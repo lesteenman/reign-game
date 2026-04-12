@@ -111,18 +111,22 @@ Puzzles are **algorithmically generated, then human-curated**. The generator is 
 
 ## User Identity
 
-### Phase 1 (MVP)
+### Free Players
 
-- Anonymous device-linked identity
-- Local stats only
-- Daily leaderboard participation via anonymous device ID
+- Fully anonymous. No device ID, no account, no server-side tracking.
+- All state (puzzle progress, stats, streaks) stored locally in IndexedDB.
+- Can submit daily completions to see their percentile, but don't appear on leaderboards.
 
-### Phase 2
+### Premium Players
 
-- Optional account creation (OAuth — Google, Apple)
-- Stats sync across devices
-- Persistent leaderboard identity (display name)
-- Account required for premium features
+- Authenticated via OAuth (provider TBD, not Cognito).
+- One-time purchase unlocks premium features.
+- Persistent leaderboard identity (display name).
+- Cross-device state sync.
+
+### Admins
+
+- Authenticated. Access to curation UI and puzzle management.
 
 ---
 
@@ -130,17 +134,19 @@ Puzzles are **algorithmically generated, then human-curated**. The generator is 
 
 ### Model: Freemium (no ads, ever)
 
-Pay for additional curated content, not for removing annoyances.
+Pay for content access, not for removing annoyances. One-time purchase, not a subscription.
 
 **Free tier:**
-- Daily challenge (all 6 puzzles) with leaderboard
+- Daily challenge (all 6 puzzles) with percentile ranking
 - Limited practice puzzle pool (rotating selection)
-- Basic personal stats
+- Basic personal stats (local only)
 - Full offline support for available puzzles
 
-**Premium tier (subscription — pricing TBD):**
+**Premium tier (one-time purchase — pricing TBD):**
 - Unlimited access to the full curated puzzle archive
+- Appear on daily and overall leaderboards
 - Detailed stats and history (solve time trends, difficulty progression)
+- Cross-device state sync
 - Extended streak tracking and achievements
 - Premium visual themes (Gems, Garden, Neon, Cosmos, and more)
 - Priority access to new puzzle types/modes as they're added
@@ -181,7 +187,7 @@ Pay for additional curated content, not for removing annoyances.
 | Language | Go |
 | Runtime | AWS Lambda |
 | API | API Gateway (REST) |
-| Auth | Cognito (Phase 2) |
+| Auth | TBD (not Cognito) |
 | Database | DynamoDB (on-demand pricing) |
 | IaC | Terraform |
 | CI/CD | GitHub Actions |
@@ -189,7 +195,7 @@ Pay for additional curated content, not for removing annoyances.
 **Key backend responsibilities:**
 - Serve puzzle data (daily + practice)
 - Record daily challenge completions and compute leaderboard
-- Manage user accounts and premium subscriptions (Phase 2)
+- Manage user accounts and premium purchases (Phase 5+)
 - Puzzle generation pipeline (batch Lambda jobs)
 - Admin API for puzzle curation
 
@@ -213,10 +219,10 @@ Pay for additional curated content, not for removing annoyances.
 - CompletedAt
 - IsDaily (boolean)
 
-**User (Phase 2):**
+**User (Phase 5+):**
 - UserID
 - DisplayName, AuthProvider
-- SubscriptionTier, SubscriptionExpiry
+- PremiumPurchasedAt (nullable)
 - Stats (embedded: total solved, streaks, averages)
 
 ### Infrastructure

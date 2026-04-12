@@ -108,7 +108,7 @@ An authenticated identity (via OAuth) that enables cross-device sync, persistent
 Default access level. Includes daily challenges, limited practice puzzle pool, and basic stats.
 
 **Premium Tier**
-Paid subscription. Includes full puzzle archive, detailed stats, custom themes, and future premium features.
+One-time purchase. Includes full puzzle archive, leaderboard identity, detailed stats, cross-device sync, custom themes, and future premium features.
 
 ## Themes
 

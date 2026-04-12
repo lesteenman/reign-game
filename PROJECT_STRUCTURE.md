@@ -131,7 +131,7 @@ infra/
 │   ├── frontend/                # S3 + CloudFront
 │   ├── api/                     # API Gateway + Lambda
 │   ├── database/                # DynamoDB tables
-│   └── auth/                    # Cognito (Phase 2)
+│   └── auth/                    # Auth provider TBD (Phase 5+)
 ├── environments/
 │   └── prod/                    # Production tfvars (single env initially)
 ├── main.tf

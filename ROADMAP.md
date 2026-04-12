@@ -1,4 +1,4 @@
-# Queens Game — Roadmap & Known Issues
+# Reign — Roadmap & Known Issues
 
 Living document tracking planned work and known problems. Each item has an ID for reference in commits and discussions.
 
@@ -6,93 +6,89 @@ Status key: `[ ]` todo, `[~]` in progress, `[x]` done, `[!]` blocked
 
 ---
 
-## Phase 0: Project Foundation
+## Phase 0: Skeleton + Deploy Pipeline
 
-Goal: Repository structure, CI/CD pipeline, infrastructure scaffolding. No game logic yet.
+Goal: Empty app live on AWS, CI/CD working. No game logic yet.
 
 - [ ] **R-001** — Initialize monorepo structure (frontend/, backend/, infra/, design/)
 - [ ] **R-002** — Set up Go module in backend/ with basic Lambda handler (health check)
-- [ ] **R-003** — Set up React + TypeScript + Vite in frontend/ with PWA scaffolding
-- [ ] **R-004** — Terraform foundation: S3 bucket, CloudFront distribution, API Gateway, Lambda, DynamoDB tables
+- [ ] **R-003** — Set up React + TypeScript + Vite in frontend/ (minimal scaffold)
+- [ ] **R-004** — Terraform: S3, CloudFront, API Gateway, Lambda (no DynamoDB yet)
 - [ ] **R-005** — GitHub Actions CI: lint + test on PR for both frontend and backend
 - [ ] **R-006** — GitHub Actions CD: deploy to AWS on merge to main
-- [ ] **R-007** — Basic dev workflow: local frontend dev server, Go backend runner, LocalStack for DynamoDB
+- [ ] **R-007** — Basic dev workflow: local frontend dev server, Go backend runner
 - [ ] **R-008** — Brand guidelines generation (ui-ux-pro-max skill)
 
-## Phase 1: Core Puzzle Engine
+Note: Terraform and GitHub Actions contain no AWS account, role, or domain specifics. All injected via GitHub configuration (secrets/variables).
 
-Goal: Playable Standard Mode puzzles in the browser. No server interaction yet — puzzles bundled in frontend.
+## Phase 1: First Playable (5x5 Standard)
 
-- [ ] **R-010** — Puzzle data model: grid, regions, solution representation
-- [ ] **R-011** — Puzzle solver: verify solution correctness, check uniqueness
-- [ ] **R-012** — Puzzle generator: produce valid Standard Mode puzzles for 5x5, 7x7, 9x9
-- [ ] **R-013** — Difficulty rating algorithm
+Goal: Play randomly generated 5x5 Standard Mode puzzles in the browser, hosted on AWS.
+
+- [ ] **R-010** — Puzzle data model: grid, regions, solution representation (Go)
+- [ ] **R-011** — Puzzle solver: constraint-based deduction, verify uniqueness (Go, 5x5 Standard)
+- [ ] **R-012** — Puzzle generator: produce valid 5x5 Standard Mode puzzles (Go)
+- [ ] **R-013** — Generate endpoint: stateless, returns a fresh puzzle on each call (no DB)
 - [ ] **R-014** — Theme architecture: ThemeContext, theme data structure, component token consumption
 - [ ] **R-015** — Minimalist default theme: piece icons, color palette, grid styling, animations (placeholder art OK)
-- [ ] **R-016** — Queens classic theme: chess queen icons, parchment aesthetic, crown animations (placeholder art OK)
-- [ ] **R-017** — Interactive grid component: render regions, place/remove markers, highlight conflicts (theme-aware)
-- [ ] **R-018** — Game state management: timer, move tracking, completion detection
-- [ ] **R-019** — Practice mode UI: difficulty selector, puzzle loading, solve flow, completion screen
-- [ ] **R-01A** — Seed puzzle database: generate + manually curate initial puzzle set (at least 20 per difficulty)
-- [ ] **R-01B** — Bundle seed puzzles in frontend for offline-first play
+- [ ] **R-016** — Interactive grid component: render regions, place/remove markers, pencil marks, highlight conflicts (theme-aware)
+- [ ] **R-017** — Solution validation in TypeScript (constraint check, no solver)
+- [ ] **R-018** — Game state in IndexedDB: placements, pencil marks, timer, completion status. Persist every move.
+- [ ] **R-019** — Game flow UI: puzzle loading, timer, solve flow, completion screen
+- [ ] **R-01A** — PWA basics: service worker (app shell caching), manifest, install prompt
 
-## Phase 2: Double Queens Mode
+## Phase 2: All Grid Sizes
 
-Goal: Full Double Queens support in generator, solver, and UI.
+Goal: 7x7 and 9x9 puzzles playable, with difficulty rating.
 
-- [ ] **R-020** — Extend solver for Double Queens constraints (2 per row/column/region)
-- [ ] **R-021** — Extend generator for Double Queens puzzles
-- [ ] **R-022** — Update difficulty rating for Double Queens
-- [ ] **R-023** — UI: mode toggle (Standard / Double Queens)
-- [ ] **R-024** — Generate + curate Double Queens puzzle set (at least 20 per difficulty)
+- [ ] **R-020** — Extend generator + solver for 7x7 and 9x9 grids
+- [ ] **R-021** — Difficulty rating algorithm (region shape complexity, deduction chain depth)
+- [ ] **R-022** — UI: difficulty selector (Easy / Medium / Hard)
 
-## Phase 3: Backend API + Daily Puzzles
+## Phase 3: Double Queens Mode
 
-Goal: Server-side puzzle serving, daily challenge, leaderboard.
+Goal: Both Standard and Double Queens modes playable at all grid sizes.
 
-- [ ] **R-030** — Puzzle API: GET puzzle by ID, GET daily puzzle (by date + mode + difficulty)
-- [ ] **R-031** — Daily puzzle scheduling: assign puzzles to dates, serve the right one per day
-- [ ] **R-032** — Completion API: POST completion (puzzle ID, time), compute leaderboard position
-- [ ] **R-033** — Leaderboard API: GET leaderboard for daily puzzle (percentile + absolute rank)
-- [ ] **R-034** — Anonymous device identity: generate + store device ID, associate completions
-- [ ] **R-035** — Frontend: daily challenge flow (fetch puzzle, timer, submit completion, show results)
-- [ ] **R-036** — Frontend: leaderboard view (percentile, rank, total players)
+- [ ] **R-030** — Extend solver for Double Queens constraints (2 per row/column/region)
+- [ ] **R-031** — Extend generator for Double Queens puzzles
+- [ ] **R-032** — Update difficulty rating for Double Queens
+- [ ] **R-033** — UI: mode toggle (Standard / Double Queens)
 
-## Phase 4: PWA & Offline
+## Phase 4: Curation + Puzzle Database
 
-Goal: Installable PWA with offline practice mode.
+Goal: Curated puzzles served from backend. Curation tooling with visual solver. Offline practice.
 
-- [ ] **R-040** — Service worker: cache app shell, practice puzzle set, static assets
-- [ ] **R-041** — Offline detection: graceful degradation (practice available, daily requires connection)
-- [ ] **R-042** — Install prompt: guide users to add to home screen
-- [ ] **R-043** — Background sync: queue daily completions when offline, submit when reconnected
+- [ ] **R-040** — DynamoDB table for puzzles (candidates, curated, metadata)
+- [ ] **R-041** — Terraform: add DynamoDB
+- [ ] **R-042** — Admin generation endpoint: generate N candidates, rank by interest heuristic, return with solver steps
+- [ ] **R-043** — Curation endpoints: list candidates, approve/reject, get solver steps
+- [ ] **R-044** — Puzzle serving API: GET puzzles by mode/difficulty (curated pool)
+- [ ] **R-045** — Frontend: curator mode route — generate, play, watch visual solver, upvote/downvote, approve/reject
+- [ ] **R-046** — Frontend: "pick best of N" comparison mode
+- [ ] **R-047** — Frontend: fetch curated puzzles from API, cache all accessible puzzles in IndexedDB
+- [ ] **R-048** — Frontend: practice mode serves from curated pool (offline after first load)
+- [ ] **R-049** — Offline detection: graceful degradation (practice available offline, curation requires connection)
 
-## Phase 5: User Accounts & Premium
+## Phase 5+: Future (scoped when we get there)
 
-Goal: Optional accounts, stats sync, premium subscription.
+Candidate items — not yet committed or ordered:
 
-- [ ] **R-050** — Cognito setup: Google + Apple OAuth
-- [ ] **R-051** — User API: create account, link device, get profile
-- [ ] **R-052** — Stats sync: merge local stats with server on account creation
-- [ ] **R-053** — Premium subscription: Stripe integration, subscription management API
-- [ ] **R-054** — Premium features: full puzzle archive access, detailed stats
-- [ ] **R-055** — Premium theme infrastructure: theme store, unlock/lock logic, theme preview
-- [ ] **R-056** — Premium themes: Gems, Garden, Neon, Cosmos (at least 2 at launch) — Nano Banana 2 final art
-- [ ] **R-057** — Frontend: account settings, login/logout, subscription management
-- [ ] **R-058** — Frontend: detailed stats views (time trends, difficulty progression, achievements)
-
-## Phase 6: Polish & Launch
-
-Goal: Production readiness, performance, monitoring.
-
-- [ ] **R-060** — Performance audit: Core Web Vitals, Lambda cold starts, DynamoDB latency
-- [ ] **R-061** — Monitoring: CloudWatch dashboards, error alerting
-- [ ] **R-062** — Dev/prod environment split (Terraform workspaces)
-- [ ] **R-063** — Rate limiting and abuse prevention on completion API
-- [ ] **R-064** — Accessibility audit: WCAG 2.1 AA compliance
-- [ ] **R-065** — Colorblind-friendly region palettes
-- [ ] **R-066** — Landing page / marketing site
-- [ ] **R-067** — Open source preparation: LICENSE files, CONTRIBUTING.md, README for generator
+- [ ] **R-050** — Daily puzzle scheduling: assign puzzles to dates, serve by date + mode + difficulty
+- [ ] **R-051** — Daily challenge flow: fetch puzzle, timer, submit completion, show percentile
+- [ ] **R-052** — Anonymous completion submission + percentile calculation (stateless for free players)
+- [ ] **R-053** — Leaderboards: premium members visible, daily and overall
+- [ ] **R-054** — Auth provider setup (not Cognito) — Google + Apple OAuth
+- [ ] **R-055** — One-time premium purchase flow
+- [ ] **R-056** — Premium: full puzzle archive access, detailed stats, cross-device sync
+- [ ] **R-057** — Premium themes: Queens Classic (free), Gems, Garden, Neon, Cosmos
+- [ ] **R-058** — Performance audit: Core Web Vitals, Lambda cold starts, DynamoDB latency
+- [ ] **R-059** — Monitoring: CloudWatch dashboards, error alerting
+- [ ] **R-05A** — Dev/prod environment split (Terraform workspaces)
+- [ ] **R-05B** — Accessibility audit: WCAG 2.1 AA compliance
+- [ ] **R-05C** — Colorblind-friendly region palettes
+- [ ] **R-05D** — Rate limiting and abuse prevention on completion API
+- [ ] **R-05E** — Landing page / marketing site
+- [ ] **R-05F** — Open source preparation: LICENSE files, CONTRIBUTING.md, README for generator
 
 ---
 

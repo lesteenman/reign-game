@@ -15,7 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Database | DynamoDB (on-demand pricing) |
 | Testing | Go test (backend), Vitest (frontend unit), Playwright (e2e) |
 | Build | Go build / Make (backend), npm + Vite (frontend) |
-| Infrastructure | Terraform, AWS (S3, CloudFront, Lambda, API Gateway, DynamoDB, Cognito) |
+| Infrastructure | Terraform, AWS (S3, CloudFront, Lambda, API Gateway, DynamoDB) |
 | CI/CD | GitHub Actions — CI on PR, CD on merge to main |
 | Dev Environment | LocalStack (local DynamoDB), Vite dev server (frontend) |
 
@@ -109,12 +109,11 @@ See **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** for the full project tree a
 
 ## Roles
 
-| Role | Access |
-|------|--------|
-| ANONYMOUS | Play daily + limited practice, submit completions via device ID, view leaderboards |
-| USER | All anonymous features + stats sync, display name on leaderboard |
-| PREMIUM | All user features + full puzzle archive, detailed stats, custom themes |
-| ADMIN | Puzzle curation, daily scheduling, user management (internal tooling) |
+| Role | Identity | Access |
+|------|----------|--------|
+| FREE | Fully anonymous, no account | Practice puzzles, daily challenge, local stats, see own percentile |
+| PREMIUM | Authenticated (OAuth, one-time purchase) | All free features + full archive, leaderboard identity, detailed stats, cross-device sync, premium themes |
+| ADMIN | Authenticated | Curation UI, puzzle management, generation tooling |
 
 ## Key References
 
