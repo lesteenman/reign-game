@@ -165,7 +165,7 @@ Pay for content access, not for removing annoyances. One-time purchase, not a su
 
 | Concern | Technology |
 |---------|-----------|
-| Framework | React 18 + TypeScript |
+| Framework | React 19 + TypeScript |
 | Bundler | Vite |
 | Styling | Tailwind CSS |
 | PWA | Workbox (service worker, offline caching, install prompt) |

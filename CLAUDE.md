@@ -11,10 +11,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Layer | Technology |
 |-------|-----------|
 | Backend | Go, AWS Lambda, API Gateway (REST) |
-| Frontend | React 18, TypeScript, Vite, Tailwind CSS, Workbox (PWA) |
+| Frontend | React 19, TypeScript, Vite, Tailwind CSS, Workbox (PWA) |
 | Database | DynamoDB (on-demand pricing) |
 | Testing | Go test (backend), Vitest (frontend unit), Playwright (e2e) |
-| Build | Go build / Make (backend), npm + Vite (frontend) |
+| Build | Go build / Taskfile (backend), npm + Vite (frontend) |
 | Infrastructure | Terraform, AWS (S3, CloudFront, Lambda, API Gateway, DynamoDB) |
 | CI/CD | GitHub Actions — CI on PR, CD on merge to main |
 | Dev Environment | LocalStack (local DynamoDB), Vite dev server (frontend) |
