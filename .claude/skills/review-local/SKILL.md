@@ -86,3 +86,17 @@ When done, briefly summarize what was fixed (or confirm the code was already cle
 - **MAJOR** -- bug, significant performance issue, or spec violation
 - **MINOR** -- code quality improvement, nice-to-have
 - **INFO** -- observation, no action needed
+
+## Security Escalation (MANDATORY)
+
+CRITICAL or HIGH security findings from Agent 1 **block merge**. They must be fixed before proceeding. After fixing, re-run the security review agent to confirm resolution. If a fix cannot be determined, escalate to the human.
+
+## Pre-Commit Secret Scan (MANDATORY)
+
+Before committing any fixes from this review, run:
+
+```bash
+gitleaks detect --source .
+```
+
+If secrets are found, resolve them before committing. Never commit API keys, tokens, passwords, or high-entropy strings.
