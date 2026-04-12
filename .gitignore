@@ -1,0 +1,94 @@
+# ===== Claude Code =====
+# Local settings (secrets, personal env vars)
+.claude/settings.local.json
+# Editor undo/swap files in .claude
+.claude/.*.un~
+.claude/*.swp
+.claude/*.swo
+
+# ===== Go (backend) =====
+# Compiled binaries
+backend/bin/
+backend/cmd/*/main
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, coverage
+*.test
+*.out
+backend/coverage.out
+backend/coverage.html
+
+# Go workspace
+go.work
+go.work.sum
+
+# Dependency cache (local)
+vendor/
+
+# ===== Node / React (frontend) =====
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/build/
+frontend/.vite/
+
+# Vitest
+frontend/coverage/
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/playwright/.cache/
+
+# ===== Terraform (infra) =====
+# Local .terraform directories
+**/.terraform/
+
+# .tfstate files — state is stored remotely in S3
+*.tfstate
+*.tfstate.*
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Variable override files (may contain secrets)
+*.tfvars
+!infra/environments/**/*.tfvars
+
+# Plan output files
+*.tfplan
+
+# Terraform lock file — commit this (consistency across machines)
+# !.terraform.lock.hcl
+
+# ===== IDE / Editor =====
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ===== Environment / Secrets =====
+.env
+.env.*
+!.env.example
+
+# ===== Logs =====
+*.log
+logs/
+
+# ===== OS =====
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db

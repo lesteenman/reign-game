@@ -1,0 +1,300 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## ⛔ MANDATORY FIRST-RUN GATE — Read This Before Doing ANYTHING
+
+**STOP. Before responding to ANY user request, check this file for `TODO` comments.**
+
+If ANY `TODO` comments remain in this file, you MUST complete ALL of the following steps before doing any other work — no exceptions:
+
+1. **Scan the codebase**: Read `pom.xml`, `package.json`, `build.gradle`, `docker-compose.yml`, directory structure, source files, and any other config files to learn the project.
+2. **EDIT this file**: Use the Edit tool to replace every `TODO` placeholder in this file with the actual values you discovered. Write the real tech stack, real build commands, real project description, real conventions — directly into this file.
+3. **Fill PROJECT_STRUCTURE.md**: If `PROJECT_STRUCTURE.md` exists and has TODO placeholders, edit that file too with the real project tree and API endpoints.
+4. **Fill GLOSSARY.md**: If `GLOSSARY.md` exists and has TODO placeholders, add the domain terms you discovered from the codebase.
+5. **Know your toolkit**: Read the agent definitions in `.claude/agents/` and skill definitions in `.claude/skills/`. Understand what each agent does and when to invoke it before starting any work.
+
+**WHY THIS IS NON-NEGOTIABLE:**
+- Other agents and teammates read this file for context. If the TODOs remain unfilled, every agent you spawn will lack critical project information.
+- Your memory is NOT a substitute for editing this file. Memory is local to your session — teammates cannot access it.
+- "I already know this" is not an acceptable reason to skip editing. The file must contain the actual values.
+
+**GATE CHECK:** After completing the steps above, re-read this file and confirm zero `TODO` comments remain. Only then proceed with the user's request.
+
+## Project Overview
+
+**Reign** (working title) is a puzzle game available as a Progressive Web App. Players place markers on a colored grid subject to row, column, region, and adjacency constraints. The default presentation is minimalist and abstract; alternative visual themes (including a classic "Queens" chess theme) are available. It offers curated puzzles across difficulty levels, daily challenges with speed-based leaderboards, and a freemium monetization model (no ads).
+
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Go, AWS Lambda, API Gateway (REST) |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS, Workbox (PWA) |
+| Database | DynamoDB (on-demand pricing) |
+| Testing | Go test (backend), Vitest (frontend unit), Playwright (e2e) |
+| Build | Go build / Make (backend), npm + Vite (frontend) |
+| Infrastructure | Terraform, AWS (S3, CloudFront, Lambda, API Gateway, DynamoDB, Cognito) |
+| CI/CD | GitHub Actions — CI on PR, CD on merge to main |
+| Dev Environment | LocalStack (local DynamoDB), Vite dev server (frontend) |
+
+## Build Commands
+
+```bash
+# Build backend
+cd backend && go build ./...
+
+# Run backend tests
+cd backend && go test ./... -v
+
+# Run backend linter
+cd backend && golangci-lint run
+
+# Build frontend
+cd frontend && npm run build
+
+# Run frontend unit tests
+cd frontend && npm run test
+
+# Run frontend e2e tests
+cd frontend && npx playwright test
+
+# Start frontend dev server
+cd frontend && npm run dev
+
+# Run backend locally (plain Go, no SAM)
+cd backend && go run ./cmd/api
+
+# Start local DynamoDB (LocalStack)
+docker compose up localstack
+
+# Deploy infrastructure
+cd infra && terraform plan && terraform apply
+```
+
+## Testing
+
+- Always run the full test suite after making changes
+- After fixing one bug, verify no regressions were introduced before moving on
+- When writing controller tests, check if the test security config has specific auth behavior
+
+## Project Structure
+
+See **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** for the full project tree and API endpoints. Search by domain keyword to locate any file.
+
+## Project-Specific Conventions
+
+### General
+- Monorepo: frontend/, backend/, infra/, design/ at the root
+- Feature branches for all changes, merged via PR to main
+- Commit after every artifact delivery (specs, wireframes, code)
+- Every change follows: OpenSpec explore -> propose -> UI/UX design (if visual) -> implementation -> archive/sync -> retro
+- TDD (red/green) for all implementation — backend AND frontend
+- Self-review session after implementation until reviewer and writer agree
+
+### Backend (Go)
+- Standard Go project layout: cmd/ for entry points, internal/ for private packages
+- Table-driven tests preferred
+- Exported functions must have doc comments
+- Error handling: wrap errors with context (`fmt.Errorf("doing X: %w", err)`)
+- No global mutable state — pass dependencies via struct fields
+- DynamoDB single-table design where practical
+
+### Frontend (React + TypeScript)
+- Functional components only, no class components
+- Custom hooks for reusable logic (useGame, useTimer, usePuzzle)
+- Strict TypeScript — no `any`, no type assertions without justification
+- Component files: PascalCase (Grid.tsx), hooks: camelCase (useGame.ts)
+- TDD with Vitest — write failing test first, then implementation
+- All components must be responsive (mobile-first)
+- Accessibility: WCAG 2.1 AA minimum
+
+### Infrastructure
+- All infrastructure in Terraform — no manual AWS console changes
+- Terraform modules for reusable components (frontend, api, database)
+- Single environment initially, parameterized for dev/prod split later
+
+### Frontend Design Rules
+
+**MANDATORY**: When implementing or modifying ANY frontend visual code (components, pages, layouts, styles), you MUST:
+
+1. Read `skills/frontend-design/SKILL.md` and follow its instructions BEFORE writing any UI code
+2. Read `skills/ui-ux-pro-max/SKILL.md` and follow its instructions with `--design-system --persist` to generate brand guidelines
+3. Persist the output as `BRAND_GUIDELINES.md` in the project root
+4. Reference `BRAND_GUIDELINES.md` for all color palettes, font pairings, spacing, and UX patterns
+5. Never output plain/generic styling — every component must reflect the brand guidelines
+
+`BRAND_GUIDELINES.md` is the single source of truth for visual design decisions. All frontend agents and reviewers reference it. If it doesn't exist when frontend visual code is being written, that is a CRITICAL review finding.
+
+## Roles
+
+| Role | Access |
+|------|--------|
+| ANONYMOUS | Play daily + limited practice, submit completions via device ID, view leaderboards |
+| USER | All anonymous features + stats sync, display name on leaderboard |
+| PREMIUM | All user features + full puzzle archive, detailed stats, custom themes |
+| ADMIN | Puzzle curation, daily scheduling, user management (internal tooling) |
+
+## Key References
+
+- **GLOSSARY.md** -- Ubiquitous Language glossary. Consult before using domain terms in specs, designs, and code.
+- **PROJECT_STRUCTURE.md** -- Full project tree + all API endpoints. Search by domain keyword to locate any file.
+- **GAME_DESIGN.md** -- Living game design vision document. The north star for what we're building.
+- **ROADMAP.md** -- Phased roadmap with explicit todos + known issues. The Jira-lite task tracker.
+- **BRAND_GUIDELINES.md** -- Design system (colors, fonts, spacing, component patterns). Generated by following the ui-ux-pro-max skill with `--design-system --persist`. Required before any frontend visual work.
+
+---
+
+## Agent Teams
+
+This project uses custom AI agents that work together as a team. The lead agent (Claude Code) orchestrates the pipeline -- it does NOT implement code itself but distributes tasks to sub-agents.
+
+### Agent Architecture
+
+Agents are markdown files in `.claude/agents/` that define specialized roles. They are spawned as sub-agents via the `Agent` tool. Sub-agents use skills by reading the skill's SKILL.md file and following its instructions -- they do NOT have access to a `Skill()` tool.
+
+### How Agents Use Skills
+
+Skills are `.md` files in `.claude/skills/`. Agents use them by:
+1. Reading the skill file (e.g., `skills/design-grill/SKILL.md`)
+2. Following its instructions completely — executing the full process described in that file
+
+Agents must NOT just summarize or paraphrase a skill. They must read and execute.
+
+### Human-in-the-Loop Rule (CRITICAL)
+
+**NEVER:**
+- Answer your own design questions or auto-approve decisions
+- Assume you know what the human would choose
+- Skip asking the human because the answer seems obvious
+
+**ALWAYS:**
+- Present decisions and options directly to the human
+- Wait for the human's explicit response before proceeding
+- Confirm alignment before moving to the next phase
+
+### Available Agents
+
+| Agent | Role | When to Use |
+|-------|------|-------------|
+| `product-owner` | Vision guardian, acceptance criteria, scope decisions, prioritization | Before implementation — validates what to build and why |
+| `design-flow` | Full design phase: explore, stress-test, glossary alignment, spec generation | Before implementation — when a feature needs design |
+| `workflow-orchestrator` | Pipeline orchestration, team coordination, glossary enforcement | Full Pipeline Mode — orchestrates all other agents, enforces glossary term consistency |
+| `backend-dev` | Go implementation, API design, DynamoDB, Lambda handlers + TDD | Any back-end work |
+| `frontend-dev` | React/TS implementation, PWA, responsive UI + TDD | Any frontend work |
+| `devops-engineer` | Terraform, GitHub Actions, AWS architecture, monitoring | Infrastructure and CI/CD work |
+| `ui-ux-designer` | Wireframes, interaction design, brand guidelines, Nano Banana 2 prompts | Visual design phases |
+| `tester` | E2E test plans, edge cases, regression hunting, Playwright | After implementation — verify features work |
+| `code-review-final` | Code quality review of PRs | After all implementation is complete |
+| `security-review-final` | Security review of PRs (conditional) | Only when diff touches security-sensitive files |
+
+### Security: Baseline Gates (MANDATORY — every cycle)
+
+These checks run on EVERY change, no exceptions:
+
+1. **Secret scanning (pre-commit):** Run `gitleaks detect --source .` before every commit. If secrets are found, the commit MUST be blocked. Never commit API keys, tokens, passwords, or high-entropy strings.
+2. **Dependency audit (CI):** `govulncheck ./...` (backend) and `npm audit --audit-level=moderate` (frontend) run on every PR. Known vulnerabilities block merge.
+3. **review-local security agent:** The security agent in `review-local` runs on every change. CRITICAL or HIGH findings from this agent block merge — they must be fixed before proceeding.
+
+### Security: Deep Review Trigger (conditional)
+
+Run the full `security-review-final` agent when the diff includes files matching ANY of:
+- `**/auth/**`, `**/middleware/**`
+- `**/handler/*.go` (new or modified Lambda handlers — API attack surface)
+- `go.mod`, `go.sum`, `package.json`, `package-lock.json` (dependency changes — supply chain risk)
+- `infra/**/*.tf` (infrastructure changes — IAM, networking, encryption)
+- `docker-compose.yml`, `Dockerfile` (container security)
+- `.github/workflows/**` (CI/CD pipeline changes)
+- Any file with `password`, `secret`, `token`, `credential`, `key` in its path or content
+
+Skip deep security review when the diff only touches: service logic, models, frontend components, tests, docs, OpenSpec artifacts.
+
+### Change Workflow (MANDATORY for all changes)
+
+Every change — feature, fix, or refactor — follows this pipeline:
+
+```
+1. OpenSpec Explore    → parallel-plan + design-grill skills (understand the problem)
+2. OpenSpec Propose    → spec artifacts (define the solution)
+3. UI/UX Design        → wireframes + Nano Banana 2 prompts (if visual change)
+4. Implementation      → red/green TDD, feature branch, commit per artifact
+5. Security Scan       → gitleaks + dependency audit + review-local security agent (every cycle)
+6. Self-Review         → reviewer + writer iterate until consensus (escalate to human if stuck)
+7. OpenSpec Archive    → sync artifacts with final implementation
+8. Retro               → retrospective on the change
+```
+
+**TDD is non-negotiable** for both backend and frontend. Write a failing test first, then make it pass, then refactor. No exceptions.
+
+**Self-review** continues until both the reviewer agent and implementation agent agree the code is ready. The reviewer must be critical but pragmatic — if there's a good reason to deviate from convention, that's acceptable with justification. If there's genuinely no consensus after two rounds, escalate to the human.
+
+**Commits** happen after every artifact delivery: specs, wireframes, images, and completed code. Not just at the end.
+
+**Feature branches** for all work. Never commit directly to main.
+
+### How to Use the Agents
+
+#### Assisted Mode (small changes, bug fixes)
+
+For changes under ~5 files or single-module work, use agents directly without orchestration:
+
+1. Spawn the appropriate implementation agent (e.g., `backend-dev`)
+2. Agent implements + tests + commits
+3. Run build verification
+4. Run `gitleaks detect --source .` — block if secrets found
+5. Read `skills/review-local/SKILL.md` and follow its instructions on the changed code
+6. If review-local security agent finds CRITICAL/HIGH → fix before continuing
+7. Spawn `code-review-final` agent (+ `security-review-final` if deep review triggered)
+8. Fix review comments, push, merge
+
+#### Full Pipeline Mode (features, multi-module changes)
+
+For larger features, spawn the `workflow-orchestrator` agent. It will:
+
+- Distribute tasks to implementation agents in parallel
+- Run build verification, pre-commit quality checks, and local review
+- Create the PR and spawn `code-review-final` (and `security-review-final` if the diff touches security-sensitive files)
+- Spawn Playwright e2e test agents if the project has a frontend
+- For optional or ambiguous steps, ask the human before executing
+
+See the `workflow-orchestrator` agent definition for the full pipeline details.
+
+### Available Skills
+
+Skills are invoked by reading their SKILL.md file and following the instructions. Available in `.claude/skills/`:
+
+- `design-grill` — Stress-test design decisions
+- `parallel-plan` — Fan-out parallel approach comparison
+- `glossary` — Ubiquitous language glossary management
+- `review-local` — 4-agent parallel local code review
+- `gitlab-code-review` — PR review via VCS CLI
+- `playwright-cli` — Browser automation for e2e testing
+- `write-simply` — Plain language writing
+- `structure-clearly` — Pyramid principle document structure
+- `retro` — Retrospective on the change
+
+**Plugin-based skills** (require Claude Code plugin install — see CONTRIBUTING.md):
+
+- `frontend-design` — Component-level design guidance (plugin: `frontend-design@claude-plugins-official`)
+- `ui-ux-pro-max` — UX patterns, interaction design, design system (plugin: `ui-ux-pro-max@ui-ux-pro-max-skill`)
+
+### Key Rules
+
+- **Sweep enforcement**: Every review finding includes a grep command. Fix agents MUST run the sweep and fix ALL matches -- not just the reported file
+- **Cross-stack contract alignment**: When backend and frontend run in parallel, the frontend API service task MUST read the actual backend DTOs before writing interfaces
+- **PR Key Decisions**: Include a "Key Decisions" section in PR descriptions listing intentional design choices. Prevents review agents from flagging them as bugs
+
+## Code Review Workflow
+
+- When reviewing PRs, structure findings by category: security, efficiency, code quality, reuse
+- Post findings directly to PR via `gh` CLI
+- Two review passes max -- after pass 2, the PR is considered ready for merge
+
+## Database (DynamoDB)
+
+- On-demand (pay-per-request) billing mode — no provisioned capacity
+- Single-table design where practical, separate tables when access patterns diverge significantly
+- Partition key design must avoid hot partitions (e.g., daily puzzle leaderboards need careful key design)
+- Local development: use LocalStack or DynamoDB Local for testing
+- No ORM — use the AWS SDK for Go v2 directly
+- All table definitions managed in Terraform (infra/modules/database/)
