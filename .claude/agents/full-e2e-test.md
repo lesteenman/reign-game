@@ -33,7 +33,6 @@ Skills are `.md` files in the `skills/` directory. To use a skill, read its `SKI
 Before starting:
 1. Run `git rev-parse --show-toplevel` to determine the project root
 2. Read `CLAUDE.md` at the project root for project context and build commands
-3. **CHECK FOR TODOs**: If `CLAUDE.md` still contains `TODO` comments, STOP and fill them in first using the Edit tool. Scan the codebase to discover real values. Memory is NOT a substitute — the file must be edited for other teammates.
 
 ## Prerequisites
 

@@ -2,25 +2,6 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## ⛔ MANDATORY FIRST-RUN GATE — Read This Before Doing ANYTHING
-
-**STOP. Before responding to ANY user request, check this file for `TODO` comments.**
-
-If ANY `TODO` comments remain in this file, you MUST complete ALL of the following steps before doing any other work — no exceptions:
-
-1. **Scan the codebase**: Read `pom.xml`, `package.json`, `build.gradle`, `docker-compose.yml`, directory structure, source files, and any other config files to learn the project.
-2. **EDIT this file**: Use the Edit tool to replace every `TODO` placeholder in this file with the actual values you discovered. Write the real tech stack, real build commands, real project description, real conventions — directly into this file.
-3. **Fill PROJECT_STRUCTURE.md**: If `PROJECT_STRUCTURE.md` exists and has TODO placeholders, edit that file too with the real project tree and API endpoints.
-4. **Fill GLOSSARY.md**: If `GLOSSARY.md` exists and has TODO placeholders, add the domain terms you discovered from the codebase.
-5. **Know your toolkit**: Read the agent definitions in `.claude/agents/` and skill definitions in `.claude/skills/`. Understand what each agent does and when to invoke it before starting any work.
-
-**WHY THIS IS NON-NEGOTIABLE:**
-- Other agents and teammates read this file for context. If the TODOs remain unfilled, every agent you spawn will lack critical project information.
-- Your memory is NOT a substitute for editing this file. Memory is local to your session — teammates cannot access it.
-- "I already know this" is not an acceptable reason to skip editing. The file must contain the actual values.
-
-**GATE CHECK:** After completing the steps above, re-read this file and confirm zero `TODO` comments remain. Only then proceed with the user's request.
-
 ## Project Overview
 
 **Reign** (working title) is a puzzle game available as a Progressive Web App. Players place markers on a colored grid subject to row, column, region, and adjacency constraints. The default presentation is minimalist and abstract; alternative visual themes (including a classic "Queens" chess theme) are available. It offers curated puzzles across difficulty levels, daily challenges with speed-based leaderboards, and a freemium monetization model (no ads).

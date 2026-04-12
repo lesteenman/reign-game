@@ -1,6 +1,6 @@
 # Reign — Vision Document
 
-**Reign** (working title) — formerly "Queens Game"
+**Reign** (working title)
 
 This is the living design document for Reign. It describes the full product vision we're building toward. Individual features are implemented incrementally via the roadmap, but this document captures the north star.
 

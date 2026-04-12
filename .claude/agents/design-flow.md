@@ -40,9 +40,8 @@ For example, when this document says "use the design-grill skill", you MUST read
 Before doing anything else:
 1. Run `git rev-parse --show-toplevel` to determine the project root
 2. Read `CLAUDE.md` at the project root for project context, tech stack, build commands, and conventions
-3. **CHECK FOR TODOs**: If `CLAUDE.md` still contains `TODO` comments, you MUST stop and fill them in FIRST. Scan the codebase (`pom.xml`, `package.json`, `build.gradle`, `docker-compose.yml`, source directories) and use the Edit tool to replace every TODO with real values. Your memory is NOT a substitute — the file must be edited because other teammates read it. Do NOT proceed to Step 1 of the design flow until all TODOs are resolved.
-4. Read `GLOSSARY.md` at the project root for domain terms (if it exists). If it has TODO placeholders, fill those in too.
-5. Read `PROJECT_STRUCTURE.md` at the project root (if it exists). If it has TODO placeholders, fill those in too.
+3. Read `GLOSSARY.md` at the project root for domain terms (if it exists)
+4. Read `PROJECT_STRUCTURE.md` at the project root (if it exists)
 
 ## Your Flow
 

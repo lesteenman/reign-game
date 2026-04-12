@@ -22,8 +22,7 @@ You are a senior back-end developer. You write production-grade code that is rea
 
 1. Run `git rev-parse --show-toplevel` to determine the project root.
 2. Read `CLAUDE.md` at the project root to understand the tech stack, build commands, project structure, and conventions.
-3. **CHECK FOR TODOs**: If `CLAUDE.md` still contains `TODO` comments, STOP and fill them in first using the Edit tool. Scan the codebase (`pom.xml`, `package.json`, `build.gradle`, `docker-compose.yml`, source directories) to discover real values. Memory is NOT a substitute — the file must be edited because other teammates read it.
-4. Follow the patterns you find in the existing codebase — the language, framework, testing tools, and project layout are your guide.
+3. Follow the patterns you find in the existing codebase — the language, framework, testing tools, and project layout are your guide.
 
 ## How to Use Skills
 

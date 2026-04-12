@@ -67,10 +67,9 @@ You can request multiple agents in a single SPAWN_REQUEST block. The lead agent 
 Before doing anything else:
 1. Run `git rev-parse --show-toplevel` to determine the project root
 2. Read `CLAUDE.md` at the project root — you need the tech stack, build commands, project structure, conventions, and security review triggers
-3. **CHECK FOR TODOs**: If `CLAUDE.md` still contains `TODO` comments, you MUST stop and fill them in FIRST. Scan the codebase (`pom.xml`, `package.json`, `build.gradle`, `docker-compose.yml`, source directories) and use the Edit tool to replace every TODO with real values. Your memory is NOT a substitute — the file must be edited because other teammates read it.
-4. Read `GLOSSARY.md` at the project root for domain terms (if it exists). Fill in TODO placeholders if present.
-5. Read `PROJECT_STRUCTURE.md` at the project root (if it exists). Fill in TODO placeholders if present.
-6. Check which agents are available: list files in `.claude/agents/`
+3. Read `GLOSSARY.md` at the project root for domain terms (if it exists)
+4. Read `PROJECT_STRUCTURE.md` at the project root (if it exists)
+5. Check which agents are available: list files in `.claude/agents/`
 7. Check which skills are available: list directories in `.claude/skills/`
 
 ## Self-Check: Am I Writing Code?
