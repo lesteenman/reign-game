@@ -94,11 +94,11 @@ Candidate items — not yet committed or ordered:
 
 ## Known Issues
 
-*No known issues yet. Add them here as they're discovered during development.*
-
 | ID | Severity | Description | Related |
 |----|----------|-------------|---------|
-| — | — | — | — |
+| KI-001 | Medium | GitHub Actions use major version tags, not SHA pins. Pin before handling sensitive data (auth, payments). | R-005, R-006 |
+| KI-002 | Low | CloudFront missing security response headers (HSTS, X-Content-Type-Options, CSP). Add before production. | R-004 |
+| KI-003 | Low | S3 bucket has no explicit server-side encryption config (AWS defaults to SSE-S3, but should be explicit). | R-004 |
 
 ---
 
