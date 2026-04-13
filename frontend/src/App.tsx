@@ -25,8 +25,7 @@ function GameBoard() {
     cells,
     conflicts,
     isSolved,
-    handleCellClick,
-    handleDragStart,
+    handleCellPointerDown,
     handleDragEnter,
     handleDragEnd,
     resetGame,
@@ -77,8 +76,7 @@ function GameBoard() {
         cells={cells}
         conflicts={conflicts}
         isSolved={isSolved}
-        onCellClick={handleCellClick}
-        onDragStart={handleDragStart}
+        onCellPointerDown={handleCellPointerDown}
         onDragEnter={handleDragEnter}
         onDragEnd={handleDragEnd}
       />

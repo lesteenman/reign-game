@@ -35,7 +35,7 @@ describe('useGame', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
 
     act(() => {
-      result.current.handleCellClick(0, 0);
+      result.current.handleCellPointerDown(0, 0);
     });
 
     expect(result.current.cells[0]![0]).toBe('excluded');
@@ -45,10 +45,10 @@ describe('useGame', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
 
     act(() => {
-      result.current.handleCellClick(0, 0); // empty -> excluded
+      result.current.handleCellPointerDown(0, 0); // empty -> excluded
     });
     act(() => {
-      result.current.handleCellClick(0, 0); // excluded -> marked
+      result.current.handleCellPointerDown(0, 0); // excluded -> marked
     });
 
     expect(result.current.cells[0]![0]).toBe('marked');
@@ -58,13 +58,13 @@ describe('useGame', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
 
     act(() => {
-      result.current.handleCellClick(0, 0); // empty -> excluded
+      result.current.handleCellPointerDown(0, 0); // empty -> excluded
     });
     act(() => {
-      result.current.handleCellClick(0, 0); // excluded -> marked
+      result.current.handleCellPointerDown(0, 0); // excluded -> marked
     });
     act(() => {
-      result.current.handleCellClick(0, 0); // marked -> empty
+      result.current.handleCellPointerDown(0, 0); // marked -> empty
     });
 
     expect(result.current.cells[0]![0]).toBe('empty');
@@ -74,26 +74,26 @@ describe('useGame', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
 
     // empty -> excluded -> marked -> empty
-    act(() => result.current.handleCellClick(2, 3));
+    act(() => result.current.handleCellPointerDown(2, 3));
     expect(result.current.cells[2]![3]).toBe('excluded');
 
-    act(() => result.current.handleCellClick(2, 3));
+    act(() => result.current.handleCellPointerDown(2, 3));
     expect(result.current.cells[2]![3]).toBe('marked');
 
-    act(() => result.current.handleCellClick(2, 3));
+    act(() => result.current.handleCellPointerDown(2, 3));
     expect(result.current.cells[2]![3]).toBe('empty');
   });
 
   it('detects conflicts when two markers in same row', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
 
-    // Place marker at (0,0)
-    act(() => result.current.handleCellClick(0, 0)); // excluded
-    act(() => result.current.handleCellClick(0, 0)); // marked
+    // Place marker at (0,0): two taps
+    act(() => result.current.handleCellPointerDown(0, 0)); // excluded
+    act(() => result.current.handleCellPointerDown(0, 0)); // marked
 
-    // Place marker at (0,1)
-    act(() => result.current.handleCellClick(0, 1)); // excluded
-    act(() => result.current.handleCellClick(0, 1)); // marked
+    // Place marker at (0,1): two taps
+    act(() => result.current.handleCellPointerDown(0, 1)); // excluded
+    act(() => result.current.handleCellPointerDown(0, 1)); // marked
 
     expect(result.current.conflicts.length).toBeGreaterThan(0);
     expect(result.current.isSolved).toBe(false);
@@ -112,8 +112,8 @@ describe('useGame', () => {
     ];
 
     for (const [row, col] of solution) {
-      act(() => result.current.handleCellClick(row, col)); // excluded
-      act(() => result.current.handleCellClick(row, col)); // marked
+      act(() => result.current.handleCellPointerDown(row, col)); // excluded
+      act(() => result.current.handleCellPointerDown(row, col)); // marked
     }
 
     expect(result.current.conflicts).toEqual([]);
@@ -123,8 +123,9 @@ describe('useGame', () => {
   it('drag from empty: starting cell excluded, entering empty cells excludes them', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
 
+    // Pointer down on empty cell starts drag with exclude mode
     act(() => {
-      result.current.handleDragStart(0, 0);
+      result.current.handleCellPointerDown(0, 0);
     });
     expect(result.current.cells[0]![0]).toBe('excluded');
 
@@ -143,20 +144,24 @@ describe('useGame', () => {
     });
   });
 
-  it('drag from excluded: starting cell cleared, entering excluded cells clears them', () => {
+  it('drag from excluded: starting cell becomes marked, entering excluded cells clears them', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
 
     // First exclude some cells
-    act(() => result.current.handleCellClick(1, 0)); // excluded
-    act(() => result.current.handleCellClick(1, 1)); // excluded
-    act(() => result.current.handleCellClick(1, 2)); // excluded
+    act(() => result.current.handleCellPointerDown(1, 0)); // excluded
+    act(() => result.current.handleDragEnd());
+    act(() => result.current.handleCellPointerDown(1, 1)); // excluded
+    act(() => result.current.handleDragEnd());
+    act(() => result.current.handleCellPointerDown(1, 2)); // excluded
+    act(() => result.current.handleDragEnd());
 
-    // Now drag from excluded cell (1,0) should clear
+    // Pointer down on excluded cell: three-tap cycles to marked, drag mode is 'clear'
     act(() => {
-      result.current.handleDragStart(1, 0);
+      result.current.handleCellPointerDown(1, 0);
     });
-    expect(result.current.cells[1]![0]).toBe('empty');
+    expect(result.current.cells[1]![0]).toBe('marked');
 
+    // Drag enter on excluded cells clears them
     act(() => {
       result.current.handleDragEnter(1, 1);
     });
@@ -175,18 +180,19 @@ describe('useGame', () => {
   it('drag from marker: no drag effect', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
 
-    // Place a marker at (0,0)
-    act(() => result.current.handleCellClick(0, 0)); // excluded
-    act(() => result.current.handleCellClick(0, 0)); // marked
+    // Place a marker at (0,0): two taps
+    act(() => result.current.handleCellPointerDown(0, 0)); // excluded
+    act(() => result.current.handleDragEnd());
+    act(() => result.current.handleCellPointerDown(0, 0)); // marked
+    act(() => result.current.handleDragEnd());
 
-    // Start drag from marker
+    // Pointer down on marker: three-tap cycles to empty, no drag
     act(() => {
-      result.current.handleDragStart(0, 0);
+      result.current.handleCellPointerDown(0, 0);
     });
-    // Marker should stay as marker (no change from drag start)
-    expect(result.current.cells[0]![0]).toBe('marked');
+    expect(result.current.cells[0]![0]).toBe('empty');
 
-    // Drag entering empty cell should not change it
+    // Drag entering empty cell should not change it (dragMode is null for marked)
     act(() => {
       result.current.handleDragEnter(0, 1);
     });
@@ -201,12 +207,14 @@ describe('useGame', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
 
     // Place a marker at (0,1)
-    act(() => result.current.handleCellClick(0, 1)); // excluded
-    act(() => result.current.handleCellClick(0, 1)); // marked
+    act(() => result.current.handleCellPointerDown(0, 1)); // excluded
+    act(() => result.current.handleDragEnd());
+    act(() => result.current.handleCellPointerDown(0, 1)); // marked
+    act(() => result.current.handleDragEnd());
 
     // Start exclude drag from (0,0) which is empty
     act(() => {
-      result.current.handleDragStart(0, 0);
+      result.current.handleCellPointerDown(0, 0);
     });
     expect(result.current.cells[0]![0]).toBe('excluded');
 
@@ -221,9 +229,9 @@ describe('useGame', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
 
     // Make some changes
-    act(() => result.current.handleCellClick(0, 0)); // excluded
-    act(() => result.current.handleCellClick(1, 1)); // excluded
-    act(() => result.current.handleCellClick(1, 1)); // marked
+    act(() => result.current.handleCellPointerDown(0, 0)); // excluded
+    act(() => result.current.handleCellPointerDown(1, 1)); // excluded
+    act(() => result.current.handleCellPointerDown(1, 1)); // marked
 
     act(() => {
       result.current.resetGame();

@@ -13,8 +13,7 @@ export interface CellProps {
   borderRight: boolean;
   borderBottom: boolean;
   borderLeft: boolean;
-  onClick: () => void;
-  onDragStart: () => void;
+  onPointerDown: () => void;
   onDragEnter: () => void;
 }
 
@@ -40,8 +39,7 @@ export function Cell({
   borderRight,
   borderBottom,
   borderLeft,
-  onClick,
-  onDragStart,
+  onPointerDown,
   onDragEnter,
 }: CellProps) {
   const theme = useTheme();
@@ -57,8 +55,7 @@ export function Cell({
 
   const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault();
-    onClick();
-    onDragStart();
+    onPointerDown();
   };
 
   const handleMouseEnter = (e: React.MouseEvent) => {
@@ -67,10 +64,8 @@ export function Cell({
     }
   };
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    e.preventDefault();
-    onClick();
-    onDragStart();
+  const handleTouchStart = () => {
+    onPointerDown();
   };
 
   // Determine animation class for marked cells

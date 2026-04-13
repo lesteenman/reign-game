@@ -10,8 +10,11 @@ export interface UseGameReturn {
   cells: CellState[][];
   conflicts: Conflict[];
   isSolved: boolean;
-  handleCellClick: (row: number, col: number) => void;
-  handleDragStart: (row: number, col: number) => void;
+  /**
+   * Handles a pointer-down on a cell: applies the three-tap cycle
+   * AND sets up drag mode for subsequent drag-enter events.
+   */
+  handleCellPointerDown: (row: number, col: number) => void;
   handleDragEnter: (row: number, col: number) => void;
   handleDragEnd: () => void;
   resetGame: () => void;
@@ -40,7 +43,7 @@ function cloneCells(cells: CellState[][]): CellState[][] {
 
 /**
  * Custom hook that manages the full game state for a puzzle.
- * Handles cell clicks (three-tap cycle), drag interactions, and game reset.
+ * Handles cell interactions (three-tap cycle + drag) and game reset.
  */
 export function useGame(puzzle: PuzzleData): UseGameReturn {
   const { gridSize, regionMap } = puzzle;
@@ -59,33 +62,25 @@ export function useGame(puzzle: PuzzleData): UseGameReturn {
     [cells, regionMap, gridSize],
   );
 
-  const handleCellClick = useCallback((row: number, col: number) => {
-    setCells((prev) => {
-      const next = cloneCells(prev);
-      const currentState = prev[row]![col]!;
-      next[row]![col] = nextCellState(currentState);
-      return next;
-    });
-  }, []);
-
-  const handleDragStart = useCallback((row: number, col: number) => {
+  const handleCellPointerDown = useCallback((row: number, col: number) => {
     setCells((prev) => {
       const currentState = prev[row]![col]!;
-
-      if (currentState === 'marked') {
-        dragModeRef.current = null;
-        return prev;
-      }
-
+      const newState = nextCellState(currentState);
       const next = cloneCells(prev);
+      next[row]![col] = newState;
+
+      // Set drag mode based on the ORIGINAL state of the starting cell:
+      // - Was empty (now excluded) → drag excludes other empty cells
+      // - Was excluded (now marked) → drag clears other excluded cells
+      // - Was marked (now empty) → no drag
       if (currentState === 'empty') {
         dragModeRef.current = 'exclude';
-        next[row]![col] = 'excluded';
-      } else {
-        // excluded
+      } else if (currentState === 'excluded') {
         dragModeRef.current = 'clear';
-        next[row]![col] = 'empty';
+      } else {
+        dragModeRef.current = null;
       }
+
       return next;
     });
   }, []);
@@ -126,8 +121,7 @@ export function useGame(puzzle: PuzzleData): UseGameReturn {
     cells,
     conflicts,
     isSolved,
-    handleCellClick,
-    handleDragStart,
+    handleCellPointerDown,
     handleDragEnter,
     handleDragEnd,
     resetGame,

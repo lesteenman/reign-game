@@ -20,8 +20,7 @@ function renderCell(overrides: Partial<CellProps> = {}) {
     borderRight: false,
     borderBottom: false,
     borderLeft: false,
-    onClick: vi.fn(),
-    onDragStart: vi.fn(),
+    onPointerDown: vi.fn(),
     onDragEnter: vi.fn(),
   };
 
@@ -71,18 +70,11 @@ describe('Cell', () => {
     expect(cell.style.backgroundColor).toBe('var(--color-destructive-bg)');
   });
 
-  it('calls onClick on mouseDown', () => {
-    const onClick = vi.fn();
-    const { cell } = renderCell({ onClick });
+  it('calls onPointerDown on mouseDown', () => {
+    const onPointerDown = vi.fn();
+    const { cell } = renderCell({ onPointerDown });
     fireEvent.mouseDown(cell);
-    expect(onClick).toHaveBeenCalledTimes(1);
-  });
-
-  it('calls onDragStart on mouseDown', () => {
-    const onDragStart = vi.fn();
-    const { cell } = renderCell({ onDragStart });
-    fireEvent.mouseDown(cell);
-    expect(onDragStart).toHaveBeenCalledTimes(1);
+    expect(onPointerDown).toHaveBeenCalledTimes(1);
   });
 
   it('calls onDragEnter on mouseEnter when button is held', () => {

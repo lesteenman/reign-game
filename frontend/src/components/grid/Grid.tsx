@@ -8,8 +8,7 @@ export interface GridProps {
   cells: CellState[][];
   conflicts: Conflict[];
   isSolved: boolean;
-  onCellClick: (row: number, col: number) => void;
-  onDragStart: (row: number, col: number) => void;
+  onCellPointerDown: (row: number, col: number) => void;
   onDragEnter: (row: number, col: number) => void;
   onDragEnd: () => void;
 }
@@ -24,8 +23,7 @@ export function Grid({
   cells,
   conflicts,
   isSolved,
-  onCellClick,
-  onDragStart,
+  onCellPointerDown,
   onDragEnter,
   onDragEnd,
 }: GridProps) {
@@ -117,11 +115,8 @@ export function Grid({
               borderRight={bRight}
               borderBottom={bBottom}
               borderLeft={bLeft}
-              onClick={
-                isSolved ? () => {} : () => onCellClick(row, col)
-              }
-              onDragStart={
-                isSolved ? () => {} : () => onDragStart(row, col)
+              onPointerDown={
+                isSolved ? () => {} : () => onCellPointerDown(row, col)
               }
               onDragEnter={
                 isSolved ? () => {} : () => onDragEnter(row, col)

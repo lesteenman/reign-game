@@ -34,8 +34,7 @@ function renderGrid(overrides: Partial<GridProps> = {}) {
     cells: makeEmptyCells(5),
     conflicts: [],
     isSolved: false,
-    onCellClick: vi.fn(),
-    onDragStart: vi.fn(),
+    onCellPointerDown: vi.fn(),
     onDragEnter: vi.fn(),
     onDragEnd: vi.fn(),
   };
@@ -94,26 +93,26 @@ describe('Grid', () => {
     expect(cell02.style.borderLeftWidth).toBe('2.5px');
   });
 
-  it('click on cell triggers onCellClick with correct row/col', () => {
-    const onCellClick = vi.fn();
-    const { container } = renderGrid({ onCellClick });
+  it('click on cell triggers onCellPointerDown with correct row/col', () => {
+    const onCellPointerDown = vi.fn();
+    const { container } = renderGrid({ onCellPointerDown });
 
     const cell23 = container.querySelector(
       '[data-testid="cell-2-3"]',
     ) as HTMLElement;
     fireEvent.mouseDown(cell23);
-    expect(onCellClick).toHaveBeenCalledWith(2, 3);
+    expect(onCellPointerDown).toHaveBeenCalledWith(2, 3);
   });
 
   it('solved state disables interaction', () => {
-    const onCellClick = vi.fn();
-    const { container } = renderGrid({ isSolved: true, onCellClick });
+    const onCellPointerDown = vi.fn();
+    const { container } = renderGrid({ isSolved: true, onCellPointerDown });
 
     const cell00 = container.querySelector(
       '[data-testid="cell-0-0"]',
     ) as HTMLElement;
     fireEvent.mouseDown(cell00);
-    expect(onCellClick).not.toHaveBeenCalled();
+    expect(onCellPointerDown).not.toHaveBeenCalled();
   });
 
   it('onDragEnd called on mouseUp on the grid', () => {
