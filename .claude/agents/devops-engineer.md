@@ -71,10 +71,18 @@ Skills are `.md` files in the `skills/` directory. To use a skill, read its `SKI
 
 Before committing Terraform code, verify:
 1. CloudFront uses managed cache policies (e.g., `CachingOptimized`), not deprecated `forwarded_values` blocks
-2. Lambda functions have `reserved_concurrent_executions` set to prevent cost/availability runaway
-3. API Gateway stages have throttling configured via `aws_api_gateway_method_settings`
-4. `terraform init` in CI/CD workflows includes `-backend-config` flags for the S3 state backend
-5. GitHub Actions that reference `terraform plan` with `continue-on-error: true` also have a subsequent step that fails explicitly on plan error
+2. API Gateway stages have throttling configured via `aws_api_gateway_method_settings`
+3. `terraform init` in CI/CD workflows includes `-backend-config` flags for the S3 state backend
+4. GitHub Actions that reference `terraform plan` with `continue-on-error: true` also have a subsequent step that fails explicitly on plan error
+5. Any `file*()` function (e.g., `filebase64sha256`) taking a variable path must be wrapped in a `fileexists()` guard — CI plan passes dummy paths that don't exist on disk
+
+## CI/CD Cross-Validation Checklist
+
+Before merging CI or CD workflow changes, verify:
+1. Every `terraform output` referenced in CD steps (e.g., `output -raw frontend_bucket_name`) exists in root `outputs.tf` and is wired to a module output
+2. Every `secrets.*` and `vars.*` reference matches what is actually configured in GitHub (secret vs variable namespace matters — `secrets.X` returns empty if X is a variable)
+3. CI and CD workflows use the same `secrets.`/`vars.` namespace for shared values — don't mix
+4. Action versions are consistent across CI and CD workflows
 
 ## Verify Before Reporting Done
 
