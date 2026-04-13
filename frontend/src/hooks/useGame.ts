@@ -103,25 +103,12 @@ export function useGame(puzzle: PuzzleData): UseGameReturn {
 
     if (!hasDraggedRef.current) return;
 
-    setCells((prev) => {
-      const currentState = prev[row]![col]!;
-      // Highlight cells that match the drag intent
-      const matches =
-        (intent === 'exclude' && currentState === 'empty') ||
-        (intent === 'clear' && currentState === 'excluded') ||
-        // Also highlight cells already in the target state (visual feedback)
-        (intent === 'exclude' && currentState === 'excluded') ||
-        (intent === 'clear' && currentState === 'empty');
-
-      if (matches) {
-        setDraggedCells((prev) => {
-          const next = new Set(prev);
-          next.add(startKey);
-          next.add(key);
-          return next;
-        });
-      }
-      return prev;
+    // Highlight all cells during drag (including marked) for visual feedback
+    setDraggedCells((prev) => {
+      const next = new Set(prev);
+      next.add(startKey);
+      next.add(key);
+      return next;
     });
   }, []);
 

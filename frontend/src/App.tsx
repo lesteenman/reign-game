@@ -1,3 +1,4 @@
+import { useState, useLayoutEffect } from "react";
 import { ThemeProvider } from "./theme/ThemeContext";
 import { Grid } from "./components/grid/Grid";
 import { useGame } from "./hooks/useGame";
@@ -21,6 +22,9 @@ const HARDCODED_PUZZLE: PuzzleData = {
 };
 
 function GameBoard() {
+  const [ready, setReady] = useState(false);
+  useLayoutEffect(() => { setReady(true); }, []);
+
   const {
     cells,
     conflicts,
@@ -57,7 +61,7 @@ function GameBoard() {
         Reign
       </h1>
 
-      {isSolved && (
+      {ready && isSolved && (
         <div
           style={{
             padding: "12px 24px",
@@ -88,6 +92,7 @@ function GameBoard() {
       <button
         type="button"
         onClick={resetGame}
+        hidden={!ready}
         style={{
           padding: "12px 32px",
           backgroundColor: "var(--color-surface)",
