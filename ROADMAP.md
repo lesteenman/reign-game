@@ -30,7 +30,7 @@ Goal: Play randomly generated 5x5 Standard Mode puzzles in the browser, hosted o
 - [ ] **R-012** — Puzzle generator: produce valid 5x5 Standard Mode puzzles (Go)
 - [ ] **R-013** — Generate endpoint: stateless, returns a fresh puzzle on each call (no DB)
 - [ ] **R-014** — Theme architecture: ThemeContext, theme data structure, component token consumption
-- [ ] **R-015** — Minimalist default theme: piece icons, color palette, grid styling, animations (placeholder art OK)
+- [ ] **R-015** — Tactile default theme: piece icons, color palette, grid styling, animations
 - [ ] **R-016** — Interactive grid component: render regions, place/remove markers, pencil marks, highlight conflicts (theme-aware)
 - [ ] **R-017** — Solution validation in TypeScript (constraint check, no solver)
 - [ ] **R-018** — Game state in IndexedDB: placements, pencil marks, timer, completion status. Persist every move.
@@ -114,7 +114,7 @@ Key decisions made during development that affect the roadmap. Linked to the rel
 | 6 daily puzzles (3 Standard + 3 Double Queens) | May be reduced if engagement data shows fatigue — starting ambitious | 2026-04-12 | R-031 |
 | Freemium, no ads | Pay for content access, not ad removal | 2026-04-12 | R-053 |
 | Working title: Reign | Evokes royalty/regions, not locked to chess theme, short and memorable | 2026-04-12 | — |
-| Minimalist default theme | Brand identity from clean grid + region colors, not a specific metaphor. Queens is a secondary theme. | 2026-04-12 | R-015, R-016 |
+| Tactile default theme | Brand identity from tactile depth, warm ink palette + bold region colors. Queens is a secondary theme. | 2026-04-12 | R-015, R-016 |
 | Theme system baked into Phase 1 | Must be part of component architecture from the start, not bolted on later | 2026-04-12 | R-014 |
 
 ---

@@ -573,12 +573,12 @@ Each theme provides these tokens:
 }
 ```
 
-### 8.2 Default Theme Tokens (Minimalist)
+### 8.2 Default Theme Tokens (Tactile)
 
 ```
 {
-  id: 'minimalist'
-  name: 'Minimalist'
+  id: 'tactile'
+  name: 'Tactile'
   marker: { component: FilledCircle, size: 0.36 }
   grid: {
     outerBorderWidth: 2.5,
@@ -606,7 +606,7 @@ Each theme provides these tokens:
 
 ### 8.3 Theme Overrides
 
-Alternative themes (Queens Classic, Gems, etc.) override any subset of these tokens. Unspecified tokens fall back to the Minimalist defaults. The ThemeContext provider handles this merge.
+Alternative themes (Queens Classic, Gems, etc.) override any subset of these tokens. Unspecified tokens fall back to the Tactile defaults. The ThemeContext provider handles this merge.
 
 Theme selection is persisted to localStorage. For authenticated users, it syncs to the server.
 
