@@ -134,6 +134,11 @@ Skills are `.md` files in `.claude/skills/`. Agents use them by:
 
 Agents must NOT just summarize or paraphrase a skill. They must read and execute.
 
+### Lessons from Past Reviews
+
+1. **Parallel agent spawning:** When spawning parallel agents (e.g., backend-dev + frontend-dev), always use a single message with multiple Agent tool calls. Never spawn one agent, wait for it, then spawn another — this wastes time and breaks the parallelism the task plan designed for.
+2. **Git commands from repo root:** Always run git commands from the repo root. Use absolute paths or `git -C <repo-root>` to avoid working-directory issues after `cd` into subdirectories.
+
 ### Human-in-the-Loop Rule (CRITICAL)
 
 **NEVER:**
