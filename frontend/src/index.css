@@ -1,1 +1,119 @@
+@import url("https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap");
 @import "tailwindcss";
+
+:root {
+  --color-ink: #2D2A26;
+  --color-background: #F8F6F3;
+  --color-surface: #FFFFFF;
+  --color-body: #6B6358;
+  --color-muted: #9C9488;
+  --color-border: #D6CFC5;
+  --color-accent: #4F46E5;
+  --color-accent-hover: #4338CA;
+  --color-on-accent: #FFFFFF;
+  --color-accent-shadow: #312E81;
+  --color-destructive: #DC2626;
+  --color-destructive-bg: #FEE2E2;
+  --color-success: #16A34A;
+  --color-success-bg: #F0FDF4;
+  --color-ring: #4F46E5;
+  --region-0-fill: #93C5FD;
+  --region-0-on-fill: #1E3A5F;
+  --region-1-fill: #FCD34D;
+  --region-1-on-fill: #78350F;
+  --region-2-fill: #FDA4AF;
+  --region-2-on-fill: #881337;
+  --region-3-fill: #5EEAD4;
+  --region-3-on-fill: #134E4A;
+  --region-4-fill: #C4B5FD;
+  --region-4-on-fill: #4C1D95;
+  --region-5-fill: #FDBA74;
+  --region-5-on-fill: #7C2D12;
+  --region-6-fill: #94A3B8;
+  --region-6-on-fill: #1E293B;
+  --region-7-fill: #BEF264;
+  --region-7-on-fill: #365314;
+  --region-8-fill: #E879F9;
+  --region-8-on-fill: #701A75;
+  --radius: 10px;
+}
+
+.dark {
+  --color-ink: #D6CFC5;
+  --color-background: #161310;
+  --color-surface: #1F1C18;
+  --color-body: #9C9488;
+  --color-muted: #6B6358;
+  --color-border: #3D3830;
+  --color-accent: #818CF8;
+  --color-accent-hover: #A5B4FC;
+  --color-on-accent: #111111;
+  --color-accent-shadow: #6366F1;
+  --color-destructive: #F87171;
+  --color-destructive-bg: #450A0A;
+  --color-success: #4ADE80;
+  --color-success-bg: #052E16;
+  --color-ring: #818CF8;
+  --region-0-fill: #1D4ED8;
+  --region-0-on-fill: #DBEAFE;
+  --region-1-fill: #B45309;
+  --region-1-on-fill: #FEF3C7;
+  --region-2-fill: #BE123C;
+  --region-2-on-fill: #FFE4E6;
+  --region-3-fill: #0F766E;
+  --region-3-on-fill: #CCFBF1;
+  --region-4-fill: #6D28D9;
+  --region-4-on-fill: #EDE9FE;
+  --region-5-fill: #C2410C;
+  --region-5-on-fill: #FFEDD5;
+  --region-6-fill: #475569;
+  --region-6-on-fill: #E2E8F0;
+  --region-7-fill: #4D7C0F;
+  --region-7-on-fill: #ECFCCB;
+  --region-8-fill: #A21CAF;
+  --region-8-on-fill: #FAE8FF;
+}
+
+.animate-placement {
+  animation: placement 150ms ease-out;
+}
+
+.animate-conflict {
+  animation: conflict-pulse 300ms ease-in-out;
+}
+
+.animate-completion {
+  animation: completion-ripple 400ms ease-out;
+}
+
+@keyframes placement {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes conflict-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+@keyframes completion-ripple {
+  from {
+    transform: scale(0.9);
+    opacity: 0.5;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
