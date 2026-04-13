@@ -9,16 +9,16 @@ describe("Marker", () => {
     expect(svg).toBeInTheDocument();
   });
 
-  it("renders a filled circle", () => {
+  it("renders a rounded rect", () => {
     const { container } = render(<Marker size={24} regionIndex={0} />);
-    const circle = container.querySelector("circle");
-    expect(circle).toBeInTheDocument();
+    const rect = container.querySelector("rect");
+    expect(rect).toBeInTheDocument();
   });
 
   it("uses currentColor for fill", () => {
     const { container } = render(<Marker size={24} regionIndex={0} />);
-    const circle = container.querySelector("circle");
-    expect(circle).toHaveAttribute("fill", "currentColor");
+    const rect = container.querySelector("rect");
+    expect(rect).toHaveAttribute("fill", "currentColor");
   });
 
   it("applies the provided size to the SVG dimensions", () => {

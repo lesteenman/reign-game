@@ -13,12 +13,8 @@ test.describe("Grid Interaction", () => {
   });
 
   test("cells have region background colors", async ({ page }) => {
-    // Cell (0,0) should have region-0-fill background
     const cell = page.getByTestId("cell-0-0");
-    await expect(cell).toHaveCSS(
-      "background-color",
-      /rgb/,
-    );
+    await expect(cell).toHaveCSS("background-color", /rgb/);
   });
 
   test("three-tap cycle: empty → excluded → marked → empty", async ({
@@ -26,22 +22,20 @@ test.describe("Grid Interaction", () => {
   }) => {
     const cell = page.getByTestId("cell-2-2");
 
-    // Initially empty: no SVG
-    await expect(cell.locator("svg")).toHaveCount(0);
+    // Initially empty
+    await expect(cell).toHaveAttribute("data-cell-state", "empty");
 
-    // First click: excluded (shows cross — two lines)
+    // First click: excluded
     await cell.click();
-    await expect(cell.locator("svg")).toHaveCount(1);
-    await expect(cell.locator("line")).toHaveCount(2);
+    await expect(cell).toHaveAttribute("data-cell-state", "excluded");
 
-    // Second click: marked (shows circle)
+    // Second click: marked
     await cell.click();
-    await expect(cell.locator("svg")).toHaveCount(1);
-    await expect(cell.locator("circle")).toHaveCount(1);
+    await expect(cell).toHaveAttribute("data-cell-state", "marked");
 
     // Third click: back to empty
     await cell.click();
-    await expect(cell.locator("svg")).toHaveCount(0);
+    await expect(cell).toHaveAttribute("data-cell-state", "empty");
   });
 
   test("conflict highlighting when two markers in same row", async ({
@@ -53,25 +47,16 @@ test.describe("Grid Interaction", () => {
     // Place marker at (0,0): click twice (excluded → marked)
     await cell00.click();
     await cell00.click();
-    await expect(cell00.locator("circle")).toHaveCount(1);
+    await expect(cell00).toHaveAttribute("data-cell-state", "marked");
 
     // Place marker at (0,1): click twice
     await cell01.click();
     await cell01.click();
-    await expect(cell01.locator("circle")).toHaveCount(1);
+    await expect(cell01).toHaveAttribute("data-cell-state", "marked");
 
-    // Both cells should now have destructive background (conflict)
-    // The exact RGB depends on the CSS variable resolution
-    const bg00 = await cell00.evaluate(
-      (el) => getComputedStyle(el).backgroundColor,
-    );
-    const bg01 = await cell01.evaluate(
-      (el) => getComputedStyle(el).backgroundColor,
-    );
-    // Both should be the same destructive background
-    expect(bg00).toBe(bg01);
-    // Should not be the original region color anymore
-    expect(bg00).not.toBe("");
+    // Both cells should have conflict attribute
+    await expect(cell00).toHaveAttribute("data-cell-conflict", "true");
+    await expect(cell01).toHaveAttribute("data-cell-conflict", "true");
   });
 
   test("solving the puzzle shows completion message", async ({ page }) => {
@@ -86,12 +71,10 @@ test.describe("Grid Interaction", () => {
 
     for (const [row, col] of solution) {
       const cell = page.getByTestId(`cell-${row}-${col}`);
-      // Click twice: empty → excluded → marked
-      await cell.click();
-      await cell.click();
+      await cell.click(); // excluded
+      await cell.click(); // marked
     }
 
-    // Should show "Puzzle solved!" message
     await expect(page.getByText("Puzzle solved!")).toBeVisible();
   });
 
@@ -101,22 +84,20 @@ test.describe("Grid Interaction", () => {
     // Place a marker
     await cell.click(); // excluded
     await cell.click(); // marked
-    await expect(cell.locator("circle")).toHaveCount(1);
+    await expect(cell).toHaveAttribute("data-cell-state", "marked");
 
     // Reset
     await page.getByRole("button", { name: /reset/i }).click();
 
     // Cell should be empty again
-    await expect(cell.locator("svg")).toHaveCount(0);
+    await expect(cell).toHaveAttribute("data-cell-state", "empty");
   });
 
   test("drag to exclude multiple cells", async ({ page }) => {
-    const grid = page.getByTestId("game-grid");
     const cell00 = page.getByTestId("cell-0-0");
     const cell01 = page.getByTestId("cell-0-1");
     const cell02 = page.getByTestId("cell-0-2");
 
-    // Get bounding boxes for cells
     const box00 = await cell00.boundingBox();
     const box01 = await cell01.boundingBox();
     const box02 = await cell02.boundingBox();
@@ -142,16 +123,16 @@ test.describe("Grid Interaction", () => {
       box02.y + box02.height / 2,
     );
 
-    // During drag: dragged cells should NOT have crosses yet
-    await expect(cell01.locator("svg")).toHaveCount(0);
-    await expect(cell02.locator("svg")).toHaveCount(0);
+    // During drag: cells still empty (exclusion deferred)
+    await expect(cell01).toHaveAttribute("data-cell-state", "empty");
+    await expect(cell02).toHaveAttribute("data-cell-state", "empty");
 
     await page.mouse.up();
 
-    // After drag end: starting cell was excluded on tap, dragged cells now excluded
-    await expect(cell00.locator("line")).toHaveCount(2);
-    await expect(cell01.locator("line")).toHaveCount(2);
-    await expect(cell02.locator("line")).toHaveCount(2);
+    // After drag end: all cells excluded
+    await expect(cell00).toHaveAttribute("data-cell-state", "excluded");
+    await expect(cell01).toHaveAttribute("data-cell-state", "excluded");
+    await expect(cell02).toHaveAttribute("data-cell-state", "excluded");
   });
 
   test("solved state disables further interaction", async ({ page }) => {
@@ -175,6 +156,6 @@ test.describe("Grid Interaction", () => {
     // Click on an empty cell — should remain empty (interactions disabled)
     const emptyCell = page.getByTestId("cell-0-0");
     await emptyCell.click();
-    await expect(emptyCell.locator("svg")).toHaveCount(0);
+    await expect(emptyCell).toHaveAttribute("data-cell-state", "empty");
   });
 });

@@ -9,18 +9,16 @@ describe("ExclusionMark", () => {
     expect(svg).toBeInTheDocument();
   });
 
-  it("renders two diagonal lines forming a cross", () => {
+  it("renders a small circle dot", () => {
     const { container } = render(<ExclusionMark size={24} />);
-    const lines = container.querySelectorAll("line");
-    expect(lines).toHaveLength(2);
+    const circle = container.querySelector("circle");
+    expect(circle).toBeInTheDocument();
   });
 
-  it("uses currentColor for stroke", () => {
+  it("uses currentColor for fill", () => {
     const { container } = render(<ExclusionMark size={24} />);
-    const lines = container.querySelectorAll("line");
-    for (const line of lines) {
-      expect(line).toHaveAttribute("stroke", "currentColor");
-    }
+    const circle = container.querySelector("circle");
+    expect(circle).toHaveAttribute("fill", "currentColor");
   });
 
   it("applies the provided size to the SVG dimensions", () => {

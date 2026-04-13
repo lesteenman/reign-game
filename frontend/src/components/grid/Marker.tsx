@@ -1,9 +1,10 @@
 import type { MarkerProps } from "../../theme/types";
 
-/** Filled circle marker for the Tactile theme. */
+/** Rounded square marker for the Tactile theme. */
 export function Marker({ size, regionIndex: _regionIndex }: MarkerProps) {
-  const radius = size * 0.35;
-  const center = size / 2;
+  const padding = size * 0.18;
+  const sideLength = size - padding * 2;
+  const rx = 3;
 
   return (
     <svg
@@ -12,7 +13,14 @@ export function Marker({ size, regionIndex: _regionIndex }: MarkerProps) {
       viewBox={`0 0 ${size} ${size}`}
       aria-hidden="true"
     >
-      <circle cx={center} cy={center} r={radius} fill="currentColor" />
+      <rect
+        x={padding}
+        y={padding}
+        width={sideLength}
+        height={sideLength}
+        rx={rx}
+        fill="currentColor"
+      />
     </svg>
   );
 }

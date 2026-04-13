@@ -83,6 +83,7 @@ describe('Grid', () => {
     const { container } = renderGrid();
 
     // Cell (0,1) is region 0, cell (0,2) is region 1
+    // Only (0,1) draws the right border; (0,2) suppresses its left internal border
     const cell01 = container.querySelector(
       '[data-testid="cell-0-1"]',
     ) as HTMLElement;
@@ -91,7 +92,7 @@ describe('Grid', () => {
     const cell02 = container.querySelector(
       '[data-testid="cell-0-2"]',
     ) as HTMLElement;
-    expect(cell02.style.borderLeftWidth).toBe('2.5px');
+    expect(cell02.style.borderLeftWidth).toBe('0px');
   });
 
   it('click on cell triggers onPointerDown with correct row/col', () => {

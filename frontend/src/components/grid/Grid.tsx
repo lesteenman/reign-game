@@ -81,7 +81,7 @@ export function Grid({
   return (
     <div
       ref={containerRef}
-      data-testid="game-grid"
+      {...(__TEST_ATTRS__ ? { 'data-testid': 'game-grid' } : {})}
       style={{
         display: 'inline-grid',
         gridTemplateColumns: `repeat(${gridSize}, ${cellSize}px)`,
@@ -105,16 +105,22 @@ export function Grid({
           const hasConflict = conflictSet.has(`${row},${col}`);
           const isDragHighlighted = draggedCells.has(`${row},${col}`);
 
-          const bTop =
-            row > 0 && regionMap[row]![col] !== regionMap[row - 1]![col];
+          // Region boundary: this cell draws right/bottom borders.
+          // adjacentLeftHasBorder / adjacentTopHasBorder tell the cell
+          // whether the neighbor already drew a region border, so it
+          // can suppress its internal border on that side.
           const bRight =
             col < gridSize - 1 &&
             regionMap[row]![col] !== regionMap[row]![col + 1];
           const bBottom =
             row < gridSize - 1 &&
             regionMap[row]![col] !== regionMap[row + 1]![col];
-          const bLeft =
-            col > 0 && regionMap[row]![col] !== regionMap[row]![col - 1];
+          const adjLeftBorder =
+            col > 0 &&
+            regionMap[row]![col] !== regionMap[row]![col - 1];
+          const adjTopBorder =
+            row > 0 &&
+            regionMap[row]![col] !== regionMap[row - 1]![col];
 
           return (
             <Cell
@@ -126,10 +132,10 @@ export function Grid({
               hasConflict={hasConflict}
               isDragHighlighted={isDragHighlighted}
               cellSize={cellSize}
-              borderTop={bTop}
               borderRight={bRight}
               borderBottom={bBottom}
-              borderLeft={bLeft}
+              adjacentLeftHasBorder={adjLeftBorder}
+              adjacentTopHasBorder={adjTopBorder}
               onPointerDown={
                 isSolved ? () => {} : () => onPointerDown(row, col)
               }

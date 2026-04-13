@@ -17,10 +17,10 @@ function renderCell(overrides: Partial<CellProps> = {}) {
     hasConflict: false,
     isDragHighlighted: false,
     cellSize: 60,
-    borderTop: false,
     borderRight: false,
     borderBottom: false,
-    borderLeft: false,
+    adjacentLeftHasBorder: false,
+    adjacentTopHasBorder: false,
     onPointerDown: vi.fn(),
     onPointerUp: vi.fn(),
     onDragEnter: vi.fn(),
@@ -56,15 +56,13 @@ describe('Cell', () => {
     const { cell } = renderCell({ state: 'excluded' });
     const svg = cell.querySelector('svg');
     expect(svg).not.toBeNull();
-    // ExclusionMark renders lines (cross)
-    expect(cell.querySelectorAll('line').length).toBe(2);
   });
 
   it('marked cell shows Marker', () => {
     const { cell } = renderCell({ state: 'marked' });
     const svg = cell.querySelector('svg');
     expect(svg).not.toBeNull();
-    expect(cell.querySelector('circle')).not.toBeNull();
+    expect(cell.querySelector('rect')).not.toBeNull();
   });
 
   it('conflict cell has destructive background color', () => {
@@ -93,16 +91,13 @@ describe('Cell', () => {
     expect(onDragEnter).not.toHaveBeenCalled();
   });
 
-  it('applies region boundary borders correctly', () => {
-    const { cell } = renderCell({
-      borderTop: true,
-      borderRight: false,
-      borderBottom: true,
-      borderLeft: false,
-    });
-    expect(cell.style.borderTopWidth).toBe('2.5px');
-    expect(cell.style.borderBottomWidth).toBe('2.5px');
-    expect(cell.style.borderRightWidth).toBe('1px');
-    expect(cell.style.borderLeftWidth).toBe('1px');
+  it('region boundary on right renders thick border', () => {
+    const { cell } = renderCell({ borderRight: true });
+    expect(cell.style.borderRightWidth).toBe('2.5px');
+  });
+
+  it('suppresses internal top border when adjacent cell above has region border', () => {
+    const { cell } = renderCell({ adjacentTopHasBorder: true });
+    expect(cell.style.borderTopWidth).toBe('0px');
   });
 });
