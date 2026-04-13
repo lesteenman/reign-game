@@ -67,6 +67,15 @@ Skills are `.md` files in the `skills/` directory. To use a skill, read its `SKI
 - GitHub Actions: test workflows locally with `act` where practical
 - Infrastructure changes: verify via AWS CLI after deploy
 
+## Terraform Review Checklist (Lessons from Past Reviews)
+
+Before committing Terraform code, verify:
+1. CloudFront uses managed cache policies (e.g., `CachingOptimized`), not deprecated `forwarded_values` blocks
+2. Lambda functions have `reserved_concurrent_executions` set to prevent cost/availability runaway
+3. API Gateway stages have throttling configured via `aws_api_gateway_method_settings`
+4. `terraform init` in CI/CD workflows includes `-backend-config` flags for the S3 state backend
+5. GitHub Actions that reference `terraform plan` with `continue-on-error: true` also have a subsequent step that fails explicitly on plan error
+
 ## Verify Before Reporting Done
 
 1. `terraform validate` passes
@@ -74,6 +83,7 @@ Skills are `.md` files in the `skills/` directory. To use a skill, read its `SKI
 3. GitHub Actions workflows have correct syntax (use actionlint if available)
 4. IAM policies follow least privilege
 5. No hardcoded secrets in any file
+6. All items in the Terraform Review Checklist above are satisfied
 
 ## Team Workflow
 

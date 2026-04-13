@@ -9,7 +9,7 @@ Monorepo layout. Search by domain keyword (e.g., `puzzle`, `grid`, `leaderboard`
 ## Repository Root
 
 ```
-queens-game/
+reign-game/
 ├── frontend/              # React + TypeScript PWA
 ├── backend/               # Go serverless API (Lambda handlers)
 ├── infra/                 # Terraform infrastructure-as-code
@@ -20,6 +20,7 @@ queens-game/
 │   └── skills/            # Skill directories with SKILL.md files
 ├── .github/
 │   └── workflows/         # GitHub Actions CI/CD pipelines
+├── Taskfile.yml           # Task runner for build, test, dev, deploy
 ├── CLAUDE.md              # Project config for Claude Code agents
 ├── GAME_DESIGN.md         # Living game design vision document
 ├── ROADMAP.md             # Phased roadmap + known issues
@@ -61,7 +62,6 @@ backend/
 │   └── middleware/              # Shared middleware (auth, logging, cors)
 ├── go.mod
 ├── go.sum
-├── Makefile
 └── README.md                    # Open source README for generator
 ```
 

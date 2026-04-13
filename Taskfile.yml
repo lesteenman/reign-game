@@ -1,0 +1,64 @@
+version: "3"
+
+tasks:
+  build:backend:
+    desc: Build the Go backend
+    dir: backend
+    cmds:
+      - go build ./...
+
+  test:backend:
+    desc: Run backend tests
+    dir: backend
+    cmds:
+      - go test ./... -v
+
+  lint:backend:
+    desc: Run backend linter
+    dir: backend
+    cmds:
+      - golangci-lint run
+
+  dev:backend:
+    desc: Start backend dev server
+    dir: backend
+    cmds:
+      - go run ./cmd/api
+
+  build:frontend:
+    desc: Build the frontend
+    dir: frontend
+    cmds:
+      - npm run build
+
+  test:frontend:
+    desc: Run frontend tests
+    dir: frontend
+    cmds:
+      - npm test
+
+  dev:frontend:
+    desc: Start frontend dev server
+    dir: frontend
+    cmds:
+      - npm run dev
+
+  build:
+    desc: Build backend and frontend
+    deps:
+      - build:backend
+      - build:frontend
+
+  test:
+    desc: Run all tests
+    deps:
+      - test:backend
+      - test:frontend
+
+  deploy:
+    desc: Deploy infrastructure via Terraform
+    deps:
+      - build
+    dir: infra
+    cmds:
+      - terraform apply
