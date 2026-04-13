@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CellState, Conflict, PuzzleData } from '../../engine/types';
 import { Cell } from './Cell';
+import { RegionBorderOverlay } from './RegionBorderOverlay';
 
 /** Props for the Grid component. */
 export interface GridProps {
@@ -16,8 +17,8 @@ export interface GridProps {
 
 /**
  * The main puzzle grid component.
- * Renders a CSS Grid of Cell components with region boundaries,
- * conflict highlighting, and drag support.
+ * Cells render with subtle internal borders. Region boundaries
+ * are drawn as an SVG overlay on top.
  */
 export function Grid({
   puzzle,
@@ -33,7 +34,6 @@ export function Grid({
   const containerRef = useRef<HTMLDivElement>(null);
   const [cellSize, setCellSize] = useState(60);
 
-  // Measure container width and compute cell size
   useEffect(() => {
     function measure() {
       const container = containerRef.current?.parentElement;
@@ -48,7 +48,6 @@ export function Grid({
     return () => window.removeEventListener('resize', measure);
   }, [gridSize]);
 
-  // Build a Set of conflicting cell positions for O(1) lookup
   const conflictSet = useMemo(() => {
     const set = new Set<string>();
     for (const conflict of conflicts) {
@@ -83,6 +82,7 @@ export function Grid({
       ref={containerRef}
       {...(__TEST_ATTRS__ ? { 'data-testid': 'game-grid' } : {})}
       style={{
+        position: 'relative',
         display: 'inline-grid',
         gridTemplateColumns: `repeat(${gridSize}, ${cellSize}px)`,
         gridTemplateRows: `repeat(${gridSize}, ${cellSize}px)`,
@@ -105,23 +105,6 @@ export function Grid({
           const hasConflict = conflictSet.has(`${row},${col}`);
           const isDragHighlighted = draggedCells.has(`${row},${col}`);
 
-          // Region boundary: this cell draws right/bottom borders.
-          // adjacentLeftHasBorder / adjacentTopHasBorder tell the cell
-          // whether the neighbor already drew a region border, so it
-          // can suppress its internal border on that side.
-          const bRight =
-            col < gridSize - 1 &&
-            regionMap[row]![col] !== regionMap[row]![col + 1];
-          const bBottom =
-            row < gridSize - 1 &&
-            regionMap[row]![col] !== regionMap[row + 1]![col];
-          const adjLeftBorder =
-            col > 0 &&
-            regionMap[row]![col] !== regionMap[row]![col - 1];
-          const adjTopBorder =
-            row > 0 &&
-            regionMap[row]![col] !== regionMap[row - 1]![col];
-
           return (
             <Cell
               key={`${row}-${col}`}
@@ -132,10 +115,6 @@ export function Grid({
               hasConflict={hasConflict}
               isDragHighlighted={isDragHighlighted}
               cellSize={cellSize}
-              borderRight={bRight}
-              borderBottom={bBottom}
-              adjacentLeftHasBorder={adjLeftBorder}
-              adjacentTopHasBorder={adjTopBorder}
               onPointerDown={
                 isSolved ? () => {} : () => onPointerDown(row, col)
               }
@@ -149,6 +128,11 @@ export function Grid({
           );
         }),
       )}
+      <RegionBorderOverlay
+        regionMap={regionMap}
+        gridSize={gridSize}
+        cellSize={cellSize}
+      />
     </div>
   );
 }

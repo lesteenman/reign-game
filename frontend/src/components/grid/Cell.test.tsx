@@ -17,10 +17,6 @@ function renderCell(overrides: Partial<CellProps> = {}) {
     hasConflict: false,
     isDragHighlighted: false,
     cellSize: 60,
-    borderRight: false,
-    borderBottom: false,
-    adjacentLeftHasBorder: false,
-    adjacentTopHasBorder: false,
     onPointerDown: vi.fn(),
     onPointerUp: vi.fn(),
     onDragEnter: vi.fn(),
@@ -91,13 +87,13 @@ describe('Cell', () => {
     expect(onDragEnter).not.toHaveBeenCalled();
   });
 
-  it('region boundary on right renders thick border', () => {
-    const { cell } = renderCell({ borderRight: true });
-    expect(cell.style.borderRightWidth).toBe('2.5px');
+  it('sets data-cell-state attribute', () => {
+    const { cell } = renderCell({ state: 'marked' });
+    expect(cell.getAttribute('data-cell-state')).toBe('marked');
   });
 
-  it('suppresses internal top border when adjacent cell above has region border', () => {
-    const { cell } = renderCell({ adjacentTopHasBorder: true });
-    expect(cell.style.borderTopWidth).toBe('0px');
+  it('sets data-cell-conflict attribute when conflicting', () => {
+    const { cell } = renderCell({ state: 'marked', hasConflict: true });
+    expect(cell.getAttribute('data-cell-conflict')).toBe('true');
   });
 });

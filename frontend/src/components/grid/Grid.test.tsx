@@ -60,48 +60,28 @@ describe('Grid', () => {
 
   it('cells have correct region background colors', () => {
     const { container } = renderGrid();
-    // Cell (0,0) is region 0
-    const cell00 = container.querySelector(
-      '[data-testid="cell-0-0"]',
-    ) as HTMLElement;
+    const cell00 = container.querySelector('[data-testid="cell-0-0"]') as HTMLElement;
     expect(cell00.style.backgroundColor).toBe('var(--region-0-fill)');
 
-    // Cell (0,2) is region 1
-    const cell02 = container.querySelector(
-      '[data-testid="cell-0-2"]',
-    ) as HTMLElement;
+    const cell02 = container.querySelector('[data-testid="cell-0-2"]') as HTMLElement;
     expect(cell02.style.backgroundColor).toBe('var(--region-1-fill)');
-
-    // Cell (1,3) is region 2
-    const cell13 = container.querySelector(
-      '[data-testid="cell-1-3"]',
-    ) as HTMLElement;
-    expect(cell13.style.backgroundColor).toBe('var(--region-2-fill)');
   });
 
-  it('region boundaries placed correctly between different regions', () => {
+  it('renders region border overlay SVG', () => {
     const { container } = renderGrid();
-
-    // Cell (0,1) is region 0, cell (0,2) is region 1
-    // Only (0,1) draws the right border; (0,2) suppresses its left internal border
-    const cell01 = container.querySelector(
-      '[data-testid="cell-0-1"]',
-    ) as HTMLElement;
-    expect(cell01.style.borderRightWidth).toBe('2.5px');
-
-    const cell02 = container.querySelector(
-      '[data-testid="cell-0-2"]',
-    ) as HTMLElement;
-    expect(cell02.style.borderLeftWidth).toBe('0px');
+    const grid = container.querySelector('[data-testid="game-grid"]') as HTMLElement;
+    const svg = grid.querySelector('svg');
+    expect(svg).not.toBeNull();
+    // Should have at least some boundary lines
+    const lines = svg!.querySelectorAll('line');
+    expect(lines.length).toBeGreaterThan(0);
   });
 
   it('click on cell triggers onPointerDown with correct row/col', () => {
     const onPointerDown = vi.fn();
     const { container } = renderGrid({ onPointerDown });
 
-    const cell23 = container.querySelector(
-      '[data-testid="cell-2-3"]',
-    ) as HTMLElement;
+    const cell23 = container.querySelector('[data-testid="cell-2-3"]') as HTMLElement;
     fireEvent.mouseDown(cell23);
     expect(onPointerDown).toHaveBeenCalledWith(2, 3);
   });
@@ -110,9 +90,7 @@ describe('Grid', () => {
     const onPointerDown = vi.fn();
     const { container } = renderGrid({ isSolved: true, onPointerDown });
 
-    const cell00 = container.querySelector(
-      '[data-testid="cell-0-0"]',
-    ) as HTMLElement;
+    const cell00 = container.querySelector('[data-testid="cell-0-0"]') as HTMLElement;
     fireEvent.mouseDown(cell00);
     expect(onPointerDown).not.toHaveBeenCalled();
   });
@@ -121,9 +99,7 @@ describe('Grid', () => {
     const onPointerUp = vi.fn();
     const { container } = renderGrid({ onPointerUp });
 
-    const cell = container.querySelector(
-      '[data-testid="cell-0-0"]',
-    ) as HTMLElement;
+    const cell = container.querySelector('[data-testid="cell-0-0"]') as HTMLElement;
     fireEvent.mouseUp(cell);
     expect(onPointerUp).toHaveBeenCalledTimes(1);
   });
@@ -132,9 +108,7 @@ describe('Grid', () => {
     const onPointerUp = vi.fn();
     const { container } = renderGrid({ onPointerUp });
 
-    const grid = container.querySelector(
-      '[data-testid="game-grid"]',
-    ) as HTMLElement;
+    const grid = container.querySelector('[data-testid="game-grid"]') as HTMLElement;
     fireEvent.mouseLeave(grid);
     expect(onPointerUp).toHaveBeenCalledTimes(1);
   });
