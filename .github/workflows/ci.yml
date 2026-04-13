@@ -32,7 +32,8 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           working-directory: backend
-          version: latest
+          install-mode: goinstall
+          version: v1.64.8
 
   frontend:
     name: Frontend
@@ -84,7 +85,7 @@ jobs:
         run: |
           terraform init \
             -backend-config="bucket=${{ secrets.TF_VAR_TERRAFORM_STATE_BUCKET }}" \
-            -backend-config="key=${{ secrets.TF_VAR_TERRAFORM_STATE_PREFIX }}/terraform.tfstate" \
+            -backend-config="key=${{ vars.TF_VAR_TERRAFORM_STATE_PREFIX }}/terraform.tfstate" \
             -backend-config="region=${{ vars.AWS_REGION }}" \
             -backend-config="use_lockfile=true"
 
