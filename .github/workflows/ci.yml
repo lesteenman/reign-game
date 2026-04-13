@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    if: always()
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: backend/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./... -v
+
+      - name: Lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: backend
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    if: always()
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    if: always()
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: true
+
+      - name: Terraform Init
+        run: terraform init
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Plan
+        id: plan
+        run: terraform plan -no-color -out=tfplan
+        continue-on-error: true
+
+      - name: Post Plan to PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const output = `#### Terraform Plan 📋
+            \`\`\`
+            ${{ steps.plan.outputs.stdout }}
+            \`\`\`
+
+            *Result: \`${{ steps.plan.outcome }}\`*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            });
+
+  security:
+    name: Security
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Go Vulnerability Check
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          cd backend && govulncheck ./...
+
+      - name: NPM Audit
+        run: cd frontend && npm ci && npm audit --audit-level=moderate
