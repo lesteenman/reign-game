@@ -39,9 +39,9 @@ No React Router, no components, no pages, no Playwright. Phase 0 proves the buil
 
 Terraform 1.14.8. Two modules:
 
-**`infra/modules/frontend/`** — S3 bucket (private), CloudFront distribution with Origin Access Control (OAC). Output: CloudFront distribution URL, S3 bucket name.
+**`infra/modules/frontend/`** — S3 bucket (private), CloudFront distribution with OAC and CachingOptimized managed cache policy. Output: CloudFront distribution URL, distribution ID, S3 bucket name.
 
-**`infra/modules/api/`** — API Gateway REST API, single Lambda function, IAM execution role (least-privilege: CloudWatch Logs only). Lambda reads zip from a path managed by Terraform. Output: API Gateway invoke URL.
+**`infra/modules/api/`** — API Gateway REST API with throttling (burst 50, rate 100), single Lambda function with reserved concurrency (100), IAM execution role (least-privilege: CloudWatch Logs only). Lambda reads zip from a path managed by Terraform. Output: API Gateway invoke URL.
 
 **Root config** — `main.tf` calls both modules. `variables.tf` defines all inputs (no defaults for AWS-specific values). `outputs.tf` exposes CloudFront URL and API Gateway URL. `backend.tf` references pre-existing S3 state bucket via variables.
 
@@ -57,14 +57,14 @@ Four parallel jobs, all run to completion (no early exit):
 |-----|-------|
 | backend | `go build ./...`, `go test ./... -v`, `golangci-lint run` |
 | frontend | `npm ci`, `npm run build`, `npm test` |
-| terraform-plan | `terraform init`, `terraform validate`, `terraform plan` — output posted as PR comment |
-| security | `gitleaks detect --source .`, `govulncheck ./...` (backend/), `npm audit --audit-level=moderate` (frontend/) |
+| terraform-plan | `terraform init` (with `-backend-config`), `terraform validate`, `terraform fmt -check`, `terraform plan` — output posted as PR comment, explicit failure on plan error |
+| security | `gitleaks detect --source .`, `govulncheck ./...` (backend/), `npm audit --package-lock-only --audit-level=moderate` (frontend/) |
 
 ## CD Pipeline (R-006)
 
 GitHub Actions workflow: `.github/workflows/cd.yml`, triggers on push to main.
 
-Steps: build Go binary and zip, build frontend, `terraform init` + `terraform apply -auto-approve`. Terraform manages everything: Lambda code update, S3 frontend sync, CloudFront cache invalidation.
+Steps: build Go binary (linux/amd64) and zip, build frontend, `terraform init` (with `-backend-config`) + `terraform apply -auto-approve`. Terraform manages Lambda code and infrastructure. S3 sync and CloudFront invalidation run as separate AWS CLI steps (Terraform is not suited for syncing many static files).
 
 AWS credentials via OIDC or GitHub secrets. No AWS specifics in the repo.
 

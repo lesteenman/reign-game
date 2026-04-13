@@ -10,13 +10,13 @@ Status key: `[ ]` todo, `[~]` in progress, `[x]` done, `[!]` blocked
 
 Goal: Empty app live on AWS, CI/CD working. No game logic yet.
 
-- [ ] **R-001** — Initialize monorepo structure (frontend/, backend/, infra/, design/)
-- [ ] **R-002** — Set up Go module in backend/ with basic Lambda handler (health check)
-- [ ] **R-003** — Set up React + TypeScript + Vite in frontend/ (minimal scaffold)
-- [ ] **R-004** — Terraform: S3, CloudFront, API Gateway, Lambda (no DynamoDB yet)
-- [ ] **R-005** — GitHub Actions CI: lint + test on PR for both frontend and backend
-- [ ] **R-006** — GitHub Actions CD: deploy to AWS on merge to main
-- [ ] **R-007** — Basic dev workflow: local frontend dev server, Go backend runner
+- [x] **R-001** — Initialize monorepo structure (frontend/, backend/, infra/, design/)
+- [x] **R-002** — Set up Go module in backend/ with basic Lambda handler (health check)
+- [x] **R-003** — Set up React + TypeScript + Vite in frontend/ (minimal scaffold)
+- [x] **R-004** — Terraform: S3, CloudFront, API Gateway, Lambda (no DynamoDB yet)
+- [x] **R-005** — GitHub Actions CI: lint + test on PR for both frontend and backend
+- [x] **R-006** — GitHub Actions CD: deploy to AWS on merge to main
+- [x] **R-007** — Basic dev workflow: local frontend dev server, Go backend runner
 - [ ] **R-008** — Brand guidelines generation (ui-ux-pro-max skill)
 
 Note: Terraform and GitHub Actions contain no AWS account, role, or domain specifics. All injected via GitHub configuration (secrets/variables).

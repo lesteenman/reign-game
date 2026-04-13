@@ -22,35 +22,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build Commands
 
 ```bash
-# Build backend
+# Using Taskfile (recommended)
+task build              # Build backend + frontend
+task test               # Run all tests
+task build:backend      # Build Go backend
+task test:backend       # Run backend tests
+task lint:backend       # Run golangci-lint
+task dev:backend        # Start backend dev server (localhost:8080)
+task build:frontend     # Build frontend
+task test:frontend      # Run frontend unit tests
+task dev:frontend       # Start Vite dev server
+task deploy             # Build + terraform apply
+
+# Direct commands (if Taskfile not installed)
 cd backend && go build ./...
-
-# Run backend tests
 cd backend && go test ./... -v
-
-# Run backend linter
 cd backend && golangci-lint run
-
-# Build frontend
 cd frontend && npm run build
-
-# Run frontend unit tests
-cd frontend && npm run test
-
-# Run frontend e2e tests
-cd frontend && npx playwright test
-
-# Start frontend dev server
+cd frontend && npm test
+cd frontend && npx playwright test   # Phase 1+
 cd frontend && npm run dev
-
-# Run backend locally (plain Go, no SAM)
 cd backend && go run ./cmd/api
-
-# Start local DynamoDB (LocalStack)
-docker compose up localstack
-
-# Deploy infrastructure
-cd infra && terraform plan && terraform apply
+docker compose up localstack         # Phase 4+
 ```
 
 ## Testing

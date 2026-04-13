@@ -23,15 +23,16 @@ Covers R-005 (CI), R-006 (CD), and R-007 (Taskfile).
 ### CI-04: Terraform Plan Job
 
 - Working directory: `infra/`
-- Runs: `terraform init`, `terraform validate`, `terraform fmt -check`, `terraform plan`
-- Posts the plan output as a comment on the PR (via `github-script` action or similar)
+- Runs: `terraform init` (with `-backend-config` flags from secrets/vars), `terraform validate`, `terraform fmt -check`, `terraform plan`
+- Posts the plan output as a comment on the PR (via `github-script` action)
+- Explicitly fails the job if the plan step fails (not swallowed by continue-on-error)
 - Requires AWS credentials (from OIDC or GitHub secrets)
 
 ### CI-05: Security Job
 
 - `gitleaks detect --source .` (repo root)
 - `govulncheck ./...` (working directory: `backend/`)
-- `npm audit --audit-level=moderate` (working directory: `frontend/`)
+- `npm audit --package-lock-only --audit-level=moderate` (working directory: `frontend/`, no install needed)
 - All three checks in a single job
 
 ### CI-06: All Jobs Run to Completion
@@ -52,12 +53,13 @@ Covers R-005 (CI), R-006 (CD), and R-007 (Taskfile).
 - Frontend: `npm ci && npm run build` produces `dist/` directory
 - Both built before Terraform apply
 
-### CD-03: Terraform Apply
+### CD-03: Deploy
 
-- Runs `terraform init` + `terraform apply -auto-approve`
-- Terraform handles: Lambda zip upload, S3 frontend sync, CloudFront cache invalidation
+- Runs `terraform init` (with `-backend-config` flags) + `terraform apply -auto-approve`
+- Terraform handles: Lambda zip upload and infrastructure state
+- S3 frontend sync via `aws s3 sync` (separate step — Terraform is not suited for syncing many static files)
+- CloudFront cache invalidation via `aws cloudfront create-invalidation` (separate step)
 - AWS credentials via OIDC or GitHub secrets
-- No separate deploy scripts — Terraform manages all resource updates
 
 ## Taskfile Requirements
 
