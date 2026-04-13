@@ -32,7 +32,7 @@ export function Grid({
 }: GridProps) {
   const { gridSize, regionMap } = puzzle;
   const containerRef = useRef<HTMLDivElement>(null);
-  const [cellSize, setCellSize] = useState(60);
+  const [cellSize, setCellSize] = useState<number | null>(null);
 
   useEffect(() => {
     function measure() {
@@ -76,6 +76,11 @@ export function Grid({
     },
     [isSolved, onDragEnter],
   );
+
+  // Don't render grid content until we've measured the container
+  if (cellSize === null) {
+    return <div ref={containerRef} style={{ width: '100%' }} />;
+  }
 
   return (
     <div

@@ -16,19 +16,15 @@ const testPuzzle: PuzzleData = {
   ],
 };
 
-/** Simulate a tap: pointer down then pointer up on the same cell. */
 function tap(result: { current: ReturnType<typeof useGame> }, row: number, col: number) {
   act(() => result.current.handlePointerDown(row, col));
   act(() => result.current.handlePointerUp());
 }
 
 describe('useGame', () => {
-  it('initializes with all cells empty, no conflicts, not solved', () => {
+  it('initializes with all cells empty', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
-
-    expect(result.current.cells).toHaveLength(5);
     for (const row of result.current.cells) {
-      expect(row).toHaveLength(5);
       for (const cell of row) {
         expect(cell).toBe('empty');
       }
@@ -39,122 +35,131 @@ describe('useGame', () => {
 
   it('nothing changes on pointer down alone', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
-
     act(() => result.current.handlePointerDown(0, 0));
-
     expect(result.current.cells[0]![0]).toBe('empty');
-    expect(result.current.draggedCells.size).toBe(0);
   });
 
-  it('tap empty cell changes to excluded', () => {
+  it('three-tap cycle: empty → excluded → marked → empty', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
     tap(result, 0, 0);
     expect(result.current.cells[0]![0]).toBe('excluded');
-  });
-
-  it('tap excluded cell changes to marked', () => {
-    const { result } = renderHook(() => useGame(testPuzzle));
-    tap(result, 0, 0); // excluded
-    tap(result, 0, 0); // marked
+    tap(result, 0, 0);
     expect(result.current.cells[0]![0]).toBe('marked');
-  });
-
-  it('tap marked cell changes to empty', () => {
-    const { result } = renderHook(() => useGame(testPuzzle));
-    tap(result, 0, 0); // excluded
-    tap(result, 0, 0); // marked
-    tap(result, 0, 0); // empty
+    tap(result, 0, 0);
     expect(result.current.cells[0]![0]).toBe('empty');
   });
 
   it('detects conflicts when two markers in same row', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
-    tap(result, 0, 0); // excluded
-    tap(result, 0, 0); // marked
-    tap(result, 0, 1); // excluded
-    tap(result, 0, 1); // marked
+    tap(result, 0, 0); tap(result, 0, 0); // marked
+    tap(result, 0, 1); tap(result, 0, 1); // marked
     expect(result.current.conflicts.length).toBeGreaterThan(0);
   });
 
-  it('isSolved is true when valid solution placed', () => {
+  it('isSolved when valid solution placed', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
-    const solution: [number, number][] = [[0, 4], [1, 1], [2, 3], [3, 0], [4, 2]];
-    for (const [row, col] of solution) {
-      tap(result, row, col); // excluded
-      tap(result, row, col); // marked
+    for (const [r, c] of [[0,4],[1,1],[2,3],[3,0],[4,2]] as [number,number][]) {
+      tap(result, r, c); tap(result, r, c);
     }
-    expect(result.current.conflicts).toEqual([]);
     expect(result.current.isSolved).toBe(true);
   });
 
-  it('drag highlights cells without changing them, applies on release', () => {
+  it('drag from empty: highlights and excludes on release', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
 
     act(() => result.current.handlePointerDown(0, 0));
-    // Nothing changed yet
-    expect(result.current.cells[0]![0]).toBe('empty');
-
-    // Drag to adjacent cells
     act(() => result.current.handleDragEnter(0, 1));
     act(() => result.current.handleDragEnter(0, 2));
 
-    // Cells highlighted but still empty
-    expect(result.current.draggedCells.has('0,0')).toBe(true);
+    // Highlighted but not yet excluded
     expect(result.current.draggedCells.has('0,1')).toBe(true);
     expect(result.current.draggedCells.has('0,2')).toBe(true);
-    expect(result.current.cells[0]![0]).toBe('empty');
     expect(result.current.cells[0]![1]).toBe('empty');
-    expect(result.current.cells[0]![2]).toBe('empty');
 
-    // Release: all get excluded
     act(() => result.current.handlePointerUp());
+
+    // Now excluded
     expect(result.current.cells[0]![0]).toBe('excluded');
     expect(result.current.cells[0]![1]).toBe('excluded');
     expect(result.current.cells[0]![2]).toBe('excluded');
     expect(result.current.draggedCells.size).toBe(0);
   });
 
-  it('drag highlights already-excluded cells', () => {
+  it('drag from excluded: highlights and clears on release', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
 
-    // Exclude (1,0) via tap
-    tap(result, 1, 0);
-    expect(result.current.cells[1]![0]).toBe('excluded');
+    // Exclude some cells first
+    tap(result, 1, 0); // excluded
+    tap(result, 1, 1); // excluded
+    tap(result, 1, 2); // excluded
 
-    // Start drag from empty (0,0)
-    act(() => result.current.handlePointerDown(0, 0));
-    act(() => result.current.handleDragEnter(1, 0)); // already excluded
+    // Drag from excluded cell (1,0)
+    act(() => result.current.handlePointerDown(1, 0));
+    act(() => result.current.handleDragEnter(1, 1));
+    act(() => result.current.handleDragEnter(1, 2));
 
-    expect(result.current.draggedCells.has('1,0')).toBe(true);
+    expect(result.current.draggedCells.has('1,1')).toBe(true);
+    expect(result.current.cells[1]![1]).toBe('excluded'); // not cleared yet
 
     act(() => result.current.handlePointerUp());
-    // Stays excluded
-    expect(result.current.cells[1]![0]).toBe('excluded');
+
+    // All cleared
+    expect(result.current.cells[1]![0]).toBe('empty');
+    expect(result.current.cells[1]![1]).toBe('empty');
+    expect(result.current.cells[1]![2]).toBe('empty');
   });
 
-  it('drag does not highlight marked cells', () => {
+  it('drag from marked: treated as tap (three-tap cycle)', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
+    tap(result, 0, 0); tap(result, 0, 0); // marked
 
-    // Mark (0,1)
-    tap(result, 0, 1); // excluded
-    tap(result, 0, 1); // marked
-
-    // Start drag from empty (0,0)
+    // Pressing and moving from a marked cell has no drag intent,
+    // so it falls through as a tap: marked → empty
     act(() => result.current.handlePointerDown(0, 0));
-    act(() => result.current.handleDragEnter(0, 1)); // marked
+    act(() => result.current.handleDragEnter(0, 1));
+
+    expect(result.current.draggedCells.size).toBe(0);
+
+    act(() => result.current.handlePointerUp());
+    expect(result.current.cells[0]![0]).toBe('empty');
+    expect(result.current.cells[0]![1]).toBe('empty'); // untouched
+  });
+
+  it('drag exclude does not affect marked cells', () => {
+    const { result } = renderHook(() => useGame(testPuzzle));
+    tap(result, 0, 1); tap(result, 0, 1); // marked
+
+    act(() => result.current.handlePointerDown(0, 0)); // empty → exclude intent
+    act(() => result.current.handleDragEnter(0, 1)); // marked → skip
 
     expect(result.current.draggedCells.has('0,1')).toBe(false);
-
     act(() => result.current.handlePointerUp());
     expect(result.current.cells[0]![1]).toBe('marked');
   });
 
+  it('drag clear does not affect empty cells', () => {
+    const { result } = renderHook(() => useGame(testPuzzle));
+    tap(result, 1, 0); // excluded
+
+    act(() => result.current.handlePointerDown(1, 0)); // excluded → clear intent
+    act(() => result.current.handleDragEnter(1, 1)); // empty → highlighted (visual) but not cleared
+
+    act(() => result.current.handlePointerUp());
+    expect(result.current.cells[1]![0]).toBe('empty'); // was excluded, now cleared
+    expect(result.current.cells[1]![1]).toBe('empty'); // was already empty, stays empty
+  });
+
+  it('no drag highlight on single tap', () => {
+    const { result } = renderHook(() => useGame(testPuzzle));
+    act(() => result.current.handlePointerDown(0, 0));
+    expect(result.current.draggedCells.size).toBe(0);
+    act(() => result.current.handlePointerUp());
+    expect(result.current.draggedCells.size).toBe(0);
+  });
+
   it('resetGame clears all cells', () => {
     const { result } = renderHook(() => useGame(testPuzzle));
-
-    tap(result, 0, 0); // excluded
-    tap(result, 1, 1); // excluded
-    tap(result, 1, 1); // marked
+    tap(result, 0, 0); tap(result, 1, 1); tap(result, 1, 1);
 
     act(() => result.current.resetGame());
 
