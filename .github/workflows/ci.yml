@@ -15,9 +15,9 @@ jobs:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
           cache-dependency-path: backend/go.sum
@@ -42,9 +42,9 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
@@ -70,14 +70,14 @@ jobs:
       run:
         working-directory: infra
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_wrapper: true
 
@@ -104,7 +104,7 @@ jobs:
         continue-on-error: true
 
       - name: Post Plan to PR
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         env:
           PLAN_OUTPUT: ${{ steps.plan.outputs.stdout }}
           PLAN_RESULT: ${{ steps.plan.outcome }}
@@ -126,16 +126,16 @@ jobs:
     name: Security
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "1.26"
           cache-dependency-path: backend/go.sum
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "24"
           cache: npm
