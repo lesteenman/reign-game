@@ -50,7 +50,7 @@ resource "aws_lambda_function" "api" {
   filename                       = var.lambda_zip_path
   reserved_concurrent_executions = 100
 
-  source_code_hash = filebase64sha256(var.lambda_zip_path)
+  source_code_hash = fileexists(var.lambda_zip_path) ? filebase64sha256(var.lambda_zip_path) : null
 }
 
 # API Gateway REST API
