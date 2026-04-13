@@ -3,20 +3,16 @@ import type { CellState, Conflict, PuzzleData } from '../engine/types';
 import { getAllConflicts } from '../engine/constraints';
 import { validateSolution } from '../engine/validator';
 
-type DragMode = 'exclude' | 'clear' | null;
-
 /** Return value of the useGame hook. */
 export interface UseGameReturn {
   cells: CellState[][];
   conflicts: Conflict[];
   isSolved: boolean;
-  /**
-   * Handles a pointer-down on a cell: applies the three-tap cycle
-   * AND sets up drag mode for subsequent drag-enter events.
-   */
-  handleCellPointerDown: (row: number, col: number) => void;
+  /** Set of "row,col" strings for cells highlighted during current drag. */
+  draggedCells: Set<string>;
+  handlePointerDown: (row: number, col: number) => void;
   handleDragEnter: (row: number, col: number) => void;
-  handleDragEnd: () => void;
+  handlePointerUp: () => void;
   resetGame: () => void;
 }
 
@@ -42,15 +38,22 @@ function cloneCells(cells: CellState[][]): CellState[][] {
 }
 
 /**
- * Custom hook that manages the full game state for a puzzle.
- * Handles cell interactions (three-tap cycle + drag) and game reset.
+ * All interactions are deferred to pointer-up:
+ * - Tap (down + up, no drag): three-tap cycle on that cell
+ * - Drag (down + move + up): exclude all highlighted empty cells
+ *
+ * During drag, cells are highlighted but not modified.
  */
 export function useGame(puzzle: PuzzleData): UseGameReturn {
   const { gridSize, regionMap } = puzzle;
   const [cells, setCells] = useState<CellState[][]>(() =>
     createEmptyCells(gridSize),
   );
-  const dragModeRef = useRef<DragMode>(null);
+  const [draggedCells, setDraggedCells] = useState<Set<string>>(new Set());
+
+  // Track the starting cell and whether we've dragged
+  const startCellRef = useRef<{ row: number; col: number } | null>(null);
+  const hasDraggedRef = useRef(false);
 
   const conflicts = useMemo(
     () => getAllConflicts(cells, regionMap, gridSize),
@@ -62,68 +65,93 @@ export function useGame(puzzle: PuzzleData): UseGameReturn {
     [cells, regionMap, gridSize],
   );
 
-  const handleCellPointerDown = useCallback((row: number, col: number) => {
-    setCells((prev) => {
-      const currentState = prev[row]![col]!;
-      const newState = nextCellState(currentState);
-      const next = cloneCells(prev);
-      next[row]![col] = newState;
-
-      // Set drag mode based on the ORIGINAL state of the starting cell:
-      // - Was empty (now excluded) → drag excludes other empty cells
-      // - Was excluded (now marked) → drag clears other excluded cells
-      // - Was marked (now empty) → no drag
-      if (currentState === 'empty') {
-        dragModeRef.current = 'exclude';
-      } else if (currentState === 'excluded') {
-        dragModeRef.current = 'clear';
-      } else {
-        dragModeRef.current = null;
-      }
-
-      return next;
-    });
+  const handlePointerDown = useCallback((row: number, col: number) => {
+    startCellRef.current = { row, col };
+    hasDraggedRef.current = false;
+    setDraggedCells(new Set());
   }, []);
 
   const handleDragEnter = useCallback((row: number, col: number) => {
-    const mode = dragModeRef.current;
-    if (mode === null) return;
+    if (!startCellRef.current) return;
+
+    const key = `${row},${col}`;
+    const startKey = `${startCellRef.current.row},${startCellRef.current.col}`;
+
+    // If we enter a different cell than the start, we're dragging
+    if (key !== startKey) {
+      hasDraggedRef.current = true;
+    }
+
+    if (!hasDraggedRef.current) return;
 
     setCells((prev) => {
       const currentState = prev[row]![col]!;
-
-      if (mode === 'exclude' && currentState === 'empty') {
-        const next = cloneCells(prev);
-        next[row]![col] = 'excluded';
-        return next;
+      // Highlight empty and already-excluded cells (not markers)
+      if (currentState === 'empty' || currentState === 'excluded') {
+        setDraggedCells((prev) => {
+          const next = new Set(prev);
+          // Also add the starting cell to the highlight
+          next.add(startKey);
+          next.add(key);
+          return next;
+        });
       }
-
-      if (mode === 'clear' && currentState === 'excluded') {
-        const next = cloneCells(prev);
-        next[row]![col] = 'empty';
-        return next;
-      }
-
       return prev;
     });
   }, []);
 
-  const handleDragEnd = useCallback(() => {
-    dragModeRef.current = null;
-  }, []);
+  const handlePointerUp = useCallback(() => {
+    const start = startCellRef.current;
+    if (!start) return;
+
+    if (!hasDraggedRef.current) {
+      // Single tap: apply three-tap cycle to starting cell
+      setCells((prev) => {
+        const currentState = prev[start.row]![start.col]!;
+        const next = cloneCells(prev);
+        next[start.row]![start.col] = nextCellState(currentState);
+        return next;
+      });
+    } else {
+      // Drag: exclude all highlighted empty cells
+      setCells((prev) => {
+        const next = cloneCells(prev);
+        // Include the starting cell in the drag exclusion
+        const startKey = `${start.row},${start.col}`;
+        const allKeys = new Set(draggedCells);
+        allKeys.add(startKey);
+        for (const key of allKeys) {
+          const [rowStr, colStr] = key.split(',');
+          const r = Number(rowStr);
+          const c = Number(colStr);
+          if (next[r]?.[c] === 'empty') {
+            next[r]![c] = 'excluded';
+          }
+        }
+        return next;
+      });
+    }
+
+    startCellRef.current = null;
+    hasDraggedRef.current = false;
+    setDraggedCells(new Set());
+  }, [draggedCells]);
 
   const resetGame = useCallback(() => {
     setCells(createEmptyCells(gridSize));
-    dragModeRef.current = null;
+    startCellRef.current = null;
+    hasDraggedRef.current = false;
+    setDraggedCells(new Set());
   }, [gridSize]);
 
   return {
     cells,
     conflicts,
     isSolved,
-    handleCellPointerDown,
+    draggedCells,
+    handlePointerDown,
     handleDragEnter,
-    handleDragEnd,
+    handlePointerUp,
     resetGame,
   };
 }

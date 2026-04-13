@@ -142,9 +142,13 @@ test.describe("Grid Interaction", () => {
       box02.y + box02.height / 2,
     );
 
+    // During drag: dragged cells should NOT have crosses yet
+    await expect(cell01.locator("svg")).toHaveCount(0);
+    await expect(cell02.locator("svg")).toHaveCount(0);
+
     await page.mouse.up();
 
-    // All three cells should be excluded (cross marks)
+    // After drag end: starting cell was excluded on tap, dragged cells now excluded
     await expect(cell00.locator("line")).toHaveCount(2);
     await expect(cell01.locator("line")).toHaveCount(2);
     await expect(cell02.locator("line")).toHaveCount(2);

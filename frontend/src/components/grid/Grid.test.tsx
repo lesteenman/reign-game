@@ -34,9 +34,10 @@ function renderGrid(overrides: Partial<GridProps> = {}) {
     cells: makeEmptyCells(5),
     conflicts: [],
     isSolved: false,
-    onCellPointerDown: vi.fn(),
+    draggedCells: new Set<string>(),
+    onPointerDown: vi.fn(),
+    onPointerUp: vi.fn(),
     onDragEnter: vi.fn(),
-    onDragEnd: vi.fn(),
   };
 
   const props = { ...defaultProps, ...overrides };
@@ -93,47 +94,47 @@ describe('Grid', () => {
     expect(cell02.style.borderLeftWidth).toBe('2.5px');
   });
 
-  it('click on cell triggers onCellPointerDown with correct row/col', () => {
-    const onCellPointerDown = vi.fn();
-    const { container } = renderGrid({ onCellPointerDown });
+  it('click on cell triggers onPointerDown with correct row/col', () => {
+    const onPointerDown = vi.fn();
+    const { container } = renderGrid({ onPointerDown });
 
     const cell23 = container.querySelector(
       '[data-testid="cell-2-3"]',
     ) as HTMLElement;
     fireEvent.mouseDown(cell23);
-    expect(onCellPointerDown).toHaveBeenCalledWith(2, 3);
+    expect(onPointerDown).toHaveBeenCalledWith(2, 3);
   });
 
   it('solved state disables interaction', () => {
-    const onCellPointerDown = vi.fn();
-    const { container } = renderGrid({ isSolved: true, onCellPointerDown });
+    const onPointerDown = vi.fn();
+    const { container } = renderGrid({ isSolved: true, onPointerDown });
 
     const cell00 = container.querySelector(
       '[data-testid="cell-0-0"]',
     ) as HTMLElement;
     fireEvent.mouseDown(cell00);
-    expect(onCellPointerDown).not.toHaveBeenCalled();
+    expect(onPointerDown).not.toHaveBeenCalled();
   });
 
-  it('onDragEnd called on mouseUp on the grid', () => {
-    const onDragEnd = vi.fn();
-    const { container } = renderGrid({ onDragEnd });
+  it('onPointerUp called on mouseUp on a cell', () => {
+    const onPointerUp = vi.fn();
+    const { container } = renderGrid({ onPointerUp });
 
-    const grid = container.querySelector(
-      '[data-testid="game-grid"]',
+    const cell = container.querySelector(
+      '[data-testid="cell-0-0"]',
     ) as HTMLElement;
-    fireEvent.mouseUp(grid);
-    expect(onDragEnd).toHaveBeenCalledTimes(1);
+    fireEvent.mouseUp(cell);
+    expect(onPointerUp).toHaveBeenCalledTimes(1);
   });
 
-  it('onDragEnd called on mouseLeave on the grid', () => {
-    const onDragEnd = vi.fn();
-    const { container } = renderGrid({ onDragEnd });
+  it('onPointerUp called on mouseLeave on the grid', () => {
+    const onPointerUp = vi.fn();
+    const { container } = renderGrid({ onPointerUp });
 
     const grid = container.querySelector(
       '[data-testid="game-grid"]',
     ) as HTMLElement;
     fireEvent.mouseLeave(grid);
-    expect(onDragEnd).toHaveBeenCalledTimes(1);
+    expect(onPointerUp).toHaveBeenCalledTimes(1);
   });
 });

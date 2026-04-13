@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import type { CellState } from '../../engine/types';
 import { useTheme } from '../../theme/ThemeContext';
 
@@ -8,12 +9,14 @@ export interface CellProps {
   state: CellState;
   regionIndex: number;
   hasConflict: boolean;
+  isDragHighlighted: boolean;
   cellSize: number;
   borderTop: boolean;
   borderRight: boolean;
   borderBottom: boolean;
   borderLeft: boolean;
   onPointerDown: () => void;
+  onPointerUp: () => void;
   onDragEnter: () => void;
 }
 
@@ -34,19 +37,28 @@ export function Cell({
   state,
   regionIndex,
   hasConflict,
+  isDragHighlighted,
   cellSize,
   borderTop,
   borderRight,
   borderBottom,
   borderLeft,
   onPointerDown,
+  onPointerUp,
   onDragEnter,
 }: CellProps) {
   const theme = useTheme();
+  // Track whether the last interaction was touch to prevent
+  // the synthesized mousedown from double-firing.
+  const touchedRef = useRef(false);
 
-  const backgroundColor = hasConflict
-    ? 'var(--color-destructive-bg)'
-    : `var(--region-${regionIndex}-fill)`;
+  let backgroundColor = `var(--region-${regionIndex}-fill)`;
+  if (hasConflict) {
+    backgroundColor = 'var(--color-destructive-bg)';
+  } else if (isDragHighlighted) {
+    // Subtle brightness shift to indicate drag path
+    backgroundColor = `color-mix(in srgb, var(--region-${regionIndex}-fill) 70%, var(--color-ink) 30%)`;
+  }
 
   const MarkerComponent = theme.marker;
   const ExclusionMarkComponent = theme.exclusionMark;
@@ -54,8 +66,18 @@ export function Cell({
   const markerSize = cellSize * 0.6;
 
   const handleMouseDown = (e: React.MouseEvent) => {
+    if (touchedRef.current) {
+      touchedRef.current = false;
+      return;
+    }
     e.preventDefault();
     onPointerDown();
+  };
+
+  const handleMouseUp = (e: React.MouseEvent) => {
+    if (touchedRef.current) return;
+    e.preventDefault();
+    onPointerUp();
   };
 
   const handleMouseEnter = (e: React.MouseEvent) => {
@@ -65,7 +87,9 @@ export function Cell({
   };
 
   const handleTouchStart = () => {
+    touchedRef.current = true;
     onPointerDown();
+    setTimeout(() => { touchedRef.current = false; }, 300);
   };
 
   // Determine animation class for marked cells
@@ -102,6 +126,7 @@ export function Cell({
         boxSizing: 'border-box',
       }}
       onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
       onMouseEnter={handleMouseEnter}
       onTouchStart={handleTouchStart}
     >
@@ -123,7 +148,7 @@ export function Cell({
       {state === 'excluded' && (
         <div
           style={{
-            color: 'var(--color-muted)',
+            color: 'var(--color-body)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

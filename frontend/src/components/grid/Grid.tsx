@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CellState, Conflict, PuzzleData } from '../../engine/types';
 import { Cell } from './Cell';
 
@@ -8,9 +8,10 @@ export interface GridProps {
   cells: CellState[][];
   conflicts: Conflict[];
   isSolved: boolean;
-  onCellPointerDown: (row: number, col: number) => void;
+  draggedCells: Set<string>;
+  onPointerDown: (row: number, col: number) => void;
+  onPointerUp: () => void;
   onDragEnter: (row: number, col: number) => void;
-  onDragEnd: () => void;
 }
 
 /**
@@ -23,11 +24,29 @@ export function Grid({
   cells,
   conflicts,
   isSolved,
-  onCellPointerDown,
+  draggedCells,
+  onPointerDown,
+  onPointerUp,
   onDragEnter,
-  onDragEnd,
 }: GridProps) {
   const { gridSize, regionMap } = puzzle;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [cellSize, setCellSize] = useState(60);
+
+  // Measure container width and compute cell size
+  useEffect(() => {
+    function measure() {
+      const container = containerRef.current?.parentElement;
+      if (!container) return;
+      const available = container.clientWidth - 5;
+      const size = Math.floor(available / gridSize);
+      setCellSize(Math.max(44, Math.min(72, size)));
+    }
+
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [gridSize]);
 
   // Build a Set of conflicting cell positions for O(1) lookup
   const conflictSet = useMemo(() => {
@@ -39,10 +58,6 @@ export function Grid({
     }
     return set;
   }, [conflicts]);
-
-  // Calculate cell size: use a reasonable default for SSR/tests
-  // In production, this would respond to container width
-  const cellSize = Math.max(44, 60);
 
   const handleTouchMove = useCallback(
     (e: React.TouchEvent) => {
@@ -65,6 +80,7 @@ export function Grid({
 
   return (
     <div
+      ref={containerRef}
       data-testid="game-grid"
       style={{
         display: 'inline-grid',
@@ -78,9 +94,8 @@ export function Grid({
         touchAction: 'none',
         maxWidth: '100%',
       }}
-      onMouseUp={onDragEnd}
-      onMouseLeave={onDragEnd}
-      onTouchEnd={onDragEnd}
+      onMouseLeave={onPointerUp}
+      onTouchEnd={onPointerUp}
       onTouchMove={handleTouchMove}
     >
       {Array.from({ length: gridSize }, (_, row) =>
@@ -88,9 +103,8 @@ export function Grid({
           const regionIndex = regionMap[row]![col]!;
           const cellState = cells[row]![col]!;
           const hasConflict = conflictSet.has(`${row},${col}`);
+          const isDragHighlighted = draggedCells.has(`${row},${col}`);
 
-          // Region boundary calculation:
-          // Only internal boundaries (not on grid edge)
           const bTop =
             row > 0 && regionMap[row]![col] !== regionMap[row - 1]![col];
           const bRight =
@@ -110,13 +124,17 @@ export function Grid({
               state={cellState}
               regionIndex={regionIndex}
               hasConflict={hasConflict}
+              isDragHighlighted={isDragHighlighted}
               cellSize={cellSize}
               borderTop={bTop}
               borderRight={bRight}
               borderBottom={bBottom}
               borderLeft={bLeft}
               onPointerDown={
-                isSolved ? () => {} : () => onCellPointerDown(row, col)
+                isSolved ? () => {} : () => onPointerDown(row, col)
+              }
+              onPointerUp={
+                isSolved ? () => {} : onPointerUp
               }
               onDragEnter={
                 isSolved ? () => {} : () => onDragEnter(row, col)

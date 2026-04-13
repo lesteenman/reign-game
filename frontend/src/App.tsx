@@ -25,9 +25,10 @@ function GameBoard() {
     cells,
     conflicts,
     isSolved,
-    handleCellPointerDown,
+    draggedCells,
+    handlePointerDown,
     handleDragEnter,
-    handleDragEnd,
+    handlePointerUp,
     resetGame,
   } = useGame(HARDCODED_PUZZLE);
 
@@ -71,15 +72,18 @@ function GameBoard() {
         </div>
       )}
 
-      <Grid
-        puzzle={HARDCODED_PUZZLE}
-        cells={cells}
-        conflicts={conflicts}
-        isSolved={isSolved}
-        onCellPointerDown={handleCellPointerDown}
-        onDragEnter={handleDragEnter}
-        onDragEnd={handleDragEnd}
-      />
+      <div style={{ width: "100%", maxWidth: 600, display: "flex", justifyContent: "center" }}>
+        <Grid
+          puzzle={HARDCODED_PUZZLE}
+          cells={cells}
+          conflicts={conflicts}
+          isSolved={isSolved}
+          draggedCells={draggedCells}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onDragEnter={handleDragEnter}
+        />
+      </div>
 
       <button
         type="button"

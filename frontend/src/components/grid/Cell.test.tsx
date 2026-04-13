@@ -15,12 +15,14 @@ function renderCell(overrides: Partial<CellProps> = {}) {
     state: 'empty',
     regionIndex: 0,
     hasConflict: false,
+    isDragHighlighted: false,
     cellSize: 60,
     borderTop: false,
     borderRight: false,
     borderBottom: false,
     borderLeft: false,
     onPointerDown: vi.fn(),
+    onPointerUp: vi.fn(),
     onDragEnter: vi.fn(),
   };
 
