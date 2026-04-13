@@ -47,8 +47,7 @@ resource "aws_lambda_function" "api" {
   role                           = aws_iam_role.lambda_exec.arn
   handler                        = "bootstrap"
   runtime                        = "provided.al2023"
-  filename                       = var.lambda_zip_path
-  reserved_concurrent_executions = 100
+  filename = var.lambda_zip_path
 
   source_code_hash = fileexists(var.lambda_zip_path) ? filebase64sha256(var.lambda_zip_path) : null
 }
