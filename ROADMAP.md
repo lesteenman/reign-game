@@ -17,7 +17,7 @@ Goal: Empty app live on AWS, CI/CD working. No game logic yet.
 - [x] **R-005** — GitHub Actions CI: lint + test on PR for both frontend and backend
 - [x] **R-006** — GitHub Actions CD: deploy to AWS on merge to main
 - [x] **R-007** — Basic dev workflow: local frontend dev server, Go backend runner
-- [ ] **R-008** — Brand guidelines generation (ui-ux-pro-max skill)
+- [x] **R-008** — Brand guidelines generation (ui-ux-pro-max skill)
 
 Note: Terraform and GitHub Actions contain no AWS account, role, or domain specifics. All injected via GitHub configuration (secrets/variables).
 
