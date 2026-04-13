@@ -82,11 +82,10 @@ jobs:
       - name: Terraform Init
         run: |
           terraform init \
-            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
-            -backend-config="key=${{ vars.TF_STATE_KEY }}" \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_STATE_PREFIX }}/terraform.tfstate" \
             -backend-config="region=${{ vars.AWS_REGION }}" \
-            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}" \
-            -backend-config="encrypt=true"
+            -backend-config="use_lockfile=true"
 
       - name: Terraform Validate
         run: terraform validate
@@ -96,7 +95,10 @@ jobs:
 
       - name: Terraform Plan
         id: plan
-        run: terraform plan -no-color -out=tfplan
+        run: |
+          terraform plan -no-color -out=tfplan \
+            -var="aws_region=${{ vars.AWS_REGION }}" \
+            -var="lambda_zip_path=dummy.zip"
         continue-on-error: true
 
       - name: Post Plan to PR
