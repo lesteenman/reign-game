@@ -43,11 +43,12 @@ resource "aws_iam_role_policy" "lambda_logs" {
 
 # Lambda function
 resource "aws_lambda_function" "api" {
-  function_name = local.function_name
-  role          = aws_iam_role.lambda_exec.arn
-  handler       = "bootstrap"
-  runtime       = "provided.al2023"
-  filename      = var.lambda_zip_path
+  function_name                  = local.function_name
+  role                           = aws_iam_role.lambda_exec.arn
+  handler                        = "bootstrap"
+  runtime                        = "provided.al2023"
+  filename                       = var.lambda_zip_path
+  reserved_concurrent_executions = 100
 
   source_code_hash = filebase64sha256(var.lambda_zip_path)
 }
@@ -110,4 +111,16 @@ resource "aws_api_gateway_stage" "api" {
   deployment_id = aws_api_gateway_deployment.api.id
   rest_api_id   = aws_api_gateway_rest_api.api.id
   stage_name    = var.environment
+}
+
+# API Gateway throttling
+resource "aws_api_gateway_method_settings" "api" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  stage_name  = aws_api_gateway_stage.api.stage_name
+  method_path = "*/*"
+
+  settings {
+    throttling_burst_limit = 50
+    throttling_rate_limit  = 100
+  }
 }

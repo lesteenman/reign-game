@@ -47,8 +47,27 @@ jobs:
 
       - name: Terraform Init
         working-directory: infra
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="dynamodb_table=${{ secrets.TF_LOCK_TABLE }}" \
+            -backend-config="encrypt=true"
 
       - name: Terraform Apply
         working-directory: infra
-        run: terraform apply -auto-approve
+        run: |
+          terraform apply -auto-approve \
+            -var="aws_region=${{ vars.AWS_REGION }}" \
+            -var="lambda_zip_path=${{ github.workspace }}/backend/lambda.zip"
+
+      - name: Sync frontend to S3
+        run: |
+          BUCKET=$(terraform -chdir=infra output -raw frontend_bucket_name)
+          aws s3 sync frontend/dist/ "s3://${BUCKET}" --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          DIST_ID=$(terraform -chdir=infra output -raw frontend_distribution_id)
+          aws cloudfront create-invalidation --distribution-id "${DIST_ID}" --paths "/*"

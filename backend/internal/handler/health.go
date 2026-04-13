@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"encoding/json"
+	"log"
 	"net/http"
 )
 
@@ -10,8 +10,7 @@ func HealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
-	resp := map[string]string{"status": "ok"}
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		http.Error(w, "failed to encode response", http.StatusInternalServerError)
+	if _, err := w.Write([]byte(`{"status":"ok"}`)); err != nil {
+		log.Printf("health check write failed: %v", err)
 	}
 }
