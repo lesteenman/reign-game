@@ -23,7 +23,7 @@ tasks:
     desc: Run Go generator benchmarks
     dir: backend
     cmds:
-      - go test -bench=. -benchtime=10x ./internal/generator/
+      - go test -bench=. -benchtime=5x -timeout=600s ./internal/generator/ -run='^$'
 
   dev:backend:
     desc: Start backend dev server
