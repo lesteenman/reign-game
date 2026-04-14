@@ -22,9 +22,9 @@ Milestone C (Frontend)                  → Full UI: selectors, advanced mode, a
 | T-207 | Double Queens mode | B | [x] |
 | T-208 | API strategy parameters | B | [x] |
 | T-209 | Full benchmark suite | B | [x] |
-| T-210 | Constraint parameterization | C | [ ] |
-| T-211 | Adaptive grid sizing | C | [ ] |
-| T-212 | API client expansion | C | [ ] |
+| T-210 | Constraint parameterization | C | [x] |
+| T-211 | Adaptive grid sizing | C | [x] |
+| T-212 | API client expansion | C | [x] |
 | T-213 | Landing page selectors | C | [ ] |
 | T-214 | Game page header + back nav | C | [ ] |
 | T-215 | Milestone C integration + playtest | C | [ ] |
