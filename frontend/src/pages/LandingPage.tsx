@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStorage } from '../hooks/useGameStorage';
 import { generatePuzzle } from '../services/puzzleService';
@@ -11,11 +11,30 @@ type PageState =
   | { status: 'fetching' }
   | { status: 'error'; message: string };
 
+/** Subscribe to online/offline events and return current connectivity status. */
+function subscribeOnline(callback: () => void) {
+  window.addEventListener('online', callback);
+  window.addEventListener('offline', callback);
+  return () => {
+    window.removeEventListener('online', callback);
+    window.removeEventListener('offline', callback);
+  };
+}
+
+function getOnlineSnapshot(): boolean {
+  return navigator.onLine;
+}
+
+function getServerOnlineSnapshot(): boolean {
+  return true;
+}
+
 /** Landing page with resume/new puzzle flow. */
 export function LandingPage() {
   const navigate = useNavigate();
   const { loadState, saveState } = useGameStorage();
   const [state, setState] = useState<PageState>({ status: 'loading' });
+  const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, getServerOnlineSnapshot);
 
   useEffect(() => {
     let cancelled = false;
@@ -33,6 +52,13 @@ export function LandingPage() {
   }, [loadState]);
 
   const startNewPuzzle = useCallback(async () => {
+    if (!navigator.onLine) {
+      setState({
+        status: 'error',
+        message: "You're offline — resume your current puzzle or connect to start a new one",
+      });
+      return;
+    }
     setState({ status: 'fetching' });
     try {
       const puzzle = await generatePuzzle(5, 'standard');
@@ -83,6 +109,24 @@ export function LandingPage() {
       >
         Reign
       </h1>
+
+      {!isOnline && (
+        <div
+          role="alert"
+          data-testid="offline-banner"
+          style={{
+            padding: '8px 16px',
+            borderRadius: 'var(--radius)',
+            backgroundColor: 'var(--color-surface)',
+            border: '2px solid var(--color-ink)',
+            fontWeight: 600,
+            fontSize: '0.875rem',
+            textAlign: 'center',
+          }}
+        >
+          You&apos;re offline — resume your current puzzle or connect to start a new one
+        </div>
+      )}
 
       {state.status === 'loading' && (
         <div data-testid="loading-state" style={{ padding: '48px 0', fontWeight: 600 }}>
