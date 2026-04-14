@@ -78,7 +78,12 @@ export function Cell({
     }
   };
 
-  const handleTouchStart = () => {
+  const handleTouchStart = (e: React.TouchEvent) => {
+    // preventDefault stops the browser from synthesising mousedown/mouseup
+    // after the touch sequence. Without this, iOS WebKit (including Chrome)
+    // fires synthesised mouse events after a 300-350ms delay that races past
+    // the touchedRef guard and causes a double state-cycle.
+    e.preventDefault();
     touchedRef.current = true;
     onPointerDown();
     clearTimeout(touchTimerRef.current);
