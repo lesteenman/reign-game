@@ -9,6 +9,37 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
 )
 
+func TestGenerateHandlerSizeRejection(t *testing.T) {
+	// Verify the handler rejects out-of-range sizes immediately (no generation).
+	tests := []struct {
+		name string
+		size string
+	}{
+		{name: "size=2 rejected", size: "2"},
+		{name: "size=1 rejected", size: "1"},
+		{name: "size=0 rejected", size: "0"},
+		{name: "size=-1 rejected", size: "-1"},
+		{name: "size=16 rejected", size: "16"},
+		{name: "size=100 rejected", size: "100"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			req := httptest.NewRequest(http.MethodGet, "/puzzles/generate?size="+tt.size+"&mode=standard", http.NoBody)
+			rec := httptest.NewRecorder()
+
+			// Act
+			handler.GenerateHandler(rec, req)
+
+			// Assert
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("expected 400 for size=%s, got %d", tt.size, rec.Code)
+			}
+		})
+	}
+}
+
 func TestGenerateHandler(t *testing.T) {
 	type errorResp struct {
 		Error   string `json:"error"`
@@ -20,11 +51,13 @@ func TestGenerateHandler(t *testing.T) {
 		query      string
 		wantStatus int
 		wantError  string // empty means expect 200 success
+		wantSize   int    // expected gridSize in response (0 = use default check)
 	}{
 		{
 			name:       "valid request size=5 mode=standard",
 			query:      "?size=5&mode=standard",
 			wantStatus: http.StatusOK,
+			wantSize:   5,
 		},
 		{
 			name:       "missing size",
@@ -39,8 +72,26 @@ func TestGenerateHandler(t *testing.T) {
 			wantError:  "invalid_params",
 		},
 		{
-			name:       "unsupported size=7",
-			query:      "?size=7&mode=standard",
+			name:       "size=2 too small",
+			query:      "?size=2&mode=standard",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name:       "size=0 too small",
+			query:      "?size=0&mode=standard",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name:       "size=16 too large",
+			query:      "?size=16&mode=standard",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name:       "size=100 too large",
+			query:      "?size=100&mode=standard",
 			wantStatus: http.StatusBadRequest,
 			wantError:  "invalid_params",
 		},
@@ -100,16 +151,18 @@ func TestGenerateHandler(t *testing.T) {
 				t.Fatalf("failed to parse success response: %v", err)
 			}
 
+			expectedSize := tt.wantSize
+
 			// puzzleId must be a non-empty string.
 			puzzleID, ok := body["puzzleId"].(string)
 			if !ok || puzzleID == "" {
 				t.Error("expected non-empty puzzleId string")
 			}
 
-			// gridSize must be 5.
+			// gridSize must match requested size.
 			gridSize, ok := body["gridSize"].(float64)
-			if !ok || gridSize != 5 {
-				t.Errorf("gridSize = %v, want 5", body["gridSize"])
+			if !ok || int(gridSize) != expectedSize {
+				t.Errorf("gridSize = %v, want %d", body["gridSize"], expectedSize)
 			}
 
 			// mode must be "standard".
@@ -118,21 +171,21 @@ func TestGenerateHandler(t *testing.T) {
 				t.Errorf("mode = %v, want %q", body["mode"], "standard")
 			}
 
-			// regionMap must be a 5x5 2D array of ints.
+			// regionMap must be an NxN 2D array of ints.
 			regionMap, ok := body["regionMap"].([]interface{})
 			if !ok {
 				t.Fatal("regionMap is not an array")
 			}
-			if len(regionMap) != 5 {
-				t.Fatalf("regionMap has %d rows, want 5", len(regionMap))
+			if len(regionMap) != expectedSize {
+				t.Fatalf("regionMap has %d rows, want %d", len(regionMap), expectedSize)
 			}
 			for i, row := range regionMap {
 				rowArr, ok := row.([]interface{})
 				if !ok {
 					t.Fatalf("regionMap[%d] is not an array", i)
 				}
-				if len(rowArr) != 5 {
-					t.Fatalf("regionMap[%d] has %d cols, want 5", i, len(rowArr))
+				if len(rowArr) != expectedSize {
+					t.Fatalf("regionMap[%d] has %d cols, want %d", i, len(rowArr), expectedSize)
 				}
 				for j, val := range rowArr {
 					if _, ok := val.(float64); !ok {

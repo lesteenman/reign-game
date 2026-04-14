@@ -23,23 +23,60 @@ func TestValidateRegionMap(t *testing.T) {
 		errMsg    string
 	}{
 		{
-			name:      "valid 5x5 region map",
+			name:      "valid 5x5 region map uniform sizes",
 			regionMap: validRegionMap5x5,
 			gridSize:  5,
 			wantErr:   false,
 		},
 		{
-			name: "region with wrong cell count",
+			name: "valid 5x5 region map variable sizes",
+			regionMap: [][]int{
+				{0, 0, 0, 1, 1},
+				{0, 0, 0, 1, 1},
+				{2, 2, 0, 1, 1},
+				{3, 2, 4, 4, 4},
+				{3, 3, 3, 4, 4},
+			},
+			gridSize: 5,
+			wantErr:  false,
+		},
+		{
+			name: "valid 3x3 region map",
+			regionMap: [][]int{
+				{0, 0, 1},
+				{0, 1, 1},
+				{2, 2, 2},
+			},
+			gridSize: 3,
+			wantErr:  false,
+		},
+		{
+			// Region 4 has only 2 cells (below minimum of 3).
+			// Counts: 0=8, 1=5, 2=5, 3=5, 4=2 → total=25
+			name: "region below minimum size",
+			regionMap: [][]int{
+				{0, 0, 0, 1, 1},
+				{0, 0, 0, 1, 1},
+				{0, 0, 2, 2, 1},
+				{3, 3, 2, 2, 4},
+				{3, 3, 3, 2, 4},
+			},
+			gridSize: 5,
+			wantErr:  true,
+			errMsg:   "below minimum",
+		},
+		{
+			name: "total cell count mismatch via wrong number of regions",
 			regionMap: [][]int{
 				{0, 0, 1, 1, 1},
 				{0, 0, 1, 2, 2},
 				{3, 3, 1, 2, 2},
-				{3, 4, 4, 4, 2},
-				{3, 3, 4, 4, 4},
+				{3, 3, 3, 2, 2},
+				{3, 3, 3, 2, 2},
 			},
 			gridSize: 5,
 			wantErr:  true,
-			errMsg:   "cell count",
+			errMsg:   "region count",
 		},
 		{
 			name: "non-contiguous region",

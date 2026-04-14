@@ -12,7 +12,7 @@ Milestone C (Frontend)                  → Full UI: selectors, advanced mode, a
 
 | Task | Title | Milestone | Status |
 |------|-------|-----------|--------|
-| T-200 | Parameterize solver for markersPerUnit | A | [ ] |
+| T-200 | Parameterize solver for markersPerUnit | A | [x] |
 | T-201 | Lift size restriction + region validation | A | [ ] |
 | T-202 | Benchmark suite for larger grids | A | [ ] |
 | T-203 | Pluggable generator interface | B | [ ] |

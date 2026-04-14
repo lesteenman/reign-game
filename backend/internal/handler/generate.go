@@ -12,11 +12,21 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/generator"
 )
 
-const generateTimeout = 5 * time.Second
+// generateTimeout returns the puzzle generation timeout based on grid size.
+// Larger grids need more time for the backtracking solver.
+func generateTimeout(size int) time.Duration {
+	if size <= 5 {
+		return 5 * time.Second
+	}
+	if size <= 9 {
+		return 30 * time.Second
+	}
+	return 60 * time.Second
+}
 
 // GenerateHandler handles GET /puzzles/generate.
-// Query params: size (int, required), mode (string, required).
-// Phase 1: only size=5 and mode=standard are accepted.
+// Query params: size (int 3-15, required), mode (string, required).
+// Currently only mode=standard is accepted.
 func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -33,8 +43,8 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if size != 5 {
-		writeError(w, http.StatusBadRequest, "invalid_params", "only size=5 is supported in Phase 1")
+	if size < 3 || size > 15 {
+		writeError(w, http.StatusBadRequest, "invalid_params", "size must be between 3 and 15")
 		return
 	}
 
@@ -46,12 +56,12 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if mode != "standard" {
-		writeError(w, http.StatusBadRequest, "invalid_params", "only mode=standard is supported in Phase 1")
+		writeError(w, http.StatusBadRequest, "invalid_params", "only mode=standard is currently supported")
 		return
 	}
 
 	// Generate puzzle.
-	puzzle, err := generator.Generate(size, generateTimeout)
+	puzzle, err := generator.Generate(size, generateTimeout(size))
 	if err != nil {
 		log.Printf("puzzle generation failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "generation_failed", "Could not generate a puzzle. Please try again.")

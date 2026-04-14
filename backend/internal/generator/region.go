@@ -135,9 +135,13 @@ func GenerateRegionMap(solution [][]bool, gridSize int) ([][]int, error) {
 	return regionMap, nil
 }
 
+// minRegionSize is the minimum number of cells a region must have.
+const minRegionSize = 3
+
 // ValidateRegionMap checks that a region map is well-formed for the given grid size.
 // It verifies: grid dimensions match, all region IDs are in [0, gridSize),
-// each region has exactly gridSize cells, and each region is contiguous
+// number of distinct regions equals gridSize, total cells equal gridSize*gridSize,
+// each region has at least minRegionSize cells, and each region is contiguous
 // (connected via horizontal/vertical adjacency).
 func ValidateRegionMap(regionMap [][]int, gridSize int) error {
 	// Check row count.
@@ -159,15 +163,26 @@ func ValidateRegionMap(regionMap [][]int, gridSize int) error {
 		}
 	}
 
-	// Check each region has exactly gridSize cells and is contiguous.
+	// Check that there are exactly gridSize distinct regions.
+	if len(regionCells) != gridSize {
+		return fmt.Errorf("validating region map: region count %d does not match grid size %d", len(regionCells), gridSize)
+	}
+
+	// Check each region meets minimum size, is contiguous, and total cells sum correctly.
+	totalCells := 0
 	for id := 0; id < gridSize; id++ {
 		cells := regionCells[id]
-		if len(cells) != gridSize {
-			return fmt.Errorf("validating region map: region %d has cell count %d, expected %d", id, len(cells), gridSize)
+		if len(cells) < minRegionSize {
+			return fmt.Errorf("validating region map: region %d has %d cells, below minimum %d", id, len(cells), minRegionSize)
 		}
 		if err := checkContiguous(cells); err != nil {
 			return fmt.Errorf("validating region map: region %d is not contiguous: %w", id, err)
 		}
+		totalCells += len(cells)
+	}
+
+	if totalCells != gridSize*gridSize {
+		return fmt.Errorf("validating region map: total cell count %d does not match expected %d", totalCells, gridSize*gridSize)
 	}
 
 	return nil

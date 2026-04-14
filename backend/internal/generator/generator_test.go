@@ -6,68 +6,94 @@ import (
 )
 
 func TestGenerate(t *testing.T) {
-	// Run multiple times to catch randomness issues.
-	for i := 0; i < 5; i++ {
-		t.Run("iteration", func(t *testing.T) {
-			gridSize := 5
-			puzzle, err := Generate(gridSize, 30*time.Second)
-			if err != nil {
-				t.Fatalf("Generate returned error: %v", err)
-			}
+	// Note: 9x9+ tests are omitted because the brute-force solver is too slow.
+	// The constraint propagation solver (GN-03) will handle larger grids.
+	tests := []struct {
+		name       string
+		gridSize   int
+		iterations int
+		timeout    time.Duration
+	}{
+		{
+			name:       "5x5 puzzle",
+			gridSize:   5,
+			iterations: 5,
+			timeout:    30 * time.Second,
+		},
+		{
+			name:       "7x7 puzzle (slow - brute force solver)",
+			gridSize:   7,
+			iterations: 1,
+			timeout:    120 * time.Second,
+		},
+	}
 
-			// GridSize matches.
-			if puzzle.GridSize != gridSize {
-				t.Errorf("GridSize = %d, want %d", puzzle.GridSize, gridSize)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.gridSize > 5 && testing.Short() {
+				t.Skipf("skipping %dx%d in short mode (brute-force solver is slow for larger grids)", tt.gridSize, tt.gridSize)
 			}
+			for i := 0; i < tt.iterations; i++ {
+				t.Run("iteration", func(t *testing.T) {
+					// Arrange
+					gridSize := tt.gridSize
 
-			// Mode is "standard".
-			if puzzle.Mode != "standard" {
-				t.Errorf("Mode = %q, want %q", puzzle.Mode, "standard")
-			}
+					// Act
+					puzzle, err := Generate(gridSize, tt.timeout)
 
-			// ID is empty (handler sets it).
-			if puzzle.ID != "" {
-				t.Errorf("ID = %q, want empty string", puzzle.ID)
-			}
-
-			// RegionMap passes validation.
-			if err := ValidateRegionMap(puzzle.RegionMap, gridSize); err != nil {
-				t.Fatalf("ValidateRegionMap failed: %v", err)
-			}
-
-			// Solution has exactly gridSize markers.
-			markerCount := 0
-			for _, row := range puzzle.Solution {
-				for _, cell := range row {
-					if cell {
-						markerCount++
+					// Assert
+					if err != nil {
+						t.Fatalf("Generate returned error: %v", err)
 					}
-				}
-			}
-			if markerCount != gridSize {
-				t.Errorf("solution has %d markers, want %d", markerCount, gridSize)
-			}
 
-			// Exactly one solution (unique).
-			solCount := CountSolutions(puzzle.RegionMap, gridSize, 1)
-			if solCount != 1 {
-				t.Errorf("CountSolutions = %d, want 1", solCount)
-			}
-
-			// Each region contains exactly one solution marker.
-			regionMarkers := make(map[int]int)
-			for r, row := range puzzle.Solution {
-				for c, cell := range row {
-					if cell {
-						rid := puzzle.RegionMap[r][c]
-						regionMarkers[rid]++
+					if puzzle.GridSize != gridSize {
+						t.Errorf("GridSize = %d, want %d", puzzle.GridSize, gridSize)
 					}
-				}
-			}
-			for rid := 0; rid < gridSize; rid++ {
-				if regionMarkers[rid] != 1 {
-					t.Errorf("region %d has %d markers, want 1", rid, regionMarkers[rid])
-				}
+
+					if puzzle.Mode != "standard" {
+						t.Errorf("Mode = %q, want %q", puzzle.Mode, "standard")
+					}
+
+					if puzzle.ID != "" {
+						t.Errorf("ID = %q, want empty string", puzzle.ID)
+					}
+
+					if err := ValidateRegionMap(puzzle.RegionMap, gridSize); err != nil {
+						t.Fatalf("ValidateRegionMap failed: %v", err)
+					}
+
+					markerCount := 0
+					for _, row := range puzzle.Solution {
+						for _, cell := range row {
+							if cell {
+								markerCount++
+							}
+						}
+					}
+					if markerCount != gridSize {
+						t.Errorf("solution has %d markers, want %d", markerCount, gridSize)
+					}
+
+					solCount := CountSolutions(puzzle.RegionMap, gridSize, 1)
+					if solCount != 1 {
+						t.Errorf("CountSolutions = %d, want 1", solCount)
+					}
+
+					regionMarkers := make(map[int]int)
+					for r, row := range puzzle.Solution {
+						for c, cell := range row {
+							if cell {
+								rid := puzzle.RegionMap[r][c]
+								regionMarkers[rid]++
+							}
+						}
+					}
+					for rid := 0; rid < gridSize; rid++ {
+						if regionMarkers[rid] != 1 {
+							t.Errorf("region %d has %d markers, want 1", rid, regionMarkers[rid])
+						}
+					}
+				})
 			}
 		})
 	}
