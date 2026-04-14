@@ -101,9 +101,11 @@ func TestComputeTargetSizes(t *testing.T) {
 				}
 			}
 
-			// At non-zero variance, check there is some variation (probabilistic,
-			// but with high variance and enough regions it should always vary).
-			if tt.variance >= 1.0 && tt.gridSize >= 5 {
+			// At non-zero variance, check there is some variation — but only when
+			// there is meaningful room (spare cells > gridSize). With minSize=4 on
+			// a 5x5 grid there are only 5 spare cells, so uniform is possible.
+			spareCells := tt.gridSize*tt.gridSize - tt.gridSize*tt.minSize
+			if tt.variance >= 1.0 && spareCells > tt.gridSize {
 				allSame := true
 				for _, s := range sizes {
 					if s != sizes[0] {
