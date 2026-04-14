@@ -17,6 +17,7 @@ import (
 func newRouter() *chi.Mux {
 	r := chi.NewRouter()
 	r.Get("/health", handler.HealthCheck)
+	r.Get("/puzzles/generate", handler.GenerateHandler)
 	return r
 }
 
