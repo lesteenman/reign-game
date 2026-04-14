@@ -1,0 +1,400 @@
+import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Grid } from '../components/grid/Grid';
+import { useGame } from '../hooks/useGame';
+import { useTimer } from '../hooks/useTimer';
+import { useGameStorage } from '../hooks/useGameStorage';
+import { generatePuzzle } from '../services/puzzleService';
+import { createFreshGameState } from '../storage/utils';
+import { PageShell } from '../components/common/PageShell';
+import { PrimaryButton, SecondaryButton } from '../components/common/Button';
+import type { PuzzleData, CellState } from '../engine/types';
+import type { GameState, CompletionRecord } from '../storage/types';
+
+/** Format seconds as MM:SS. */
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+type LoadState =
+  | { status: 'loading' }
+  | { status: 'ready'; puzzle: PuzzleData; initialCells: CellState[][]; timerElapsed: number; timerResumedAt: number | null; startedAt: number }
+  | { status: 'no-state' }
+  | { status: 'error'; message: string };
+
+/**
+ * Main gameplay page. Loads persisted state from IndexedDB or fetches
+ * a new puzzle when ?new=true is present.
+ */
+export function GamePage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { loadState, saveState, addCompletion } = useGameStorage();
+  const [loadStatus, setLoadStatus] = useState<LoadState>({ status: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+    const isNew = searchParams.get('new') === 'true';
+
+    if (isNew) {
+      void generatePuzzle(5, 'standard').then(async (puzzle) => {
+        if (cancelled) return;
+        const gameState = createFreshGameState(puzzle);
+        await saveState(gameState);
+        setLoadStatus({
+          status: 'ready',
+          puzzle: gameState.puzzle,
+          initialCells: gameState.cells,
+          timerElapsed: 0,
+          timerResumedAt: null,
+          startedAt: gameState.startedAt,
+        });
+      }).catch((err) => {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        setLoadStatus({ status: 'error', message });
+      });
+    } else {
+      void loadState().then((saved) => {
+        if (cancelled) return;
+        if (!saved) {
+          setLoadStatus({ status: 'no-state' });
+          return;
+        }
+        setLoadStatus({
+          status: 'ready',
+          puzzle: saved.puzzle,
+          initialCells: saved.cells,
+          timerElapsed: saved.timer.elapsedAtLastPause,
+          timerResumedAt: saved.timer.lastResumedAt,
+          startedAt: saved.startedAt,
+        });
+      }).catch(() => {
+        if (!cancelled) setLoadStatus({ status: 'no-state' });
+      });
+    }
+    return () => { cancelled = true; };
+  }, [searchParams, loadState, saveState]);
+
+  if (loadStatus.status === 'loading') {
+    return (
+      <PageShell>
+        <div style={{ padding: '48px 0', fontWeight: 600 }}>Loading...</div>
+      </PageShell>
+    );
+  }
+
+  if (loadStatus.status === 'error') {
+    return (
+      <PageShell>
+        <div
+          data-testid="error-state"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
+            padding: '48px 0',
+          }}
+        >
+          <p style={{ color: 'var(--color-destructive)', fontWeight: 600 }}>
+            Failed to load puzzle: {loadStatus.message}
+          </p>
+          <SecondaryButton onClick={() => navigate('/play?new=true', { replace: true })}>
+            Try Again
+          </SecondaryButton>
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (loadStatus.status === 'no-state') {
+    return <RedirectToHome />;
+  }
+
+  return (
+    <GameBoard
+      key={loadStatus.puzzle.puzzleId}
+      puzzle={loadStatus.puzzle}
+      initialCells={loadStatus.initialCells}
+      timerElapsed={loadStatus.timerElapsed}
+      timerResumedAt={loadStatus.timerResumedAt}
+      startedAt={loadStatus.startedAt}
+      navigate={navigate}
+      saveState={saveState}
+      addCompletion={addCompletion}
+    />
+  );
+}
+
+/** Small component to redirect home via effect. */
+function RedirectToHome() {
+  const navigate = useNavigate();
+  useEffect(() => { navigate('/', { replace: true }); }, [navigate]);
+  return null;
+}
+
+interface GameBoardProps {
+  puzzle: PuzzleData;
+  initialCells: CellState[][];
+  timerElapsed: number;
+  timerResumedAt: number | null;
+  startedAt: number;
+  navigate: ReturnType<typeof useNavigate>;
+  saveState: (state: GameState) => Promise<void>;
+  addCompletion: (record: CompletionRecord) => Promise<void>;
+}
+
+/** Build the current GameState from refs, preserving the original startedAt. */
+function buildCurrentState(
+  puzzle: PuzzleData,
+  cellsRef: React.RefObject<CellState[][]>,
+  timerRef: React.RefObject<ReturnType<typeof useTimer>>,
+  isSolvedRef: React.RefObject<boolean>,
+  startedAtRef: React.RefObject<number>,
+): GameState {
+  return {
+    id: 'current',
+    puzzle,
+    cells: cellsRef.current,
+    timer: timerRef.current.timerState,
+    status: isSolvedRef.current ? 'solved' : 'in-progress',
+    startedAt: startedAtRef.current,
+  };
+}
+
+function GameBoard({
+  puzzle,
+  initialCells,
+  timerElapsed,
+  timerResumedAt,
+  startedAt,
+  navigate,
+  saveState,
+  addCompletion,
+}: GameBoardProps) {
+  const [ready, setReady] = useState(false);
+  useLayoutEffect(() => { setReady(true); }, []);
+
+  const {
+    cells,
+    conflicts,
+    isSolved,
+    draggedCells,
+    handlePointerDown,
+    handleDragEnter,
+    handlePointerUp: originalPointerUp,
+    resetGame: originalResetGame,
+  } = useGame(puzzle, initialCells);
+
+  const timer = useTimer();
+  const timerStartedRef = useRef(false);
+  const completionHandledRef = useRef(false);
+  const [showCompletion, setShowCompletion] = useState(false);
+  const [completionTime, setCompletionTime] = useState(0);
+
+  // Fix 3: capture startedAt once, never overwrite
+  const startedAtRef = useRef(startedAt);
+
+  // Restore timer on mount
+  useEffect(() => {
+    if (timerElapsed > 0 || timerResumedAt !== null) {
+      timer.restore({
+        elapsedAtLastPause: timerElapsed,
+        lastResumedAt: timerResumedAt,
+      });
+      timerStartedRef.current = true;
+    }
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Refs for debounced saves
+  const cellsRef = useRef(cells);
+  cellsRef.current = cells;
+  const timerRef = useRef(timer);
+  timerRef.current = timer;
+  const isSolvedRef = useRef(isSolved);
+  isSolvedRef.current = isSolved;
+
+  // Debounced save on cell changes
+  useEffect(() => {
+    if (!ready) return;
+    const timeout = setTimeout(() => {
+      void saveState(buildCurrentState(puzzle, cellsRef, timerRef, isSolvedRef, startedAtRef));
+    }, 200);
+    return () => clearTimeout(timeout);
+    // Save whenever cells change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cells, ready]);
+
+  // Visibility change: pause/resume timer + save
+  useEffect(() => {
+    function handleVisibility() {
+      if (document.hidden) {
+        timerRef.current.pause();
+        void saveState(buildCurrentState(puzzle, cellsRef, timerRef, isSolvedRef, startedAtRef));
+      } else {
+        if (timerStartedRef.current && !isSolvedRef.current) {
+          timerRef.current.start();
+        }
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [puzzle, saveState]);
+
+  // Before unload: best-effort save
+  useEffect(() => {
+    function handleBeforeUnload() {
+      timerRef.current.pause();
+      void saveState(buildCurrentState(puzzle, cellsRef, timerRef, isSolvedRef, startedAtRef));
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [puzzle, saveState]);
+
+  // Handle puzzle completion
+  useEffect(() => {
+    if (isSolved && !completionHandledRef.current) {
+      completionHandledRef.current = true;
+      timer.stop();
+      const finalTime = timer.elapsed;
+      setCompletionTime(finalTime);
+      setShowCompletion(true);
+      // Save final state + completion record
+      void saveState(buildCurrentState(puzzle, cellsRef, timerRef, isSolvedRef, startedAtRef));
+      void addCompletion({
+        puzzleId: puzzle.puzzleId,
+        time: finalTime,
+        completedAt: Date.now(),
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSolved]);
+
+  // Wrap pointerUp to start timer on first interaction
+  const handlePointerUp = useCallback(() => {
+    originalPointerUp();
+    if (!timerStartedRef.current && !isSolvedRef.current) {
+      timerStartedRef.current = true;
+      timerRef.current.start();
+    }
+  }, [originalPointerUp]);
+
+  const resetGame = useCallback(() => {
+    originalResetGame();
+    completionHandledRef.current = false;
+    setShowCompletion(false);
+    setCompletionTime(0);
+  }, [originalResetGame]);
+
+  // Fix 4: navigate to /play?new=true instead of reloading
+  const handlePlayAgain = useCallback(() => {
+    navigate('/play?new=true', { replace: true });
+  }, [navigate]);
+
+  const handleGoHome = useCallback(() => {
+    navigate('/');
+  }, [navigate]);
+
+  return (
+    <PageShell>
+      {/* Timer display */}
+      <div
+        data-testid="timer-display"
+        style={{
+          alignSelf: 'flex-end',
+          fontFamily: '"Space Mono", ui-monospace, monospace',
+          fontSize: '1.5rem',
+          fontWeight: 700,
+          fontVariantNumeric: 'tabular-nums',
+          color: 'var(--color-muted)',
+          maxWidth: 600,
+          width: '100%',
+          textAlign: 'right',
+        }}
+      >
+        {formatTime(timer.elapsed)}
+      </div>
+
+      {/* Grid area with completion overlay */}
+      <div style={{ position: 'relative', width: '100%', maxWidth: 600, display: 'flex', justifyContent: 'center' }}>
+        <Grid
+          puzzle={puzzle}
+          cells={cells}
+          conflicts={conflicts}
+          isSolved={isSolved}
+          draggedCells={draggedCells}
+          onPointerDown={handlePointerDown}
+          onPointerUp={handlePointerUp}
+          onDragEnter={handleDragEnter}
+        />
+
+        {/* Completion overlay */}
+        {ready && showCompletion && (
+          <div
+            data-testid="completion-overlay"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              backgroundColor: 'rgba(0, 0, 0, 0.5)',
+              backdropFilter: 'blur(4px)',
+              borderRadius: 'var(--radius)',
+              zIndex: 50,
+            }}
+          >
+            <div
+              style={{
+                backgroundColor: 'var(--color-surface)',
+                border: '2px solid var(--color-ink)',
+                borderRadius: 'var(--radius)',
+                padding: '32px',
+                boxShadow: '0 4px 0 var(--color-ink), 0 12px 32px rgba(0,0,0,0.08)',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '16px',
+                maxWidth: '90%',
+              }}
+            >
+              <h2
+                style={{
+                  fontSize: '1.5rem',
+                  fontWeight: 700,
+                  margin: 0,
+                  color: 'var(--color-success)',
+                }}
+              >
+                Puzzle Complete!
+              </h2>
+              <p
+                style={{
+                  fontFamily: '"Space Mono", ui-monospace, monospace',
+                  fontSize: '1.5rem',
+                  fontWeight: 700,
+                  fontVariantNumeric: 'tabular-nums',
+                  margin: 0,
+                }}
+              >
+                {formatTime(completionTime)}
+              </p>
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <PrimaryButton onClick={handlePlayAgain}>Play Again</PrimaryButton>
+                <SecondaryButton onClick={handleGoHome}>Home</SecondaryButton>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Reset button */}
+      <SecondaryButton onClick={resetGame}>Reset</SecondaryButton>
+    </PageShell>
+  );
+}

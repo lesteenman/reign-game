@@ -17,6 +17,7 @@ import (
 func newRouter() *chi.Mux {
 	r := chi.NewRouter()
 	r.Get("/health", handler.HealthCheck)
+	r.Get("/puzzles/generate", handler.GenerateHandler)
 	return r
 }
 
@@ -30,7 +31,7 @@ func main() {
 	} else {
 		port := os.Getenv("PORT")
 		if port == "" {
-			port = "8080"
+			port = "5181"
 		}
 		addr := fmt.Sprintf("127.0.0.1:%s", port)
 		log.Printf("starting local server on %s", addr)

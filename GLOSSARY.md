@@ -115,8 +115,8 @@ One-time purchase. Includes full puzzle archive, leaderboard identity, detailed 
 **Theme**
 A coherent visual package that changes the game's appearance: marker icon, grid style, region rendering, background, animations, and color palette. Purely cosmetic — gameplay mechanics are identical across themes.
 
-**Minimalist Theme**
-The default theme. Abstract and clean: filled circle markers, thin grid lines, pastel region fills, subtle animations. The brand identity comes from the grid and region colors, not a specific metaphor.
+**Tactile Theme**
+The default theme. Abstract and clean with physical depth: filled circle markers, thick ink borders between regions, bold saturated region fills, layered offset shadows. The brand identity comes from the tactile style and warm ink palette.
 
 **Queens Classic Theme**
 A free built-in theme with chess-inspired visuals: queen markers, traditional grid, parchment background, crown flourish animations.

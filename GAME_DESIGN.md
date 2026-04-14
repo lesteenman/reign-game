@@ -271,16 +271,16 @@ Themes are coherent visual packages that change the entire look and feel of the 
 | Conflict highlight | How constraint violations are shown (red pulse, glow, shake) |
 | Color palette | Region colors — each theme ships its own colorblind-safe palette |
 
-### Default Theme: Minimalist
+### Default Theme: Tactile
 
-The default theme is abstract and clean. It should feel premium on its own — confident, modern, no ornamentation needed.
+The default theme is abstract and clean with a physical, substantial feel. Layered offset shadows, thick ink borders, and moderate rounding create depth without blur or ornamentation.
 
 - **Piece:** Filled circle / pip
-- **Grid:** Thin, muted lines
-- **Regions:** Solid pastel fills with subtle borders
-- **Background:** Clean white (light mode) or dark neutral (dark mode)
-- **Animations:** Subtle fade-in on placement, clean ripple on completion
-- **Identity:** The brand comes from the grid and region colors, not from a specific metaphor
+- **Grid:** Thick ink borders between regions, clean lines within
+- **Regions:** Bold saturated fills with 2.5px ink boundaries
+- **Background:** Warm cream (light mode) or deep brown-black (dark mode)
+- **Animations:** Subtle fade-scale on placement, ripple on completion, pulse on conflict
+- **Identity:** The brand comes from the tactile depth, region colors, and warm ink palette
 
 ### Built-in Theme: Queens (Classic)
 

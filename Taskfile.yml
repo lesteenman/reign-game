@@ -19,6 +19,12 @@ tasks:
     cmds:
       - golangci-lint run
 
+  bench:backend:
+    desc: Run Go generator benchmarks
+    dir: backend
+    cmds:
+      - go test -bench=. -benchtime=10x ./internal/generator/
+
   dev:backend:
     desc: Start backend dev server
     dir: backend

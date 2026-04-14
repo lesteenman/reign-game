@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+# Ensure Go binaries are in PATH
+export PATH="$PATH:$(go env GOPATH)/bin"
+
+echo "=== Pre-push checks ==="
+
+# Backend
+echo "--- Backend: lint ---"
+cd "$ROOT/backend"
+if command -v golangci-lint &>/dev/null; then
+  golangci-lint run
+else
+  echo "WARN: golangci-lint not found, skipping lint"
+fi
+
+echo "--- Backend: test ---"
+go test ./... -count=1
+
+# Frontend
+echo "--- Frontend: build (includes tsc) ---"
+cd "$ROOT/frontend"
+npm run build
+
+echo "--- Frontend: unit tests ---"
+npx vitest run
+
+echo "--- Frontend: npm audit ---"
+npm audit --audit-level=moderate
+
+# Secrets
+echo "--- Secret scan ---"
+cd "$ROOT"
+if command -v gitleaks &>/dev/null; then
+  gitleaks detect --source .
+else
+  echo "WARN: gitleaks not found, skipping secret scan"
+fi
+
+echo "=== All pre-push checks passed ==="

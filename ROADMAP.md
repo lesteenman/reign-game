@@ -25,17 +25,17 @@ Note: Terraform and GitHub Actions contain no AWS account, role, or domain speci
 
 Goal: Play randomly generated 5x5 Standard Mode puzzles in the browser, hosted on AWS.
 
-- [ ] **R-010** — Puzzle data model: grid, regions, solution representation (Go)
-- [ ] **R-011** — Puzzle solver: constraint-based deduction, verify uniqueness (Go, 5x5 Standard)
-- [ ] **R-012** — Puzzle generator: produce valid 5x5 Standard Mode puzzles (Go)
-- [ ] **R-013** — Generate endpoint: stateless, returns a fresh puzzle on each call (no DB)
-- [ ] **R-014** — Theme architecture: ThemeContext, theme data structure, component token consumption
-- [ ] **R-015** — Minimalist default theme: piece icons, color palette, grid styling, animations (placeholder art OK)
-- [ ] **R-016** — Interactive grid component: render regions, place/remove markers, pencil marks, highlight conflicts (theme-aware)
-- [ ] **R-017** — Solution validation in TypeScript (constraint check, no solver)
-- [ ] **R-018** — Game state in IndexedDB: placements, pencil marks, timer, completion status. Persist every move.
-- [ ] **R-019** — Game flow UI: puzzle loading, timer, solve flow, completion screen
-- [ ] **R-01A** — PWA basics: service worker (app shell caching), manifest, install prompt
+- [x] **R-010** — Puzzle data model: grid, regions, solution representation (Go)
+- [x] **R-011** — Puzzle solver: constraint-based deduction, verify uniqueness (Go, 5x5 Standard)
+- [x] **R-012** — Puzzle generator: produce valid 5x5 Standard Mode puzzles (Go)
+- [x] **R-013** — Generate endpoint: stateless, returns a fresh puzzle on each call (no DB)
+- [x] **R-014** — Theme architecture: ThemeContext, theme data structure, component token consumption
+- [x] **R-015** — Tactile default theme: piece icons, color palette, grid styling, animations
+- [x] **R-016** — Interactive grid component: render regions, place/remove markers, exclusion marks, highlight conflicts (theme-aware)
+- [x] **R-017** — Solution validation in TypeScript (constraint check, no solver)
+- [x] **R-018** — Game state in IndexedDB: placements, exclusion marks, timer, completion status. Persist every move.
+- [x] **R-019** — Game flow UI: puzzle loading, timer, solve flow, completion screen
+- [x] **R-01A** — PWA basics: service worker (app shell caching), manifest, install prompt
 
 ## Phase 2: All Grid Sizes
 
@@ -99,6 +99,7 @@ Candidate items — not yet committed or ordered:
 | KI-001 | Medium | GitHub Actions use major version tags, not SHA pins. Pin before handling sensitive data (auth, payments). | R-005, R-006 |
 | KI-002 | Low | CloudFront missing security response headers (HSTS, X-Content-Type-Options, CSP). Add before production. | R-004 |
 | KI-003 | Low | S3 bucket has no explicit server-side encryption config (AWS defaults to SSE-S3, but should be explicit). | R-004 |
+| KI-004 | Low | PWA service worker disabled — vite-plugin-pwa lacks Vite 8 support. Track [vite-pwa/vite-plugin-pwa#923](https://github.com/vite-pwa/vite-plugin-pwa/issues/923). Manifest + icons in place; re-add plugin when compatible. | R-01A |
 
 ---
 
@@ -114,7 +115,7 @@ Key decisions made during development that affect the roadmap. Linked to the rel
 | 6 daily puzzles (3 Standard + 3 Double Queens) | May be reduced if engagement data shows fatigue — starting ambitious | 2026-04-12 | R-031 |
 | Freemium, no ads | Pay for content access, not ad removal | 2026-04-12 | R-053 |
 | Working title: Reign | Evokes royalty/regions, not locked to chess theme, short and memorable | 2026-04-12 | — |
-| Minimalist default theme | Brand identity from clean grid + region colors, not a specific metaphor. Queens is a secondary theme. | 2026-04-12 | R-015, R-016 |
+| Tactile default theme | Brand identity from tactile depth, warm ink palette + bold region colors. Queens is a secondary theme. | 2026-04-12 | R-015, R-016 |
 | Theme system baked into Phase 1 | Must be part of component architecture from the start, not bolted on later | 2026-04-12 | R-014 |
 
 ---
