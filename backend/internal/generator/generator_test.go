@@ -49,7 +49,7 @@ func TestGenerate(t *testing.T) {
 			}
 
 			// Exactly one solution (unique).
-			solCount := CountSolutions(puzzle.RegionMap, gridSize)
+			solCount := CountSolutions(puzzle.RegionMap, gridSize, 1)
 			if solCount != 1 {
 				t.Errorf("CountSolutions = %d, want 1", solCount)
 			}
