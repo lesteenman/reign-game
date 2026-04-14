@@ -1,3 +1,5 @@
+data "aws_region" "current" {}
+
 locals {
   function_name = "${var.project_name}-${var.environment}-api"
 }
@@ -43,11 +45,11 @@ resource "aws_iam_role_policy" "lambda_logs" {
 
 # Lambda function
 resource "aws_lambda_function" "api" {
-  function_name                  = local.function_name
-  role                           = aws_iam_role.lambda_exec.arn
-  handler                        = "bootstrap"
-  runtime                        = "provided.al2023"
-  filename = var.lambda_zip_path
+  function_name = local.function_name
+  role          = aws_iam_role.lambda_exec.arn
+  handler       = "bootstrap"
+  runtime       = "provided.al2023"
+  filename      = var.lambda_zip_path
 
   source_code_hash = fileexists(var.lambda_zip_path) ? filebase64sha256(var.lambda_zip_path) : null
 }
@@ -97,8 +99,17 @@ resource "aws_api_gateway_deployment" "api" {
   rest_api_id = aws_api_gateway_rest_api.api.id
 
   depends_on = [
-    aws_api_gateway_integration.health_lambda
+    aws_api_gateway_integration.health_lambda,
+    aws_api_gateway_integration.puzzles_proxy_lambda,
   ]
+
+  # Force new deployment when integrations change
+  triggers = {
+    redeployment = sha1(jsonencode([
+      aws_api_gateway_integration.health_lambda.id,
+      aws_api_gateway_integration.puzzles_proxy_lambda.id,
+    ]))
+  }
 
   lifecycle {
     create_before_destroy = true
@@ -110,6 +121,38 @@ resource "aws_api_gateway_stage" "api" {
   deployment_id = aws_api_gateway_deployment.api.id
   rest_api_id   = aws_api_gateway_rest_api.api.id
   stage_name    = var.environment
+}
+
+# /puzzles resource
+resource "aws_api_gateway_resource" "puzzles" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
+  path_part   = "puzzles"
+}
+
+# /puzzles/{proxy+} for sub-paths like /puzzles/generate
+resource "aws_api_gateway_resource" "puzzles_proxy" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_resource.puzzles.id
+  path_part   = "{proxy+}"
+}
+
+# GET on /puzzles/{proxy+}
+resource "aws_api_gateway_method" "puzzles_proxy_get" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.puzzles_proxy.id
+  http_method   = "GET"
+  authorization = "NONE"
+}
+
+# Lambda integration for /puzzles/{proxy+}
+resource "aws_api_gateway_integration" "puzzles_proxy_lambda" {
+  rest_api_id             = aws_api_gateway_rest_api.api.id
+  resource_id             = aws_api_gateway_resource.puzzles_proxy.id
+  http_method             = aws_api_gateway_method.puzzles_proxy_get.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.api.invoke_arn
 }
 
 # API Gateway throttling
