@@ -39,7 +39,7 @@ export function Grid({
     function measure() {
       const container = containerRef.current?.parentElement;
       if (!container) return;
-      const available = container.clientWidth - 5;
+      const available = container.clientWidth - 4; // 2px border each side
       const size = Math.floor(available / gridSize);
       setCellSize(Math.max(44, Math.min(72, size)));
     }
@@ -92,7 +92,7 @@ export function Grid({
         display: 'inline-grid',
         gridTemplateColumns: `repeat(${gridSize}, ${cellSize}px)`,
         gridTemplateRows: `repeat(${gridSize}, ${cellSize}px)`,
-        border: '2.5px solid var(--color-ink)',
+        border: '2px solid var(--color-ink)',
         borderRadius: 'var(--radius)',
         boxShadow: '0 3px 0 var(--color-ink)',
         overflow: 'hidden',
@@ -108,9 +108,21 @@ export function Grid({
         Array.from({ length: gridSize }, (_, col) => {
           const regionIndex = regionMap[row]![col]!;
           const cellState = cells[row]![col]!;
-          const key = cellKey(row, col);
-          const hasConflict = conflictSet.has(key);
-          const isDragHighlighted = draggedCells.has(key);
+          const k = cellKey(row, col);
+          const hasConflict = conflictSet.has(k);
+          const isDragHighlighted = draggedCells.has(k);
+
+          // Show cell border only on sides that are:
+          // - not on the grid edge (outer border handles those)
+          // - not on a region boundary (SVG overlay handles those)
+          const isEdgeTop = row === 0;
+          const isEdgeBottom = row === gridSize - 1;
+          const isEdgeLeft = col === 0;
+          const isEdgeRight = col === gridSize - 1;
+          const isRegionTop = !isEdgeTop && regionMap[row]![col] !== regionMap[row - 1]![col];
+          const isRegionBottom = !isEdgeBottom && regionMap[row]![col] !== regionMap[row + 1]![col];
+          const isRegionLeft = !isEdgeLeft && regionMap[row]![col] !== regionMap[row]![col - 1];
+          const isRegionRight = !isEdgeRight && regionMap[row]![col] !== regionMap[row]![col + 1];
 
           return (
             <Cell
@@ -122,6 +134,10 @@ export function Grid({
               hasConflict={hasConflict}
               isDragHighlighted={isDragHighlighted}
               cellSize={cellSize}
+              showBorderTop={!isEdgeTop && !isRegionTop}
+              showBorderRight={!isEdgeRight && !isRegionRight}
+              showBorderBottom={!isEdgeBottom && !isRegionBottom}
+              showBorderLeft={!isEdgeLeft && !isRegionLeft}
               onPointerDown={
                 isSolved ? () => {} : () => onPointerDown(row, col)
               }

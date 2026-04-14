@@ -11,6 +11,11 @@ export interface CellProps {
   hasConflict: boolean;
   isDragHighlighted: boolean;
   cellSize: number;
+  /** Which sides show the subtle internal cell border (not on edge or region boundary). */
+  showBorderTop: boolean;
+  showBorderRight: boolean;
+  showBorderBottom: boolean;
+  showBorderLeft: boolean;
   onPointerDown: () => void;
   onPointerUp: () => void;
   onDragEnter: () => void;
@@ -25,6 +30,10 @@ export function Cell({
   hasConflict,
   isDragHighlighted,
   cellSize,
+  showBorderTop,
+  showBorderRight,
+  showBorderBottom,
+  showBorderLeft,
   onPointerDown,
   onPointerUp,
   onDragEnter,
@@ -101,7 +110,10 @@ export function Cell({
         justifyContent: 'center',
         cursor: 'pointer',
         userSelect: 'none',
-        border: '0.5px solid rgba(0,0,0,0.07)',
+        borderTop: showBorderTop ? '0.5px solid rgba(0,0,0,0.07)' : 'none',
+        borderRight: showBorderRight ? '0.5px solid rgba(0,0,0,0.07)' : 'none',
+        borderBottom: showBorderBottom ? '0.5px solid rgba(0,0,0,0.07)' : 'none',
+        borderLeft: showBorderLeft ? '0.5px solid rgba(0,0,0,0.07)' : 'none',
         boxSizing: 'border-box',
       }}
       onMouseDown={handleMouseDown}

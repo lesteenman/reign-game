@@ -54,23 +54,27 @@ body {
 .cell {
   width: ${cellSize}px; height: ${cellSize}px;
   display: flex; align-items: center; justify-content: center;
-  border: 0.5px solid rgba(0,0,0,0.07);
+  box-sizing: border-box;
 }
 .r0 { background: #93C5FD; }
 .r1 { background: #FCD34D; }
+/* Cell borders only between same-region cells, not on edges or region boundaries */
+.c00 { border-right: 0.5px solid rgba(0,0,0,0.07); border-bottom: 0.5px solid rgba(0,0,0,0.07); }
+.c01 { border-left: 0.5px solid rgba(0,0,0,0.07); }
+.c10 { border-top: 0.5px solid rgba(0,0,0,0.07); }
 /* Region border overlay */
 .overlay {
   position: absolute; top: 0; left: 0; pointer-events: none;
 }
 </style></head><body>
 <div class="grid">
-  <div class="cell r0">
+  <div class="cell r0 c00">
     <svg width="${markerArea}" height="${markerArea}" viewBox="0 0 ${markerArea} ${markerArea}">
       <rect x="${markerPad}" y="${markerPad}" width="${markerSide}" height="${markerSide}" rx="${markerRx}" fill="#2D2A26"/>
     </svg>
   </div>
-  <div class="cell r0"></div>
-  <div class="cell r0"></div>
+  <div class="cell r0 c01"></div>
+  <div class="cell r0 c10"></div>
   <div class="cell r1">
     <svg width="${exArea}" height="${exArea}" viewBox="0 0 ${exArea} ${exArea}">
       <circle cx="${exArea / 2}" cy="${exArea / 2}" r="${dotR}" fill="#2D2A26"/>
