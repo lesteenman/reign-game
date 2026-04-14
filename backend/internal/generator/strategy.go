@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"context"
 	"time"
 
 	"github.com/eriksteenman/reign-game/backend/internal/model"
@@ -37,6 +38,7 @@ type RegionOpts struct {
 
 // GenerateOpts configures puzzle generation.
 type GenerateOpts struct {
-	Timeout    time.Duration // maximum time to spend generating
-	RegionOpts RegionOpts    // region generation options
+	Timeout    time.Duration  // maximum time to spend generating
+	Ctx        context.Context // request context; cancelled on client disconnect
+	RegionOpts RegionOpts     // region generation options
 }

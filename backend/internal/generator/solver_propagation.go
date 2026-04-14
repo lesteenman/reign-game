@@ -16,6 +16,9 @@ func NewPropagationSolver() *PropagationSolver {
 }
 
 // propagationState holds the mutable state for constraint propagation search.
+// When regionMap is non-nil, region constraints are also tracked (used by
+// CountSolutions). When regionMap is nil, only row/column/adjacency constraints
+// are enforced (used by GenerateSolution).
 type propagationState struct {
 	gridSize       int
 	markersPerUnit int
@@ -35,6 +38,24 @@ type propagationState struct {
 
 	// markerCols[r] holds columns where markers are placed in row r.
 	markerCols [][]int
+
+	// eliminated is a pre-allocated scratch buffer for propagatePlace to avoid
+	// per-call allocation on the hot path.
+	eliminated [][2]int
+
+	// --- Optional region tracking (nil when not used) ---
+
+	// regionMap[r][c] is the region ID of cell (r,c). Nil when regions are not tracked.
+	regionMap [][]int
+	// regionPlaced[rid] counts how many markers have been placed in region rid.
+	regionPlaced []int
+	// regionAvail[rid] counts how many available cells remain in region rid.
+	regionAvail []int
+	// regionCells[rid] lists (row, col) pairs for each region, enabling O(region size)
+	// iteration instead of O(gridSize*gridSize) scans.
+	regionCells [][][2]int
+	// numRegions is the number of distinct regions.
+	numRegions int
 }
 
 func newPropagationState(gridSize, markersPerUnit int) *propagationState {
@@ -47,6 +68,7 @@ func newPropagationState(gridSize, markersPerUnit int) *propagationState {
 		rowPlaced:      make([]int, gridSize),
 		colPlaced:      make([]int, gridSize),
 		markerCols:     make([][]int, gridSize),
+		eliminated:     make([][2]int, 0, 4*gridSize),
 	}
 	for r := 0; r < gridSize; r++ {
 		s.available[r] = make([]bool, gridSize)
@@ -62,8 +84,42 @@ func newPropagationState(gridSize, markersPerUnit int) *propagationState {
 	return s
 }
 
-// eliminateCell marks a cell as unavailable and updates counts.
-// Returns the list of cells that were actually eliminated (for undo).
+// newPropagationStateWithRegions creates a propagation state that also tracks
+// region constraints. Used by CountSolutions.
+func newPropagationStateWithRegions(regionMap [][]int, gridSize, markersPerUnit int) *propagationState {
+	s := newPropagationState(gridSize, markersPerUnit)
+
+	// Determine number of regions.
+	numRegions := 0
+	for r := 0; r < gridSize; r++ {
+		for c := 0; c < gridSize; c++ {
+			rid := regionMap[r][c]
+			if rid >= numRegions {
+				numRegions = rid + 1
+			}
+		}
+	}
+
+	regionAvail := make([]int, numRegions)
+	regionCells := make([][][2]int, numRegions)
+	for r := 0; r < gridSize; r++ {
+		for c := 0; c < gridSize; c++ {
+			rid := regionMap[r][c]
+			regionAvail[rid]++
+			regionCells[rid] = append(regionCells[rid], [2]int{r, c})
+		}
+	}
+
+	s.regionMap = regionMap
+	s.regionPlaced = make([]int, numRegions)
+	s.regionAvail = regionAvail
+	s.regionCells = regionCells
+	s.numRegions = numRegions
+	return s
+}
+
+// eliminateCell marks a cell as unavailable and updates counts, including
+// region counts when region tracking is active.
 func (s *propagationState) eliminateCell(r, c int) bool {
 	if !s.available[r][c] {
 		return false
@@ -71,24 +127,32 @@ func (s *propagationState) eliminateCell(r, c int) bool {
 	s.available[r][c] = false
 	s.rowAvail[r]--
 	s.colAvail[c]--
+	if s.regionMap != nil {
+		s.regionAvail[s.regionMap[r][c]]--
+	}
 	return true
 }
 
+// restoreCell marks a cell as available again and updates counts.
 func (s *propagationState) restoreCell(r, c int) {
 	s.available[r][c] = true
 	s.rowAvail[r]++
 	s.colAvail[c]++
+	if s.regionMap != nil {
+		s.regionAvail[s.regionMap[r][c]]++
+	}
 }
 
 // propagatePlace eliminates cells that conflict with placing a marker at (r, c).
 // Returns the list of eliminated cells for backtracking, or nil if a
-// contradiction is detected.
+// contradiction is detected. Uses a pre-allocated scratch buffer to avoid
+// per-call allocation.
 func (s *propagationState) propagatePlace(r, c int) (eliminated [][2]int, ok bool) {
-	eliminated = make([][2]int, 0, 16)
+	s.eliminated = s.eliminated[:0]
 
 	// Eliminate the placed cell itself from available.
 	if s.eliminateCell(r, c) {
-		eliminated = append(eliminated, [2]int{r, c})
+		s.eliminated = append(s.eliminated, [2]int{r, c})
 	}
 
 	// Eliminate all 8 adjacent cells.
@@ -100,7 +164,7 @@ func (s *propagationState) propagatePlace(r, c int) (eliminated [][2]int, ok boo
 			nr, nc := r+dr, c+dc
 			if nr >= 0 && nr < s.gridSize && nc >= 0 && nc < s.gridSize {
 				if s.eliminateCell(nr, nc) {
-					eliminated = append(eliminated, [2]int{nr, nc})
+					s.eliminated = append(s.eliminated, [2]int{nr, nc})
 				}
 			}
 		}
@@ -111,7 +175,7 @@ func (s *propagationState) propagatePlace(r, c int) (eliminated [][2]int, ok boo
 	if s.rowPlaced[r] >= s.markersPerUnit {
 		for cc := 0; cc < s.gridSize; cc++ {
 			if s.eliminateCell(r, cc) {
-				eliminated = append(eliminated, [2]int{r, cc})
+				s.eliminated = append(s.eliminated, [2]int{r, cc})
 			}
 		}
 	}
@@ -121,7 +185,20 @@ func (s *propagationState) propagatePlace(r, c int) (eliminated [][2]int, ok boo
 	if s.colPlaced[c] >= s.markersPerUnit {
 		for rr := 0; rr < s.gridSize; rr++ {
 			if s.eliminateCell(rr, c) {
-				eliminated = append(eliminated, [2]int{rr, c})
+				s.eliminated = append(s.eliminated, [2]int{rr, c})
+			}
+		}
+	}
+
+	// If region tracking is active and this region is full, eliminate all
+	// remaining available cells in the region using the per-region cell index.
+	if s.regionMap != nil {
+		rid := s.regionMap[r][c]
+		if s.regionPlaced[rid] >= s.markersPerUnit {
+			for _, cell := range s.regionCells[rid] {
+				if s.eliminateCell(cell[0], cell[1]) {
+					s.eliminated = append(s.eliminated, [2]int{cell[0], cell[1]})
+				}
 			}
 		}
 	}
@@ -131,15 +208,25 @@ func (s *propagationState) propagatePlace(r, c int) (eliminated [][2]int, ok boo
 	for i := 0; i < s.gridSize; i++ {
 		rowNeeded := s.markersPerUnit - s.rowPlaced[i]
 		if rowNeeded > 0 && s.rowAvail[i] < rowNeeded {
-			return eliminated, false
+			return s.eliminated, false
 		}
 		colNeeded := s.markersPerUnit - s.colPlaced[i]
 		if colNeeded > 0 && s.colAvail[i] < colNeeded {
-			return eliminated, false
+			return s.eliminated, false
 		}
 	}
 
-	return eliminated, true
+	// Check region contradictions when tracking regions.
+	if s.regionMap != nil {
+		for rid := 0; rid < s.numRegions; rid++ {
+			regNeeded := s.markersPerUnit - s.regionPlaced[rid]
+			if regNeeded > 0 && s.regionAvail[rid] < regNeeded {
+				return s.eliminated, false
+			}
+		}
+	}
+
+	return s.eliminated, true
 }
 
 // undoEliminations restores previously eliminated cells.
@@ -228,15 +315,14 @@ func propGenCols(s *propagationState, row, startCol int) bool {
 		s.colPlaced[col]++
 
 		eliminated, ok := s.propagatePlace(row, col)
+		// Copy eliminated since the scratch buffer will be reused.
+		elimCopy := make([][2]int, len(eliminated))
+		copy(elimCopy, eliminated)
 
 		if ok {
 			// Try forced moves via propagation chain.
 			forcedElim, forcedOk := propApplyForced(s)
 			if forcedOk {
-				// For next marker in same row, use col+1 to maintain
-				// combination ordering. But since we shuffle, just pass 0
-				// and let availability filtering handle it. Actually we need
-				// to allow any column > col for combination ordering.
 				if propGenCols(s, row, col+1) {
 					return true
 				}
@@ -246,7 +332,7 @@ func propGenCols(s *propagationState, row, startCol int) bool {
 		}
 
 		// Undo placement.
-		s.undoEliminations(eliminated)
+		s.undoEliminations(elimCopy)
 		s.markerCols[row] = s.markerCols[row][:len(s.markerCols[row])-1]
 		s.rowPlaced[row]--
 		s.colPlaced[col]--
@@ -257,13 +343,14 @@ func propGenCols(s *propagationState, row, startCol int) bool {
 // forcedResult tracks marker placements and eliminations from forced moves
 // so they can be undone on backtrack.
 type forcedResult struct {
-	placements  [][2]int   // markers placed by forced moves
-	eliminations [][][2]int // eliminations per placement
+	placements   [][2]int
+	eliminations [][][2]int
 }
 
-// propApplyForced repeatedly finds rows or columns with exactly the right
-// number of available cells to fill and places markers there.
-// Returns the forced results for undo, and whether a contradiction was found.
+// propApplyForced repeatedly finds rows, columns, or regions (when tracked)
+// with exactly the right number of available cells to fill and places markers
+// there. Returns the forced results for undo, and whether a contradiction was
+// found.
 func propApplyForced(s *propagationState) (forcedResult, bool) {
 	result := forcedResult{}
 
@@ -289,13 +376,25 @@ func propApplyForced(s *propagationState) (forcedResult, bool) {
 					if s.colPlaced[c] >= s.markersPerUnit {
 						return result, false // contradiction
 					}
+					if s.regionMap != nil {
+						rid := s.regionMap[r][c]
+						if s.regionPlaced[rid] >= s.markersPerUnit {
+							return result, false // contradiction
+						}
+					}
 
 					s.markerCols[r] = append(s.markerCols[r], c)
 					s.rowPlaced[r]++
 					s.colPlaced[c]++
+					if s.regionMap != nil {
+						s.regionPlaced[s.regionMap[r][c]]++
+					}
 					eliminated, ok := s.propagatePlace(r, c)
+					// Copy since scratch buffer is reused.
+					elimCopy := make([][2]int, len(eliminated))
+					copy(elimCopy, eliminated)
 					result.placements = append(result.placements, [2]int{r, c})
-					result.eliminations = append(result.eliminations, eliminated)
+					result.eliminations = append(result.eliminations, elimCopy)
 
 					if !ok {
 						return result, false
@@ -323,18 +422,71 @@ func propApplyForced(s *propagationState) (forcedResult, bool) {
 					if s.rowPlaced[r] >= s.markersPerUnit {
 						return result, false // contradiction
 					}
+					if s.regionMap != nil {
+						rid := s.regionMap[r][c]
+						if s.regionPlaced[rid] >= s.markersPerUnit {
+							return result, false // contradiction
+						}
+					}
 
 					s.markerCols[r] = append(s.markerCols[r], c)
 					s.rowPlaced[r]++
 					s.colPlaced[c]++
+					if s.regionMap != nil {
+						s.regionPlaced[s.regionMap[r][c]]++
+					}
 					eliminated, ok := s.propagatePlace(r, c)
+					elimCopy := make([][2]int, len(eliminated))
+					copy(elimCopy, eliminated)
 					result.placements = append(result.placements, [2]int{r, c})
-					result.eliminations = append(result.eliminations, eliminated)
+					result.eliminations = append(result.eliminations, elimCopy)
 
 					if !ok {
 						return result, false
 					}
 					changed = true
+				}
+			}
+		}
+
+		// Check regions for forced moves (only when region tracking is active).
+		if s.regionMap != nil {
+			for rid := 0; rid < s.numRegions; rid++ {
+				needed := s.markersPerUnit - s.regionPlaced[rid]
+				if needed <= 0 {
+					continue
+				}
+				if s.regionAvail[rid] < needed {
+					return result, false // contradiction
+				}
+				if s.regionAvail[rid] == needed {
+					for _, cell := range s.regionCells[rid] {
+						r, c := cell[0], cell[1]
+						if !s.available[r][c] {
+							continue
+						}
+						if s.rowPlaced[r] >= s.markersPerUnit {
+							return result, false
+						}
+						if s.colPlaced[c] >= s.markersPerUnit {
+							return result, false
+						}
+
+						s.markerCols[r] = append(s.markerCols[r], c)
+						s.rowPlaced[r]++
+						s.colPlaced[c]++
+						s.regionPlaced[rid]++
+						eliminated, ok := s.propagatePlace(r, c)
+						elimCopy := make([][2]int, len(eliminated))
+						copy(elimCopy, eliminated)
+						result.placements = append(result.placements, [2]int{r, c})
+						result.eliminations = append(result.eliminations, elimCopy)
+
+						if !ok {
+							return result, false
+						}
+						changed = true
+					}
 				}
 			}
 		}
@@ -360,382 +512,93 @@ func propUndoForced(s *propagationState, result forcedResult) {
 		}
 		s.rowPlaced[r]--
 		s.colPlaced[c]--
-	}
-}
-
-// countPropagationState extends propagationState with region tracking for
-// CountSolutions.
-type countPropagationState struct {
-	*propagationState
-	regionMap    [][]int
-	regionPlaced []int
-	regionAvail  []int
-	numRegions   int
-}
-
-func newCountPropagationState(regionMap [][]int, gridSize, markersPerUnit int) *countPropagationState {
-	base := newPropagationState(gridSize, markersPerUnit)
-
-	// Determine number of regions.
-	numRegions := 0
-	for r := 0; r < gridSize; r++ {
-		for c := 0; c < gridSize; c++ {
-			rid := regionMap[r][c]
-			if rid >= numRegions {
-				numRegions = rid + 1
-			}
+		if s.regionMap != nil {
+			s.regionPlaced[s.regionMap[r][c]]--
 		}
-	}
-
-	regionAvail := make([]int, numRegions)
-	for r := 0; r < gridSize; r++ {
-		for c := 0; c < gridSize; c++ {
-			regionAvail[regionMap[r][c]]++
-		}
-	}
-
-	return &countPropagationState{
-		propagationState: base,
-		regionMap:        regionMap,
-		regionPlaced:     make([]int, numRegions),
-		regionAvail:      regionAvail,
-		numRegions:       numRegions,
-	}
-}
-
-// eliminateCellCount marks a cell as unavailable, updating region counts too.
-func (cs *countPropagationState) eliminateCellCount(r, c int) bool {
-	if !cs.available[r][c] {
-		return false
-	}
-	cs.available[r][c] = false
-	cs.rowAvail[r]--
-	cs.colAvail[c]--
-	cs.regionAvail[cs.regionMap[r][c]]--
-	return true
-}
-
-func (cs *countPropagationState) restoreCellCount(r, c int) {
-	cs.available[r][c] = true
-	cs.rowAvail[r]++
-	cs.colAvail[c]++
-	cs.regionAvail[cs.regionMap[r][c]]++
-}
-
-// propagatePlaceCount propagates constraints after placing a marker at (r, c),
-// including region constraints.
-func (cs *countPropagationState) propagatePlaceCount(r, c int) (eliminated [][2]int, ok bool) {
-	eliminated = make([][2]int, 0, 16)
-
-	// Eliminate the placed cell itself.
-	if cs.eliminateCellCount(r, c) {
-		eliminated = append(eliminated, [2]int{r, c})
-	}
-
-	// Eliminate all 8 adjacent cells.
-	for dr := -1; dr <= 1; dr++ {
-		for dc := -1; dc <= 1; dc++ {
-			if dr == 0 && dc == 0 {
-				continue
-			}
-			nr, nc := r+dr, c+dc
-			if nr >= 0 && nr < cs.gridSize && nc >= 0 && nc < cs.gridSize {
-				if cs.eliminateCellCount(nr, nc) {
-					eliminated = append(eliminated, [2]int{nr, nc})
-				}
-			}
-		}
-	}
-
-	// If row is full, eliminate remaining cells in row.
-	if cs.rowPlaced[r] >= cs.markersPerUnit {
-		for cc := 0; cc < cs.gridSize; cc++ {
-			if cs.eliminateCellCount(r, cc) {
-				eliminated = append(eliminated, [2]int{r, cc})
-			}
-		}
-	}
-
-	// If column is full, eliminate remaining cells in column.
-	if cs.colPlaced[c] >= cs.markersPerUnit {
-		for rr := 0; rr < cs.gridSize; rr++ {
-			if cs.eliminateCellCount(rr, c) {
-				eliminated = append(eliminated, [2]int{rr, c})
-			}
-		}
-	}
-
-	// If region is full, eliminate remaining cells in region.
-	rid := cs.regionMap[r][c]
-	if cs.regionPlaced[rid] >= cs.markersPerUnit {
-		for rr := 0; rr < cs.gridSize; rr++ {
-			for cc := 0; cc < cs.gridSize; cc++ {
-				if cs.regionMap[rr][cc] == rid {
-					if cs.eliminateCellCount(rr, cc) {
-						eliminated = append(eliminated, [2]int{rr, cc})
-					}
-				}
-			}
-		}
-	}
-
-	// Check for contradictions.
-	for i := 0; i < cs.gridSize; i++ {
-		rowNeeded := cs.markersPerUnit - cs.rowPlaced[i]
-		if rowNeeded > 0 && cs.rowAvail[i] < rowNeeded {
-			return eliminated, false
-		}
-		colNeeded := cs.markersPerUnit - cs.colPlaced[i]
-		if colNeeded > 0 && cs.colAvail[i] < colNeeded {
-			return eliminated, false
-		}
-	}
-	for rid := 0; rid < cs.numRegions; rid++ {
-		regNeeded := cs.markersPerUnit - cs.regionPlaced[rid]
-		if regNeeded > 0 && cs.regionAvail[rid] < regNeeded {
-			return eliminated, false
-		}
-	}
-
-	return eliminated, true
-}
-
-func (cs *countPropagationState) undoEliminationsCount(eliminated [][2]int) {
-	for i := len(eliminated) - 1; i >= 0; i-- {
-		cs.restoreCellCount(eliminated[i][0], eliminated[i][1])
-	}
-}
-
-// countForcedResult tracks forced placements for CountSolutions.
-type countForcedResult struct {
-	placements   [][2]int
-	eliminations [][][2]int
-}
-
-// applyForcedCount applies forced moves considering row, column, and region constraints.
-func applyForcedCount(cs *countPropagationState) (countForcedResult, bool) {
-	result := countForcedResult{}
-
-	changed := true
-	for changed {
-		changed = false
-
-		// Check rows.
-		for r := 0; r < cs.gridSize; r++ {
-			needed := cs.markersPerUnit - cs.rowPlaced[r]
-			if needed <= 0 {
-				continue
-			}
-			if cs.rowAvail[r] < needed {
-				return result, false
-			}
-			if cs.rowAvail[r] == needed {
-				for c := 0; c < cs.gridSize; c++ {
-					if !cs.available[r][c] {
-						continue
-					}
-					if cs.colPlaced[c] >= cs.markersPerUnit {
-						return result, false
-					}
-					rid := cs.regionMap[r][c]
-					if cs.regionPlaced[rid] >= cs.markersPerUnit {
-						return result, false
-					}
-
-					cs.markerCols[r] = append(cs.markerCols[r], c)
-					cs.rowPlaced[r]++
-					cs.colPlaced[c]++
-					cs.regionPlaced[rid]++
-					eliminated, ok := cs.propagatePlaceCount(r, c)
-					result.placements = append(result.placements, [2]int{r, c})
-					result.eliminations = append(result.eliminations, eliminated)
-
-					if !ok {
-						return result, false
-					}
-					changed = true
-				}
-			}
-		}
-
-		// Check columns.
-		for c := 0; c < cs.gridSize; c++ {
-			needed := cs.markersPerUnit - cs.colPlaced[c]
-			if needed <= 0 {
-				continue
-			}
-			if cs.colAvail[c] < needed {
-				return result, false
-			}
-			if cs.colAvail[c] == needed {
-				for r := 0; r < cs.gridSize; r++ {
-					if !cs.available[r][c] {
-						continue
-					}
-					if cs.rowPlaced[r] >= cs.markersPerUnit {
-						return result, false
-					}
-					rid := cs.regionMap[r][c]
-					if cs.regionPlaced[rid] >= cs.markersPerUnit {
-						return result, false
-					}
-
-					cs.markerCols[r] = append(cs.markerCols[r], c)
-					cs.rowPlaced[r]++
-					cs.colPlaced[c]++
-					cs.regionPlaced[rid]++
-					eliminated, ok := cs.propagatePlaceCount(r, c)
-					result.placements = append(result.placements, [2]int{r, c})
-					result.eliminations = append(result.eliminations, eliminated)
-
-					if !ok {
-						return result, false
-					}
-					changed = true
-				}
-			}
-		}
-
-		// Check regions.
-		for rid := 0; rid < cs.numRegions; rid++ {
-			needed := cs.markersPerUnit - cs.regionPlaced[rid]
-			if needed <= 0 {
-				continue
-			}
-			if cs.regionAvail[rid] < needed {
-				return result, false
-			}
-			if cs.regionAvail[rid] == needed {
-				for r := 0; r < cs.gridSize; r++ {
-					for c := 0; c < cs.gridSize; c++ {
-						if cs.regionMap[r][c] != rid || !cs.available[r][c] {
-							continue
-						}
-						if cs.rowPlaced[r] >= cs.markersPerUnit {
-							return result, false
-						}
-						if cs.colPlaced[c] >= cs.markersPerUnit {
-							return result, false
-						}
-
-						cs.markerCols[r] = append(cs.markerCols[r], c)
-						cs.rowPlaced[r]++
-						cs.colPlaced[c]++
-						cs.regionPlaced[rid]++
-						eliminated, ok := cs.propagatePlaceCount(r, c)
-						result.placements = append(result.placements, [2]int{r, c})
-						result.eliminations = append(result.eliminations, eliminated)
-
-						if !ok {
-							return result, false
-						}
-						changed = true
-					}
-				}
-			}
-		}
-	}
-
-	return result, true
-}
-
-// undoForcedCount reverses forced placements.
-func undoForcedCount(cs *countPropagationState, result countForcedResult) {
-	for i := len(result.placements) - 1; i >= 0; i-- {
-		r, c := result.placements[i][0], result.placements[i][1]
-		cs.undoEliminationsCount(result.eliminations[i])
-
-		rid := cs.regionMap[r][c]
-		cols := cs.markerCols[r]
-		for j := len(cols) - 1; j >= 0; j-- {
-			if cols[j] == c {
-				cs.markerCols[r] = append(cols[:j], cols[j+1:]...)
-				break
-			}
-		}
-		cs.rowPlaced[r]--
-		cs.colPlaced[c]--
-		cs.regionPlaced[rid]--
 	}
 }
 
 // CountSolutions returns the number of valid solutions (stops at maxSolutions)
 // using backtracking with constraint propagation including region constraints.
 func (s *PropagationSolver) CountSolutions(regionMap [][]int, gridSize int, markersPerUnit int, maxSolutions int) int {
-	cs := newCountPropagationState(regionMap, gridSize, markersPerUnit)
+	state := newPropagationStateWithRegions(regionMap, gridSize, markersPerUnit)
 	count := 0
-	countPropRow(cs, 0, maxSolutions, &count)
+	countPropRow(state, 0, maxSolutions, &count)
 	return count
 }
 
 // countPropRow recursively counts solutions row by row with propagation.
-func countPropRow(cs *countPropagationState, row, maxSolutions int, count *int) {
+func countPropRow(s *propagationState, row, maxSolutions int, count *int) {
 	if *count >= maxSolutions {
 		return
 	}
-	if row == cs.gridSize {
+	if row == s.gridSize {
 		*count++
 		return
 	}
 
 	// Skip rows that already have enough markers (from forced moves).
-	if cs.rowPlaced[row] >= cs.markersPerUnit {
-		countPropRow(cs, row+1, maxSolutions, count)
+	if s.rowPlaced[row] >= s.markersPerUnit {
+		countPropRow(s, row+1, maxSolutions, count)
 		return
 	}
 
-	countPropCols(cs, row, 0, maxSolutions, count)
+	countPropCols(s, row, 0, maxSolutions, count)
 }
 
 // countPropCols recursively selects columns for a row during counting.
 // Deterministic ordering (no shuffle) for completeness.
-func countPropCols(cs *countPropagationState, row, startCol, maxSolutions int, count *int) {
+func countPropCols(s *propagationState, row, startCol, maxSolutions int, count *int) {
 	if *count >= maxSolutions {
 		return
 	}
-	if cs.rowPlaced[row] >= cs.markersPerUnit {
-		countPropRow(cs, row+1, maxSolutions, count)
+	if s.rowPlaced[row] >= s.markersPerUnit {
+		countPropRow(s, row+1, maxSolutions, count)
 		return
 	}
 
-	remaining := cs.markersPerUnit - cs.rowPlaced[row]
-	for col := startCol; col <= cs.gridSize-remaining; col++ {
+	remaining := s.markersPerUnit - s.rowPlaced[row]
+	for col := startCol; col <= s.gridSize-remaining; col++ {
 		if *count >= maxSolutions {
 			return
 		}
-		if !cs.available[row][col] {
+		if !s.available[row][col] {
 			continue
 		}
-		if cs.colPlaced[col] >= cs.markersPerUnit {
+		if s.colPlaced[col] >= s.markersPerUnit {
 			continue
 		}
-		rid := cs.regionMap[row][col]
-		if cs.regionPlaced[rid] >= cs.markersPerUnit {
+		// Region check (always present in counting path).
+		rid := s.regionMap[row][col]
+		if s.regionPlaced[rid] >= s.markersPerUnit {
 			continue
 		}
 
 		// Place marker.
-		cs.markerCols[row] = append(cs.markerCols[row], col)
-		cs.rowPlaced[row]++
-		cs.colPlaced[col]++
-		cs.regionPlaced[rid]++
+		s.markerCols[row] = append(s.markerCols[row], col)
+		s.rowPlaced[row]++
+		s.colPlaced[col]++
+		s.regionPlaced[rid]++
 
-		eliminated, ok := cs.propagatePlaceCount(row, col)
+		eliminated, ok := s.propagatePlace(row, col)
+		// Copy since scratch buffer is reused.
+		elimCopy := make([][2]int, len(eliminated))
+		copy(elimCopy, eliminated)
 
 		if ok {
-			forcedResult, forcedOk := applyForcedCount(cs)
+			forcedResult, forcedOk := propApplyForced(s)
 			if forcedOk {
-				countPropCols(cs, row, col+1, maxSolutions, count)
+				countPropCols(s, row, col+1, maxSolutions, count)
 			}
-			undoForcedCount(cs, forcedResult)
+			propUndoForced(s, forcedResult)
 		}
 
 		// Undo placement.
-		cs.undoEliminationsCount(eliminated)
-		cs.markerCols[row] = cs.markerCols[row][:len(cs.markerCols[row])-1]
-		cs.rowPlaced[row]--
-		cs.colPlaced[col]--
-		cs.regionPlaced[rid]--
+		s.undoEliminations(elimCopy)
+		s.markerCols[row] = s.markerCols[row][:len(s.markerCols[row])-1]
+		s.rowPlaced[row]--
+		s.colPlaced[col]--
+		s.regionPlaced[rid]--
 
 		if *count >= maxSolutions {
 			return

@@ -32,6 +32,11 @@ func (p *SolutionFirstPipeline) Generate(gridSize int, markersPerUnit int, opts 
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("generating puzzle: timeout after %v", opts.Timeout)
 		}
+		if opts.Ctx != nil {
+			if err := opts.Ctx.Err(); err != nil {
+				return nil, fmt.Errorf("generating puzzle: %w", err)
+			}
+		}
 
 		solution := p.solver.GenerateSolution(gridSize, markersPerUnit)
 		if solution == nil {

@@ -192,84 +192,8 @@ func generateRegionMapDoubleWithTargets(solution [][]bool, gridSize int, targetS
 		}
 	}
 
-	// Grow regions using round-robin BFS (same as standard mode).
-	dirs := [][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
-	totalAssigned := 2 * gridSize // 2 markers per region seeded
-
-	// Initialize frontiers for each region.
-	frontiers := make([][]regionCell, gridSize)
-	for r := 0; r < gridSize; r++ {
-		for c := 0; c < gridSize; c++ {
-			if regionMap[r][c] < 0 {
-				continue
-			}
-			rid := regionMap[r][c]
-			for _, d := range dirs {
-				nr, nc := r+d[0], c+d[1]
-				if nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize && regionMap[nr][nc] == -1 {
-					frontiers[rid] = append(frontiers[rid], regionCell{nr, nc})
-				}
-			}
-		}
-	}
-
-	target := gridSize * gridSize
-	for totalAssigned < target {
-		// Refresh frontiers.
-		for rid := 0; rid < gridSize; rid++ {
-			filtered := frontiers[rid][:0]
-			for _, fc := range frontiers[rid] {
-				if regionMap[fc.r][fc.c] == -1 {
-					filtered = append(filtered, fc)
-				}
-			}
-			frontiers[rid] = filtered
-		}
-
-		order := rand.Perm(gridSize)
-		bestRid := -1
-		bestDeficit := 0
-		for _, rid := range order {
-			if len(frontiers[rid]) == 0 {
-				continue
-			}
-			deficit := targetSizes[rid] - regionSize[rid]
-			if deficit > 0 && deficit > bestDeficit {
-				bestDeficit = deficit
-				bestRid = rid
-			}
-		}
-		if bestRid == -1 {
-			for _, rid := range order {
-				if len(frontiers[rid]) > 0 {
-					bestRid = rid
-					break
-				}
-			}
-		}
-		if bestRid == -1 {
-			return nil, fmt.Errorf("generating double region map: stuck with %d/%d cells assigned", totalAssigned, target)
-		}
-
-		idx := rand.IntN(len(frontiers[bestRid]))
-		chosen := frontiers[bestRid][idx]
-		frontiers[bestRid][idx] = frontiers[bestRid][len(frontiers[bestRid])-1]
-		frontiers[bestRid] = frontiers[bestRid][:len(frontiers[bestRid])-1]
-
-		if regionMap[chosen.r][chosen.c] != -1 {
-			continue
-		}
-
-		regionMap[chosen.r][chosen.c] = bestRid
-		regionSize[bestRid]++
-		totalAssigned++
-
-		for _, d := range dirs {
-			nr, nc := chosen.r+d[0], chosen.c+d[1]
-			if nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize && regionMap[nr][nc] == -1 {
-				frontiers[bestRid] = append(frontiers[bestRid], regionCell{nr, nc})
-			}
-		}
+	if err := growRegionsBFS(regionMap, regionSize, targetSizes, gridSize); err != nil {
+		return nil, fmt.Errorf("generating double region map: %w", err)
 	}
 
 	if err := ValidateRegionMapWithMinSize(regionMap, gridSize, minRegionSizeDouble); err != nil {
@@ -309,16 +233,36 @@ func generateRegionMapWithTargets(solution [][]bool, gridSize int, targetSizes [
 		return nil, fmt.Errorf("generating region map: found %d markers, expected %d", markerIdx, gridSize)
 	}
 
-	// Grow regions using round-robin BFS. Each round, iterate regions in shuffled
-	// order; the smallest region with frontier cells claims one random neighbor.
-	// No hard cap on region size during growth -- sizes are checked at the end.
-	// Prefer non-full regions, but allow full regions to grow if no other region
-	// can claim cells (prevents stranding).
-	dirs := [][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
-	totalAssigned := gridSize
+	if err := growRegionsBFS(regionMap, regionSize, targetSizes, gridSize); err != nil {
+		return nil, fmt.Errorf("generating region map: %w", err)
+	}
 
-	// Initialize frontiers for each region.
-	frontiers := make([][]regionCell, gridSize)
+	if err := ValidateRegionMap(regionMap, gridSize); err != nil {
+		return nil, fmt.Errorf("generating region map: validation failed: %w", err)
+	}
+
+	return regionMap, nil
+}
+
+// growRegionsBFS runs round-robin BFS growth on an already-seeded region map
+// until all cells are assigned. regionSize tracks the current cell count per
+// region, and targetSizes specifies the desired cell count for each region.
+// Each round, the region with the largest deficit (below its target) that has
+// frontier cells claims one random neighbor. If all regions with frontiers are
+// at or above their target, any region with frontier cells is used as a
+// fallback to prevent stranding.
+func growRegionsBFS(regionMap [][]int, regionSize []int, targetSizes []int, gridSize int) error {
+	dirs := [][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
+	numRegions := len(regionSize)
+
+	// Count already-assigned cells.
+	totalAssigned := 0
+	for _, s := range regionSize {
+		totalAssigned += s
+	}
+
+	// Initialize frontiers for each region from seeded cells.
+	frontiers := make([][]regionCell, numRegions)
 	for r := 0; r < gridSize; r++ {
 		for c := 0; c < gridSize; c++ {
 			if regionMap[r][c] < 0 {
@@ -337,7 +281,7 @@ func generateRegionMapWithTargets(solution [][]bool, gridSize int, targetSizes [
 	target := gridSize * gridSize
 	for totalAssigned < target {
 		// Refresh all frontiers: remove assigned cells.
-		for rid := 0; rid < gridSize; rid++ {
+		for rid := 0; rid < numRegions; rid++ {
 			filtered := frontiers[rid][:0]
 			for _, fc := range frontiers[rid] {
 				if regionMap[fc.r][fc.c] == -1 {
@@ -347,11 +291,10 @@ func generateRegionMapWithTargets(solution [][]bool, gridSize int, targetSizes [
 			frontiers[rid] = filtered
 		}
 
-		// Find the smallest region (relative to its target) that has frontier cells.
-		// First pass: prefer regions below their target size.
-		order := rand.Perm(gridSize)
+		// Find the region with the largest deficit that has frontier cells.
+		order := rand.Perm(numRegions)
 		bestRid := -1
-		bestDeficit := 0 // how far below target the best candidate is
+		bestDeficit := 0
 		for _, rid := range order {
 			if len(frontiers[rid]) == 0 {
 				continue
@@ -362,8 +305,8 @@ func generateRegionMapWithTargets(solution [][]bool, gridSize int, targetSizes [
 				bestRid = rid
 			}
 		}
-		// Fallback: if all regions with frontiers are at or above their target, pick any
-		// (this avoids stranding cells; validation will catch size imbalance).
+		// Fallback: if all regions with frontiers are at or above their target,
+		// pick any (prevents stranding; validation will catch size imbalance).
 		if bestRid == -1 {
 			for _, rid := range order {
 				if len(frontiers[rid]) > 0 {
@@ -373,7 +316,7 @@ func generateRegionMapWithTargets(solution [][]bool, gridSize int, targetSizes [
 			}
 		}
 		if bestRid == -1 {
-			return nil, fmt.Errorf("generating region map: stuck with %d/%d cells assigned", totalAssigned, target)
+			return fmt.Errorf("stuck with %d/%d cells assigned", totalAssigned, target)
 		}
 
 		// Pick a random frontier cell from the chosen region.
@@ -398,11 +341,7 @@ func generateRegionMapWithTargets(solution [][]bool, gridSize int, targetSizes [
 		}
 	}
 
-	if err := ValidateRegionMap(regionMap, gridSize); err != nil {
-		return nil, fmt.Errorf("generating region map: validation failed: %w", err)
-	}
-
-	return regionMap, nil
+	return nil
 }
 
 // minRegionSize is the default minimum number of cells a region must have (standard mode).

@@ -22,8 +22,8 @@ const (
 
 // Solver strategy names.
 const (
-	SolverBacktrack    = "backtrack"
-	SolverPropagation  = "propagation"
+	SolverBacktrack   = "backtrack"
+	SolverPropagation = "propagation"
 )
 
 // Region strategy names.
@@ -50,6 +50,140 @@ func generateTimeout(size int) time.Duration {
 	return 60 * time.Second
 }
 
+// generateParams holds all validated parameters for puzzle generation.
+type generateParams struct {
+	size           int
+	mode           string
+	pipeline       string
+	solver         string
+	regions        string
+	regionVariance float64
+	markersPerUnit int
+	minSize        int
+}
+
+// parseGenerateParams validates and extracts all query parameters from a
+// generate request. Returns an error message tuple (status, code, message)
+// on validation failure.
+func parseGenerateParams(r *http.Request) (generateParams, int, string, string) {
+	var p generateParams
+
+	// Validate size parameter.
+	sizeStr := r.URL.Query().Get("size")
+	if sizeStr == "" {
+		return p, http.StatusBadRequest, "invalid_params", "size parameter is required"
+	}
+
+	size, err := strconv.Atoi(sizeStr)
+	if err != nil {
+		return p, http.StatusBadRequest, "invalid_params", "size must be an integer"
+	}
+
+	if size < 3 || size > 15 {
+		return p, http.StatusBadRequest, "invalid_params", "size must be between 3 and 15"
+	}
+	p.size = size
+
+	// Validate mode parameter.
+	p.mode = r.URL.Query().Get("mode")
+	if p.mode == "" {
+		return p, http.StatusBadRequest, "invalid_params", "mode parameter is required"
+	}
+
+	if p.mode != ModeStandard && p.mode != ModeDouble {
+		return p, http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'"
+	}
+
+	// Validate pipeline parameter.
+	p.pipeline = r.URL.Query().Get("pipeline")
+	if p.pipeline == "" {
+		p.pipeline = PipelineRegionFirst
+	}
+	if p.pipeline != PipelineRegionFirst && p.pipeline != PipelineIterative && p.pipeline != PipelineConstraintAware {
+		return p, http.StatusBadRequest, "invalid_params", "pipeline must be 'region-first', 'iterative', or 'constraint-aware'"
+	}
+
+	// Validate solver parameter.
+	p.solver = r.URL.Query().Get("solver")
+	if p.solver == "" {
+		p.solver = SolverPropagation
+	}
+	if p.solver != SolverBacktrack && p.solver != SolverPropagation {
+		return p, http.StatusBadRequest, "invalid_params", "solver must be 'backtrack' or 'propagation'"
+	}
+
+	// Validate regions parameter.
+	p.regions = r.URL.Query().Get("regions")
+	if p.regions == "" {
+		p.regions = RegionsBFS
+	}
+	if p.regions != RegionsBFS && p.regions != RegionsWFC {
+		return p, http.StatusBadRequest, "invalid_params", "regions must be 'bfs' or 'wfc'"
+	}
+
+	// Validate regionVariance parameter.
+	regionVarianceStr := r.URL.Query().Get("regionVariance")
+	if regionVarianceStr != "" {
+		p.regionVariance, err = strconv.ParseFloat(regionVarianceStr, 64)
+		if err != nil {
+			return p, http.StatusBadRequest, "invalid_params", "regionVariance must be a number"
+		}
+		if p.regionVariance < 0.0 || p.regionVariance > 1.0 || math.IsNaN(p.regionVariance) {
+			return p, http.StatusBadRequest, "invalid_params", "regionVariance must be between 0.0 and 1.0"
+		}
+	}
+
+	// Determine markersPerUnit and minSize based on mode.
+	p.markersPerUnit = 1
+	p.minSize = 3
+	if p.mode == ModeDouble {
+		p.markersPerUnit = 2
+		p.minSize = 4
+	}
+
+	return p, 0, "", ""
+}
+
+// buildPipeline constructs the appropriate pipeline strategy from validated
+// parameters.
+func buildPipeline(p generateParams) generator.PipelineStrategy {
+	// Construct solver strategy.
+	var solver generator.SolverStrategy
+	switch p.solver {
+	case SolverBacktrack:
+		solver = generator.NewBacktrackSolver()
+	case SolverPropagation:
+		solver = generator.NewPropagationSolver()
+	}
+
+	// Construct region strategy (used by iterative pipeline).
+	var regions generator.RegionStrategy
+	switch p.regions {
+	case RegionsBFS:
+		if p.mode == ModeDouble {
+			regions = generator.NewBFSRegionGeneratorDouble()
+		} else {
+			regions = generator.NewBFSRegionGenerator()
+		}
+	case RegionsWFC:
+		if p.mode == ModeDouble {
+			regions = generator.NewWFCRegionGeneratorDouble()
+		} else {
+			regions = generator.NewWFCRegionGenerator()
+		}
+	}
+
+	// Construct pipeline strategy.
+	switch p.pipeline {
+	case PipelineIterative:
+		return generator.NewIterativeRefinementPipeline(solver, regions)
+	case PipelineConstraintAware:
+		return generator.NewConstraintAwarePipeline(solver)
+	default:
+		return generator.NewRegionFirstPipeline(solver)
+	}
+}
+
 // GenerateHandler handles GET /puzzles/generate.
 // Query params:
 //   - size: int 3-15 (required)
@@ -61,137 +195,28 @@ func generateTimeout(size int) time.Duration {
 func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Validate size parameter.
-	sizeStr := r.URL.Query().Get("size")
-	if sizeStr == "" {
-		writeError(w, http.StatusBadRequest, "invalid_params", "size parameter is required")
+	// Parse and validate all parameters.
+	params, status, errCode, errMsg := parseGenerateParams(r)
+	if status != 0 {
+		writeError(w, status, errCode, errMsg)
 		return
 	}
 
-	size, err := strconv.Atoi(sizeStr)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_params", "size must be an integer")
-		return
-	}
-
-	if size < 3 || size > 15 {
-		writeError(w, http.StatusBadRequest, "invalid_params", "size must be between 3 and 15")
-		return
-	}
-
-	// Validate mode parameter.
-	mode := r.URL.Query().Get("mode")
-	if mode == "" {
-		writeError(w, http.StatusBadRequest, "invalid_params", "mode parameter is required")
-		return
-	}
-
-	if mode != ModeStandard && mode != ModeDouble {
-		writeError(w, http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'")
-		return
-	}
-
-	// Validate pipeline parameter.
-	pipelineStr := r.URL.Query().Get("pipeline")
-	if pipelineStr == "" {
-		pipelineStr = PipelineRegionFirst
-	}
-	if pipelineStr != PipelineRegionFirst && pipelineStr != PipelineIterative && pipelineStr != PipelineConstraintAware {
-		writeError(w, http.StatusBadRequest, "invalid_params", "pipeline must be 'region-first', 'iterative', or 'constraint-aware'")
-		return
-	}
-
-	// Validate solver parameter.
-	solverStr := r.URL.Query().Get("solver")
-	if solverStr == "" {
-		solverStr = SolverPropagation
-	}
-	if solverStr != SolverBacktrack && solverStr != SolverPropagation {
-		writeError(w, http.StatusBadRequest, "invalid_params", "solver must be 'backtrack' or 'propagation'")
-		return
-	}
-
-	// Validate regions parameter.
-	regionsStr := r.URL.Query().Get("regions")
-	if regionsStr == "" {
-		regionsStr = RegionsBFS
-	}
-	if regionsStr != RegionsBFS && regionsStr != RegionsWFC {
-		writeError(w, http.StatusBadRequest, "invalid_params", "regions must be 'bfs' or 'wfc'")
-		return
-	}
-
-	// Validate regionVariance parameter.
-	var regionVariance float64
-	regionVarianceStr := r.URL.Query().Get("regionVariance")
-	if regionVarianceStr != "" {
-		regionVariance, err = strconv.ParseFloat(regionVarianceStr, 64)
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_params", "regionVariance must be a number")
-			return
-		}
-		if regionVariance < 0.0 || regionVariance > 1.0 || math.IsNaN(regionVariance) {
-			writeError(w, http.StatusBadRequest, "invalid_params", "regionVariance must be between 0.0 and 1.0")
-			return
-		}
-	}
-
-	// Determine markersPerUnit and minSize based on mode.
-	markersPerUnit := 1
-	minSize := 3
-	if mode == ModeDouble {
-		markersPerUnit = 2
-		minSize = 4
-	}
-
-	// Construct solver strategy.
-	var solver generator.SolverStrategy
-	switch solverStr {
-	case SolverBacktrack:
-		solver = generator.NewBacktrackSolver()
-	case SolverPropagation:
-		solver = generator.NewPropagationSolver()
-	}
-
-	// Construct region strategy (used by iterative pipeline).
-	var regions generator.RegionStrategy
-	switch regionsStr {
-	case RegionsBFS:
-		if mode == ModeDouble {
-			regions = generator.NewBFSRegionGeneratorDouble()
-		} else {
-			regions = generator.NewBFSRegionGenerator()
-		}
-	case RegionsWFC:
-		if mode == ModeDouble {
-			regions = generator.NewWFCRegionGeneratorDouble()
-		} else {
-			regions = generator.NewWFCRegionGenerator()
-		}
-	}
-
-	// Construct pipeline strategy.
-	var pipeline generator.PipelineStrategy
-	switch pipelineStr {
-	case PipelineRegionFirst:
-		pipeline = generator.NewRegionFirstPipeline(solver)
-	case PipelineIterative:
-		pipeline = generator.NewIterativeRefinementPipeline(solver, regions)
-	case PipelineConstraintAware:
-		pipeline = generator.NewConstraintAwarePipeline(solver)
-	}
+	// Build pipeline from parameters.
+	pipeline := buildPipeline(params)
 
 	// Build generation options.
 	opts := generator.GenerateOpts{
-		Timeout: generateTimeout(size),
+		Timeout: generateTimeout(params.size),
+		Ctx:     r.Context(),
 		RegionOpts: generator.RegionOpts{
-			Variance: regionVariance,
-			MinSize:  minSize,
+			Variance: params.regionVariance,
+			MinSize:  params.minSize,
 		},
 	}
 
 	// Generate the puzzle.
-	puzzle, err := pipeline.Generate(size, markersPerUnit, opts)
+	puzzle, err := pipeline.Generate(params.size, params.markersPerUnit, opts)
 	if err != nil {
 		log.Printf("puzzle generation failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "generation_failed", "Could not generate a puzzle. Please try again.")
@@ -199,7 +224,7 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Stamp puzzle mode (pipelines return Mode="", handler owns this).
-	puzzle.Mode = mode
+	puzzle.Mode = params.mode
 
 	// Assign a UUID v4.
 	puzzle.ID, err = newUUIDv4()

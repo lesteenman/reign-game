@@ -52,9 +52,7 @@ func GenerateRandomRegions(gridSize int, opts RegionOpts) ([][]int, error) {
 
 // generateRandomRegionsWithTargets places random seed cells and grows regions
 // via round-robin BFS to their target sizes.
-func generateRandomRegionsWithTargets(gridSize, numRegions, total int, targets []int, minSize int) ([][]int, error) {
-	dirs := [4][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
-
+func generateRandomRegionsWithTargets(gridSize, numRegions, _ int, targets []int, minSize int) ([][]int, error) {
 	regionMap := make([][]int, gridSize)
 	for r := 0; r < gridSize; r++ {
 		regionMap[r] = make([]int, gridSize)
@@ -72,80 +70,13 @@ func generateRandomRegionsWithTargets(gridSize, numRegions, total int, targets [
 	}
 
 	regionSize := make([]int, numRegions)
-	frontiers := make([][]regionCell, numRegions)
-
 	for rid, seed := range seeds {
 		regionMap[seed.r][seed.c] = rid
 		regionSize[rid] = 1
-		for _, d := range dirs {
-			nr, nc := seed.r+d[0], seed.c+d[1]
-			if nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize {
-				frontiers[rid] = append(frontiers[rid], regionCell{nr, nc})
-			}
-		}
 	}
 
-	totalAssigned := numRegions
-
-	for totalAssigned < total {
-		// Refresh frontiers: remove already-assigned cells.
-		for rid := 0; rid < numRegions; rid++ {
-			filtered := frontiers[rid][:0]
-			for _, fc := range frontiers[rid] {
-				if regionMap[fc.r][fc.c] == -1 {
-					filtered = append(filtered, fc)
-				}
-			}
-			frontiers[rid] = filtered
-		}
-
-		// Find the region with the largest deficit that has frontier cells.
-		order := rand.Perm(numRegions)
-		bestRid := -1
-		bestDeficit := 0
-		for _, rid := range order {
-			if len(frontiers[rid]) == 0 {
-				continue
-			}
-			deficit := targets[rid] - regionSize[rid]
-			if deficit > 0 && deficit > bestDeficit {
-				bestDeficit = deficit
-				bestRid = rid
-			}
-		}
-		// Fallback: any region with frontier cells.
-		if bestRid == -1 {
-			for _, rid := range order {
-				if len(frontiers[rid]) > 0 {
-					bestRid = rid
-					break
-				}
-			}
-		}
-		if bestRid == -1 {
-			return nil, fmt.Errorf("generating random regions: stuck with %d/%d cells assigned", totalAssigned, total)
-		}
-
-		// Pick a random frontier cell.
-		idx := rand.IntN(len(frontiers[bestRid]))
-		chosen := frontiers[bestRid][idx]
-		frontiers[bestRid][idx] = frontiers[bestRid][len(frontiers[bestRid])-1]
-		frontiers[bestRid] = frontiers[bestRid][:len(frontiers[bestRid])-1]
-
-		if regionMap[chosen.r][chosen.c] != -1 {
-			continue
-		}
-
-		regionMap[chosen.r][chosen.c] = bestRid
-		regionSize[bestRid]++
-		totalAssigned++
-
-		for _, d := range dirs {
-			nr, nc := chosen.r+d[0], chosen.c+d[1]
-			if nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize && regionMap[nr][nc] == -1 {
-				frontiers[bestRid] = append(frontiers[bestRid], regionCell{nr, nc})
-			}
-		}
+	if err := growRegionsBFS(regionMap, regionSize, targets, gridSize); err != nil {
+		return nil, fmt.Errorf("generating random regions: %w", err)
 	}
 
 	if err := ValidateRegionMapWithMinSize(regionMap, gridSize, minSize); err != nil {

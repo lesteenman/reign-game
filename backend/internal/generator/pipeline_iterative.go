@@ -37,6 +37,11 @@ func (p *IterativeRefinementPipeline) Generate(gridSize int, markersPerUnit int,
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("generating puzzle (iterative): timeout after %v", opts.Timeout)
 		}
+		if opts.Ctx != nil {
+			if err := opts.Ctx.Err(); err != nil {
+				return nil, fmt.Errorf("generating puzzle (iterative): %w", err)
+			}
+		}
 
 		solution := p.solver.GenerateSolution(gridSize, markersPerUnit)
 		if solution == nil {

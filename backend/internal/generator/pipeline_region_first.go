@@ -34,6 +34,11 @@ func (p *RegionFirstPipeline) Generate(gridSize int, markersPerUnit int, opts Ge
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("generating puzzle (region-first): timeout after %v", opts.Timeout)
 		}
+		if opts.Ctx != nil {
+			if err := opts.Ctx.Err(); err != nil {
+				return nil, fmt.Errorf("generating puzzle (region-first): %w", err)
+			}
+		}
 
 		regionMap, err := GenerateRandomRegions(gridSize, opts.RegionOpts)
 		if err != nil {

@@ -16,12 +16,12 @@ Milestone C (Frontend)                  → Full UI: selectors, advanced mode, a
 | T-201 | Lift size restriction + region validation | A | [x] |
 | T-202 | Benchmark suite for larger grids | A | [x] |
 | T-203 | Pluggable generator interface | B | [x] |
-| T-204 | Variable region sizes | B | [ ] |
-| T-205 | Constraint propagation solver | B | [ ] |
-| T-206 | WFC region generator | B | [ ] |
-| T-207 | Double Queens mode | B | [ ] |
-| T-208 | API strategy parameters | B | [ ] |
-| T-209 | Full benchmark suite | B | [ ] |
+| T-204 | Variable region sizes | B | [x] |
+| T-205 | Constraint propagation solver | B | [x] |
+| T-206 | WFC region generator | B | [x] |
+| T-207 | Double Queens mode | B | [x] |
+| T-208 | API strategy parameters | B | [x] |
+| T-209 | Full benchmark suite | B | [x] |
 | T-210 | Constraint parameterization | C | [ ] |
 | T-211 | Adaptive grid sizing | C | [ ] |
 | T-212 | API client expansion | C | [ ] |
