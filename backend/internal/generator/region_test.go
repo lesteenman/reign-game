@@ -104,10 +104,8 @@ func TestValidateRegionMap(t *testing.T) {
 				if tt.errMsg != "" && !containsStr(err.Error(), tt.errMsg) {
 					t.Errorf("expected error containing %q, got %q", tt.errMsg, err.Error())
 				}
-			} else {
-				if err != nil {
-					t.Fatalf("expected no error, got %v", err)
-				}
+			} else if err != nil {
+				t.Fatalf("expected no error, got %v", err)
 			}
 		})
 	}

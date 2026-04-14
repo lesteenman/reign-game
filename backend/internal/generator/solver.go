@@ -4,7 +4,7 @@ package generator
 // A valid placement puts exactly one marker per row, per column, and per region,
 // with no two markers horizontally, vertically, or diagonally adjacent.
 // It uses backtracking, placing markers row by row.
-func solve(regionMap [][]int, gridSize int, maxSolutions int) [][][]bool {
+func solve(regionMap [][]int, gridSize, maxSolutions int) [][][]bool {
 	solutions := make([][][]bool, 0, maxSolutions)
 	placedCol := make([]bool, gridSize)
 	placedRegion := make([]bool, gridSize)

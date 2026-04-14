@@ -53,6 +53,15 @@ docker compose up localstack         # Phase 4+
 - When writing controller tests, check if the test security config has specific auth behavior
 - All unit tests must use **Arrange-Act-Assert** structure with explicit `// Arrange`, `// Act`, `// Assert` comments separating the sections. This applies to both frontend (Vitest) and backend (Go) tests.
 
+## Git Hooks
+
+Pre-push hook (`.githooks/pre-push`) runs before every push:
+- Backend: `golangci-lint run` + `go test ./...`
+- Frontend: `npm run build` (includes tsc) + `npx vitest run` + `npm audit`
+- Secret scan: `gitleaks detect`
+
+Configure with: `git config core.hooksPath .githooks`
+
 ## Project Structure
 
 See **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** for the full project tree and API endpoints. Search by domain keyword to locate any file.
