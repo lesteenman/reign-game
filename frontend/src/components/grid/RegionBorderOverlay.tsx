@@ -7,6 +7,9 @@ interface Segment {
   y2: number;
 }
 
+const STROKE_WIDTH = 2.5;
+const HALF_STROKE = STROKE_WIDTH / 2;
+
 function computeSegments(regionMap: number[][], gridSize: number, cellSize: number): Segment[] {
   const segments: Segment[] = [];
 
@@ -20,7 +23,13 @@ function computeSegments(regionMap: number[][], gridSize: number, cellSize: numb
       }
       if ((!boundary || c === gridSize - 1) && segStart !== null) {
         const end = boundary ? c + 1 : c;
-        segments.push({ x1: segStart * cellSize, y1: r * cellSize, x2: end * cellSize, y2: r * cellSize });
+        // Extend by half stroke width on each end for clean joints
+        segments.push({
+          x1: segStart * cellSize - HALF_STROKE,
+          y1: r * cellSize,
+          x2: end * cellSize + HALF_STROKE,
+          y2: r * cellSize,
+        });
         segStart = null;
       }
     }
@@ -36,7 +45,12 @@ function computeSegments(regionMap: number[][], gridSize: number, cellSize: numb
       }
       if ((!boundary || r === gridSize - 1) && segStart !== null) {
         const end = boundary ? r + 1 : r;
-        segments.push({ x1: c * cellSize, y1: segStart * cellSize, x2: c * cellSize, y2: end * cellSize });
+        segments.push({
+          x1: c * cellSize,
+          y1: segStart * cellSize - HALF_STROKE,
+          x2: c * cellSize,
+          y2: end * cellSize + HALF_STROKE,
+        });
         segStart = null;
       }
     }
@@ -83,8 +97,7 @@ export const RegionBorderOverlay = memo(function RegionBorderOverlay({
           x2={s.x2}
           y2={s.y2}
           stroke="var(--color-ink)"
-          strokeWidth={2.5}
-          strokeLinecap="round"
+          strokeWidth={STROKE_WIDTH}
         />
       ))}
     </svg>
