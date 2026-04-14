@@ -19,7 +19,7 @@ function buildHTML(size: number): string {
   const padding = Math.round(size * 0.08);
   const gridArea = size - padding * 2;
   const borderWidth = Math.max(2, Math.round(size * 0.012));
-  const regionBorderWidth = Math.max(2, Math.round(size * 0.014));
+  const regionBorderWidth = borderWidth;
   const cellSize = Math.floor((gridArea - borderWidth * 2) / 2);
   const radius = Math.round(size * 0.06);
 
