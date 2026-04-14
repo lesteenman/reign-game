@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { CellState } from '../../engine/types';
 import { useTheme } from '../../theme/ThemeContext';
 
@@ -31,6 +31,11 @@ export function Cell({
 }: CellProps) {
   const theme = useTheme();
   const touchedRef = useRef(false);
+  const touchTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => {
+    return () => { clearTimeout(touchTimerRef.current); };
+  }, []);
 
   let backgroundColor = `var(--region-${regionIndex}-fill)`;
   if (hasConflict) {
@@ -67,7 +72,8 @@ export function Cell({
   const handleTouchStart = () => {
     touchedRef.current = true;
     onPointerDown();
-    setTimeout(() => { touchedRef.current = false; }, 300);
+    clearTimeout(touchTimerRef.current);
+    touchTimerRef.current = setTimeout(() => { touchedRef.current = false; }, 300);
   };
 
   let animationClass = '';

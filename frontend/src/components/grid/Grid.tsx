@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CellState, Conflict, PuzzleData } from '../../engine/types';
+import { cellKey } from '../../hooks/useGame';
 import { Cell } from './Cell';
 import { RegionBorderOverlay } from './RegionBorderOverlay';
 
@@ -52,7 +53,7 @@ export function Grid({
     const set = new Set<string>();
     for (const conflict of conflicts) {
       for (const pos of conflict.cells) {
-        set.add(`${pos.row},${pos.col}`);
+        set.add(cellKey(pos.row, pos.col));
       }
     }
     return set;
@@ -107,8 +108,9 @@ export function Grid({
         Array.from({ length: gridSize }, (_, col) => {
           const regionIndex = regionMap[row]![col]!;
           const cellState = cells[row]![col]!;
-          const hasConflict = conflictSet.has(`${row},${col}`);
-          const isDragHighlighted = draggedCells.has(`${row},${col}`);
+          const key = cellKey(row, col);
+          const hasConflict = conflictSet.has(key);
+          const isDragHighlighted = draggedCells.has(key);
 
           return (
             <Cell

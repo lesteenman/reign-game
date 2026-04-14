@@ -1,4 +1,4 @@
-import type { CellState } from './types';
+import type { CellState, Conflict } from './types';
 import { getAllConflicts } from './constraints';
 
 /**
@@ -6,14 +6,16 @@ import { getAllConflicts } from './constraints';
  *
  * Returns true ONLY when:
  * 1. The grid has exactly `gridSize` markers total
- * 2. `getAllConflicts()` returns zero conflicts
+ * 2. There are zero conflicts
+ *
+ * Accepts optional pre-computed conflicts to avoid redundant work.
  */
 export function validateSolution(
   cells: CellState[][],
   regionMap: number[][],
   gridSize: number,
+  precomputedConflicts?: Conflict[],
 ): boolean {
-  // Count total markers
   let markerCount = 0;
   for (const row of cells) {
     for (const cell of row) {
@@ -27,6 +29,6 @@ export function validateSolution(
     return false;
   }
 
-  const conflicts = getAllConflicts(cells, regionMap, gridSize);
+  const conflicts = precomputedConflicts ?? getAllConflicts(cells, regionMap, gridSize);
   return conflicts.length === 0;
 }

@@ -1,9 +1,12 @@
 import { useState, useCallback, useRef, useMemo } from 'react';
 import type { CellState, Conflict, PuzzleData } from '../engine/types';
 import { getAllConflicts } from '../engine/constraints';
-import { validateSolution } from '../engine/validator';
 
 type DragIntent = 'exclude' | 'clear' | null;
+
+export function cellKey(row: number, col: number): string {
+  return `${row},${col}`;
+}
 
 /** Return value of the useGame hook. */
 export interface UseGameReturn {
@@ -54,6 +57,9 @@ export function useGame(puzzle: PuzzleData): UseGameReturn {
   const [cells, setCells] = useState<CellState[][]>(() =>
     createEmptyCells(gridSize),
   );
+  // draggedCells is tracked in a ref (for stable callbacks) and mirrored
+  // to state (for re-render on highlight changes).
+  const draggedCellsRef = useRef<Set<string>>(new Set());
   const [draggedCells, setDraggedCells] = useState<Set<string>>(new Set());
 
   const startCellRef = useRef<{ row: number; col: number } | null>(null);
@@ -65,37 +71,41 @@ export function useGame(puzzle: PuzzleData): UseGameReturn {
     [cells, regionMap, gridSize],
   );
 
-  const isSolved = useMemo(
-    () => validateSolution(cells, regionMap, gridSize),
-    [cells, regionMap, gridSize],
-  );
+  // Solved when exactly gridSize markers and zero conflicts
+  const isSolved = useMemo(() => {
+    let markerCount = 0;
+    for (const row of cells) {
+      for (const cell of row) {
+        if (cell === 'marked') markerCount++;
+      }
+    }
+    return markerCount === gridSize && conflicts.length === 0;
+  }, [cells, gridSize, conflicts]);
 
   const handlePointerDown = useCallback((row: number, col: number) => {
     startCellRef.current = { row, col };
     hasDraggedRef.current = false;
+    draggedCellsRef.current = new Set();
     setDraggedCells(new Set());
 
-    // Determine drag intent from the starting cell's current state
-    setCells((prev) => {
-      const state = prev[row]![col]!;
-      if (state === 'empty') {
-        dragIntentRef.current = 'exclude';
-      } else if (state === 'excluded') {
-        dragIntentRef.current = 'clear';
-      } else {
-        dragIntentRef.current = null;
-      }
-      return prev;
-    });
-  }, []);
+    // Read cell state directly from the cells ref captured by closure.
+    // This is safe because cells state doesn't change during pointer-down.
+    const state = cells[row]?.[col];
+    if (state === 'empty') {
+      dragIntentRef.current = 'exclude';
+    } else if (state === 'excluded') {
+      dragIntentRef.current = 'clear';
+    } else {
+      dragIntentRef.current = null;
+    }
+  }, [cells]);
 
   const handleDragEnter = useCallback((row: number, col: number) => {
     if (!startCellRef.current) return;
-    const intent = dragIntentRef.current;
-    if (intent === null) return;
+    if (dragIntentRef.current === null) return;
 
-    const key = `${row},${col}`;
-    const startKey = `${startCellRef.current.row},${startCellRef.current.col}`;
+    const key = cellKey(row, col);
+    const startKey = cellKey(startCellRef.current.row, startCellRef.current.col);
 
     if (key !== startKey) {
       hasDraggedRef.current = true;
@@ -103,13 +113,12 @@ export function useGame(puzzle: PuzzleData): UseGameReturn {
 
     if (!hasDraggedRef.current) return;
 
-    // Highlight all cells during drag (including marked) for visual feedback
-    setDraggedCells((prev) => {
-      const next = new Set(prev);
-      next.add(startKey);
-      next.add(key);
-      return next;
-    });
+    // Update the ref (stable, no closure issue) then flush to state
+    const next = new Set(draggedCellsRef.current);
+    next.add(startKey);
+    next.add(key);
+    draggedCellsRef.current = next;
+    setDraggedCells(next);
   }, []);
 
   const handlePointerUp = useCallback(() => {
@@ -127,11 +136,10 @@ export function useGame(puzzle: PuzzleData): UseGameReturn {
     } else {
       // Drag: apply intent to all highlighted cells (including start)
       const intent = dragIntentRef.current;
+      const allKeys = new Set(draggedCellsRef.current);
+      allKeys.add(cellKey(start.row, start.col));
       setCells((prev) => {
         const next = cloneCells(prev);
-        const startKey = `${start.row},${start.col}`;
-        const allKeys = new Set(draggedCells);
-        allKeys.add(startKey);
         for (const key of allKeys) {
           const [rowStr, colStr] = key.split(',');
           const r = Number(rowStr);
@@ -149,14 +157,16 @@ export function useGame(puzzle: PuzzleData): UseGameReturn {
     startCellRef.current = null;
     hasDraggedRef.current = false;
     dragIntentRef.current = null;
+    draggedCellsRef.current = new Set();
     setDraggedCells(new Set());
-  }, [draggedCells]);
+  }, []);
 
   const resetGame = useCallback(() => {
     setCells(createEmptyCells(gridSize));
     startCellRef.current = null;
     hasDraggedRef.current = false;
     dragIntentRef.current = null;
+    draggedCellsRef.current = new Set();
     setDraggedCells(new Set());
   }, [gridSize]);
 
