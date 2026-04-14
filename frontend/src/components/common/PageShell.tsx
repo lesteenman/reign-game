@@ -1,11 +1,14 @@
 import type { ReactNode } from 'react';
+import { useDarkMode } from '../../theme/useDarkMode';
 
 interface PageShellProps {
   children: ReactNode;
 }
 
-/** Standard page layout wrapper with centered content and Reign heading. */
+/** Standard page layout wrapper with centered content, Reign heading, and dark mode toggle. */
 export function PageShell({ children }: PageShellProps) {
+  const { isDark, toggle } = useDarkMode();
+
   return (
     <div
       style={{
@@ -21,16 +24,40 @@ export function PageShell({ children }: PageShellProps) {
         color: 'var(--color-ink)',
       }}
     >
-      <h1
+      <div
         style={{
-          fontSize: '1.875rem',
-          fontWeight: 800,
-          letterSpacing: '-0.01em',
-          margin: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
         }}
       >
-        Reign
-      </h1>
+        <h1
+          style={{
+            fontSize: '1.875rem',
+            fontWeight: 800,
+            letterSpacing: '-0.01em',
+            margin: 0,
+          }}
+        >
+          Reign
+        </h1>
+        <button
+          type="button"
+          onClick={toggle}
+          aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '1.25rem',
+            padding: '4px',
+            color: 'var(--color-muted)',
+            lineHeight: 1,
+          }}
+        >
+          {isDark ? '\u2600' : '\u263E'}
+        </button>
+      </div>
       {children}
     </div>
   );
