@@ -19,7 +19,7 @@ function buildHTML(size: number): string {
   const padding = Math.round(size * 0.08);
   const gridArea = size - padding * 2;
   const borderWidth = Math.max(2, Math.round(size * 0.012));
-  const regionBorderWidth = Math.max(2.5, Math.round(size * 0.015));
+  const regionBorderWidth = Math.max(2, Math.round(size * 0.014));
   const cellSize = Math.floor((gridArea - borderWidth * 2) / 2);
   const radius = Math.round(size * 0.06);
 
@@ -78,9 +78,10 @@ body {
   </div>
   <svg class="overlay" width="${cellSize * 2}" height="${cellSize * 2}" viewBox="0 0 ${cellSize * 2} ${cellSize * 2}">
     <!-- Vertical: between col 0 and col 1, only bottom half (region boundary) -->
-    <line x1="${cellSize}" y1="${cellSize - regionBorderWidth / 2}" x2="${cellSize}" y2="${cellSize * 2}" stroke="#2D2A26" stroke-width="${regionBorderWidth}"/>
-    <!-- Horizontal: between row 0 and row 1, only right half (region boundary) -->
-    <line x1="${cellSize - regionBorderWidth / 2}" y1="${cellSize}" x2="${cellSize * 2}" y2="${cellSize}" stroke="#2D2A26" stroke-width="${regionBorderWidth}"/>
+    <line x1="${cellSize}" y1="${cellSize}" x2="${cellSize}" y2="${cellSize * 2}" stroke="#2D2A26" stroke-width="${regionBorderWidth}"/>
+    <line x1="${cellSize}" y1="${cellSize}" x2="${cellSize * 2}" y2="${cellSize}" stroke="#2D2A26" stroke-width="${regionBorderWidth}"/>
+    <!-- Corner fill at junction -->
+    <rect x="${cellSize - regionBorderWidth / 2}" y="${cellSize - regionBorderWidth / 2}" width="${regionBorderWidth}" height="${regionBorderWidth}" fill="#2D2A26"/>
   </svg>
 </div>
 </body></html>`;
