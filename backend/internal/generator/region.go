@@ -5,6 +5,69 @@ import (
 	"math/rand/v2"
 )
 
+// computeTargetSizes returns target cell counts for each of the gridSize regions.
+// At variance=0.0, all regions get exactly gridSize cells (uniform).
+// At higher variance, sizes spread out while respecting minSize and summing to gridSize*gridSize.
+// The algorithm redistributes cells pairwise: pick two regions, move a cell from
+// the larger to the smaller direction with probability weighted by variance.
+func computeTargetSizes(gridSize int, variance float64, minSize int) []int {
+	numRegions := gridSize
+	total := gridSize * gridSize
+
+	sizes := make([]int, numRegions)
+	for i := range sizes {
+		sizes[i] = gridSize // start uniform
+	}
+
+	if variance <= 0.0 {
+		return sizes
+	}
+
+	// Number of redistribution rounds scales with variance and grid area.
+	rounds := int(variance * float64(total))
+
+	for round := 0; round < rounds; round++ {
+		// Pick two distinct random regions.
+		a := rand.IntN(numRegions)
+		b := rand.IntN(numRegions - 1)
+		if b >= a {
+			b++
+		}
+
+		// Transfer one cell from a to b (or vice versa, randomly).
+		donor, recipient := a, b
+		if rand.IntN(2) == 0 {
+			donor, recipient = b, a
+		}
+
+		// Only transfer if donor won't drop below minSize.
+		if sizes[donor] <= minSize {
+			continue
+		}
+
+		sizes[donor]--
+		sizes[recipient]++
+	}
+
+	// Verify sum is correct (should be invariant, but defensive).
+	sum := 0
+	for _, s := range sizes {
+		sum += s
+	}
+	if sum != total {
+		// Fix any drift by adjusting the largest region.
+		maxIdx := 0
+		for i, s := range sizes {
+			if s > sizes[maxIdx] {
+				maxIdx = i
+			}
+		}
+		sizes[maxIdx] += total - sum
+	}
+
+	return sizes
+}
+
 // regionCell is a row/column coordinate used during region map generation.
 type regionCell struct{ r, c int }
 
@@ -13,6 +76,24 @@ type regionCell struct{ r, c int }
 // Region IDs are assigned based on the order markers appear (row 0's marker gets
 // region 0, row 1's marker gets region 1, etc.).
 func GenerateRegionMap(solution [][]bool, gridSize int) ([][]int, error) {
+	// Uniform target sizes: each region gets gridSize cells.
+	targets := make([]int, gridSize)
+	for i := range targets {
+		targets[i] = gridSize
+	}
+	return generateRegionMapWithTargets(solution, gridSize, targets)
+}
+
+// GenerateRegionMapVariable builds a contiguous region map with variable region sizes.
+// targetSizes specifies the number of cells each region should have.
+// Each region contains exactly one solution marker.
+func GenerateRegionMapVariable(solution [][]bool, gridSize int, targetSizes []int) ([][]int, error) {
+	return generateRegionMapWithTargets(solution, gridSize, targetSizes)
+}
+
+// generateRegionMapWithTargets is the internal implementation that grows regions
+// to their specified target sizes using round-robin BFS.
+func generateRegionMapWithTargets(solution [][]bool, gridSize int, targetSizes []int) ([][]int, error) {
 	regionMap := make([][]int, gridSize)
 	for r := 0; r < gridSize; r++ {
 		regionMap[r] = make([]int, gridSize)
@@ -78,21 +159,22 @@ func GenerateRegionMap(solution [][]bool, gridSize int) ([][]int, error) {
 			frontiers[rid] = filtered
 		}
 
-		// Find the smallest region that has frontier cells.
-		// First pass: prefer regions below gridSize.
+		// Find the smallest region (relative to its target) that has frontier cells.
+		// First pass: prefer regions below their target size.
 		order := rand.Perm(gridSize)
 		bestRid := -1
-		bestSize := target + 1
+		bestDeficit := 0 // how far below target the best candidate is
 		for _, rid := range order {
 			if len(frontiers[rid]) == 0 {
 				continue
 			}
-			if regionSize[rid] < gridSize && regionSize[rid] < bestSize {
-				bestSize = regionSize[rid]
+			deficit := targetSizes[rid] - regionSize[rid]
+			if deficit > 0 && deficit > bestDeficit {
+				bestDeficit = deficit
 				bestRid = rid
 			}
 		}
-		// Fallback: if all regions with frontiers are already at gridSize, pick any
+		// Fallback: if all regions with frontiers are at or above their target, pick any
 		// (this avoids stranding cells; validation will catch size imbalance).
 		if bestRid == -1 {
 			for _, rid := range order {

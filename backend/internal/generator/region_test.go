@@ -4,6 +4,245 @@ import (
 	"testing"
 )
 
+func TestComputeTargetSizes(t *testing.T) {
+	tests := []struct {
+		name     string
+		gridSize int
+		variance float64
+		minSize  int
+	}{
+		{
+			name:     "5x5 zero variance produces uniform sizes",
+			gridSize: 5,
+			variance: 0.0,
+			minSize:  3,
+		},
+		{
+			name:     "7x7 zero variance produces uniform sizes",
+			gridSize: 7,
+			variance: 0.0,
+			minSize:  3,
+		},
+		{
+			name:     "9x9 zero variance produces uniform sizes",
+			gridSize: 9,
+			variance: 0.0,
+			minSize:  3,
+		},
+		{
+			name:     "5x5 full variance respects constraints",
+			gridSize: 5,
+			variance: 1.0,
+			minSize:  3,
+		},
+		{
+			name:     "7x7 full variance respects constraints",
+			gridSize: 7,
+			variance: 1.0,
+			minSize:  3,
+		},
+		{
+			name:     "9x9 full variance respects constraints",
+			gridSize: 9,
+			variance: 1.0,
+			minSize:  3,
+		},
+		{
+			name:     "5x5 half variance respects constraints",
+			gridSize: 5,
+			variance: 0.5,
+			minSize:  3,
+		},
+		{
+			name:     "9x9 double queens minSize 4",
+			gridSize: 9,
+			variance: 0.5,
+			minSize:  4,
+		},
+		{
+			name:     "5x5 full variance with minSize 4",
+			gridSize: 5,
+			variance: 1.0,
+			minSize:  4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			expectedTotal := tt.gridSize * tt.gridSize
+			numRegions := tt.gridSize
+
+			// Act
+			sizes := computeTargetSizes(tt.gridSize, tt.variance, tt.minSize)
+
+			// Assert
+			if len(sizes) != numRegions {
+				t.Fatalf("got %d sizes, want %d", len(sizes), numRegions)
+			}
+
+			total := 0
+			for i, s := range sizes {
+				if s < tt.minSize {
+					t.Errorf("size[%d] = %d, below minSize %d", i, s, tt.minSize)
+				}
+				total += s
+			}
+			if total != expectedTotal {
+				t.Errorf("total = %d, want %d", total, expectedTotal)
+			}
+
+			// At zero variance, all sizes must equal gridSize.
+			if tt.variance == 0.0 {
+				for i, s := range sizes {
+					if s != tt.gridSize {
+						t.Errorf("at variance=0.0: size[%d] = %d, want %d", i, s, tt.gridSize)
+					}
+				}
+			}
+
+			// At non-zero variance, check there is some variation (probabilistic,
+			// but with high variance and enough regions it should always vary).
+			if tt.variance >= 1.0 && tt.gridSize >= 5 {
+				allSame := true
+				for _, s := range sizes {
+					if s != sizes[0] {
+						allSame = false
+						break
+					}
+				}
+				if allSame {
+					t.Errorf("at variance=%.1f with gridSize=%d: expected some variation, all sizes are %d",
+						tt.variance, tt.gridSize, sizes[0])
+				}
+			}
+		})
+	}
+}
+
+func TestComputeTargetSizes_Deterministic(t *testing.T) {
+	// Verify stability: run multiple times, all must satisfy invariants.
+	for i := 0; i < 20; i++ {
+		// Arrange
+		gridSize := 7
+		variance := 0.8
+		minSz := 3
+
+		// Act
+		sizes := computeTargetSizes(gridSize, variance, minSz)
+
+		// Assert
+		total := 0
+		for _, s := range sizes {
+			if s < minSz {
+				t.Fatalf("iteration %d: size %d below min %d", i, s, minSz)
+			}
+			total += s
+		}
+		if total != gridSize*gridSize {
+			t.Fatalf("iteration %d: total %d != %d", i, total, gridSize*gridSize)
+		}
+	}
+}
+
+func TestBFSRegionGenerator_WithVariance(t *testing.T) {
+	// Known 5x5 solution: markers at (0,2),(1,0),(2,3),(3,1),(4,4).
+	solution := [][]bool{
+		{false, false, true, false, false},
+		{true, false, false, false, false},
+		{false, false, false, true, false},
+		{false, true, false, false, false},
+		{false, false, false, false, true},
+	}
+
+	tests := []struct {
+		name         string
+		gridSize     int
+		opts         RegionOpts
+		wantUniform  bool
+	}{
+		{
+			name:     "zero variance produces uniform regions",
+			gridSize: 5,
+			opts: RegionOpts{
+				Variance: 0.0,
+				MinSize:  3,
+			},
+			wantUniform: true,
+		},
+		{
+			name:     "half variance produces valid variable regions",
+			gridSize: 5,
+			opts: RegionOpts{
+				Variance: 0.5,
+				MinSize:  3,
+			},
+			wantUniform: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			gen := NewBFSRegionGenerator()
+
+			// Act — retry since BFS can fail stochastically.
+			var regionMap [][]int
+			var err error
+			for attempt := 0; attempt < 100; attempt++ {
+				regionMap, err = gen.GenerateRegions(solution, tt.gridSize, tt.opts)
+				if err == nil {
+					break
+				}
+			}
+
+			// Assert
+			if err != nil {
+				t.Fatalf("GenerateRegions failed after 100 attempts: %v", err)
+			}
+			if valErr := ValidateRegionMap(regionMap, tt.gridSize); valErr != nil {
+				t.Fatalf("ValidateRegionMap failed: %v", valErr)
+			}
+
+			// Each region must contain exactly one solution marker.
+			regionMarkers := make(map[int]int)
+			for r, row := range solution {
+				for c, cell := range row {
+					if cell {
+						regionMarkers[regionMap[r][c]]++
+					}
+				}
+			}
+			for rid := 0; rid < tt.gridSize; rid++ {
+				if regionMarkers[rid] != 1 {
+					t.Errorf("region %d has %d markers, want 1", rid, regionMarkers[rid])
+				}
+			}
+
+			// Check sizes for zero-variance case: all regions should be
+			// close to gridSize (the BFS fallback can cause minor deviation).
+			if tt.wantUniform {
+				regionSizes := make(map[int]int)
+				for _, row := range regionMap {
+					for _, id := range row {
+						regionSizes[id]++
+					}
+				}
+				for rid := 0; rid < tt.gridSize; rid++ {
+					diff := regionSizes[rid] - tt.gridSize
+					if diff < 0 {
+						diff = -diff
+					}
+					if diff > 2 {
+						t.Errorf("at variance=0: region %d has %d cells, want ~%d (diff %d > 2)",
+							rid, regionSizes[rid], tt.gridSize, diff)
+					}
+				}
+			}
+		})
+	}
+}
+
 // validRegionMap5x5 is the reference 5x5 region map used across tests.
 // Each region has exactly 5 contiguous cells. Unique solution: (0,2),(1,0),(2,3),(3,1),(4,4).
 var validRegionMap5x5 = [][]int{
