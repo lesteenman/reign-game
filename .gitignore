@@ -36,6 +36,9 @@ frontend/dist/
 frontend/build/
 frontend/.vite/
 
+# TypeScript build cache
+*.tsbuildinfo
+
 # Vitest
 frontend/coverage/
 

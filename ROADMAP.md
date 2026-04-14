@@ -37,22 +37,23 @@ Goal: Play randomly generated 5x5 Standard Mode puzzles in the browser, hosted o
 - [x] **R-019** — Game flow UI: puzzle loading, timer, solve flow, completion screen
 - [x] **R-01A** — PWA basics: service worker (app shell caching), manifest, install prompt
 
-## Phase 2: All Grid Sizes
+## Phase 2: All Grid Sizes + Double Queens
 
-Goal: 7x7 and 9x9 puzzles playable, with difficulty rating.
+Goal: 7x7 and 9x9 puzzles playable in both Standard and Double Queens modes.
 
 - [ ] **R-020** — Extend generator + solver for 7x7 and 9x9 grids
-- [ ] **R-021** — Difficulty rating algorithm (region shape complexity, deduction chain depth)
-- [ ] **R-022** — UI: difficulty selector (Easy / Medium / Hard)
-
-## Phase 3: Double Queens Mode
-
-Goal: Both Standard and Double Queens modes playable at all grid sizes.
-
+- [ ] **R-022** — UI: grid size selector
 - [ ] **R-030** — Extend solver for Double Queens constraints (2 per row/column/region)
 - [ ] **R-031** — Extend generator for Double Queens puzzles
-- [ ] **R-032** — Update difficulty rating for Double Queens
 - [ ] **R-033** — UI: mode toggle (Standard / Double Queens)
+
+## Phase 3: Difficulty Rating
+
+Goal: Difficulty rating for all grid sizes and modes, with user-facing difficulty selector.
+
+- [ ] **R-021** — Difficulty rating algorithm (region shape complexity, deduction chain depth)
+- [ ] **R-032** — Update difficulty rating for Double Queens
+- [ ] **R-034** — UI: difficulty selector (Easy / Medium / Hard)
 
 ## Phase 4: Curation + Puzzle Database
 
@@ -100,6 +101,8 @@ Candidate items — not yet committed or ordered:
 | KI-002 | Low | CloudFront missing security response headers (HSTS, X-Content-Type-Options, CSP). Add before production. | R-004 |
 | KI-003 | Low | S3 bucket has no explicit server-side encryption config (AWS defaults to SSE-S3, but should be explicit). | R-004 |
 | KI-004 | Low | PWA service worker disabled — vite-plugin-pwa lacks Vite 8 support. Track [vite-pwa/vite-plugin-pwa#923](https://github.com/vite-pwa/vite-plugin-pwa/issues/923). Manifest + icons in place; re-add plugin when compatible. | R-01A |
+| KI-005 | Low | Timer does not start immediately when opening a new puzzle. Noticeable delay before first tick. | R-019 |
+| KI-006 | Medium | Every CD deploy updates the Lambda function even when there are no backend changes. Should only rebuild/deploy Lambda when backend/ files change. | R-006 |
 
 ---
 
