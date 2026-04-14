@@ -138,6 +138,9 @@ Agents must NOT just summarize or paraphrase a skill. They must read and execute
 
 1. **Parallel agent spawning:** When spawning parallel agents (e.g., backend-dev + frontend-dev), always use a single message with multiple Agent tool calls. Never spawn one agent, wait for it, then spawn another — this wastes time and breaks the parallelism the task plan designed for.
 2. **Git commands from repo root:** Always run git commands from the repo root. Use absolute paths or `git -C <repo-root>` to avoid working-directory issues after `cd` into subdirectories.
+3. **Touch/pointer e2e tests first:** For any touch/pointer interaction code, write Playwright e2e tests before unit tests. jsdom does not simulate synthesized mouse events after touch events, so unit tests pass while the actual mobile experience is broken. The touch double-fire bug (Phase 1) was only caught by user playtesting.
+4. **Sub-agents must use Write/Edit, not Bash for files:** When spawning implementation agents, explicitly instruct them to use the Write and Edit tools for file creation — not Bash with cat/heredoc. Bash file writes may still prompt for user approval even in bypassPermissions mode.
+5. **First-paint correctness for visual components:** Never render a component at a default/placeholder size then resize after measuring. Use CSS-based sizing or defer rendering until the container is measured. Layout flicker is a user-visible bug.
 
 ### Human-in-the-Loop Rule (CRITICAL)
 
