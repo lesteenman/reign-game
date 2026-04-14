@@ -113,6 +113,56 @@ func TestValidateRegionMap(t *testing.T) {
 	}
 }
 
+func TestGenerateRegionMap(t *testing.T) {
+	// Known 5x5 solution: markers at (0,2),(1,0),(2,3),(3,1),(4,4).
+	gridSize := 5
+	solution := [][]bool{
+		{false, false, true, false, false},
+		{true, false, false, false, false},
+		{false, false, false, true, false},
+		{false, true, false, false, false},
+		{false, false, false, false, true},
+	}
+
+	// Run multiple times. GenerateRegionMap uses a randomized greedy algorithm
+	// that can fail on some attempts; retry up to 20 times per iteration.
+	for i := 0; i < 5; i++ {
+		t.Run("iteration", func(t *testing.T) {
+			var regionMap [][]int
+			var err error
+			for attempt := 0; attempt < 100; attempt++ {
+				regionMap, err = GenerateRegionMap(solution, gridSize)
+				if err == nil {
+					break
+				}
+			}
+			if err != nil {
+				t.Fatalf("GenerateRegionMap failed after 100 attempts: %v", err)
+			}
+
+			// Must pass validation.
+			if err := ValidateRegionMap(regionMap, gridSize); err != nil {
+				t.Fatalf("ValidateRegionMap failed: %v", err)
+			}
+
+			// Each region must contain exactly one solution marker.
+			regionMarkers := make(map[int]int)
+			for r, row := range solution {
+				for c, cell := range row {
+					if cell {
+						regionMarkers[regionMap[r][c]]++
+					}
+				}
+			}
+			for rid := 0; rid < gridSize; rid++ {
+				if regionMarkers[rid] != 1 {
+					t.Errorf("region %d has %d markers, want 1", rid, regionMarkers[rid])
+				}
+			}
+		})
+	}
+}
+
 // containsStr checks if s contains substr.
 func containsStr(s, substr string) bool {
 	for i := 0; i <= len(s)-len(substr); i++ {
