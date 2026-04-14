@@ -61,3 +61,54 @@ func BenchmarkGenerate9x9Standard(b *testing.B) {
 		b.ReportMetric(float64(puzzle.GridSize), "gridSize")
 	}
 }
+
+// BenchmarkGeneratePropagation5x5 benchmarks full pipeline with PropagationSolver at 5x5.
+func BenchmarkGeneratePropagation5x5(b *testing.B) {
+	solver := NewPropagationSolver()
+	regions := NewBFSRegionGenerator()
+	opts := GenerateOpts{Timeout: 60 * time.Second, Mode: "standard"}
+	for b.Loop() {
+		start := time.Now()
+		puzzle, err := Generate(5, 1, solver, regions, opts)
+		elapsed := time.Since(start)
+		if err != nil {
+			b.Fatalf("Generate(5) failed: %v", err)
+		}
+		b.ReportMetric(elapsed.Seconds(), "sec/puzzle")
+		b.ReportMetric(float64(puzzle.GridSize), "gridSize")
+	}
+}
+
+// BenchmarkGeneratePropagation7x7 benchmarks full pipeline with PropagationSolver at 7x7.
+func BenchmarkGeneratePropagation7x7(b *testing.B) {
+	solver := NewPropagationSolver()
+	regions := NewBFSRegionGenerator()
+	opts := GenerateOpts{Timeout: 60 * time.Second, Mode: "standard"}
+	for b.Loop() {
+		start := time.Now()
+		puzzle, err := Generate(7, 1, solver, regions, opts)
+		elapsed := time.Since(start)
+		if err != nil {
+			b.Fatalf("Generate(7) failed: %v", err)
+		}
+		b.ReportMetric(elapsed.Seconds(), "sec/puzzle")
+		b.ReportMetric(float64(puzzle.GridSize), "gridSize")
+	}
+}
+
+// BenchmarkGeneratePropagation9x9 benchmarks full pipeline with PropagationSolver at 9x9.
+func BenchmarkGeneratePropagation9x9(b *testing.B) {
+	solver := NewPropagationSolver()
+	regions := NewBFSRegionGenerator()
+	opts := GenerateOpts{Timeout: 60 * time.Second, Mode: "standard"}
+	for b.Loop() {
+		start := time.Now()
+		puzzle, err := Generate(9, 1, solver, regions, opts)
+		elapsed := time.Since(start)
+		if err != nil {
+			b.Fatalf("Generate(9) failed: %v", err)
+		}
+		b.ReportMetric(elapsed.Seconds(), "sec/puzzle")
+		b.ReportMetric(float64(puzzle.GridSize), "gridSize")
+	}
+}
