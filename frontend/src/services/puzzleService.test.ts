@@ -38,8 +38,8 @@ describe('apiFetch', () => {
     });
 
     expect(result).toEqual(MOCK_PUZZLE);
-    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    const url = call[0] as string;
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const url = calls[0]![0] as string;
     expect(url).toContain('/puzzles/generate');
     expect(url).toContain('size=5');
     expect(url).toContain('mode=standard');
@@ -96,8 +96,8 @@ describe('generatePuzzle', () => {
     const result = await generatePuzzle(5, 'standard');
 
     expect(result).toEqual(MOCK_PUZZLE);
-    const call = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
-    const url = call[0] as string;
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const url = calls[0]![0] as string;
     expect(url).toContain('/puzzles/generate');
     expect(url).toContain('size=5');
     expect(url).toContain('mode=standard');
