@@ -62,6 +62,15 @@ Pre-push hook (`.githooks/pre-push`) runs before every push:
 
 Configure with: `git config core.hooksPath .githooks`
 
+## Dev Server Ports
+
+| Service | Port | Command |
+|---------|------|---------|
+| Frontend | 5180 | `npm run dev` (configured in package.json) |
+| Backend | 5181 | `go run ./cmd/api` (default in main.go) |
+
+Always start the frontend with `--host 0.0.0.0` for mobile testing over the local network. The Vite proxy forwards `/puzzles/*` to `localhost:5181`.
+
 ## Project Structure
 
 See **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** for the full project tree and API endpoints. Search by domain keyword to locate any file.
@@ -151,6 +160,8 @@ Agents must NOT just summarize or paraphrase a skill. They must read and execute
 3. **Touch/pointer e2e tests first:** For any touch/pointer interaction code, write Playwright e2e tests before unit tests. jsdom does not simulate synthesized mouse events after touch events, so unit tests pass while the actual mobile experience is broken. The touch double-fire bug (Phase 1) was only caught by user playtesting.
 4. **Sub-agents must use Write/Edit, not Bash for files:** When spawning implementation agents, explicitly instruct them to use the Write and Edit tools for file creation — not Bash with cat/heredoc. Bash file writes may still prompt for user approval even in bypassPermissions mode.
 5. **First-paint correctness for visual components:** Never render a component at a default/placeholder size then resize after measuring. Use CSS-based sizing or defer rendering until the container is measured. Layout flicker is a user-visible bug.
+6. **Even pixel values for SVG strokes:** Use 2px, 4px — never 2.5px or other subpixel values. Subpixel stroke widths cause anti-aliasing artifacts at line intersections visible on both standard and retina displays.
+7. **Verify production request flow before deploy PRs:** Trace every URL the frontend calls and confirm it reaches the correct backend in production. Check CloudFront behaviors, API Gateway routes, and proxy config. Dev proxies mask routing issues that break in production.
 
 ### Human-in-the-Loop Rule (CRITICAL)
 
