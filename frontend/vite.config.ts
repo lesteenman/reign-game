@@ -7,6 +7,11 @@ export default defineConfig(({ mode }) => ({
   define: {
     __TEST_ATTRS__: mode !== "production",
   },
+  server: {
+    proxy: {
+      "/puzzles": "http://localhost:8080",
+    },
+  },
   test: {
     environment: "jsdom",
     globals: false,

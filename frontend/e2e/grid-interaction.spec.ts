@@ -1,7 +1,29 @@
 import { test, expect } from "@playwright/test";
 
+const MOCK_PUZZLE = {
+  puzzleId: "playtest-001",
+  gridSize: 5,
+  mode: "standard",
+  regionMap: [
+    [0, 0, 1, 1, 1],
+    [0, 0, 1, 2, 2],
+    [3, 3, 1, 2, 2],
+    [3, 4, 4, 4, 2],
+    [3, 3, 4, 4, 4],
+  ],
+};
+
 test.describe("Grid Interaction", () => {
   test.beforeEach(async ({ page }) => {
+    // Intercept puzzle API calls and return mock data so tests
+    // don't depend on a running backend.
+    await page.route("**/puzzles/generate*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(MOCK_PUZZLE),
+      }),
+    );
     await page.goto("/");
     await expect(page.getByRole("heading", { name: /reign/i })).toBeVisible();
     await expect(page.getByTestId("game-grid")).toBeVisible();
