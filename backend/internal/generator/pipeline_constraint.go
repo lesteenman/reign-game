@@ -86,18 +86,33 @@ func (p *ConstraintAwarePipeline) growConstraintAware(solution [][]bool, gridSiz
 
 	// Seed regions from marker positions.
 	regionSize := make([]int, numRegions)
-	markerIdx := 0
-	for r := 0; r < gridSize; r++ {
-		for c := 0; c < gridSize; c++ {
-			if solution[r][c] {
-				regionMap[r][c] = markerIdx
-				regionSize[markerIdx] = 1
-				markerIdx++
+	if markersPerUnit >= 2 {
+		// Double Queens: pair markers into regions.
+		pairs, err := pairMarkersForDoubleQueens(solution, gridSize)
+		if err != nil {
+			return nil
+		}
+		for rid, pair := range pairs {
+			for _, m := range pair {
+				regionMap[m[0]][m[1]] = rid
+				regionSize[rid]++
 			}
 		}
-	}
-	if markerIdx != numRegions {
-		return nil
+	} else {
+		// Standard mode: one marker per region.
+		markerIdx := 0
+		for r := 0; r < gridSize; r++ {
+			for c := 0; c < gridSize; c++ {
+				if solution[r][c] {
+					regionMap[r][c] = markerIdx
+					regionSize[markerIdx] = 1
+					markerIdx++
+				}
+			}
+		}
+		if markerIdx != numRegions {
+			return nil
+		}
 	}
 
 	targets := make([]int, numRegions)
@@ -105,7 +120,10 @@ func (p *ConstraintAwarePipeline) growConstraintAware(solution [][]bool, gridSiz
 		targets[i] = gridSize
 	}
 
-	totalAssigned := numRegions
+	totalAssigned := 0
+	for _, s := range regionSize {
+		totalAssigned += s
+	}
 
 	// Grow regions round-robin by deficit, but use constraint-aware selection
 	// for which frontier cell to add. Heuristic: pick the candidate that creates
@@ -231,7 +249,11 @@ func (p *ConstraintAwarePipeline) growConstraintAware(solution [][]bool, gridSiz
 		totalAssigned++
 	}
 
-	if err := ValidateRegionMap(regionMap, gridSize); err != nil {
+	validateMin := minRegionSize
+	if markersPerUnit >= 2 {
+		validateMin = minRegionSizeDouble
+	}
+	if err := ValidateRegionMapWithMinSize(regionMap, gridSize, validateMin); err != nil {
 		return nil
 	}
 

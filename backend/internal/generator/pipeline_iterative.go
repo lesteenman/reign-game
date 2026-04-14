@@ -53,13 +53,17 @@ func (p *IterativeRefinementPipeline) Generate(gridSize int, markersPerUnit int,
 			continue
 		}
 
-		result := p.refine(regionMap, gridSize, markersPerUnit, deadline)
+		minSize := minRegionSize
+		if markersPerUnit >= 2 {
+			minSize = minRegionSizeDouble
+		}
+		result := p.refine(regionMap, gridSize, markersPerUnit, minSize, deadline)
 		if result == nil {
 			continue
 		}
 
 		// Validate the refined region map.
-		if err := ValidateRegionMap(result, gridSize); err != nil {
+		if err := ValidateRegionMapWithMinSize(result, gridSize, minSize); err != nil {
 			continue
 		}
 
@@ -81,8 +85,9 @@ func (p *IterativeRefinementPipeline) Generate(gridSize int, markersPerUnit int,
 
 // refine iteratively swaps non-marker cells between adjacent regions to reduce
 // the solution count. Returns the refined region map if uniqueness is achieved,
-// or nil if max iterations are exceeded.
-func (p *IterativeRefinementPipeline) refine(regionMap [][]int, gridSize, markersPerUnit int, deadline time.Time) [][]int {
+// or nil if max iterations are exceeded. The minSize parameter prevents regions
+// from shrinking below the mode-specific minimum.
+func (p *IterativeRefinementPipeline) refine(regionMap [][]int, gridSize, markersPerUnit, minSize int, deadline time.Time) [][]int {
 	currentMap := copyRegionMap(regionMap, gridSize)
 	currentCount := p.solver.CountSolutions(currentMap, gridSize, markersPerUnit, 2)
 
@@ -123,7 +128,7 @@ func (p *IterativeRefinementPipeline) refine(regionMap [][]int, gridSize, marker
 
 			// Count cells in old region — don't let it drop below minimum.
 			oldSize := countRegionCells(currentMap, gridSize, oldRid)
-			if oldSize <= minRegionSize {
+			if oldSize <= minSize {
 				continue
 			}
 

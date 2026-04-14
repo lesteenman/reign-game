@@ -52,12 +52,14 @@ func TestGenerateHandler(t *testing.T) {
 		wantStatus int
 		wantError  string // empty means expect 200 success
 		wantSize   int    // expected gridSize in response (0 = use default check)
+		wantMode   string // expected mode in response
 	}{
 		{
 			name:       "valid request size=5 mode=standard",
 			query:      "?size=5&mode=standard",
 			wantStatus: http.StatusOK,
 			wantSize:   5,
+			wantMode:   "standard",
 		},
 		{
 			name:       "missing size",
@@ -102,8 +104,8 @@ func TestGenerateHandler(t *testing.T) {
 			wantError:  "invalid_params",
 		},
 		{
-			name:       "unsupported mode=double",
-			query:      "?size=5&mode=double",
+			name:       "invalid mode",
+			query:      "?size=5&mode=triple",
 			wantStatus: http.StatusBadRequest,
 			wantError:  "invalid_params",
 		},
@@ -113,17 +115,115 @@ func TestGenerateHandler(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 			wantError:  "invalid_params",
 		},
+		// Strategy parameter validation.
+		{
+			name:       "invalid pipeline",
+			query:      "?size=5&mode=standard&pipeline=invalid",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name:       "invalid solver",
+			query:      "?size=5&mode=standard&solver=invalid",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name:       "invalid regions",
+			query:      "?size=5&mode=standard&regions=invalid",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name:       "regionVariance negative",
+			query:      "?size=5&mode=standard&regionVariance=-0.1",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name:       "regionVariance too large",
+			query:      "?size=5&mode=standard&regionVariance=1.1",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name:       "regionVariance not a number",
+			query:      "?size=5&mode=standard&regionVariance=abc",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		// Solution-first pipeline not exposed via API.
+		{
+			name:       "solution-first pipeline rejected",
+			query:      "?size=5&mode=standard&pipeline=solution-first",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		// Valid strategy combinations.
+		{
+			name:       "explicit defaults: region-first + propagation + bfs",
+			query:      "?size=5&mode=standard&pipeline=region-first&solver=propagation&regions=bfs",
+			wantStatus: http.StatusOK,
+			wantSize:   5,
+			wantMode:   "standard",
+		},
+		{
+			name:       "iterative pipeline with backtrack solver and wfc regions",
+			query:      "?size=5&mode=standard&pipeline=iterative&solver=backtrack&regions=wfc",
+			wantStatus: http.StatusOK,
+			wantSize:   5,
+			wantMode:   "standard",
+		},
+		{
+			name:       "constraint-aware pipeline with propagation solver",
+			query:      "?size=5&mode=standard&pipeline=constraint-aware&solver=propagation",
+			wantStatus: http.StatusOK,
+			wantSize:   5,
+			wantMode:   "standard",
+		},
+		{
+			name:       "regionVariance=0.5 with iterative pipeline",
+			query:      "?size=5&mode=standard&pipeline=iterative&regionVariance=0.5",
+			wantStatus: http.StatusOK,
+			wantSize:   5,
+			wantMode:   "standard",
+		},
+		{
+			name:       "regionVariance=0.0 explicit",
+			query:      "?size=5&mode=standard&regionVariance=0.0",
+			wantStatus: http.StatusOK,
+			wantSize:   5,
+			wantMode:   "standard",
+		},
+		{
+			name:       "regionVariance=1.0 max",
+			query:      "?size=5&mode=standard&regionVariance=1.0",
+			wantStatus: http.StatusOK,
+			wantSize:   5,
+			wantMode:   "standard",
+		},
+		// Double Queens mode.
+		{
+			name:       "mode=double with size=9",
+			query:      "?size=9&mode=double",
+			wantStatus: http.StatusOK,
+			wantSize:   9,
+			wantMode:   "double",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
 			req := httptest.NewRequest(http.MethodGet, "/puzzles/generate"+tt.query, http.NoBody)
 			rec := httptest.NewRecorder()
 
+			// Act
 			handler.GenerateHandler(rec, req)
 
+			// Assert
 			if rec.Code != tt.wantStatus {
-				t.Errorf("status = %d, want %d", rec.Code, tt.wantStatus)
+				t.Errorf("status = %d, want %d; body = %s", rec.Code, tt.wantStatus, rec.Body.String())
 			}
 
 			contentType := rec.Header().Get("Content-Type")
@@ -165,10 +265,14 @@ func TestGenerateHandler(t *testing.T) {
 				t.Errorf("gridSize = %v, want %d", body["gridSize"], expectedSize)
 			}
 
-			// mode must be "standard".
+			// mode must match expected mode.
+			wantMode := tt.wantMode
+			if wantMode == "" {
+				wantMode = "standard"
+			}
 			mode, ok := body["mode"].(string)
-			if !ok || mode != "standard" {
-				t.Errorf("mode = %v, want %q", body["mode"], "standard")
+			if !ok || mode != wantMode {
+				t.Errorf("mode = %v, want %q", body["mode"], wantMode)
 			}
 
 			// regionMap must be an NxN 2D array of ints.

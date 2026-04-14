@@ -13,11 +13,20 @@ const wfcMaxRetries = 100
 // iteratively collapsing cells with the fewest remaining possibilities and
 // propagating size constraints after each collapse. Contiguity is enforced
 // by only allowing a cell to be assigned to a region it is adjacent to.
-type WFCRegionGenerator struct{}
+type WFCRegionGenerator struct {
+	markersPerUnit int // 1 for standard, 2 for double
+}
 
-// NewWFCRegionGenerator returns a new WFCRegionGenerator.
+// NewWFCRegionGenerator returns a new WFCRegionGenerator for standard mode
+// (1 marker per region).
 func NewWFCRegionGenerator() *WFCRegionGenerator {
-	return &WFCRegionGenerator{}
+	return &WFCRegionGenerator{markersPerUnit: 1}
+}
+
+// NewWFCRegionGeneratorDouble returns a new WFCRegionGenerator for double mode
+// (2 markers per region).
+func NewWFCRegionGeneratorDouble() *WFCRegionGenerator {
+	return &WFCRegionGenerator{markersPerUnit: 2}
 }
 
 // GenerateRegions creates a region map from a solution placement using
@@ -26,10 +35,17 @@ func NewWFCRegionGenerator() *WFCRegionGenerator {
 // picks the lowest-entropy uncollapsed cell, assigns it a region, and propagates
 // constraints. On contradiction (zero possibilities for any cell), it restarts
 // from scratch up to wfcMaxRetries times.
+//
+// For double mode (markersPerUnit=2), markers are paired into regions using
+// greedy closest-pair matching before WFC growth begins.
 func (g *WFCRegionGenerator) GenerateRegions(solution [][]bool, gridSize int, opts RegionOpts) ([][]int, error) {
+	defaultMin := minRegionSize
+	if g.markersPerUnit >= 2 {
+		defaultMin = minRegionSizeDouble
+	}
 	minSize := opts.MinSize
-	if minSize < minRegionSize {
-		minSize = minRegionSize
+	if minSize < defaultMin {
+		minSize = defaultMin
 	}
 
 	var targets []int
@@ -42,11 +58,16 @@ func (g *WFCRegionGenerator) GenerateRegions(solution [][]bool, gridSize int, op
 		targets = computeTargetSizes(gridSize, opts.Variance, minSize)
 	}
 
+	validateMinSize := minRegionSize
+	if g.markersPerUnit >= 2 {
+		validateMinSize = minRegionSizeDouble
+	}
+
 	var lastErr error
 	for attempt := 0; attempt < wfcMaxRetries; attempt++ {
 		regionMap, err := g.tryWFC(solution, gridSize, targets)
 		if err == nil {
-			if valErr := ValidateRegionMap(regionMap, gridSize); valErr == nil {
+			if valErr := ValidateRegionMapWithMinSize(regionMap, gridSize, validateMinSize); valErr == nil {
 				return regionMap, nil
 			}
 			// Validation failed — treat as contradiction, retry.
@@ -97,18 +118,32 @@ func (g *WFCRegionGenerator) tryWFC(solution [][]bool, gridSize int, targets []i
 	// fullRegion[rid] = true if region rid has reached its target size.
 	fullRegion := make([]bool, numRegions)
 
-	// Seed markers. Marker in row i gets region i (Standard mode).
-	markerIdx := 0
-	for r := 0; r < gridSize; r++ {
-		for c := 0; c < gridSize; c++ {
-			if solution[r][c] {
-				collapse(r, c, markerIdx)
-				markerIdx++
+	// Seed markers. For standard mode (markersPerUnit=1), marker i gets
+	// region i. For double mode (markersPerUnit=2), markers are paired
+	// using greedy closest-pair matching.
+	if g.markersPerUnit >= 2 {
+		pairs, err := pairMarkersForDoubleQueens(solution, gridSize)
+		if err != nil {
+			return nil, fmt.Errorf("seeding WFC regions: %w", err)
+		}
+		for rid, pair := range pairs {
+			for _, m := range pair {
+				collapse(m[0], m[1], rid)
 			}
 		}
-	}
-	if markerIdx != numRegions {
-		return nil, fmt.Errorf("found %d markers, expected %d", markerIdx, numRegions)
+	} else {
+		markerIdx := 0
+		for r := 0; r < gridSize; r++ {
+			for c := 0; c < gridSize; c++ {
+				if solution[r][c] {
+					collapse(r, c, markerIdx)
+					markerIdx++
+				}
+			}
+		}
+		if markerIdx != numRegions {
+			return nil, fmt.Errorf("found %d markers, expected %d", markerIdx, numRegions)
+		}
 	}
 
 	// Main collapse loop.

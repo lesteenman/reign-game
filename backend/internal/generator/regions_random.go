@@ -34,9 +34,14 @@ func GenerateRandomRegions(gridSize int, opts RegionOpts) ([][]int, error) {
 		targets = computeTargetSizes(gridSize, opts.Variance, minSize)
 	}
 
+	effectiveMinSize := opts.MinSize
+	if effectiveMinSize < minRegionSize {
+		effectiveMinSize = minRegionSize
+	}
+
 	var lastErr error
 	for attempt := 0; attempt < randomRegionMaxRetries; attempt++ {
-		regionMap, err := generateRandomRegionsWithTargets(gridSize, numRegions, total, targets)
+		regionMap, err := generateRandomRegionsWithTargets(gridSize, numRegions, total, targets, effectiveMinSize)
 		if err == nil {
 			return regionMap, nil
 		}
@@ -47,7 +52,7 @@ func GenerateRandomRegions(gridSize int, opts RegionOpts) ([][]int, error) {
 
 // generateRandomRegionsWithTargets places random seed cells and grows regions
 // via round-robin BFS to their target sizes.
-func generateRandomRegionsWithTargets(gridSize, numRegions, total int, targets []int) ([][]int, error) {
+func generateRandomRegionsWithTargets(gridSize, numRegions, total int, targets []int, minSize int) ([][]int, error) {
 	dirs := [4][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
 
 	regionMap := make([][]int, gridSize)
@@ -143,7 +148,7 @@ func generateRandomRegionsWithTargets(gridSize, numRegions, total int, targets [
 		}
 	}
 
-	if err := ValidateRegionMap(regionMap, gridSize); err != nil {
+	if err := ValidateRegionMapWithMinSize(regionMap, gridSize, minSize); err != nil {
 		return nil, fmt.Errorf("generating random regions: validation failed: %w", err)
 	}
 

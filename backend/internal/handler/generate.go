@@ -25,8 +25,13 @@ func generateTimeout(size int) time.Duration {
 }
 
 // GenerateHandler handles GET /puzzles/generate.
-// Query params: size (int 3-15, required), mode (string, required).
-// Currently only mode=standard is accepted.
+// Query params:
+//   - size: int 3-15 (required)
+//   - mode: "standard" | "double" (required)
+//   - pipeline: "region-first" | "iterative" | "constraint-aware" (optional, default "region-first")
+//   - solver: "backtrack" | "propagation" (optional, default "propagation")
+//   - regions: "bfs" | "wfc" (optional, default "bfs")
+//   - regionVariance: float 0.0-1.0 (optional, default 0.0)
 func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -55,18 +60,113 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if mode != "standard" {
-		writeError(w, http.StatusBadRequest, "invalid_params", "only mode=standard is currently supported")
+	if mode != "standard" && mode != "double" {
+		writeError(w, http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'")
 		return
 	}
 
-	// Generate puzzle using default pipeline.
-	pipeline := generator.NewDefaultPipeline()
+	// Validate pipeline parameter.
+	pipelineStr := r.URL.Query().Get("pipeline")
+	if pipelineStr == "" {
+		pipelineStr = "region-first"
+	}
+	if pipelineStr != "region-first" && pipelineStr != "iterative" && pipelineStr != "constraint-aware" {
+		writeError(w, http.StatusBadRequest, "invalid_params", "pipeline must be 'region-first', 'iterative', or 'constraint-aware'")
+		return
+	}
+
+	// Validate solver parameter.
+	solverStr := r.URL.Query().Get("solver")
+	if solverStr == "" {
+		solverStr = "propagation"
+	}
+	if solverStr != "backtrack" && solverStr != "propagation" {
+		writeError(w, http.StatusBadRequest, "invalid_params", "solver must be 'backtrack' or 'propagation'")
+		return
+	}
+
+	// Validate regions parameter.
+	regionsStr := r.URL.Query().Get("regions")
+	if regionsStr == "" {
+		regionsStr = "bfs"
+	}
+	if regionsStr != "bfs" && regionsStr != "wfc" {
+		writeError(w, http.StatusBadRequest, "invalid_params", "regions must be 'bfs' or 'wfc'")
+		return
+	}
+
+	// Validate regionVariance parameter.
+	var regionVariance float64
+	regionVarianceStr := r.URL.Query().Get("regionVariance")
+	if regionVarianceStr != "" {
+		regionVariance, err = strconv.ParseFloat(regionVarianceStr, 64)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_params", "regionVariance must be a number")
+			return
+		}
+		if regionVariance < 0.0 || regionVariance > 1.0 {
+			writeError(w, http.StatusBadRequest, "invalid_params", "regionVariance must be between 0.0 and 1.0")
+			return
+		}
+	}
+
+	// Determine markersPerUnit and minSize based on mode.
+	markersPerUnit := 1
+	minSize := 3
+	if mode == "double" {
+		markersPerUnit = 2
+		minSize = 4
+	}
+
+	// Construct solver strategy.
+	var solver generator.SolverStrategy
+	switch solverStr {
+	case "backtrack":
+		solver = generator.NewBacktrackSolver()
+	case "propagation":
+		solver = generator.NewPropagationSolver()
+	}
+
+	// Construct region strategy (used by iterative pipeline).
+	var regions generator.RegionStrategy
+	switch regionsStr {
+	case "bfs":
+		if mode == "double" {
+			regions = generator.NewBFSRegionGeneratorDouble()
+		} else {
+			regions = generator.NewBFSRegionGenerator()
+		}
+	case "wfc":
+		if mode == "double" {
+			regions = generator.NewWFCRegionGeneratorDouble()
+		} else {
+			regions = generator.NewWFCRegionGenerator()
+		}
+	}
+
+	// Construct pipeline strategy.
+	var pipeline generator.PipelineStrategy
+	switch pipelineStr {
+	case "region-first":
+		pipeline = generator.NewRegionFirstPipeline(solver)
+	case "iterative":
+		pipeline = generator.NewIterativeRefinementPipeline(solver, regions)
+	case "constraint-aware":
+		pipeline = generator.NewConstraintAwarePipeline(solver)
+	}
+
+	// Build generation options.
 	opts := generator.GenerateOpts{
 		Timeout: generateTimeout(size),
 		Mode:    mode,
+		RegionOpts: generator.RegionOpts{
+			Variance: regionVariance,
+			MinSize:  minSize,
+		},
 	}
-	puzzle, err := pipeline.Generate(size, 1, opts)
+
+	// Generate the puzzle.
+	puzzle, err := pipeline.Generate(size, markersPerUnit, opts)
 	if err != nil {
 		log.Printf("puzzle generation failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "generation_failed", "Could not generate a puzzle. Please try again.")
