@@ -14,7 +14,7 @@ Milestone C (Frontend)                  → Full UI: selectors, advanced mode, a
 |------|-------|-----------|--------|
 | T-200 | Parameterize solver for markersPerUnit | A | [x] |
 | T-201 | Lift size restriction + region validation | A | [x] |
-| T-202 | Benchmark suite for larger grids | A | [ ] |
+| T-202 | Benchmark suite for larger grids | A | [x] |
 | T-203 | Pluggable generator interface | B | [ ] |
 | T-204 | Variable region sizes | B | [ ] |
 | T-205 | Constraint propagation solver | B | [ ] |

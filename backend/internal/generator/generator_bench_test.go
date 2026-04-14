@@ -8,9 +8,12 @@ import (
 // BenchmarkGenerate5x5Standard benchmarks puzzle generation for a 5x5 grid.
 // This is the baseline size — the backtrack solver handles it comfortably.
 func BenchmarkGenerate5x5Standard(b *testing.B) {
+	solver := NewBacktrackSolver()
+	regions := NewBFSRegionGenerator()
+	opts := GenerateOpts{Timeout: 60 * time.Second, Mode: "standard"}
 	for b.Loop() {
 		start := time.Now()
-		puzzle, err := Generate(5, 60*time.Second)
+		puzzle, err := Generate(5, 1, solver, regions, opts)
 		elapsed := time.Since(start)
 		if err != nil {
 			b.Fatalf("Generate(5) failed: %v", err)
@@ -24,9 +27,12 @@ func BenchmarkGenerate5x5Standard(b *testing.B) {
 // The backtrack solver is expected to struggle at this size — generation
 // regularly takes 30-60+ seconds per puzzle.
 func BenchmarkGenerate7x7Standard(b *testing.B) {
+	solver := NewBacktrackSolver()
+	regions := NewBFSRegionGenerator()
+	opts := GenerateOpts{Timeout: 120 * time.Second, Mode: "standard"}
 	for b.Loop() {
 		start := time.Now()
-		puzzle, err := Generate(7, 120*time.Second)
+		puzzle, err := Generate(7, 1, solver, regions, opts)
 		elapsed := time.Since(start)
 		if err != nil {
 			b.Fatalf("Generate(7) failed: %v", err)
@@ -41,9 +47,12 @@ func BenchmarkGenerate7x7Standard(b *testing.B) {
 // This benchmark exists to quantify the gap that a constraint propagation
 // solver (GN-03) needs to close.
 func BenchmarkGenerate9x9Standard(b *testing.B) {
+	solver := NewBacktrackSolver()
+	regions := NewBFSRegionGenerator()
+	opts := GenerateOpts{Timeout: 300 * time.Second, Mode: "standard"}
 	for b.Loop() {
 		start := time.Now()
-		puzzle, err := Generate(9, 300*time.Second)
+		puzzle, err := Generate(9, 1, solver, regions, opts)
 		elapsed := time.Since(start)
 		if err != nil {
 			b.Fatalf("Generate(9) failed: %v", err)

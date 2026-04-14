@@ -60,8 +60,14 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Generate puzzle.
-	puzzle, err := generator.Generate(size, generateTimeout(size))
+	// Generate puzzle using default strategies.
+	solver := generator.NewBacktrackSolver()
+	regions := generator.NewBFSRegionGenerator()
+	opts := generator.GenerateOpts{
+		Timeout: generateTimeout(size),
+		Mode:    mode,
+	}
+	puzzle, err := generator.Generate(size, 1, solver, regions, opts)
 	if err != nil {
 		log.Printf("puzzle generation failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "generation_failed", "Could not generate a puzzle. Please try again.")

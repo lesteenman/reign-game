@@ -39,7 +39,10 @@ func TestGenerate(t *testing.T) {
 					gridSize := tt.gridSize
 
 					// Act
-					puzzle, err := Generate(gridSize, tt.timeout)
+					solver := NewBacktrackSolver()
+					regions := NewBFSRegionGenerator()
+					opts := GenerateOpts{Timeout: tt.timeout, Mode: "standard"}
+					puzzle, err := Generate(gridSize, 1, solver, regions, opts)
 
 					// Assert
 					if err != nil {
@@ -100,7 +103,10 @@ func TestGenerate(t *testing.T) {
 }
 
 func TestGenerateTimeout(t *testing.T) {
-	_, err := Generate(5, 1*time.Nanosecond)
+	solver := NewBacktrackSolver()
+	regions := NewBFSRegionGenerator()
+	opts := GenerateOpts{Timeout: 1 * time.Nanosecond}
+	_, err := Generate(5, 1, solver, regions, opts)
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}

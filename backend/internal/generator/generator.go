@@ -9,34 +9,40 @@ import (
 )
 
 // Generate creates a random puzzle with the given grid size that has exactly
-// one solution. It retries until a unique puzzle is found or the timeout expires.
-func Generate(gridSize int, timeout time.Duration) (*model.Puzzle, error) {
-	deadline := time.Now().Add(timeout)
-	markersPerUnit := 1
+// one solution. It uses the provided solver and region strategies for pluggable
+// generation algorithms. It retries until a unique puzzle is found or the
+// timeout expires.
+func Generate(gridSize int, markersPerUnit int, solver SolverStrategy, regions RegionStrategy, opts GenerateOpts) (*model.Puzzle, error) {
+	deadline := time.Now().Add(opts.Timeout)
+
+	mode := opts.Mode
+	if mode == "" {
+		mode = "standard"
+	}
 
 	for {
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("generating puzzle: timeout after %v", timeout)
+			return nil, fmt.Errorf("generating puzzle: timeout after %v", opts.Timeout)
 		}
 
-		solution := generateSolution(gridSize, markersPerUnit)
+		solution := solver.GenerateSolution(gridSize, markersPerUnit)
 		if solution == nil {
 			continue
 		}
 
-		regionMap, err := GenerateRegionMap(solution, gridSize)
+		regionMap, err := regions.GenerateRegions(solution, gridSize, opts.RegionOpts)
 		if err != nil {
 			continue
 		}
 
-		if CountSolutions(regionMap, gridSize, markersPerUnit) != 1 {
+		if solver.CountSolutions(regionMap, gridSize, markersPerUnit, 2) != 1 {
 			continue
 		}
 
 		return &model.Puzzle{
 			ID:        "",
 			GridSize:  gridSize,
-			Mode:      "standard",
+			Mode:      mode,
 			RegionMap: regionMap,
 			Solution:  solution,
 		}, nil
