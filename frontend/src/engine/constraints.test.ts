@@ -83,22 +83,67 @@ describe('checkRowConstraint', () => {
 
   for (const { name, grid, expected } of cases) {
     it(name, () => {
-      const conflicts = checkRowConstraint(grid, 5);
+      // Arrange
+      const markersPerUnit = 1;
+
+      // Act
+      const conflicts = checkRowConstraint(grid, 5, markersPerUnit);
+
+      // Assert
       expect(conflicts).toHaveLength(expected);
     });
   }
 
   it('returns correct cell positions for row conflict', () => {
+    // Arrange
     const grid = placeMarkers(emptyGrid(5), [
       [2, 1],
       [2, 4],
     ]);
-    const conflicts = checkRowConstraint(grid, 5);
+
+    // Act
+    const conflicts = checkRowConstraint(grid, 5, 1);
+
+    // Assert
     expect(conflicts).toHaveLength(1);
     expect(conflicts[0]!.cells).toEqual([
       { row: 2, col: 1 },
       { row: 2, col: 4 },
     ]);
+  });
+});
+
+// -------------------------------------------------
+// checkRowConstraint (Double Queens, markersPerUnit=2)
+// -------------------------------------------------
+describe('checkRowConstraint (markersPerUnit=2)', () => {
+  it('2 markers in same row → no conflict', () => {
+    // Arrange
+    const grid = placeMarkers(emptyGrid(5), [
+      [0, 0],
+      [0, 3],
+    ]);
+
+    // Act
+    const conflicts = checkRowConstraint(grid, 5, 2);
+
+    // Assert
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it('3 markers in same row → 3 conflicts (all pairs)', () => {
+    // Arrange
+    const grid = placeMarkers(emptyGrid(5), [
+      [1, 0],
+      [1, 2],
+      [1, 4],
+    ]);
+
+    // Act
+    const conflicts = checkRowConstraint(grid, 5, 2);
+
+    // Assert
+    expect(conflicts).toHaveLength(3);
   });
 });
 
@@ -138,22 +183,67 @@ describe('checkColumnConstraint', () => {
 
   for (const { name, grid, expected } of cases) {
     it(name, () => {
-      const conflicts = checkColumnConstraint(grid, 5);
+      // Arrange
+      const markersPerUnit = 1;
+
+      // Act
+      const conflicts = checkColumnConstraint(grid, 5, markersPerUnit);
+
+      // Assert
       expect(conflicts).toHaveLength(expected);
     });
   }
 
   it('returns correct cell positions for column conflict', () => {
+    // Arrange
     const grid = placeMarkers(emptyGrid(5), [
       [0, 3],
       [4, 3],
     ]);
-    const conflicts = checkColumnConstraint(grid, 5);
+
+    // Act
+    const conflicts = checkColumnConstraint(grid, 5, 1);
+
+    // Assert
     expect(conflicts).toHaveLength(1);
     expect(conflicts[0]!.cells).toEqual([
       { row: 0, col: 3 },
       { row: 4, col: 3 },
     ]);
+  });
+});
+
+// -------------------------------------------------
+// checkColumnConstraint (Double Queens, markersPerUnit=2)
+// -------------------------------------------------
+describe('checkColumnConstraint (markersPerUnit=2)', () => {
+  it('2 markers in same column → no conflict', () => {
+    // Arrange
+    const grid = placeMarkers(emptyGrid(5), [
+      [0, 2],
+      [3, 2],
+    ]);
+
+    // Act
+    const conflicts = checkColumnConstraint(grid, 5, 2);
+
+    // Assert
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it('3 markers in same column → 3 conflicts (all pairs)', () => {
+    // Arrange
+    const grid = placeMarkers(emptyGrid(5), [
+      [0, 1],
+      [2, 1],
+      [4, 1],
+    ]);
+
+    // Act
+    const conflicts = checkColumnConstraint(grid, 5, 2);
+
+    // Assert
+    expect(conflicts).toHaveLength(3);
   });
 });
 
@@ -194,10 +284,52 @@ describe('checkRegionConstraint', () => {
 
   for (const { name, grid, expected } of cases) {
     it(name, () => {
-      const conflicts = checkRegionConstraint(grid, regionMap);
+      // Arrange
+      const markersPerUnit = 1;
+
+      // Act
+      const conflicts = checkRegionConstraint(grid, regionMap, markersPerUnit);
+
+      // Assert
       expect(conflicts).toHaveLength(expected);
     });
   }
+});
+
+// -------------------------------------------------
+// checkRegionConstraint (Double Queens, markersPerUnit=2)
+// -------------------------------------------------
+describe('checkRegionConstraint (markersPerUnit=2)', () => {
+  it('2 markers in same region → no conflict', () => {
+    // Arrange
+    // Region 0 contains (0,0), (0,1), (1,0), (1,1)
+    const grid = placeMarkers(emptyGrid(5), [
+      [0, 0],
+      [1, 1],
+    ]);
+
+    // Act
+    const conflicts = checkRegionConstraint(grid, regionMap, 2);
+
+    // Assert
+    expect(conflicts).toHaveLength(0);
+  });
+
+  it('3 markers in same region → 3 conflicts (all pairs)', () => {
+    // Arrange
+    // Region 0 contains (0,0), (0,1), (1,0), (1,1)
+    const grid = placeMarkers(emptyGrid(5), [
+      [0, 0],
+      [0, 1],
+      [1, 0],
+    ]);
+
+    // Act
+    const conflicts = checkRegionConstraint(grid, regionMap, 2);
+
+    // Assert
+    expect(conflicts).toHaveLength(3);
+  });
 });
 
 // -------------------------------------------------
@@ -278,18 +410,26 @@ describe('checkAdjacencyConstraint', () => {
 // -------------------------------------------------
 describe('getAllConflicts', () => {
   it('valid solution → no conflicts', () => {
-    const conflicts = getAllConflicts(validSolution, regionMap, 5);
+    // Arrange / Act
+    const conflicts = getAllConflicts(validSolution, regionMap, 5, 1);
+
+    // Assert
     expect(conflicts).toHaveLength(0);
   });
 
   it('combines violations from multiple constraint types', () => {
+    // Arrange
     // 2 markers in row 0, col 0, region 0, and adjacent
     // This triggers row, column won't (different cols), region, adjacency
     const grid = placeMarkers(emptyGrid(5), [
       [0, 0],
       [0, 1],
     ]);
-    const conflicts = getAllConflicts(grid, regionMap, 5);
+
+    // Act
+    const conflicts = getAllConflicts(grid, regionMap, 5, 1);
+
+    // Assert
     // Row conflict: (0,0)-(0,1)
     // Region conflict: (0,0)-(0,1) — both in region 0
     // Adjacency conflict: (0,0)-(0,1)
@@ -298,18 +438,23 @@ describe('getAllConflicts', () => {
   });
 
   it('returns distinct conflicts for different pairs', () => {
+    // Arrange
     // Markers at (0,0), (0,2), (1,1) — all in different columns
-    // Row conflict: (0,0)-(0,2)
-    // Adjacency: (0,0)-(1,1) and (0,2)-(1,1)
-    // Region: (0,0) is region 0, (0,2) is region 1, (1,1) is region 0
-    //   → region conflict: (0,0)-(1,1)
-    // So unique pairs: (0,0)-(0,2), (0,0)-(1,1), (0,2)-(1,1) = 3
     const grid = placeMarkers(emptyGrid(5), [
       [0, 0],
       [0, 2],
       [1, 1],
     ]);
-    const conflicts = getAllConflicts(grid, regionMap, 5);
+
+    // Act
+    const conflicts = getAllConflicts(grid, regionMap, 5, 1);
+
+    // Assert
+    // Row conflict: (0,0)-(0,2)
+    // Adjacency: (0,0)-(1,1) and (0,2)-(1,1)
+    // Region: (0,0) is region 0, (0,2) is region 1, (1,1) is region 0
+    //   → region conflict: (0,0)-(1,1)
+    // So unique pairs: (0,0)-(0,2), (0,0)-(1,1), (0,2)-(1,1) = 3
     expect(conflicts).toHaveLength(3);
   });
 });

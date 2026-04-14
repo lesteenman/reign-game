@@ -39,7 +39,7 @@ export function GamePage() {
     const isNew = searchParams.get('new') === 'true';
 
     if (isNew) {
-      void generatePuzzle(5, 'standard').then(async (puzzle) => {
+      void generatePuzzle({ size: 5, mode: 'standard' }).then(async (puzzle) => {
         if (cancelled) return;
         const gameState = createFreshGameState(puzzle);
         await saveState(gameState);
