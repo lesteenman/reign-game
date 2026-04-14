@@ -252,12 +252,12 @@ function GameBoard({
 
   const resetGame = useCallback(() => {
     originalResetGame();
-    timer.reset();
-    timerStartedRef.current = false;
+    // Reset clears the grid but keeps the timer running — it's a
+    // "I'm stuck" helper, not a way to get a lower time.
     completionHandledRef.current = false;
     setShowCompletion(false);
     setCompletionTime(0);
-  }, [originalResetGame, timer]);
+  }, [originalResetGame]);
 
   const handlePlayAgain = useCallback(async () => {
     try {
