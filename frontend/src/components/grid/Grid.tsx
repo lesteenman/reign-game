@@ -45,8 +45,16 @@ export function Grid({
     }
 
     measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    let rafId: number;
+    function handleResize() {
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(measure);
+    }
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      cancelAnimationFrame(rafId);
+    };
   }, [gridSize]);
 
   const conflictSet = useMemo(() => {

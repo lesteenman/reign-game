@@ -53,7 +53,8 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	// Generate puzzle.
 	puzzle, err := generator.Generate(size, generateTimeout)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "generation_failed", fmt.Sprintf("puzzle generation failed: %v", err))
+		log.Printf("puzzle generation failed: %v", err)
+		writeError(w, http.StatusInternalServerError, "generation_failed", "Could not generate a puzzle. Please try again.")
 		return
 	}
 

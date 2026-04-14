@@ -24,10 +24,10 @@ test.describe("Grid Interaction", () => {
         body: JSON.stringify(MOCK_PUZZLE),
       }),
     );
-    // Go to landing page, click Play to get to the game
+    // Go to landing page, click Play to navigate to /play?new=true
     await page.goto("/");
     await expect(page.getByRole("heading", { name: /reign/i })).toBeVisible();
-    // Click Play button to fetch puzzle and navigate to /play
+    // Click Play button to navigate to /play?new=true where puzzle is fetched
     const playButton = page.getByRole("button", { name: /play/i });
     await expect(playButton).toBeVisible();
     await playButton.click();

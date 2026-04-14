@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useGameStorage } from '../hooks/useGameStorage';
-import { generatePuzzle } from '../services/puzzleService';
-import type { GameState } from '../storage/types';
+import { PageShell } from '../components/common/PageShell';
+import { PrimaryButton, SecondaryButton } from '../components/common/Button';
 
 type PageState =
   | { status: 'loading' }
   | { status: 'fresh' }
   | { status: 'has-progress' }
-  | { status: 'fetching' }
   | { status: 'error'; message: string };
 
 /** Subscribe to online/offline events and return current connectivity status. */
@@ -32,7 +31,7 @@ function getServerOnlineSnapshot(): boolean {
 /** Landing page with resume/new puzzle flow. */
 export function LandingPage() {
   const navigate = useNavigate();
-  const { loadState, saveState } = useGameStorage();
+  const { loadState } = useGameStorage();
   const [state, setState] = useState<PageState>({ status: 'loading' });
   const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, getServerOnlineSnapshot);
 
@@ -51,7 +50,7 @@ export function LandingPage() {
     return () => { cancelled = true; };
   }, [loadState]);
 
-  const startNewPuzzle = useCallback(async () => {
+  const handleNewPuzzle = useCallback(() => {
     if (!navigator.onLine) {
       setState({
         status: 'error',
@@ -59,57 +58,15 @@ export function LandingPage() {
       });
       return;
     }
-    setState({ status: 'fetching' });
-    try {
-      const puzzle = await generatePuzzle(5, 'standard');
-      const gameState: GameState = {
-        id: 'current',
-        puzzle,
-        cells: Array.from({ length: puzzle.gridSize }, () =>
-          Array.from({ length: puzzle.gridSize }, () => 'empty' as const),
-        ),
-        timer: { elapsedAtLastPause: 0, lastResumedAt: null },
-        status: 'in-progress',
-        startedAt: Date.now(),
-      };
-      await saveState(gameState);
-      navigate('/play');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error';
-      setState({ status: 'error', message });
-    }
-  }, [saveState, navigate]);
+    navigate('/play?new=true');
+  }, [navigate]);
 
   const handleResume = useCallback(() => {
     navigate('/play');
   }, [navigate]);
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '24px',
-        padding: '24px 16px',
-        minHeight: '100vh',
-        backgroundColor: 'var(--color-background)',
-        fontFamily: '"Nunito Sans", system-ui, sans-serif',
-        color: 'var(--color-ink)',
-      }}
-    >
-      <h1
-        style={{
-          fontSize: '1.875rem',
-          fontWeight: 800,
-          letterSpacing: '-0.01em',
-          margin: 0,
-        }}
-      >
-        Reign
-      </h1>
-
+    <PageShell>
       {!isOnline && (
         <div
           role="alert"
@@ -135,97 +92,13 @@ export function LandingPage() {
       )}
 
       {state.status === 'fresh' && (
-        <button
-          type="button"
-          onClick={() => void startNewPuzzle()}
-          style={{
-            padding: '12px 32px',
-            backgroundColor: 'var(--color-accent)',
-            color: 'var(--color-on-accent)',
-            border: '2px solid var(--color-ink)',
-            borderRadius: 'var(--radius)',
-            boxShadow: '0 3px 0 var(--color-accent-shadow)',
-            fontFamily: '"Nunito Sans", system-ui, sans-serif',
-            fontWeight: 700,
-            fontSize: '1rem',
-            cursor: 'pointer',
-            transition: 'transform 100ms ease-out, box-shadow 100ms ease-out',
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.transform = 'translateY(1px)';
-            e.currentTarget.style.boxShadow = '0 2px 0 var(--color-accent-shadow)';
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.transform = 'translateY(0)';
-            e.currentTarget.style.boxShadow = '0 3px 0 var(--color-accent-shadow)';
-          }}
-        >
-          Play
-        </button>
+        <PrimaryButton onClick={handleNewPuzzle}>Play</PrimaryButton>
       )}
 
       {state.status === 'has-progress' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
-          <button
-            type="button"
-            onClick={handleResume}
-            style={{
-              padding: '12px 32px',
-              backgroundColor: 'var(--color-accent)',
-              color: 'var(--color-on-accent)',
-              border: '2px solid var(--color-ink)',
-              borderRadius: 'var(--radius)',
-              boxShadow: '0 3px 0 var(--color-accent-shadow)',
-              fontFamily: '"Nunito Sans", system-ui, sans-serif',
-              fontWeight: 700,
-              fontSize: '1rem',
-              cursor: 'pointer',
-              transition: 'transform 100ms ease-out, box-shadow 100ms ease-out',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(1px)';
-              e.currentTarget.style.boxShadow = '0 2px 0 var(--color-accent-shadow)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 3px 0 var(--color-accent-shadow)';
-            }}
-          >
-            Resume
-          </button>
-          <button
-            type="button"
-            onClick={() => void startNewPuzzle()}
-            style={{
-              padding: '12px 32px',
-              backgroundColor: 'var(--color-surface)',
-              color: 'var(--color-ink)',
-              border: '2px solid var(--color-ink)',
-              borderRadius: 'var(--radius)',
-              boxShadow: '0 3px 0 var(--color-ink)',
-              fontFamily: '"Nunito Sans", system-ui, sans-serif',
-              fontWeight: 700,
-              fontSize: '1rem',
-              cursor: 'pointer',
-              transition: 'transform 100ms ease-out, box-shadow 100ms ease-out',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(1px)';
-              e.currentTarget.style.boxShadow = '0 2px 0 var(--color-ink)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 3px 0 var(--color-ink)';
-            }}
-          >
-            New Puzzle
-          </button>
-        </div>
-      )}
-
-      {state.status === 'fetching' && (
-        <div data-testid="loading-state" style={{ padding: '48px 0', fontWeight: 600 }}>
-          Loading puzzle...
+          <PrimaryButton onClick={handleResume}>Resume</PrimaryButton>
+          <SecondaryButton onClick={handleNewPuzzle}>New Puzzle</SecondaryButton>
         </div>
       )}
 
@@ -241,28 +114,11 @@ export function LandingPage() {
           }}
         >
           <p style={{ color: 'var(--color-destructive)', fontWeight: 600 }}>
-            Failed to load puzzle: {state.message}
+            {state.message}
           </p>
-          <button
-            type="button"
-            onClick={() => void startNewPuzzle()}
-            style={{
-              padding: '12px 32px',
-              backgroundColor: 'var(--color-surface)',
-              color: 'var(--color-ink)',
-              border: '2px solid var(--color-ink)',
-              borderRadius: 'var(--radius)',
-              boxShadow: '0 3px 0 var(--color-ink)',
-              fontFamily: '"Nunito Sans", system-ui, sans-serif',
-              fontWeight: 700,
-              fontSize: '1rem',
-              cursor: 'pointer',
-            }}
-          >
-            Try Again
-          </button>
+          <SecondaryButton onClick={handleNewPuzzle}>Try Again</SecondaryButton>
         </div>
       )}
-    </div>
+    </PageShell>
   );
 }
