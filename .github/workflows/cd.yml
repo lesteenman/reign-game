@@ -36,7 +36,7 @@ jobs:
       - name: Build backend
         working-directory: backend
         run: |
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap ./cmd/api
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bootstrap ./cmd/api
           zip -j lambda.zip bootstrap
 
       - name: Build frontend
