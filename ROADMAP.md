@@ -25,17 +25,17 @@ Note: Terraform and GitHub Actions contain no AWS account, role, or domain speci
 
 Goal: Play randomly generated 5x5 Standard Mode puzzles in the browser, hosted on AWS.
 
-- [ ] **R-010** — Puzzle data model: grid, regions, solution representation (Go)
-- [ ] **R-011** — Puzzle solver: constraint-based deduction, verify uniqueness (Go, 5x5 Standard)
-- [ ] **R-012** — Puzzle generator: produce valid 5x5 Standard Mode puzzles (Go)
-- [ ] **R-013** — Generate endpoint: stateless, returns a fresh puzzle on each call (no DB)
-- [ ] **R-014** — Theme architecture: ThemeContext, theme data structure, component token consumption
-- [ ] **R-015** — Tactile default theme: piece icons, color palette, grid styling, animations
-- [ ] **R-016** — Interactive grid component: render regions, place/remove markers, pencil marks, highlight conflicts (theme-aware)
-- [ ] **R-017** — Solution validation in TypeScript (constraint check, no solver)
-- [ ] **R-018** — Game state in IndexedDB: placements, pencil marks, timer, completion status. Persist every move.
-- [ ] **R-019** — Game flow UI: puzzle loading, timer, solve flow, completion screen
-- [ ] **R-01A** — PWA basics: service worker (app shell caching), manifest, install prompt
+- [x] **R-010** — Puzzle data model: grid, regions, solution representation (Go)
+- [x] **R-011** — Puzzle solver: constraint-based deduction, verify uniqueness (Go, 5x5 Standard)
+- [x] **R-012** — Puzzle generator: produce valid 5x5 Standard Mode puzzles (Go)
+- [x] **R-013** — Generate endpoint: stateless, returns a fresh puzzle on each call (no DB)
+- [x] **R-014** — Theme architecture: ThemeContext, theme data structure, component token consumption
+- [x] **R-015** — Tactile default theme: piece icons, color palette, grid styling, animations
+- [x] **R-016** — Interactive grid component: render regions, place/remove markers, exclusion marks, highlight conflicts (theme-aware)
+- [x] **R-017** — Solution validation in TypeScript (constraint check, no solver)
+- [x] **R-018** — Game state in IndexedDB: placements, exclusion marks, timer, completion status. Persist every move.
+- [x] **R-019** — Game flow UI: puzzle loading, timer, solve flow, completion screen
+- [x] **R-01A** — PWA basics: service worker (app shell caching), manifest, install prompt
 
 ## Phase 2: All Grid Sizes
 

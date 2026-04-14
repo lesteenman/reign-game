@@ -93,13 +93,15 @@ interface Theme {
 
 The single theme shipping in Phase 1. Visual identity from BRAND_GUIDELINES.md:
 
-- **Marker:** Filled circle SVG, `--color-ink` fill
-- **Exclusion mark:** Cross SVG, `--color-muted` stroke
+- **Marker:** Rounded square SVG (`rect` with rx=3), `--color-ink` fill, tight fit (padding 0.18)
+- **Exclusion mark:** Small dot SVG (`circle` with r=0.08), `--color-ink` fill
 - **Region colors:** 9 bold-saturation colorblind-safe fills from `--region-N-fill` tokens
-- **Region boundaries:** 2.5px `--color-ink` borders between cells of different regions
-- **Grid:** No borders between cells in the same region
+- **Region boundaries:** 2px `--color-ink` lines drawn as SVG overlay on top of the grid (not CSS borders). Small filled squares at junction points for clean corners.
+- **Cell borders:** 0.5px subtle internal borders between same-region cells only. Hidden on grid edges and under region boundaries.
+- **Grid outer border:** 2px `--color-ink`, matching region border width
 - **Depth:** Tactile offset shadows (`0 3px 0 var(--color-ink)`) on interactive elements
-- **Border radius:** 10px on cards and buttons, not on cells (grid stays sharp)
+- **Border radius:** 10px on cards, buttons, and grid container
+- **Dark mode:** Toggle button in page header, persists to localStorage, respects system preference
 
 Components never hardcode visual values. They read CSS custom properties or theme context.
 
@@ -108,25 +110,33 @@ Components never hardcode visual values. They read CSS custom properties or them
 ### Component Structure
 
 ```
-Grid.tsx         — CSS Grid layout, region boundary logic
-├── Cell.tsx     — Single cell, tap/drag handler, background color
-│   ├── Marker.tsx         — Placed piece (from theme)
-│   └── ExclusionMark.tsx  — "Not here" mark (from theme)
+Grid.tsx                — CSS Grid layout, responsive sizing, touch/mouse handlers
+├── Cell.tsx            — Single cell, background color, border visibility
+│   ├── Marker.tsx      — Placed piece (from theme, rounded square)
+│   └── ExclusionMark.tsx — "Not here" mark (from theme, small dot)
+├── RegionBorderOverlay.tsx — SVG overlay drawing region boundary lines
 ```
 
-### Interaction Model
+Shared layout components: `PageShell` (page wrapper with heading + dark mode toggle), `PrimaryButton`, `SecondaryButton`.
 
-**Three-tap cycle** on a single cell:
-1. Empty → Exclusion mark (cross)
-2. Exclusion mark → Marker (circle)
-3. Marker → Empty
+### Interaction Model (deferred-apply)
 
-**Drag gesture:**
-- Start on empty cell → drag excludes all empty cells in path
-- Start on excluded cell → drag clears exclusions in path
-- Start on marker → no drag behavior
+All state changes are deferred to pointer-up. Nothing happens on pointer-down.
 
-Drag works on both touch (touchmove) and mouse (mousemove with button held).
+**Single tap** (pointer down + up, no movement):
+Three-tap cycle: Empty → Exclusion mark → Marker → Empty
+
+**Drag** (pointer down + movement + up):
+Intent determined by starting cell state:
+- Start on empty cell → highlighted cells become excluded on release
+- Start on excluded cell → highlighted cells become empty on release
+- Start on marked cell → no drag effect (treated as tap on release)
+
+During drag, all cells in the path are highlighted (15% darken) including marked cells. Exclusions/clears only applied on pointer-up. Touch double-fire prevented via `touchedRef` flag.
+
+### Grid Sizing
+
+Grid measures its container on mount and on (debounced) resize. Cells are clamped 44–72px. Grid defers rendering until measured (no flicker).
 
 ### Conflict Highlighting
 
@@ -199,22 +209,30 @@ A thin wrapper (custom hook `useGameStorage`) hides IndexedDB async complexity f
 
 ### Landing Page
 
+Navigation only — does not fetch puzzles or construct game state.
+
 Two states:
-- **No active puzzle:** "Play" button. Fetches from API on click, navigates to `/play`.
-- **Active puzzle in progress:** "Resume" button (navigates to `/play` with existing state) + "New Puzzle" button (fetches fresh, discards old).
+- **No active puzzle:** "Play" button → navigates to `/play?new=true`
+- **Active puzzle in progress:** "Resume" button → `/play`, "New Puzzle" button → `/play?new=true`
+- Offline detection: shows message when offline, Resume still works
 
 ### Game Page
 
-- Grid component (full width on mobile, constrained on desktop)
-- Timer display (Space Mono, tabular-nums)
-- On completion: inline overlay with solve time and "Play Again" button
+Owns puzzle fetching and game state construction:
+- `?new=true` param: fetches puzzle from API, creates fresh GameState, saves to IndexedDB
+- No param: loads existing state from IndexedDB, redirects to `/` if none
+- Grid component (full width on mobile, max 600px on desktop)
+- Timer display (Space Mono, tabular-nums, right-aligned above grid)
+- Timer starts on first cell interaction, pauses on page blur, resumes on focus
+- `startedAt` captured once on game creation, never overwritten
+- Reset clears the grid but keeps the timer running (not a way to get a lower time)
 
 ### Completion
 
-1. Timer stops (write final elapsed time to IndexedDB)
-2. Brief celebration animation (theme-defined, subtle, non-blocking)
-3. Overlay: solve time + "Play Again" button
-4. "Play Again" fetches a new puzzle from the API
+1. Timer stops
+2. Inline overlay: "Puzzle Complete!" + solve time + "Play Again" + "Home"
+3. "Play Again" navigates to `/play?new=true` (fetches new puzzle)
+4. Completion record saved to IndexedDB `completions` store
 
 ## PWA (R-01A)
 
@@ -233,7 +251,16 @@ Workbox precache of build output (HTML, JS, CSS, fonts). App shell loads offline
 - "Play" / "New Puzzle" buttons show connectivity error when offline
 - No custom install prompt — browser native is fine for Phase 1
 
-## Doc Updates Required
+## Implementation Notes (post-archive)
 
-- **BRAND_GUIDELINES.md** section 8.2: rename "Minimalist" → "Tactile" (id, name)
-- **GAME_DESIGN.md** "Default Theme: Minimalist" section: rename to "Default Theme: Tactile"
+Changes from original design that emerged during implementation:
+
+- **Interaction model**: Deferred-apply replaced immediate click+drag. All state changes on pointer-up. Prevents touch double-fire bug.
+- **Region borders**: SVG overlay replaced CSS cell borders. Eliminates doubling, offset, and corner artifacts. 2px width (not 2.5px) for pixel-aligned rendering.
+- **Markers**: Rounded square (`rect` rx=3) replaced filled circle. Exclusion dot replaced cross. Chosen through iterative visual comparison.
+- **Puzzle fetch ownership**: GamePage owns fetching (via `?new=true` param), not LandingPage. Cleaner separation — landing page is navigation only.
+- **Reset behavior**: Clears grid only, timer keeps running. It's a "I'm stuck" helper, not a score reset.
+- **Dev ports**: Frontend 5180, backend 5181 (avoids conflicts with other local services).
+- **Dark mode toggle**: Added to PageShell header, not in original spec. Uses existing useDarkMode hook.
+- **Shared components**: PageShell, PrimaryButton, SecondaryButton extracted during review to eliminate duplication.
+- **Test conventions**: Arrange-Act-Assert with explicit comments. Cell tests verify specific SVG elements (circle vs rect).
