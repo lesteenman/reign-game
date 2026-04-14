@@ -84,6 +84,7 @@ export const RegionBorderOverlay = memo(function RegionBorderOverlay({
           y2={s.y2}
           stroke="var(--color-ink)"
           strokeWidth={2.5}
+          strokeLinecap="round"
         />
       ))}
     </svg>

@@ -78,9 +78,9 @@ body {
   </div>
   <svg class="overlay" width="${cellSize * 2}" height="${cellSize * 2}" viewBox="0 0 ${cellSize * 2} ${cellSize * 2}">
     <!-- Vertical: between col 0 and col 1, only bottom half (region boundary) -->
-    <line x1="${cellSize}" y1="${cellSize}" x2="${cellSize}" y2="${cellSize * 2}" stroke="#2D2A26" stroke-width="${regionBorderWidth}"/>
+    <line x1="${cellSize}" y1="${cellSize}" x2="${cellSize}" y2="${cellSize * 2}" stroke="#2D2A26" stroke-width="${regionBorderWidth}" stroke-linecap="round"/>
     <!-- Horizontal: between row 0 and row 1, only right half (region boundary) -->
-    <line x1="${cellSize}" y1="${cellSize}" x2="${cellSize * 2}" y2="${cellSize}" stroke="#2D2A26" stroke-width="${regionBorderWidth}"/>
+    <line x1="${cellSize}" y1="${cellSize}" x2="${cellSize * 2}" y2="${cellSize}" stroke="#2D2A26" stroke-width="${regionBorderWidth}" stroke-linecap="round"/>
   </svg>
 </div>
 </body></html>`;
