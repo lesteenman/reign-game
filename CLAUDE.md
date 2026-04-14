@@ -51,6 +51,7 @@ docker compose up localstack         # Phase 4+
 - Always run the full test suite after making changes
 - After fixing one bug, verify no regressions were introduced before moving on
 - When writing controller tests, check if the test security config has specific auth behavior
+- All unit tests must use **Arrange-Act-Assert** structure with explicit `// Arrange`, `// Act`, `// Assert` comments separating the sections. This applies to both frontend (Vitest) and backend (Go) tests.
 
 ## Project Structure
 

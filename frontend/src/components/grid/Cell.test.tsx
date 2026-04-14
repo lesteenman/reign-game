@@ -43,61 +43,99 @@ function renderCell(overrides: Partial<CellProps> = {}) {
 
 describe('Cell', () => {
   it('renders with correct region background color', () => {
-    const { cell } = renderCell({ regionIndex: 2 });
+    // Arrange
+    const regionIndex = 2;
+
+    // Act
+    const { cell } = renderCell({ regionIndex });
+
+    // Assert
     expect(cell.style.backgroundColor).toBe('var(--region-2-fill)');
   });
 
   it('empty cell shows no marker or exclusion mark', () => {
+    // Arrange & Act
     const { cell } = renderCell({ state: 'empty' });
+
+    // Assert
     expect(cell.querySelector('svg')).toBeNull();
   });
 
-  it('excluded cell shows ExclusionMark', () => {
+  it('excluded cell shows ExclusionMark (circle dot), not Marker', () => {
+    // Arrange & Act
     const { cell } = renderCell({ state: 'excluded' });
-    const svg = cell.querySelector('svg');
-    expect(svg).not.toBeNull();
+
+    // Assert — ExclusionMark renders a circle, Marker renders a rect
+    expect(cell.querySelector('circle')).not.toBeNull();
+    expect(cell.querySelector('rect')).toBeNull();
   });
 
-  it('marked cell shows Marker', () => {
+  it('marked cell shows Marker (rounded rect), not ExclusionMark', () => {
+    // Arrange & Act
     const { cell } = renderCell({ state: 'marked' });
-    const svg = cell.querySelector('svg');
-    expect(svg).not.toBeNull();
+
+    // Assert — Marker renders a rect, ExclusionMark renders a circle
     expect(cell.querySelector('rect')).not.toBeNull();
+    expect(cell.querySelector('circle')).toBeNull();
   });
 
   it('conflict cell has destructive background color', () => {
+    // Arrange & Act
     const { cell } = renderCell({ state: 'marked', hasConflict: true });
+
+    // Assert
     expect(cell.style.backgroundColor).toBe('var(--color-destructive-bg)');
   });
 
   it('calls onPointerDown on mouseDown', () => {
+    // Arrange
     const onPointerDown = vi.fn();
     const { cell } = renderCell({ onPointerDown });
+
+    // Act
     fireEvent.mouseDown(cell);
+
+    // Assert
     expect(onPointerDown).toHaveBeenCalledTimes(1);
   });
 
   it('calls onDragEnter on mouseEnter when button is held', () => {
+    // Arrange
     const onDragEnter = vi.fn();
     const { cell } = renderCell({ onDragEnter });
+
+    // Act
     fireEvent.mouseEnter(cell, { buttons: 1 });
+
+    // Assert
     expect(onDragEnter).toHaveBeenCalledTimes(1);
   });
 
   it('does not call onDragEnter on mouseEnter when button is not held', () => {
+    // Arrange
     const onDragEnter = vi.fn();
     const { cell } = renderCell({ onDragEnter });
+
+    // Act
     fireEvent.mouseEnter(cell, { buttons: 0 });
+
+    // Assert
     expect(onDragEnter).not.toHaveBeenCalled();
   });
 
   it('sets data-cell-state attribute', () => {
+    // Arrange & Act
     const { cell } = renderCell({ state: 'marked' });
+
+    // Assert
     expect(cell.getAttribute('data-cell-state')).toBe('marked');
   });
 
   it('sets data-cell-conflict attribute when conflicting', () => {
+    // Arrange & Act
     const { cell } = renderCell({ state: 'marked', hasConflict: true });
+
+    // Assert
     expect(cell.getAttribute('data-cell-conflict')).toBe('true');
   });
 });
