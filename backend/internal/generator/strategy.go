@@ -39,5 +39,4 @@ type RegionOpts struct {
 type GenerateOpts struct {
 	Timeout    time.Duration // maximum time to spend generating
 	RegionOpts RegionOpts    // region generation options
-	Mode       string        // puzzle mode (e.g., "standard", "double")
 }

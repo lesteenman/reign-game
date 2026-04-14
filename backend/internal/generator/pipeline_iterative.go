@@ -33,11 +33,6 @@ func NewIterativeRefinementPipeline(solver SolverStrategy, regions RegionStrateg
 func (p *IterativeRefinementPipeline) Generate(gridSize int, markersPerUnit int, opts GenerateOpts) (*model.Puzzle, error) {
 	deadline := time.Now().Add(opts.Timeout)
 
-	mode := opts.Mode
-	if mode == "" {
-		mode = "standard"
-	}
-
 	for {
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("generating puzzle (iterative): timeout after %v", opts.Timeout)
@@ -76,7 +71,6 @@ func (p *IterativeRefinementPipeline) Generate(gridSize int, markersPerUnit int,
 		return &model.Puzzle{
 			ID:        "",
 			GridSize:  gridSize,
-			Mode:      mode,
 			RegionMap: result,
 			Solution:  sol,
 		}, nil

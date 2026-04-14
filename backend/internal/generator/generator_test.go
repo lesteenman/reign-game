@@ -41,8 +41,9 @@ func TestGenerate(t *testing.T) {
 					// Act
 					solver := NewBacktrackSolver()
 					regions := NewBFSRegionGenerator()
-					opts := GenerateOpts{Timeout: tt.timeout, Mode: "standard"}
-					puzzle, err := Generate(gridSize, 1, solver, regions, opts)
+					pipeline := NewSolutionFirstPipeline(solver, regions)
+					opts := GenerateOpts{Timeout: tt.timeout}
+					puzzle, err := pipeline.Generate(gridSize, 1, opts)
 
 					// Assert
 					if err != nil {
@@ -53,8 +54,8 @@ func TestGenerate(t *testing.T) {
 						t.Errorf("GridSize = %d, want %d", puzzle.GridSize, gridSize)
 					}
 
-					if puzzle.Mode != "standard" {
-						t.Errorf("Mode = %q, want %q", puzzle.Mode, "standard")
+					if puzzle.Mode != "" {
+						t.Errorf("Mode = %q, want empty string", puzzle.Mode)
 					}
 
 					if puzzle.ID != "" {
@@ -103,10 +104,16 @@ func TestGenerate(t *testing.T) {
 }
 
 func TestGenerateTimeout(t *testing.T) {
+	// Arrange
 	solver := NewBacktrackSolver()
 	regions := NewBFSRegionGenerator()
+	pipeline := NewSolutionFirstPipeline(solver, regions)
 	opts := GenerateOpts{Timeout: 1 * time.Nanosecond}
-	_, err := Generate(5, 1, solver, regions, opts)
+
+	// Act
+	_, err := pipeline.Generate(5, 1, opts)
+
+	// Assert
 	if err == nil {
 		t.Fatal("expected timeout error, got nil")
 	}

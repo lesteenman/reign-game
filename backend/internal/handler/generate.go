@@ -5,11 +5,37 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/eriksteenman/reign-game/backend/internal/generator"
+)
+
+// Pipeline strategy names.
+const (
+	PipelineRegionFirst     = "region-first"
+	PipelineIterative       = "iterative"
+	PipelineConstraintAware = "constraint-aware"
+)
+
+// Solver strategy names.
+const (
+	SolverBacktrack    = "backtrack"
+	SolverPropagation  = "propagation"
+)
+
+// Region strategy names.
+const (
+	RegionsBFS = "bfs"
+	RegionsWFC = "wfc"
+)
+
+// Puzzle mode names.
+const (
+	ModeStandard = "standard"
+	ModeDouble   = "double"
 )
 
 // generateTimeout returns the puzzle generation timeout based on grid size.
@@ -60,7 +86,7 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if mode != "standard" && mode != "double" {
+	if mode != ModeStandard && mode != ModeDouble {
 		writeError(w, http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'")
 		return
 	}
@@ -68,9 +94,9 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	// Validate pipeline parameter.
 	pipelineStr := r.URL.Query().Get("pipeline")
 	if pipelineStr == "" {
-		pipelineStr = "region-first"
+		pipelineStr = PipelineRegionFirst
 	}
-	if pipelineStr != "region-first" && pipelineStr != "iterative" && pipelineStr != "constraint-aware" {
+	if pipelineStr != PipelineRegionFirst && pipelineStr != PipelineIterative && pipelineStr != PipelineConstraintAware {
 		writeError(w, http.StatusBadRequest, "invalid_params", "pipeline must be 'region-first', 'iterative', or 'constraint-aware'")
 		return
 	}
@@ -78,9 +104,9 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	// Validate solver parameter.
 	solverStr := r.URL.Query().Get("solver")
 	if solverStr == "" {
-		solverStr = "propagation"
+		solverStr = SolverPropagation
 	}
-	if solverStr != "backtrack" && solverStr != "propagation" {
+	if solverStr != SolverBacktrack && solverStr != SolverPropagation {
 		writeError(w, http.StatusBadRequest, "invalid_params", "solver must be 'backtrack' or 'propagation'")
 		return
 	}
@@ -88,9 +114,9 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	// Validate regions parameter.
 	regionsStr := r.URL.Query().Get("regions")
 	if regionsStr == "" {
-		regionsStr = "bfs"
+		regionsStr = RegionsBFS
 	}
-	if regionsStr != "bfs" && regionsStr != "wfc" {
+	if regionsStr != RegionsBFS && regionsStr != RegionsWFC {
 		writeError(w, http.StatusBadRequest, "invalid_params", "regions must be 'bfs' or 'wfc'")
 		return
 	}
@@ -104,7 +130,7 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "invalid_params", "regionVariance must be a number")
 			return
 		}
-		if regionVariance < 0.0 || regionVariance > 1.0 {
+		if regionVariance < 0.0 || regionVariance > 1.0 || math.IsNaN(regionVariance) {
 			writeError(w, http.StatusBadRequest, "invalid_params", "regionVariance must be between 0.0 and 1.0")
 			return
 		}
@@ -113,7 +139,7 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	// Determine markersPerUnit and minSize based on mode.
 	markersPerUnit := 1
 	minSize := 3
-	if mode == "double" {
+	if mode == ModeDouble {
 		markersPerUnit = 2
 		minSize = 4
 	}
@@ -121,23 +147,23 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	// Construct solver strategy.
 	var solver generator.SolverStrategy
 	switch solverStr {
-	case "backtrack":
+	case SolverBacktrack:
 		solver = generator.NewBacktrackSolver()
-	case "propagation":
+	case SolverPropagation:
 		solver = generator.NewPropagationSolver()
 	}
 
 	// Construct region strategy (used by iterative pipeline).
 	var regions generator.RegionStrategy
 	switch regionsStr {
-	case "bfs":
-		if mode == "double" {
+	case RegionsBFS:
+		if mode == ModeDouble {
 			regions = generator.NewBFSRegionGeneratorDouble()
 		} else {
 			regions = generator.NewBFSRegionGenerator()
 		}
-	case "wfc":
-		if mode == "double" {
+	case RegionsWFC:
+		if mode == ModeDouble {
 			regions = generator.NewWFCRegionGeneratorDouble()
 		} else {
 			regions = generator.NewWFCRegionGenerator()
@@ -147,18 +173,17 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	// Construct pipeline strategy.
 	var pipeline generator.PipelineStrategy
 	switch pipelineStr {
-	case "region-first":
+	case PipelineRegionFirst:
 		pipeline = generator.NewRegionFirstPipeline(solver)
-	case "iterative":
+	case PipelineIterative:
 		pipeline = generator.NewIterativeRefinementPipeline(solver, regions)
-	case "constraint-aware":
+	case PipelineConstraintAware:
 		pipeline = generator.NewConstraintAwarePipeline(solver)
 	}
 
 	// Build generation options.
 	opts := generator.GenerateOpts{
 		Timeout: generateTimeout(size),
-		Mode:    mode,
 		RegionOpts: generator.RegionOpts{
 			Variance: regionVariance,
 			MinSize:  minSize,
@@ -172,6 +197,9 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "generation_failed", "Could not generate a puzzle. Please try again.")
 		return
 	}
+
+	// Stamp puzzle mode (pipelines return Mode="", handler owns this).
+	puzzle.Mode = mode
 
 	// Assign a UUID v4.
 	puzzle.ID, err = newUUIDv4()

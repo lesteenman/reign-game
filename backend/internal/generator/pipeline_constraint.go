@@ -31,11 +31,6 @@ func NewConstraintAwarePipeline(solver SolverStrategy) *ConstraintAwarePipeline 
 func (p *ConstraintAwarePipeline) Generate(gridSize int, markersPerUnit int, opts GenerateOpts) (*model.Puzzle, error) {
 	deadline := time.Now().Add(opts.Timeout)
 
-	mode := opts.Mode
-	if mode == "" {
-		mode = "standard"
-	}
-
 	for {
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("generating puzzle (constraint-aware): timeout after %v", opts.Timeout)
@@ -59,7 +54,6 @@ func (p *ConstraintAwarePipeline) Generate(gridSize int, markersPerUnit int, opt
 		return &model.Puzzle{
 			ID:        "",
 			GridSize:  gridSize,
-			Mode:      mode,
 			RegionMap: regionMap,
 			Solution:  solution,
 		}, nil
@@ -136,8 +130,8 @@ func (p *ConstraintAwarePipeline) growConstraintAware(solution [][]bool, gridSiz
 
 		// Collect all frontier cells: unassigned cells adjacent to at least one region.
 		type candidate struct {
-			r, c, rid int
-			score     int // lower = more irregular = preferred
+			r, c, rid  int
+			regularity int // same-region neighbor count; lower = more irregular = preferred
 		}
 		var candidates []candidate
 
@@ -172,7 +166,7 @@ func (p *ConstraintAwarePipeline) growConstraintAware(solution [][]bool, gridSiz
 							}
 						}
 					}
-					candidates = append(candidates, candidate{r, c, rid, sameNeighbors})
+					candidates = append(candidates, candidate{r: r, c: c, rid: rid, regularity: sameNeighbors})
 				}
 			}
 		}
@@ -189,7 +183,7 @@ func (p *ConstraintAwarePipeline) growConstraintAware(solution [][]bool, gridSiz
 						if nr >= 0 && nr < gridSize && nc >= 0 && nc < gridSize {
 							rid := regionMap[nr][nc]
 							if rid >= 0 {
-								candidates = append(candidates, candidate{r, c, rid, 0})
+								candidates = append(candidates, candidate{r: r, c: c, rid: rid, regularity: 0})
 								break
 							}
 						}
@@ -224,17 +218,17 @@ func (p *ConstraintAwarePipeline) growConstraintAware(solution [][]bool, gridSiz
 			bestCandidates = candidates
 		}
 
-		// Among those, prefer lower score (more irregular boundary).
-		minScore := 5
+		// Among those, prefer lower regularity (more irregular boundary).
+		minRegularity := 5
 		for _, cand := range bestCandidates {
-			if cand.score < minScore {
-				minScore = cand.score
+			if cand.regularity < minRegularity {
+				minRegularity = cand.regularity
 			}
 		}
 
 		var finalCandidates []candidate
 		for _, cand := range bestCandidates {
-			if cand.score <= minScore {
+			if cand.regularity <= minRegularity {
 				finalCandidates = append(finalCandidates, cand)
 			}
 		}

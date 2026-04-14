@@ -1,53 +1,8 @@
 package generator
 
 import (
-	"fmt"
 	"math/rand/v2"
-	"time"
-
-	"github.com/eriksteenman/reign-game/backend/internal/model"
 )
-
-// Generate creates a random puzzle with the given grid size that has exactly
-// one solution. It uses the provided solver and region strategies for pluggable
-// generation algorithms. It retries until a unique puzzle is found or the
-// timeout expires.
-func Generate(gridSize int, markersPerUnit int, solver SolverStrategy, regions RegionStrategy, opts GenerateOpts) (*model.Puzzle, error) {
-	deadline := time.Now().Add(opts.Timeout)
-
-	mode := opts.Mode
-	if mode == "" {
-		mode = "standard"
-	}
-
-	for {
-		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("generating puzzle: timeout after %v", opts.Timeout)
-		}
-
-		solution := solver.GenerateSolution(gridSize, markersPerUnit)
-		if solution == nil {
-			continue
-		}
-
-		regionMap, err := regions.GenerateRegions(solution, gridSize, opts.RegionOpts)
-		if err != nil {
-			continue
-		}
-
-		if solver.CountSolutions(regionMap, gridSize, markersPerUnit, 2) != 1 {
-			continue
-		}
-
-		return &model.Puzzle{
-			ID:        "",
-			GridSize:  gridSize,
-			Mode:      mode,
-			RegionMap: regionMap,
-			Solution:  solution,
-		}, nil
-	}
-}
 
 // generateSolution places gridSize*markersPerUnit markers on a gridSize×gridSize
 // grid such that each row and column has exactly markersPerUnit markers, and no

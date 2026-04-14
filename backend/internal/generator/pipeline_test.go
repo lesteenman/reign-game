@@ -6,15 +6,16 @@ import (
 )
 
 // assertPuzzleValid is a test helper that validates a generated puzzle.
-func assertPuzzleValid(t *testing.T, puzzle *PuzzleResult, gridSize int, mode string) {
+// Pipelines return Mode="" because mode stamping is the handler's responsibility.
+func assertPuzzleValid(t *testing.T, puzzle *PuzzleResult, gridSize int) {
 	t.Helper()
 
 	if puzzle.GridSize != gridSize {
 		t.Errorf("GridSize = %d, want %d", puzzle.GridSize, gridSize)
 	}
 
-	if puzzle.Mode != mode {
-		t.Errorf("Mode = %q, want %q", puzzle.Mode, mode)
+	if puzzle.Mode != "" {
+		t.Errorf("Mode = %q, want empty string (handler sets mode)", puzzle.Mode)
 	}
 
 	if puzzle.ID != "" {
@@ -89,7 +90,7 @@ func TestSolutionFirstPipeline_5x5(t *testing.T) {
 			solver := NewPropagationSolver()
 			regions := NewBFSRegionGenerator()
 			pipeline := NewSolutionFirstPipeline(solver, regions)
-			opts := GenerateOpts{Timeout: tt.timeout, Mode: "standard"}
+			opts := GenerateOpts{Timeout: tt.timeout}
 
 			// Act
 			puzzle, err := pipeline.Generate(tt.gridSize, 1, opts)
@@ -101,7 +102,7 @@ func TestSolutionFirstPipeline_5x5(t *testing.T) {
 			assertPuzzleValid(t, &PuzzleResult{
 				ID: puzzle.ID, GridSize: puzzle.GridSize, Mode: puzzle.Mode,
 				RegionMap: puzzle.RegionMap, Solution: puzzle.Solution,
-			}, tt.gridSize, "standard")
+			}, tt.gridSize)
 		})
 	}
 }
@@ -144,7 +145,7 @@ func TestRegionFirstPipeline_5x5(t *testing.T) {
 					// Arrange
 					solver := NewPropagationSolver()
 					pipeline := NewRegionFirstPipeline(solver)
-					opts := GenerateOpts{Timeout: tt.timeout, Mode: "standard"}
+					opts := GenerateOpts{Timeout: tt.timeout}
 
 					// Act
 					puzzle, err := pipeline.Generate(tt.gridSize, 1, opts)
@@ -156,7 +157,7 @@ func TestRegionFirstPipeline_5x5(t *testing.T) {
 					assertPuzzleValid(t, &PuzzleResult{
 						ID: puzzle.ID, GridSize: puzzle.GridSize, Mode: puzzle.Mode,
 						RegionMap: puzzle.RegionMap, Solution: puzzle.Solution,
-					}, tt.gridSize, "standard")
+					}, tt.gridSize)
 				})
 			}
 		})
@@ -201,7 +202,7 @@ func TestIterativeRefinementPipeline_5x5(t *testing.T) {
 					solver := NewPropagationSolver()
 					regions := NewBFSRegionGenerator()
 					pipeline := NewIterativeRefinementPipeline(solver, regions)
-					opts := GenerateOpts{Timeout: tt.timeout, Mode: "standard"}
+					opts := GenerateOpts{Timeout: tt.timeout}
 
 					// Act
 					puzzle, err := pipeline.Generate(tt.gridSize, 1, opts)
@@ -213,7 +214,7 @@ func TestIterativeRefinementPipeline_5x5(t *testing.T) {
 					assertPuzzleValid(t, &PuzzleResult{
 						ID: puzzle.ID, GridSize: puzzle.GridSize, Mode: puzzle.Mode,
 						RegionMap: puzzle.RegionMap, Solution: puzzle.Solution,
-					}, tt.gridSize, "standard")
+					}, tt.gridSize)
 				})
 			}
 		})
@@ -258,7 +259,7 @@ func TestConstraintAwarePipeline_5x5(t *testing.T) {
 					// Arrange
 					solver := NewPropagationSolver()
 					pipeline := NewConstraintAwarePipeline(solver)
-					opts := GenerateOpts{Timeout: tt.timeout, Mode: "standard"}
+					opts := GenerateOpts{Timeout: tt.timeout}
 
 					// Act
 					puzzle, err := pipeline.Generate(tt.gridSize, 1, opts)
@@ -270,7 +271,7 @@ func TestConstraintAwarePipeline_5x5(t *testing.T) {
 					assertPuzzleValid(t, &PuzzleResult{
 						ID: puzzle.ID, GridSize: puzzle.GridSize, Mode: puzzle.Mode,
 						RegionMap: puzzle.RegionMap, Solution: puzzle.Solution,
-					}, tt.gridSize, "standard")
+					}, tt.gridSize)
 				})
 			}
 		})
@@ -295,7 +296,7 @@ func TestConstraintAwarePipeline_Timeout(t *testing.T) {
 func TestDefaultPipeline_5x5(t *testing.T) {
 	// Arrange
 	pipeline := NewDefaultPipeline()
-	opts := GenerateOpts{Timeout: 30 * time.Second, Mode: "standard"}
+	opts := GenerateOpts{Timeout: 30 * time.Second}
 
 	// Act
 	puzzle, err := pipeline.Generate(5, 1, opts)
@@ -307,7 +308,7 @@ func TestDefaultPipeline_5x5(t *testing.T) {
 	assertPuzzleValid(t, &PuzzleResult{
 		ID: puzzle.ID, GridSize: puzzle.GridSize, Mode: puzzle.Mode,
 		RegionMap: puzzle.RegionMap, Solution: puzzle.Solution,
-	}, 5, "standard")
+	}, 5)
 }
 
 func TestGenerateRandomRegions_5x5(t *testing.T) {
@@ -371,8 +372,8 @@ func assertPuzzleValidDouble(t *testing.T, puzzle *PuzzleResult, gridSize int) {
 		t.Errorf("GridSize = %d, want %d", puzzle.GridSize, gridSize)
 	}
 
-	if puzzle.Mode != "double" {
-		t.Errorf("Mode = %q, want %q", puzzle.Mode, "double")
+	if puzzle.Mode != "" {
+		t.Errorf("Mode = %q, want empty string (handler sets mode)", puzzle.Mode)
 	}
 
 	if puzzle.ID != "" {
@@ -480,7 +481,6 @@ func TestRegionFirstPipeline_DoubleQueens_9x9(t *testing.T) {
 	pipeline := NewRegionFirstPipeline(solver)
 	opts := GenerateOpts{
 		Timeout: 60 * time.Second,
-		Mode:    "double",
 		RegionOpts: RegionOpts{
 			MinSize: minRegionSizeDouble,
 		},
@@ -510,7 +510,6 @@ func TestIterativeRefinementPipeline_DoubleQueens_9x9(t *testing.T) {
 	pipeline := NewIterativeRefinementPipeline(solver, regions)
 	opts := GenerateOpts{
 		Timeout: 60 * time.Second,
-		Mode:    "double",
 		RegionOpts: RegionOpts{
 			MinSize: minRegionSizeDouble,
 		},
@@ -541,7 +540,6 @@ func TestConstraintAwarePipeline_DoubleQueens_8x8(t *testing.T) {
 	pipeline := NewConstraintAwarePipeline(solver)
 	opts := GenerateOpts{
 		Timeout: 60 * time.Second,
-		Mode:    "double",
 		RegionOpts: RegionOpts{
 			MinSize: minRegionSizeDouble,
 		},

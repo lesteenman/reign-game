@@ -179,15 +179,13 @@ func propGenRow(s *propagationState, row int) bool {
 		return propGenRow(s, row+1)
 	}
 
-	return propGenCols(s, row, 0, 0)
+	return propGenCols(s, row, 0)
 }
 
 // propGenCols recursively selects columns for a row during generation.
 // Uses random ordering for non-deterministic generation. startCol ensures
 // combination ordering (columns in increasing order within each row).
-func propGenCols(s *propagationState, row, startCol, placed int) bool {
-	// rowPlaced already includes markers placed by this recursion AND forced moves.
-	_ = placed // kept for API consistency; we use rowPlaced directly.
+func propGenCols(s *propagationState, row, startCol int) bool {
 	if s.rowPlaced[row] >= s.markersPerUnit {
 		return propGenRow(s, row+1)
 	}
@@ -239,7 +237,7 @@ func propGenCols(s *propagationState, row, startCol, placed int) bool {
 				// combination ordering. But since we shuffle, just pass 0
 				// and let availability filtering handle it. Actually we need
 				// to allow any column > col for combination ordering.
-				if propGenCols(s, row, col+1, placed+1) {
+				if propGenCols(s, row, col+1) {
 					return true
 				}
 			}
@@ -686,17 +684,15 @@ func countPropRow(cs *countPropagationState, row, maxSolutions int, count *int) 
 		return
 	}
 
-	countPropCols(cs, row, 0, 0, maxSolutions, count)
+	countPropCols(cs, row, 0, maxSolutions, count)
 }
 
 // countPropCols recursively selects columns for a row during counting.
 // Deterministic ordering (no shuffle) for completeness.
-func countPropCols(cs *countPropagationState, row, startCol, placed, maxSolutions int, count *int) {
+func countPropCols(cs *countPropagationState, row, startCol, maxSolutions int, count *int) {
 	if *count >= maxSolutions {
 		return
 	}
-	// rowPlaced already includes markers placed by this recursion AND forced moves.
-	_ = placed // kept for API consistency; we use rowPlaced directly.
 	if cs.rowPlaced[row] >= cs.markersPerUnit {
 		countPropRow(cs, row+1, maxSolutions, count)
 		return
@@ -729,7 +725,7 @@ func countPropCols(cs *countPropagationState, row, startCol, placed, maxSolution
 		if ok {
 			forcedResult, forcedOk := applyForcedCount(cs)
 			if forcedOk {
-				countPropCols(cs, row, col+1, placed+1, maxSolutions, count)
+				countPropCols(cs, row, col+1, maxSolutions, count)
 			}
 			undoForcedCount(cs, forcedResult)
 		}

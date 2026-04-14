@@ -40,7 +40,6 @@ type benchConfig struct {
 	pipeline       PipelineStrategy
 	gridSize       int
 	markersPerUnit int
-	mode           string
 	timeout        time.Duration
 }
 
@@ -49,7 +48,6 @@ func runPipelineBench(b *testing.B, cfg benchConfig) {
 	b.Helper()
 	opts := GenerateOpts{
 		Timeout: cfg.timeout,
-		Mode:    cfg.mode,
 	}
 	for b.Loop() {
 		start := time.Now()
@@ -68,7 +66,6 @@ func runPipelineBenchWithVariance(b *testing.B, cfg benchConfig, variance float6
 	b.Helper()
 	opts := GenerateOpts{
 		Timeout:    cfg.timeout,
-		Mode:       cfg.mode,
 		RegionOpts: RegionOpts{Variance: variance, MinSize: 3},
 	}
 	for b.Loop() {
@@ -94,7 +91,6 @@ func BenchmarkPipeline_RegionFirst_5x5_Standard(b *testing.B) {
 		pipeline:       NewRegionFirstPipeline(NewPropagationSolver()),
 		gridSize:       5,
 		markersPerUnit: 1,
-		mode:           "standard",
 		timeout:        60 * time.Second,
 	})
 }
@@ -105,7 +101,6 @@ func BenchmarkPipeline_RegionFirst_7x7_Standard(b *testing.B) {
 		pipeline:       NewRegionFirstPipeline(NewPropagationSolver()),
 		gridSize:       7,
 		markersPerUnit: 1,
-		mode:           "standard",
 		timeout:        60 * time.Second,
 	})
 }
@@ -117,7 +112,6 @@ func BenchmarkPipeline_RegionFirst_9x9_Standard(b *testing.B) {
 		pipeline:       NewRegionFirstPipeline(NewPropagationSolver()),
 		gridSize:       9,
 		markersPerUnit: 1,
-		mode:           "standard",
 		timeout:        120 * time.Second,
 	})
 }
@@ -133,7 +127,6 @@ func BenchmarkPipeline_RegionFirst_9x9_Double(b *testing.B) {
 		pipeline:       NewRegionFirstPipeline(NewPropagationSolver()),
 		gridSize:       9,
 		markersPerUnit: 2,
-		mode:           "double",
 		timeout:        120 * time.Second,
 	})
 }
@@ -148,7 +141,6 @@ func BenchmarkPipeline_Iterative_5x5_Standard(b *testing.B) {
 		pipeline:       NewIterativeRefinementPipeline(NewPropagationSolver(), NewBFSRegionGenerator()),
 		gridSize:       5,
 		markersPerUnit: 1,
-		mode:           "standard",
 		timeout:        60 * time.Second,
 	})
 }
@@ -159,7 +151,6 @@ func BenchmarkPipeline_Iterative_7x7_Standard(b *testing.B) {
 		pipeline:       NewIterativeRefinementPipeline(NewPropagationSolver(), NewBFSRegionGenerator()),
 		gridSize:       7,
 		markersPerUnit: 1,
-		mode:           "standard",
 		timeout:        60 * time.Second,
 	})
 }
@@ -170,7 +161,6 @@ func BenchmarkPipeline_Iterative_9x9_Standard(b *testing.B) {
 		pipeline:       NewIterativeRefinementPipeline(NewPropagationSolver(), NewBFSRegionGenerator()),
 		gridSize:       9,
 		markersPerUnit: 1,
-		mode:           "standard",
 		timeout:        120 * time.Second,
 	})
 }
@@ -185,7 +175,7 @@ func BenchmarkPipeline_Iterative_9x9_Double(b *testing.B) {
 	solver := NewPropagationSolver()
 	regions := NewBFSRegionGeneratorDouble()
 	pipeline := NewIterativeRefinementPipeline(solver, regions)
-	opts := GenerateOpts{Timeout: 60 * time.Second, Mode: "double", RegionOpts: RegionOpts{MinSize: 4}}
+	opts := GenerateOpts{Timeout: 60 * time.Second, RegionOpts: RegionOpts{MinSize: 4}}
 	for b.Loop() {
 		start := time.Now()
 		puzzle, err := pipeline.Generate(9, 2, opts)
@@ -208,7 +198,6 @@ func BenchmarkPipeline_ConstraintAware_5x5_Standard(b *testing.B) {
 		pipeline:       NewConstraintAwarePipeline(NewPropagationSolver()),
 		gridSize:       5,
 		markersPerUnit: 1,
-		mode:           "standard",
 		timeout:        60 * time.Second,
 	})
 }
@@ -220,7 +209,6 @@ func BenchmarkPipeline_ConstraintAware_7x7_Standard(b *testing.B) {
 		pipeline:       NewConstraintAwarePipeline(NewPropagationSolver()),
 		gridSize:       7,
 		markersPerUnit: 1,
-		mode:           "standard",
 		timeout:        60 * time.Second,
 	})
 }
@@ -242,7 +230,6 @@ func BenchmarkPipeline_RegionFirst_9x9_Standard_Variance00(b *testing.B) {
 		pipeline:       NewRegionFirstPipeline(NewPropagationSolver()),
 		gridSize:       9,
 		markersPerUnit: 1,
-		mode:           "standard",
 		timeout:        120 * time.Second,
 	}, 0.0)
 }
@@ -254,7 +241,6 @@ func BenchmarkPipeline_RegionFirst_9x9_Standard_Variance05(b *testing.B) {
 		pipeline:       NewRegionFirstPipeline(NewPropagationSolver()),
 		gridSize:       9,
 		markersPerUnit: 1,
-		mode:           "standard",
 		timeout:        120 * time.Second,
 	}, 0.5)
 }
@@ -266,7 +252,6 @@ func BenchmarkPipeline_Iterative_9x9_Standard_Variance00(b *testing.B) {
 		pipeline:       NewIterativeRefinementPipeline(NewPropagationSolver(), NewBFSRegionGenerator()),
 		gridSize:       9,
 		markersPerUnit: 1,
-		mode:           "standard",
 		timeout:        120 * time.Second,
 	}, 0.0)
 }
@@ -278,7 +263,6 @@ func BenchmarkPipeline_Iterative_9x9_Standard_Variance05(b *testing.B) {
 		pipeline:       NewIterativeRefinementPipeline(NewPropagationSolver(), NewBFSRegionGenerator()),
 		gridSize:       9,
 		markersPerUnit: 1,
-		mode:           "standard",
 		timeout:        120 * time.Second,
 	}, 0.5)
 }
@@ -319,16 +303,17 @@ func BenchmarkSolver_Propagation_CountSolutions_5x5(b *testing.B) {
 // Kept as a historical reference point. The BacktrackSolver times out at
 // 7x7+ in full pipeline mode, so only 5x5 is benchmarked here.
 
-// BenchmarkPipeline_Legacy_Backtrack_5x5_Standard benchmarks the old
-// Generate() function with BacktrackSolver + BFS regions at 5x5.
+// BenchmarkPipeline_Legacy_Backtrack_5x5_Standard benchmarks the
+// SolutionFirstPipeline with BacktrackSolver + BFS regions at 5x5.
 // This is the pre-pipeline baseline for comparison.
 func BenchmarkPipeline_Legacy_Backtrack_5x5_Standard(b *testing.B) {
 	solver := NewBacktrackSolver()
 	regions := NewBFSRegionGenerator()
-	opts := GenerateOpts{Timeout: 60 * time.Second, Mode: "standard"}
+	pipeline := NewSolutionFirstPipeline(solver, regions)
+	opts := GenerateOpts{Timeout: 60 * time.Second}
 	for b.Loop() {
 		start := time.Now()
-		puzzle, err := Generate(5, 1, solver, regions, opts)
+		puzzle, err := pipeline.Generate(5, 1, opts)
 		elapsed := time.Since(start)
 		if err != nil {
 			b.Fatalf("Generate(5) failed: %v", err)

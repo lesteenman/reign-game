@@ -30,11 +30,6 @@ func NewRegionFirstPipeline(solver SolverStrategy) *RegionFirstPipeline {
 func (p *RegionFirstPipeline) Generate(gridSize int, markersPerUnit int, opts GenerateOpts) (*model.Puzzle, error) {
 	deadline := time.Now().Add(opts.Timeout)
 
-	mode := opts.Mode
-	if mode == "" {
-		mode = "standard"
-	}
-
 	for {
 		if time.Now().After(deadline) {
 			return nil, fmt.Errorf("generating puzzle (region-first): timeout after %v", opts.Timeout)
@@ -59,7 +54,6 @@ func (p *RegionFirstPipeline) Generate(gridSize int, markersPerUnit int, opts Ge
 		return &model.Puzzle{
 			ID:        "",
 			GridSize:  gridSize,
-			Mode:      mode,
 			RegionMap: regionMap,
 			Solution:  solution,
 		}, nil
