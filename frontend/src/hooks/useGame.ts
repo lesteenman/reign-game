@@ -52,10 +52,10 @@ function cloneCells(cells: CellState[][]): CellState[][] {
  *
  * During drag, cells matching the intent are highlighted but not modified.
  */
-export function useGame(puzzle: PuzzleData): UseGameReturn {
+export function useGame(puzzle: PuzzleData, initialCells?: CellState[][]): UseGameReturn {
   const { gridSize, regionMap } = puzzle;
   const [cells, setCells] = useState<CellState[][]>(() =>
-    createEmptyCells(gridSize),
+    initialCells ?? createEmptyCells(gridSize),
   );
   // draggedCells is tracked in a ref (for stable callbacks) and mirrored
   // to state (for re-render on highlight changes).

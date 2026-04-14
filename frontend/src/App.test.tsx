@@ -1,6 +1,9 @@
-import { render, screen, cleanup } from "@testing-library/react";
-import { expect, test, vi, beforeEach, afterEach } from "vitest";
-import App, { FALLBACK_PUZZLE } from "./App";
+import { render, screen, cleanup } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { expect, test, vi, beforeEach, afterEach } from 'vitest';
+import { ThemeProvider } from './theme/ThemeContext';
+import { LandingPage } from './pages/LandingPage';
+import { FALLBACK_PUZZLE } from './App';
 
 const originalFetch = globalThis.fetch;
 
@@ -16,37 +19,29 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-test("shows loading state initially", () => {
-  render(<App />);
-  expect(screen.getByTestId("loading-state")).toBeInTheDocument();
-});
+function renderLanding() {
+  return render(
+    <ThemeProvider>
+      <MemoryRouter initialEntries={['/']}>
+        <LandingPage />
+      </MemoryRouter>
+    </ThemeProvider>,
+  );
+}
 
-test("renders Reign heading", async () => {
-  render(<App />);
-  // Wait for puzzle to load, then verify heading
-  await screen.findByTestId("game-grid");
-  const heading = screen.getByRole("heading", { name: /reign/i });
+test('renders Reign heading on landing page', async () => {
+  renderLanding();
+  const heading = screen.getByRole('heading', { name: /reign/i });
   expect(heading).toBeInTheDocument();
 });
 
-test("renders the game grid after loading", async () => {
-  render(<App />);
-  const grid = await screen.findByTestId("game-grid");
-  expect(grid).toBeInTheDocument();
+test('shows Play button when no saved state', async () => {
+  renderLanding();
+  const playButton = await screen.findByRole('button', { name: /play/i });
+  expect(playButton).toBeInTheDocument();
 });
 
-test("renders reset button after loading", async () => {
-  render(<App />);
-  await screen.findByTestId("game-grid");
-  expect(screen.getByRole("button", { name: /reset/i })).toBeInTheDocument();
-});
-
-test("shows error state on fetch failure", async () => {
-  globalThis.fetch = vi.fn().mockRejectedValue(new Error("Network error"));
-
-  render(<App />);
-  const error = await screen.findByTestId("error-state");
-  expect(error).toBeInTheDocument();
-  expect(screen.getByText(/network error/i)).toBeInTheDocument();
-  expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
+test('shows loading state initially', () => {
+  renderLanding();
+  expect(screen.getByTestId('loading-state')).toBeInTheDocument();
 });

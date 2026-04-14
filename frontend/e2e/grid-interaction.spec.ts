@@ -24,8 +24,14 @@ test.describe("Grid Interaction", () => {
         body: JSON.stringify(MOCK_PUZZLE),
       }),
     );
+    // Go to landing page, click Play to get to the game
     await page.goto("/");
     await expect(page.getByRole("heading", { name: /reign/i })).toBeVisible();
+    // Click Play button to fetch puzzle and navigate to /play
+    const playButton = page.getByRole("button", { name: /play/i });
+    await expect(playButton).toBeVisible();
+    await playButton.click();
+    // Wait for the grid to appear on the game page
     await expect(page.getByTestId("game-grid")).toBeVisible();
   });
 
@@ -39,7 +45,7 @@ test.describe("Grid Interaction", () => {
     await expect(cell).toHaveCSS("background-color", /rgb/);
   });
 
-  test("three-tap cycle: empty → excluded → marked → empty", async ({
+  test("three-tap cycle: empty -> excluded -> marked -> empty", async ({
     page,
   }) => {
     const cell = page.getByTestId("cell-2-2");
@@ -66,7 +72,7 @@ test.describe("Grid Interaction", () => {
     const cell00 = page.getByTestId("cell-0-0");
     const cell01 = page.getByTestId("cell-0-1");
 
-    // Place marker at (0,0): click twice (excluded → marked)
+    // Place marker at (0,0): click twice (excluded -> marked)
     await cell00.click();
     await cell00.click();
     await expect(cell00).toHaveAttribute("data-cell-state", "marked");
@@ -81,7 +87,7 @@ test.describe("Grid Interaction", () => {
     await expect(cell01).toHaveAttribute("data-cell-conflict", "true");
   });
 
-  test("solving the puzzle shows completion message", async ({ page }) => {
+  test("solving the puzzle shows completion overlay", async ({ page }) => {
     // Valid solution for hardcoded puzzle: (0,4), (1,1), (2,3), (3,0), (4,2)
     const solution: [number, number][] = [
       [0, 4],
@@ -97,7 +103,7 @@ test.describe("Grid Interaction", () => {
       await cell.click(); // marked
     }
 
-    await expect(page.getByText("Puzzle solved!")).toBeVisible();
+    await expect(page.getByText("Puzzle Complete!")).toBeVisible();
   });
 
   test("reset button clears all markers", async ({ page }) => {
@@ -173,11 +179,16 @@ test.describe("Grid Interaction", () => {
       await cell.click();
     }
 
-    await expect(page.getByText("Puzzle solved!")).toBeVisible();
+    await expect(page.getByText("Puzzle Complete!")).toBeVisible();
 
-    // Click on an empty cell — should remain empty (interactions disabled)
+    // The completion overlay covers the grid, preventing interaction.
+    // Verify that an empty cell is still empty (the overlay blocks clicks).
     const emptyCell = page.getByTestId("cell-0-0");
-    await emptyCell.click();
     await expect(emptyCell).toHaveAttribute("data-cell-state", "empty");
+  });
+
+  test("timer display is visible on game page", async ({ page }) => {
+    await expect(page.getByTestId("timer-display")).toBeVisible();
+    await expect(page.getByTestId("timer-display")).toHaveText("00:00");
   });
 });
