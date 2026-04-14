@@ -44,10 +44,10 @@ tasks:
       - npm test
 
   dev:frontend:
-    desc: Start frontend dev server
+    desc: Start frontend dev server (port 5180, network accessible)
     dir: frontend
     cmds:
-      - npm run dev
+      - npm run dev -- --host 0.0.0.0
 
   build:
     desc: Build backend and frontend
