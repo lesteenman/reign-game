@@ -47,7 +47,7 @@ export default defineConfig(({ mode }) => ({
   },
   server: {
     proxy: {
-      "/puzzles": "http://localhost:8080",
+      "/puzzles": "http://localhost:5181",
     },
   },
   test: {

@@ -31,7 +31,7 @@ func main() {
 	} else {
 		port := os.Getenv("PORT")
 		if port == "" {
-			port = "8080"
+			port = "5181"
 		}
 		addr := fmt.Sprintf("127.0.0.1:%s", port)
 		log.Printf("starting local server on %s", addr)
