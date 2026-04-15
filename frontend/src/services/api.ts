@@ -7,7 +7,18 @@
  */
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
-/** Fetch JSON from the backend API. Throws on non-2xx responses. */
+/** Error thrown on non-2xx API responses. Includes the HTTP status code. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
+/** Fetch JSON from the backend API. Throws ApiError on non-2xx responses. */
 export async function apiFetch<T>(
   path: string,
   params?: Record<string, string>,
@@ -21,10 +32,41 @@ export async function apiFetch<T>(
   const response = await fetch(url.toString());
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new Error(
+    throw new ApiError(
       (body as Record<string, string>).message ||
         `API error: ${response.status}`,
+      response.status,
     );
   }
   return response.json() as Promise<T>;
+}
+
+/** Send a PUT request with a JSON body to the backend API. Throws ApiError on non-2xx. */
+export async function apiPut<T>(
+  path: string,
+  body: unknown,
+  params?: Record<string, string>,
+): Promise<T> {
+  const url = new URL(path, API_BASE_URL || window.location.origin);
+  if (params) {
+    for (const [key, value] of Object.entries(params)) {
+      url.searchParams.set(key, value);
+    }
+  }
+  const response = await fetch(url.toString(), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const respBody = await response.json().catch(() => ({}));
+    throw new ApiError(
+      (respBody as Record<string, string>).message ||
+        `API error: ${response.status}`,
+      response.status,
+    );
+  }
+  // Return empty object for void-like responses
+  const text = await response.text();
+  return (text ? JSON.parse(text) : {}) as T;
 }
