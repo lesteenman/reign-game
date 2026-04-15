@@ -1,34 +1,193 @@
 package main
 
 import (
+	"context"
+	"crypto/rand"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	chiadapter "github.com/awslabs/aws-lambda-go-api-proxy/chi"
 	"github.com/go-chi/chi/v5"
 
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
+	"github.com/eriksteenman/reign-game/backend/internal/queue"
+	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	"github.com/eriksteenman/reign-game/backend/internal/worker"
 )
 
-// newRouter builds and returns the application router.
-func newRouter() *chi.Mux {
+// newUUIDv4 generates a UUID v4 string using crypto/rand.
+func newUUIDv4() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", fmt.Errorf("reading random bytes: %w", err)
+	}
+	b[6] = (b[6] & 0x0f) | 0x40
+	b[8] = (b[8] & 0x3f) | 0x80
+	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
+}
+
+// newRouter builds and returns the application router with all routes.
+func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux {
 	r := chi.NewRouter()
 	r.Get("/health", handler.HealthCheck)
 	r.Get("/puzzles/generate", handler.GenerateHandler)
+
+	// Pool management routes.
+	if repo != nil {
+		r.Get("/puzzles/next", handler.ServeHandler(repo))
+		r.Put("/puzzles/{id}/status", handler.StatusHandler(repo))
+	}
+	if repo != nil && pub != nil {
+		r.Post("/admin/replenish", handler.ReplenishHandler(repo, pub))
+	}
+
 	return r
 }
 
-func main() {
-	r := newRouter()
+// loadAWSConfig loads the default AWS SDK config with optional endpoint
+// overrides for local development.
+func loadAWSConfig(ctx context.Context) (aws.Config, error) {
+	region := os.Getenv("AWS_REGION")
+	if region == "" {
+		region = "us-east-1"
+	}
 
-	// Detect Lambda environment by checking for AWS_LAMBDA_FUNCTION_NAME.
-	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	if err != nil {
+		return aws.Config{}, fmt.Errorf("loading AWS config: %w", err)
+	}
+	return cfg, nil
+}
+
+// newDynamoDBClient creates a DynamoDB client, optionally with a custom
+// endpoint for local development (e.g., LocalStack).
+func newDynamoDBClient(cfg aws.Config) *dynamodb.Client {
+	endpoint := os.Getenv("DYNAMODB_ENDPOINT")
+	if endpoint != "" {
+		return dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
+			o.BaseEndpoint = aws.String(endpoint)
+		})
+	}
+	return dynamodb.NewFromConfig(cfg)
+}
+
+// newSQSClient creates an SQS client, optionally with a custom endpoint
+// for local development (e.g., LocalStack).
+func newSQSClient(cfg aws.Config) *sqs.Client {
+	endpoint := os.Getenv("SQS_ENDPOINT")
+	if endpoint != "" {
+		return sqs.NewFromConfig(cfg, func(o *sqs.Options) {
+			o.BaseEndpoint = aws.String(endpoint)
+		})
+	}
+	return sqs.NewFromConfig(cfg)
+}
+
+func main() {
+	ctx := context.Background()
+	generatorMode := os.Getenv("GENERATOR_MODE")
+
+	if generatorMode == "sqs" {
+		// SQS consumer mode: generate puzzles from queue messages.
+		cfg, err := loadAWSConfig(ctx)
+		if err != nil {
+			log.Fatalf("failed to load AWS config: %v", err)
+		}
+
+		tableName := os.Getenv("PUZZLE_TABLE_NAME")
+		if tableName == "" {
+			tableName = "puzzle-pool"
+		}
+
+		dynamoClient := newDynamoDBClient(cfg)
+		repo := repository.NewPuzzleRepository(dynamoClient, tableName)
+		w := worker.NewGeneratorWorker(repo, newUUIDv4)
+
+		if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+			// Lambda environment: start SQS event handler.
+			lambda.Start(w.HandleSQSEvent)
+		} else {
+			// Local dev: start SQS poller.
+			queueURL := os.Getenv("SQS_QUEUE_URL")
+			if queueURL == "" {
+				log.Fatal("SQS_QUEUE_URL is required for local SQS consumer mode")
+			}
+
+			sqsClient := newSQSClient(cfg)
+
+			pollerCtx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+			defer cancel()
+
+			worker.RunLocalPoller(pollerCtx, sqsClient, queueURL, w.HandleSQSEvent)
+		}
+	} else if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+		// Lambda API mode: HTTP routes via API Gateway proxy.
+		cfg, err := loadAWSConfig(ctx)
+		if err != nil {
+			log.Fatalf("failed to load AWS config: %v", err)
+		}
+
+		tableName := os.Getenv("PUZZLE_TABLE_NAME")
+		if tableName == "" {
+			tableName = "puzzle-pool"
+		}
+		queueURL := os.Getenv("SQS_QUEUE_URL")
+
+		dynamoClient := newDynamoDBClient(cfg)
+		repo := repository.NewPuzzleRepository(dynamoClient, tableName)
+
+		var pub *queue.Publisher
+		if queueURL != "" {
+			sqsClient := newSQSClient(cfg)
+			pub = queue.NewPublisher(sqsClient, queueURL)
+		}
+
+		r := newRouter(repo, pub)
 		adapter := chiadapter.New(r)
 		lambda.Start(adapter.ProxyWithContext)
 	} else {
+		// Local dev HTTP server mode.
+		var repo *repository.PuzzleRepository
+		var pub *queue.Publisher
+
+		// Set up AWS clients if endpoints are configured.
+		dynamoEndpoint := os.Getenv("DYNAMODB_ENDPOINT")
+		sqsEndpoint := os.Getenv("SQS_ENDPOINT")
+
+		if dynamoEndpoint != "" || sqsEndpoint != "" {
+			cfg, err := loadAWSConfig(ctx)
+			if err != nil {
+				log.Fatalf("failed to load AWS config: %v", err)
+			}
+
+			if dynamoEndpoint != "" {
+				tableName := os.Getenv("PUZZLE_TABLE_NAME")
+				if tableName == "" {
+					tableName = "puzzle-pool"
+				}
+				dynamoClient := newDynamoDBClient(cfg)
+				repo = repository.NewPuzzleRepository(dynamoClient, tableName)
+			}
+
+			queueURL := os.Getenv("SQS_QUEUE_URL")
+			if sqsEndpoint != "" && queueURL != "" {
+				sqsClient := newSQSClient(cfg)
+				pub = queue.NewPublisher(sqsClient, queueURL)
+			}
+		}
+
+		r := newRouter(repo, pub)
+
 		port := os.Getenv("PORT")
 		if port == "" {
 			port = "5181"
