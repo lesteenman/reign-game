@@ -380,7 +380,7 @@ describe('PuzzleSelector', () => {
 
     it('clears error when value changes to valid range', () => {
       // Arrange
-      const { onSelect } = renderSelector();
+      renderSelector();
       fireEvent.click(screen.getByTestId('advanced-toggle'));
       fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '2' } });
       fireEvent.click(screen.getByTestId('play-button'));
