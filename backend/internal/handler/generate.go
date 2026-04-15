@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/eriksteenman/reign-game/backend/internal/generator"
+	"github.com/eriksteenman/reign-game/backend/internal/model"
 )
 
 // Pipeline strategy names.
@@ -61,6 +62,7 @@ type generateParams struct {
 	markersPerUnit int
 	minSize        int
 	deducible      bool
+	concurrency    int
 }
 
 // parseGenerateParams validates and extracts all query parameters from a
@@ -144,6 +146,20 @@ func parseGenerateParams(r *http.Request) (generateParams, int, string, string) 
 		}
 	}
 
+	// Validate concurrency parameter (default 1).
+	concurrencyStr := r.URL.Query().Get("concurrency")
+	if concurrencyStr == "" {
+		p.concurrency = 1
+	} else {
+		p.concurrency, err = strconv.Atoi(concurrencyStr)
+		if err != nil {
+			return p, http.StatusBadRequest, "invalid_params", "concurrency must be an integer"
+		}
+		if p.concurrency < 1 || p.concurrency > 8 {
+			return p, http.StatusBadRequest, "invalid_params", "concurrency must be between 1 and 8"
+		}
+	}
+
 	// Determine markersPerUnit and minSize based on mode.
 	p.markersPerUnit = 1
 	p.minSize = 3
@@ -204,6 +220,7 @@ func buildPipeline(p generateParams) generator.PipelineStrategy {
 //   - solver: "backtrack" | "propagation" (optional, default "propagation")
 //   - regions: "bfs" | "wfc" (optional, default "bfs")
 //   - regionVariance: float 0.0-1.0 (optional, default 0.0)
+//   - concurrency: int 1-8 (optional, default 1 — number of parallel generation goroutines)
 func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
@@ -229,7 +246,14 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate the puzzle.
-	puzzle, err := pipeline.Generate(params.size, params.markersPerUnit, opts)
+	var puzzle *model.Puzzle
+	var err error
+	if params.concurrency > 1 {
+		opts.Concurrency = params.concurrency
+		puzzle, err = generator.GenerateConcurrent(pipeline, params.size, params.markersPerUnit, opts)
+	} else {
+		puzzle, err = pipeline.Generate(params.size, params.markersPerUnit, opts)
+	}
 	if err != nil {
 		log.Printf("puzzle generation failed: %v", err)
 		writeError(w, http.StatusInternalServerError, "generation_failed", "Could not generate a puzzle. Please try again.")

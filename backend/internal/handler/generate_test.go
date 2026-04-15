@@ -210,6 +210,38 @@ func TestGenerateHandler(t *testing.T) {
 			wantSize:   9,
 			wantMode:   "double",
 		},
+		// Concurrency parameter validation.
+		{
+			name:       "concurrency=0 rejected",
+			query:      "?size=5&mode=standard&concurrency=0",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name:       "concurrency=9 rejected",
+			query:      "?size=5&mode=standard&concurrency=9",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name:       "concurrency=abc rejected",
+			query:      "?size=5&mode=standard&concurrency=abc",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name:       "concurrency=-1 rejected",
+			query:      "?size=5&mode=standard&concurrency=-1",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name:       "concurrency=2 valid",
+			query:      "?size=5&mode=standard&concurrency=2",
+			wantStatus: http.StatusOK,
+			wantSize:   5,
+			wantMode:   "standard",
+		},
 	}
 
 	for _, tt := range tests {
