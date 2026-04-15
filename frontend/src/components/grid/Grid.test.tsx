@@ -1,6 +1,6 @@
 import { render, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Grid } from './Grid';
+import { Grid, getMinCellSize } from './Grid';
 import { ThemeProvider } from '../../theme/ThemeContext';
 import type { PuzzleData, CellState } from '../../engine/types';
 import type { GridProps } from './Grid';
@@ -111,5 +111,49 @@ describe('Grid', () => {
     const grid = container.querySelector('[data-testid="game-grid"]') as HTMLElement;
     fireEvent.mouseLeave(grid);
     expect(onPointerUp).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders correct number of cells for a 9x9 puzzle', () => {
+    // Arrange
+    const puzzle9x9: PuzzleData = {
+      puzzleId: 'test-9x9',
+      gridSize: 9,
+      mode: 'standard',
+      regionMap: Array.from({ length: 9 }, (_, r) =>
+        Array.from({ length: 9 }, (_, c) => Math.floor(r / 3) * 3 + Math.floor(c / 3)),
+      ),
+    };
+
+    // Act
+    const { container } = renderGrid({
+      puzzle: puzzle9x9,
+      cells: makeEmptyCells(9),
+    });
+
+    // Assert
+    const cells = container.querySelectorAll('[data-testid^="cell-"]');
+    expect(cells).toHaveLength(81);
+  });
+});
+
+describe('getMinCellSize', () => {
+  it('returns 44 for grid size 5', () => {
+    // Arrange & Act & Assert
+    expect(getMinCellSize(5)).toBe(44);
+  });
+
+  it('returns 44 for grid size 7', () => {
+    // Arrange & Act & Assert
+    expect(getMinCellSize(7)).toBe(44);
+  });
+
+  it('returns 38 for grid size 9', () => {
+    // Arrange & Act & Assert
+    expect(getMinCellSize(9)).toBe(38);
+  });
+
+  it('returns 0 for grid size 12 (experimental)', () => {
+    // Arrange & Act & Assert
+    expect(getMinCellSize(12)).toBe(0);
   });
 });

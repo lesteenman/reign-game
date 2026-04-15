@@ -20,10 +20,22 @@ tasks:
       - golangci-lint run
 
   bench:backend:
-    desc: Run Go generator benchmarks
+    desc: Run full generator benchmark suite (all pipelines, sizes, modes)
     dir: backend
     cmds:
-      - go test -bench=. -benchtime=10x ./internal/generator/
+      - go test -bench=BenchmarkPipeline -benchtime=3x -timeout=600s ./internal/generator/ -run='^$'
+
+  bench:backend:solvers:
+    desc: Run solver comparison benchmarks (Backtrack vs Propagation)
+    dir: backend
+    cmds:
+      - go test -bench=BenchmarkSolver -benchtime=3x -timeout=60s ./internal/generator/ -run='^$'
+
+  bench:backend:all:
+    desc: Run all benchmarks including solver comparison and legacy
+    dir: backend
+    cmds:
+      - go test -bench=. -benchtime=3x -timeout=600s ./internal/generator/ -run='^$'
 
   dev:backend:
     desc: Start backend dev server

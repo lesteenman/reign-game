@@ -66,12 +66,14 @@ export function useGame(puzzle: PuzzleData, initialCells?: CellState[][]): UseGa
   const hasDraggedRef = useRef(false);
   const dragIntentRef = useRef<DragIntent>(null);
 
+  const markersPerUnit = puzzle.mode === 'double' ? 2 : 1;
+
   const conflicts = useMemo(
-    () => getAllConflicts(cells, regionMap, gridSize),
-    [cells, regionMap, gridSize],
+    () => getAllConflicts(cells, regionMap, gridSize, markersPerUnit),
+    [cells, regionMap, gridSize, markersPerUnit],
   );
 
-  // Solved when exactly gridSize markers and zero conflicts
+  // Solved when exactly gridSize * markersPerUnit markers and zero conflicts
   const isSolved = useMemo(() => {
     let markerCount = 0;
     for (const row of cells) {
@@ -79,8 +81,8 @@ export function useGame(puzzle: PuzzleData, initialCells?: CellState[][]): UseGa
         if (cell === 'marked') markerCount++;
       }
     }
-    return markerCount === gridSize && conflicts.length === 0;
-  }, [cells, gridSize, conflicts]);
+    return markerCount === gridSize * markersPerUnit && conflicts.length === 0;
+  }, [cells, gridSize, markersPerUnit, conflicts]);
 
   const handlePointerDown = useCallback((row: number, col: number) => {
     startCellRef.current = { row, col };

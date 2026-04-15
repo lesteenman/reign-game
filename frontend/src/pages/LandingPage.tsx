@@ -3,11 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import { useGameStorage } from '../hooks/useGameStorage';
 import { PageShell } from '../components/common/PageShell';
 import { PrimaryButton, SecondaryButton } from '../components/common/Button';
+import { PuzzleSelector } from '../components/landing/PuzzleSelector';
+import type { GenerateOptions } from '../services/puzzleService';
 
 type PageState =
   | { status: 'loading' }
   | { status: 'fresh' }
   | { status: 'has-progress' }
+  | { status: 'has-progress-selecting' }
   | { status: 'error'; message: string };
 
 /** Subscribe to online/offline events and return current connectivity status. */
@@ -26,6 +29,27 @@ function getOnlineSnapshot(): boolean {
 
 function getServerOnlineSnapshot(): boolean {
   return true;
+}
+
+/** Build a URL search string from GenerateOptions. */
+function buildPlayUrl(options: GenerateOptions): string {
+  const params = new URLSearchParams();
+  params.set('new', 'true');
+  params.set('size', String(options.size));
+  params.set('mode', options.mode);
+  if (options.pipeline !== undefined) {
+    params.set('pipeline', options.pipeline);
+  }
+  if (options.solver !== undefined) {
+    params.set('solver', options.solver);
+  }
+  if (options.regions !== undefined) {
+    params.set('regions', options.regions);
+  }
+  if (options.regionVariance !== undefined) {
+    params.set('regionVariance', String(options.regionVariance));
+  }
+  return `/play?${params.toString()}`;
 }
 
 /** Landing page with resume/new puzzle flow. */
@@ -50,7 +74,7 @@ export function LandingPage() {
     return () => { cancelled = true; };
   }, [loadState]);
 
-  const handleNewPuzzle = useCallback(() => {
+  const handleNewPuzzle = useCallback((options: GenerateOptions) => {
     if (!navigator.onLine) {
       setState({
         status: 'error',
@@ -58,12 +82,16 @@ export function LandingPage() {
       });
       return;
     }
-    navigate('/play?new=true');
+    navigate(buildPlayUrl(options));
   }, [navigate]);
 
   const handleResume = useCallback(() => {
     navigate('/play');
   }, [navigate]);
+
+  const handleShowSelector = useCallback(() => {
+    setState({ status: 'has-progress-selecting' });
+  }, []);
 
   return (
     <PageShell>
@@ -92,13 +120,20 @@ export function LandingPage() {
       )}
 
       {state.status === 'fresh' && (
-        <PrimaryButton onClick={handleNewPuzzle}>Play</PrimaryButton>
+        <PuzzleSelector onSelect={handleNewPuzzle} />
       )}
 
       {state.status === 'has-progress' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
           <PrimaryButton onClick={handleResume}>Resume</PrimaryButton>
-          <SecondaryButton onClick={handleNewPuzzle}>New Puzzle</SecondaryButton>
+          <SecondaryButton onClick={handleShowSelector}>New Puzzle</SecondaryButton>
+        </div>
+      )}
+
+      {state.status === 'has-progress-selecting' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
+          <SecondaryButton onClick={handleResume}>Resume</SecondaryButton>
+          <PuzzleSelector onSelect={handleNewPuzzle} />
         </div>
       )}
 
@@ -116,9 +151,11 @@ export function LandingPage() {
           <p style={{ color: 'var(--color-destructive)', fontWeight: 600 }}>
             {state.message}
           </p>
-          <SecondaryButton onClick={handleNewPuzzle}>Try Again</SecondaryButton>
+          <PuzzleSelector onSelect={handleNewPuzzle} />
         </div>
       )}
     </PageShell>
   );
 }
+
+export { buildPlayUrl };

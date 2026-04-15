@@ -171,3 +171,67 @@ describe('useGame', () => {
     }
   });
 });
+
+describe('useGame (Double Queens, mode=double)', () => {
+  // 4x4 grid with 4 regions, each 2x2
+  const doublePuzzle: PuzzleData = {
+    puzzleId: 'double-1',
+    gridSize: 4,
+    mode: 'double',
+    regionMap: [
+      [0, 0, 1, 1],
+      [0, 0, 1, 1],
+      [2, 2, 3, 3],
+      [2, 2, 3, 3],
+    ],
+  };
+
+  it('2 markers in same row → no conflict for double mode', () => {
+    // Arrange
+    const initialCells: import('../engine/types').CellState[][] = [
+      ['marked', 'empty', 'empty', 'marked'],
+      ['empty', 'empty', 'empty', 'empty'],
+      ['empty', 'empty', 'empty', 'empty'],
+      ['empty', 'empty', 'empty', 'empty'],
+    ];
+
+    // Act
+    const { result } = renderHook(() => useGame(doublePuzzle, initialCells));
+
+    // Assert
+    expect(result.current.conflicts).toHaveLength(0);
+  });
+
+  it('3 markers in same row → conflict for double mode', () => {
+    // Arrange
+    const initialCells: import('../engine/types').CellState[][] = [
+      ['marked', 'marked', 'empty', 'marked'],
+      ['empty', 'empty', 'empty', 'empty'],
+      ['empty', 'empty', 'empty', 'empty'],
+      ['empty', 'empty', 'empty', 'empty'],
+    ];
+
+    // Act
+    const { result } = renderHook(() => useGame(doublePuzzle, initialCells));
+
+    // Assert
+    expect(result.current.conflicts.length).toBeGreaterThan(0);
+  });
+
+  it('isSolved requires gridSize * 2 markers for double mode', () => {
+    // Arrange
+    // Only 4 markers (gridSize=4, markersPerUnit=2, need 8) — not solved
+    const initialCells: import('../engine/types').CellState[][] = [
+      ['marked', 'empty', 'empty', 'marked'],
+      ['empty', 'empty', 'empty', 'empty'],
+      ['empty', 'empty', 'empty', 'empty'],
+      ['marked', 'empty', 'empty', 'marked'],
+    ];
+
+    // Act
+    const { result } = renderHook(() => useGame(doublePuzzle, initialCells));
+
+    // Assert
+    expect(result.current.isSolved).toBe(false);
+  });
+});

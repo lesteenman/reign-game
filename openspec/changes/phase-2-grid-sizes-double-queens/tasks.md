@@ -12,21 +12,21 @@ Milestone C (Frontend)                  → Full UI: selectors, advanced mode, a
 
 | Task | Title | Milestone | Status |
 |------|-------|-----------|--------|
-| T-200 | Parameterize solver for markersPerUnit | A | [ ] |
-| T-201 | Lift size restriction + region validation | A | [ ] |
-| T-202 | Benchmark suite for larger grids | A | [ ] |
-| T-203 | Pluggable generator interface | B | [ ] |
-| T-204 | Variable region sizes | B | [ ] |
-| T-205 | Constraint propagation solver | B | [ ] |
-| T-206 | WFC region generator | B | [ ] |
-| T-207 | Double Queens mode | B | [ ] |
-| T-208 | API strategy parameters | B | [ ] |
-| T-209 | Full benchmark suite | B | [ ] |
-| T-210 | Constraint parameterization | C | [ ] |
-| T-211 | Adaptive grid sizing | C | [ ] |
-| T-212 | API client expansion | C | [ ] |
-| T-213 | Landing page selectors | C | [ ] |
-| T-214 | Game page header + back nav | C | [ ] |
+| T-200 | Parameterize solver for markersPerUnit | A | [x] |
+| T-201 | Lift size restriction + region validation | A | [x] |
+| T-202 | Benchmark suite for larger grids | A | [x] |
+| T-203 | Pluggable generator interface | B | [x] |
+| T-204 | Variable region sizes | B | [x] |
+| T-205 | Constraint propagation solver | B | [x] |
+| T-206 | WFC region generator | B | [x] |
+| T-207 | Double Queens mode | B | [x] |
+| T-208 | API strategy parameters | B | [x] |
+| T-209 | Full benchmark suite | B | [x] |
+| T-210 | Constraint parameterization | C | [x] |
+| T-211 | Adaptive grid sizing | C | [x] |
+| T-212 | API client expansion | C | [x] |
+| T-213 | Landing page selectors | C | [x] |
+| T-214 | Game page header + back nav | C | [x] |
 | T-215 | Milestone C integration + playtest | C | [ ] |
 
 ## Tasks

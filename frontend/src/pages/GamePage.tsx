@@ -5,6 +5,7 @@ import { useGame } from '../hooks/useGame';
 import { useTimer } from '../hooks/useTimer';
 import { useGameStorage } from '../hooks/useGameStorage';
 import { generatePuzzle } from '../services/puzzleService';
+import type { GenerateOptions } from '../services/puzzleService';
 import { createFreshGameState } from '../storage/utils';
 import { PageShell } from '../components/common/PageShell';
 import { PrimaryButton, SecondaryButton } from '../components/common/Button';
@@ -34,12 +35,44 @@ export function GamePage() {
   const { loadState, saveState, addCompletion } = useGameStorage();
   const [loadStatus, setLoadStatus] = useState<LoadState>({ status: 'loading' });
 
+  /** Navigate back to home without clearing game state. */
+  const handleBack = useCallback(() => {
+    navigate('/');
+  }, [navigate]);
+
   useEffect(() => {
     let cancelled = false;
     const isNew = searchParams.get('new') === 'true';
 
     if (isNew) {
-      void generatePuzzle(5, 'standard').then(async (puzzle) => {
+      const size = Number(searchParams.get('size')) || 5;
+      const modeParam = searchParams.get('mode');
+      const mode: 'standard' | 'double' = modeParam === 'double' ? 'double' : 'standard';
+      const pipelineParam = searchParams.get('pipeline');
+      const pipeline: GenerateOptions['pipeline'] | undefined =
+        ['region-first', 'iterative', 'constraint-aware'].includes(pipelineParam ?? '')
+          ? (pipelineParam as GenerateOptions['pipeline'])
+          : undefined;
+      const solverParam = searchParams.get('solver');
+      const solver: GenerateOptions['solver'] | undefined =
+        ['backtrack', 'propagation'].includes(solverParam ?? '')
+          ? (solverParam as GenerateOptions['solver'])
+          : undefined;
+      const regionsParam = searchParams.get('regions');
+      const regions: GenerateOptions['regions'] | undefined =
+        ['bfs', 'wfc'].includes(regionsParam ?? '')
+          ? (regionsParam as GenerateOptions['regions'])
+          : undefined;
+      const regionVarianceStr = searchParams.get('regionVariance');
+      const regionVariance = regionVarianceStr !== null ? Number(regionVarianceStr) : undefined;
+
+      const options: GenerateOptions = { size, mode };
+      if (pipeline) options.pipeline = pipeline;
+      if (solver) options.solver = solver;
+      if (regions) options.regions = regions;
+      if (regionVariance !== undefined && !Number.isNaN(regionVariance)) options.regionVariance = regionVariance;
+
+      void generatePuzzle(options).then(async (puzzle) => {
         if (cancelled) return;
         const gameState = createFreshGameState(puzzle);
         await saveState(gameState);
@@ -80,7 +113,7 @@ export function GamePage() {
 
   if (loadStatus.status === 'loading') {
     return (
-      <PageShell>
+      <PageShell onBack={handleBack}>
         <div style={{ padding: '48px 0', fontWeight: 600 }}>Loading...</div>
       </PageShell>
     );
@@ -88,7 +121,7 @@ export function GamePage() {
 
   if (loadStatus.status === 'error') {
     return (
-      <PageShell>
+      <PageShell onBack={handleBack}>
         <div
           data-testid="error-state"
           style={{
@@ -102,7 +135,12 @@ export function GamePage() {
           <p style={{ color: 'var(--color-destructive)', fontWeight: 600 }}>
             Failed to load puzzle: {loadStatus.message}
           </p>
-          <SecondaryButton onClick={() => navigate('/play?new=true', { replace: true })}>
+          <SecondaryButton onClick={() => {
+            // Retry with the same generation params from the current URL
+            const retryParams = new URLSearchParams(searchParams);
+            retryParams.set('new', 'true');
+            navigate(`/play?${retryParams.toString()}`, { replace: true });
+          }}>
             Try Again
           </SecondaryButton>
         </div>
@@ -125,6 +163,7 @@ export function GamePage() {
       navigate={navigate}
       saveState={saveState}
       addCompletion={addCompletion}
+      onBack={handleBack}
     />
   );
 }
@@ -145,6 +184,7 @@ interface GameBoardProps {
   navigate: ReturnType<typeof useNavigate>;
   saveState: (state: GameState) => Promise<void>;
   addCompletion: (record: CompletionRecord) => Promise<void>;
+  onBack: () => void;
 }
 
 /** Build the current GameState from refs, preserving the original startedAt. */
@@ -174,6 +214,7 @@ function GameBoard({
   navigate,
   saveState,
   addCompletion,
+  onBack,
 }: GameBoardProps) {
   const [ready, setReady] = useState(false);
   useLayoutEffect(() => { setReady(true); }, []);
@@ -291,17 +332,20 @@ function GameBoard({
     setCompletionTime(0);
   }, [originalResetGame]);
 
-  // Fix 4: navigate to /play?new=true instead of reloading
+  // Navigate to /play with the same generation params for a new puzzle.
+  const [currentSearchParams] = useSearchParams();
   const handlePlayAgain = useCallback(() => {
-    navigate('/play?new=true', { replace: true });
-  }, [navigate]);
+    const replayParams = new URLSearchParams(currentSearchParams);
+    replayParams.set('new', 'true');
+    navigate(`/play?${replayParams.toString()}`, { replace: true });
+  }, [navigate, currentSearchParams]);
 
   const handleGoHome = useCallback(() => {
     navigate('/');
   }, [navigate]);
 
   return (
-    <PageShell>
+    <PageShell onBack={onBack}>
       {/* Timer display */}
       <div
         data-testid="timer-display"

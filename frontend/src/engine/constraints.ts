@@ -32,12 +32,13 @@ function makeConflict(a: Position, b: Position): Conflict {
 }
 
 /**
- * Find all rows that have more than 1 marker.
- * Returns a Conflict for each pair of markers in the same row.
+ * Find all rows that have more than markersPerUnit markers.
+ * Returns a Conflict for each pair of markers in the same row when the count exceeds the limit.
  */
 export function checkRowConstraint(
   cells: CellState[][],
   _gridSize: number,
+  markersPerUnit: number,
 ): Conflict[] {
   const conflicts: Conflict[] = [];
   for (let row = 0; row < cells.length; row++) {
@@ -48,6 +49,8 @@ export function checkRowConstraint(
         markerCols.push(col);
       }
     }
+    // Only flag conflicts when count exceeds the allowed limit
+    if (markerCols.length <= markersPerUnit) continue;
     // Generate all pairs
     for (let i = 0; i < markerCols.length; i++) {
       for (let j = i + 1; j < markerCols.length; j++) {
@@ -64,12 +67,13 @@ export function checkRowConstraint(
 }
 
 /**
- * Find all columns that have more than 1 marker.
- * Returns a Conflict for each pair of markers in the same column.
+ * Find all columns that have more than markersPerUnit markers.
+ * Returns a Conflict for each pair of markers in the same column when the count exceeds the limit.
  */
 export function checkColumnConstraint(
   cells: CellState[][],
   gridSize: number,
+  markersPerUnit: number,
 ): Conflict[] {
   const conflicts: Conflict[] = [];
   for (let col = 0; col < gridSize; col++) {
@@ -79,6 +83,8 @@ export function checkColumnConstraint(
         markerRows.push(row);
       }
     }
+    // Only flag conflicts when count exceeds the allowed limit
+    if (markerRows.length <= markersPerUnit) continue;
     for (let i = 0; i < markerRows.length; i++) {
       for (let j = i + 1; j < markerRows.length; j++) {
         conflicts.push({
@@ -94,12 +100,13 @@ export function checkColumnConstraint(
 }
 
 /**
- * Find all regions that have more than 1 marker.
- * Returns a Conflict for each pair of markers in the same region.
+ * Find all regions that have more than markersPerUnit markers.
+ * Returns a Conflict for each pair of markers in the same region when the count exceeds the limit.
  */
 export function checkRegionConstraint(
   cells: CellState[][],
   regionMap: number[][],
+  markersPerUnit: number,
 ): Conflict[] {
   const markers = getMarkerPositions(cells);
 
@@ -117,6 +124,8 @@ export function checkRegionConstraint(
 
   const conflicts: Conflict[] = [];
   for (const group of byRegion.values()) {
+    // Only flag conflicts when count exceeds the allowed limit
+    if (group.length <= markersPerUnit) continue;
     for (let i = 0; i < group.length; i++) {
       for (let j = i + 1; j < group.length; j++) {
         conflicts.push(makeConflict(group[i]!, group[j]!));
@@ -159,11 +168,12 @@ export function getAllConflicts(
   cells: CellState[][],
   regionMap: number[][],
   gridSize: number,
+  markersPerUnit: number,
 ): Conflict[] {
   const all = [
-    ...checkRowConstraint(cells, gridSize),
-    ...checkColumnConstraint(cells, gridSize),
-    ...checkRegionConstraint(cells, regionMap),
+    ...checkRowConstraint(cells, gridSize, markersPerUnit),
+    ...checkColumnConstraint(cells, gridSize, markersPerUnit),
+    ...checkRegionConstraint(cells, regionMap, markersPerUnit),
     ...checkAdjacencyConstraint(cells, gridSize),
   ];
 

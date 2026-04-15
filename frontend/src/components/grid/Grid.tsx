@@ -4,6 +4,17 @@ import { cellKey } from '../../hooks/useGame';
 import { Cell } from './Cell';
 import { RegionBorderOverlay } from './RegionBorderOverlay';
 
+/**
+ * Returns the minimum cell size in pixels for a given grid size.
+ * Smaller grids get larger minimums for comfortable tap targets;
+ * experimental sizes (10+) use no minimum so they fit on screen.
+ */
+export function getMinCellSize(gridSize: number): number {
+  if (gridSize <= 7) return 44;
+  if (gridSize <= 9) return 38;
+  return 0;
+}
+
 /** Props for the Grid component. */
 export interface GridProps {
   puzzle: PuzzleData;
@@ -41,7 +52,7 @@ export function Grid({
       if (!container) return;
       const available = container.clientWidth - 4; // 2px border each side
       const size = Math.floor(available / gridSize);
-      setCellSize(Math.max(44, Math.min(72, size)));
+      setCellSize(Math.max(getMinCellSize(gridSize), Math.min(72, size)));
     }
 
     measure();
