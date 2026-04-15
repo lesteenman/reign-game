@@ -126,9 +126,9 @@ resource "aws_lambda_function" "generator" {
 
   environment {
     variables = {
-      GENERATOR_MODE   = "sqs"
+      GENERATOR_MODE    = "sqs"
       PUZZLE_TABLE_NAME = var.puzzle_table_name
-      SQS_QUEUE_URL    = aws_sqs_queue.generation.url
+      SQS_QUEUE_URL     = aws_sqs_queue.generation.url
     }
   }
 

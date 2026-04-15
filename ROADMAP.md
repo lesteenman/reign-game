@@ -135,6 +135,8 @@ Candidate items — not yet committed or ordered:
 | KI-004 | Low | PWA service worker disabled — vite-plugin-pwa lacks Vite 8 support. Track [vite-pwa/vite-plugin-pwa#923](https://github.com/vite-pwa/vite-plugin-pwa/issues/923). Manifest + icons in place; re-add plugin when compatible. | R-01A |
 | KI-005 | Low | Timer does not start immediately when opening a new puzzle. Noticeable delay before first tick. | R-019 |
 | KI-006 | Medium | Every CD deploy updates the Lambda function even when there are no backend changes. Should only rebuild/deploy Lambda when backend/ files change. | R-006 |
+| KI-007 | High | Double Queens puzzle generation too slow (12+ min for 7x7) with deducibility check. Disabled in replenish and UI. Needs generator algorithm optimization before re-enabling. | R-030, R-031 |
+| KI-008 | Medium | "Play Again" and "Retry" buttons don't work. Both navigate to the same URL with unchanged search params, so React Router doesn't trigger a re-render/re-fetch. Affects: completion overlay "Play Again" and pool-empty "Retry". | R-044 |
 
 ---
 

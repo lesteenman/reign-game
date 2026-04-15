@@ -8,9 +8,9 @@ module "database" {
 module "generation" {
   source = "./modules/generation"
 
-  project_name     = var.project_name
-  environment      = var.environment
-  lambda_zip_path  = var.lambda_zip_path
+  project_name      = var.project_name
+  environment       = var.environment
+  lambda_zip_path   = var.lambda_zip_path
   puzzle_table_name = module.database.puzzle_table_name
   puzzle_table_arn  = module.database.puzzle_table_arn
 }
@@ -18,13 +18,13 @@ module "generation" {
 module "api" {
   source = "./modules/api"
 
-  project_name     = var.project_name
-  environment      = var.environment
-  lambda_zip_path  = var.lambda_zip_path
+  project_name      = var.project_name
+  environment       = var.environment
+  lambda_zip_path   = var.lambda_zip_path
   puzzle_table_name = module.database.puzzle_table_name
   puzzle_table_arn  = module.database.puzzle_table_arn
-  sqs_queue_url    = module.generation.queue_url
-  sqs_queue_arn    = module.generation.queue_arn
+  sqs_queue_url     = module.generation.queue_url
+  sqs_queue_arn     = module.generation.queue_arn
 }
 
 module "frontend" {
