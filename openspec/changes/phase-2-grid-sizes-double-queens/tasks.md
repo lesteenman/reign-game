@@ -25,8 +25,8 @@ Milestone C (Frontend)                  → Full UI: selectors, advanced mode, a
 | T-210 | Constraint parameterization | C | [x] |
 | T-211 | Adaptive grid sizing | C | [x] |
 | T-212 | API client expansion | C | [x] |
-| T-213 | Landing page selectors | C | [ ] |
-| T-214 | Game page header + back nav | C | [ ] |
+| T-213 | Landing page selectors | C | [x] |
+| T-214 | Game page header + back nav | C | [x] |
 | T-215 | Milestone C integration + playtest | C | [ ] |
 
 ## Tasks
