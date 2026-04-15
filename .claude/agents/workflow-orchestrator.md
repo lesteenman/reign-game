@@ -165,11 +165,13 @@ Run targeted greps from the implementation agents' quality checklists. If violat
 **Glossary Terminology Check (MANDATORY when GLOSSARY.md exists):**
 Read `GLOSSARY.md` and verify that the new/changed code uses glossary terms consistently. Grep for known anti-patterns — e.g., if the glossary defines "Book Year", grep for `FiscalYear`, `fiscal_year`, `financialYear` etc. in the diff. Term mismatches MUST be fixed before proceeding.
 
-### 6. Local Review (MANDATORY — never skip)
+### 6. Local Review (MANDATORY for code changes)
 
 **Action: Read `skills/review-local/SKILL.md` and follow its instructions completely.**
 
-This is a mandatory quality gate — every change goes through local review before the MR is created, no exceptions. It runs 4 parallel review agents (security, efficiency, quality, reuse). The quality agent checks spec compliance when OpenSpec artifacts exist — it verifies the implementation actually satisfies the spec requirements. Follow the full process: auto-fixes, re-tests, and commits.
+This is a mandatory quality gate — every code change goes through local review before the MR is created. It runs 4 parallel review agents (security, efficiency, quality, reuse). The quality agent checks spec compliance when OpenSpec artifacts exist — it verifies the implementation actually satisfies the spec requirements. Follow the full process: auto-fixes, re-tests, and commits.
+
+**Skip review-local** when the diff only touches: OpenSpec artifacts, ROADMAP.md, GLOSSARY.md, or other documentation files (no application code changes).
 
 In parallel (if applicable):
 - Docker pre-warm: `docker compose up --build -d` in background (if frontend changes)
