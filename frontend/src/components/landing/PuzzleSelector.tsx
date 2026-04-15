@@ -93,7 +93,8 @@ export function PuzzleSelector({ onSelect }: PuzzleSelectorProps) {
   const [useAdvanced, setUseAdvanced] = useState(false);
 
   // Advanced state
-  const [advSize, setAdvSize] = useState(5);
+  const [advSizeInput, setAdvSizeInput] = useState('5');
+  const [advSizeError, setAdvSizeError] = useState('');
   const [advMode, setAdvMode] = useState<'standard' | 'double'>('standard');
   const [advPipeline, setAdvPipeline] = useState<GenerateOptions['pipeline']>('region-first');
   const [advSolver, setAdvSolver] = useState<GenerateOptions['solver']>('backtrack');
@@ -111,9 +112,14 @@ export function PuzzleSelector({ onSelect }: PuzzleSelectorProps) {
 
   const handlePlay = useCallback(() => {
     if (useAdvanced) {
+      const parsed = Number(advSizeInput);
+      if (advSizeInput === '' || isNaN(parsed) || parsed < 3 || parsed > 15 || !Number.isInteger(parsed)) {
+        setAdvSizeError('Grid size must be between 3 and 15');
+        return;
+      }
       const varianceValue = VARIANCE_STOPS[advVarianceIndex]?.value ?? 0.5;
       onSelect({
-        size: advSize,
+        size: parsed,
         mode: advMode,
         pipeline: advPipeline,
         solver: advSolver,
@@ -125,7 +131,7 @@ export function PuzzleSelector({ onSelect }: PuzzleSelectorProps) {
       const mode = PRESETS[selectedPresetIndex]?.mode ?? 'standard';
       onSelect({ size, mode });
     }
-  }, [useAdvanced, advSize, advMode, advPipeline, advSolver, advRegions, advVarianceIndex, selectedPresetIndex, onSelect]);
+  }, [useAdvanced, advSizeInput, advMode, advPipeline, advSolver, advRegions, advVarianceIndex, selectedPresetIndex, onSelect]);
 
   return (
     <div
@@ -213,16 +219,29 @@ export function PuzzleSelector({ onSelect }: PuzzleSelectorProps) {
               id="adv-size"
               data-testid="adv-size"
               type="number"
-              min={3}
-              max={15}
-              value={advSize}
+              value={advSizeInput}
               onChange={(e) => {
-                const v = Math.min(15, Math.max(3, Number(e.target.value)));
-                setAdvSize(v);
+                setAdvSizeInput(e.target.value);
+                setAdvSizeError('');
                 handleAdvancedChange();
               }}
               style={numberInputStyle}
             />
+            {advSizeError && (
+              <p
+                data-testid="adv-size-error"
+                style={{
+                  color: 'var(--color-destructive)',
+                  fontSize: '0.75rem',
+                  fontFamily: '"Nunito Sans", system-ui, sans-serif',
+                  fontWeight: 600,
+                  marginTop: '4px',
+                  marginBottom: 0,
+                }}
+              >
+                {advSizeError}
+              </p>
+            )}
           </div>
 
           {/* Mode */}

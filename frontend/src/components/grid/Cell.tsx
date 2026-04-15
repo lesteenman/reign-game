@@ -115,10 +115,10 @@ export function Cell({
         justifyContent: 'center',
         cursor: 'pointer',
         userSelect: 'none',
-        borderTop: showBorderTop ? '0.5px solid rgba(0,0,0,0.07)' : 'none',
-        borderRight: showBorderRight ? '0.5px solid rgba(0,0,0,0.07)' : 'none',
-        borderBottom: showBorderBottom ? '0.5px solid rgba(0,0,0,0.07)' : 'none',
-        borderLeft: showBorderLeft ? '0.5px solid rgba(0,0,0,0.07)' : 'none',
+        borderTop: showBorderTop ? '0.5px solid var(--color-cell-border)' : 'none',
+        borderRight: showBorderRight ? '0.5px solid var(--color-cell-border)' : 'none',
+        borderBottom: showBorderBottom ? '0.5px solid var(--color-cell-border)' : 'none',
+        borderLeft: showBorderLeft ? '0.5px solid var(--color-cell-border)' : 'none',
         boxSizing: 'border-box',
       }}
       onMouseDown={handleMouseDown}

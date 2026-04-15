@@ -260,4 +260,96 @@ describe('PuzzleSelector', () => {
       );
     });
   });
+
+  describe('grid size validation', () => {
+    it('shows error when grid size is below 3', () => {
+      // Arrange
+      const { onSelect } = renderSelector();
+      fireEvent.click(screen.getByTestId('advanced-toggle'));
+
+      // Act
+      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '2' } });
+      fireEvent.click(screen.getByTestId('play-button'));
+
+      // Assert
+      expect(screen.getByTestId('adv-size-error')).toHaveTextContent(
+        'Grid size must be between 3 and 15',
+      );
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('shows error when grid size is above 15', () => {
+      // Arrange
+      const { onSelect } = renderSelector();
+      fireEvent.click(screen.getByTestId('advanced-toggle'));
+
+      // Act
+      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '20' } });
+      fireEvent.click(screen.getByTestId('play-button'));
+
+      // Assert
+      expect(screen.getByTestId('adv-size-error')).toHaveTextContent(
+        'Grid size must be between 3 and 15',
+      );
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('shows error when grid size is empty', () => {
+      // Arrange
+      const { onSelect } = renderSelector();
+      fireEvent.click(screen.getByTestId('advanced-toggle'));
+
+      // Act
+      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '' } });
+      fireEvent.click(screen.getByTestId('play-button'));
+
+      // Assert
+      expect(screen.getByTestId('adv-size-error')).toHaveTextContent(
+        'Grid size must be between 3 and 15',
+      );
+      expect(onSelect).not.toHaveBeenCalled();
+    });
+
+    it('clears error when value changes to valid range', () => {
+      // Arrange
+      const { onSelect } = renderSelector();
+      fireEvent.click(screen.getByTestId('advanced-toggle'));
+      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '2' } });
+      fireEvent.click(screen.getByTestId('play-button'));
+      expect(screen.getByTestId('adv-size-error')).toBeInTheDocument();
+
+      // Act
+      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '10' } });
+
+      // Assert
+      expect(screen.queryByTestId('adv-size-error')).not.toBeInTheDocument();
+    });
+
+    it('allows typing 10 by clearing field first', () => {
+      // Arrange
+      const { onSelect } = renderSelector();
+      fireEvent.click(screen.getByTestId('advanced-toggle'));
+
+      // Act — simulate mobile: clear field, then type "10"
+      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '' } });
+      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '10' } });
+      fireEvent.click(screen.getByTestId('play-button'));
+
+      // Assert
+      expect(onSelect).toHaveBeenCalledWith(
+        expect.objectContaining({ size: 10 }),
+      );
+    });
+
+    it('does not have min or max HTML attributes on grid size input', () => {
+      // Arrange
+      renderSelector();
+      fireEvent.click(screen.getByTestId('advanced-toggle'));
+
+      // Assert
+      const input = screen.getByTestId('adv-size');
+      expect(input).not.toHaveAttribute('min');
+      expect(input).not.toHaveAttribute('max');
+    });
+  });
 });

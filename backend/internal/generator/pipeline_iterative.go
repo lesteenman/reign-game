@@ -73,6 +73,10 @@ func (p *IterativeRefinementPipeline) Generate(gridSize int, markersPerUnit int,
 			continue
 		}
 
+		if !IsLogicallyDeducible(result, gridSize, markersPerUnit) {
+			continue
+		}
+
 		return &model.Puzzle{
 			ID:        "",
 			GridSize:  gridSize,

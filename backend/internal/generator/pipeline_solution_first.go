@@ -52,6 +52,10 @@ func (p *SolutionFirstPipeline) Generate(gridSize int, markersPerUnit int, opts 
 			continue
 		}
 
+		if !IsLogicallyDeducible(regionMap, gridSize, markersPerUnit) {
+			continue
+		}
+
 		return &model.Puzzle{
 			ID:        "",
 			GridSize:  gridSize,

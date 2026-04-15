@@ -546,6 +546,108 @@ func countPropRow(s *propagationState, row, maxSolutions int, count *int) {
 	countPropCols(s, row, 0, maxSolutions, count)
 }
 
+// IsLogicallyDeducible checks whether a puzzle can be solved entirely through
+// forced moves (naked singles) without any guessing/branching. Returns true
+// if constraint propagation alone solves the puzzle.
+//
+// The algorithm walks the same search tree as CountSolutions (row-by-row marker
+// placement with constraint propagation and forced-move cascades) but verifies
+// that no backtracking ever occurs. A puzzle is deducible when the entire
+// search traverses a single path — at every row, the first valid candidate
+// (after forced moves) leads directly to the solution without any undo.
+//
+// Concretely: the solver places markers row by row. After each placement it
+// propagates constraints and applies cascading forced moves. If at any point
+// the solver would need to try a second candidate for the same row (i.e.,
+// backtrack), the puzzle is not deducible.
+func IsLogicallyDeducible(regionMap [][]int, gridSize int, markersPerUnit int) bool {
+	state := newPropagationStateWithRegions(regionMap, gridSize, markersPerUnit)
+
+	// Apply initial forced moves.
+	forcedRes, ok := propApplyForced(state)
+	if !ok {
+		_ = forcedRes
+		return false
+	}
+
+	return deducibleSearchRow(state, 0)
+}
+
+// deducibleSearchRow walks the search tree row by row. Returns true only if
+// the solution is reached without any backtracking.
+func deducibleSearchRow(s *propagationState, row int) bool {
+	if row == s.gridSize {
+		return true
+	}
+
+	if s.rowPlaced[row] >= s.markersPerUnit {
+		return deducibleSearchRow(s, row+1)
+	}
+
+	return deducibleSearchCols(s, row, 0, false)
+}
+
+// deducibleSearchCols tries candidates in a row. The firstAttempted flag tracks
+// whether we've already tried (and backtracked from) a candidate — if so, the
+// puzzle requires branching and is not deducible.
+func deducibleSearchCols(s *propagationState, row, startCol int, firstAttempted bool) bool {
+	if s.rowPlaced[row] >= s.markersPerUnit {
+		return deducibleSearchRow(s, row+1)
+	}
+
+	remaining := s.markersPerUnit - s.rowPlaced[row]
+
+	for col := startCol; col <= s.gridSize-remaining; col++ {
+		if !s.available[row][col] {
+			continue
+		}
+		if s.colPlaced[col] >= s.markersPerUnit {
+			continue
+		}
+		rid := s.regionMap[row][col]
+		if s.regionPlaced[rid] >= s.markersPerUnit {
+			continue
+		}
+
+		if firstAttempted {
+			// A previous candidate was tried and failed — this means
+			// backtracking is needed, so the puzzle is not deducible.
+			return false
+		}
+
+		// Place marker.
+		s.markerCols[row] = append(s.markerCols[row], col)
+		s.rowPlaced[row]++
+		s.colPlaced[col]++
+		s.regionPlaced[rid]++
+
+		eliminated, placedOk := s.propagatePlace(row, col)
+		elimCopy := make([][2]int, len(eliminated))
+		copy(elimCopy, eliminated)
+
+		if placedOk {
+			forcedRes, forcedOk := propApplyForced(s)
+			if forcedOk {
+				if deducibleSearchCols(s, row, col+1, false) {
+					return true
+				}
+			}
+			propUndoForced(s, forcedRes)
+		}
+
+		// Undo placement.
+		s.undoEliminations(elimCopy)
+		s.markerCols[row] = s.markerCols[row][:len(s.markerCols[row])-1]
+		s.rowPlaced[row]--
+		s.colPlaced[col]--
+		s.regionPlaced[rid]--
+
+		// Mark that we've attempted and failed with one candidate.
+		firstAttempted = true
+	}
+	return false
+}
+
 // countPropCols recursively selects columns for a row during counting.
 // Deterministic ordering (no shuffle) for completeness.
 func countPropCols(s *propagationState, row, startCol, maxSolutions int, count *int) {

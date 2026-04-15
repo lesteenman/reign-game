@@ -35,6 +35,7 @@
   --region-7-on-fill: #365314;
   --region-8-fill: #E879F9;
   --region-8-on-fill: #701A75;
+  --color-cell-border: rgba(0, 0, 0, 0.15);
   --radius: 10px;
 }
 
@@ -54,6 +55,7 @@
   --color-success: #4ADE80;
   --color-success-bg: #052E16;
   --color-ring: #818CF8;
+  --color-cell-border: rgba(255, 255, 255, 0.15);
   --region-0-fill: #1D4ED8;
   --region-0-on-fill: #DBEAFE;
   --region-1-fill: #B45309;

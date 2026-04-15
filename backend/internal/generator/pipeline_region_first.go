@@ -50,6 +50,10 @@ func (p *RegionFirstPipeline) Generate(gridSize int, markersPerUnit int, opts Ge
 			continue
 		}
 
+		if !IsLogicallyDeducible(regionMap, gridSize, markersPerUnit) {
+			continue
+		}
+
 		// Extract the unique solution.
 		solution := p.extractSolution(regionMap, gridSize, markersPerUnit)
 		if solution == nil {
