@@ -47,7 +47,50 @@ Goal: 7x7 and 9x9 puzzles playable in both Standard and Double Queens modes.
 - [x] **R-031** — Extend generator for Double Queens puzzles
 - [x] **R-033** — UI: mode toggle (Standard / Double Queens)
 
-## Phase 3: Difficulty Rating
+## Phase 3: Puzzle Pool + Generation Pipeline
+
+Goal: Pre-generate puzzles into a pool, serve from the pool instead of generating on the fly. Measure generation performance across engines and grid sizes.
+
+- [ ] **R-040** — DynamoDB `puzzle-pool` table (PK=size#mode, SK=puzzleId, status/verdict/metadata)
+- [ ] **R-041** — Terraform: DynamoDB table, SQS queue + DLQ, Generator Lambda (15min timeout)
+- [ ] **R-042** — SQS-based generation: API Lambda publishes messages, Generator Lambda consumes and writes puzzles to DB
+- [ ] **R-043** — `POST /admin/replenish` endpoint: check pool levels, publish SQS messages for gaps (pool size = 3 per size+mode)
+- [ ] **R-044** — `GET /puzzles/next?size=N&mode=M` endpoint: serve next ready puzzle with generation metadata, mark as served
+- [ ] **R-045** — LocalStack SQS setup: local dev parity with two processes (API server + SQS consumer)
+- [ ] **R-046** — Frontend: replace `generatePuzzle()` with `/puzzles/next`, remove advanced options from PuzzleSelector
+- [ ] **R-047** — Frontend: show generation metadata (pipeline, solver, duration) subtly on puzzle page
+- [ ] **R-048** — Frontend: "no puzzles available" state with retry button when pool is empty
+
+## Phase 4: Admin Pool Management
+
+Goal: Admin UI to view pool status per size+mode and tune generation settings.
+
+- [ ] **R-060** — `GET/PUT /admin/config` endpoints: per-combo generation settings + pool size
+- [ ] **R-061** — `GET /admin/puzzles` endpoint: filtered puzzle listing (by status, pipeline, size, mode)
+- [ ] **R-062** — Frontend: admin page — pool counts per size+mode, replenish button, generation settings
+
+## Phase 5: Verdict System
+
+Goal: Rate puzzles after playing them — upvote, downvote, or skip.
+
+- [ ] **R-063** — `PUT /puzzles/:id/verdict` endpoint: upvote/downvote/skip
+- [ ] **R-064** — Frontend: verdict buttons on puzzle completion/skip
+
+## Phase 6: Puzzle Replay
+
+Goal: Admin can browse played puzzles and replay them to review quality.
+
+- [ ] **R-065** — `GET /puzzles/:id` endpoint: load any puzzle by ID for replay
+- [ ] **R-066** — Frontend: played puzzle list in admin UI, replay by ID
+
+## Phase 7: Puzzle Analysis Agent
+
+Goal: Automated analysis of played puzzles — generation performance, verdict patterns, engine comparison.
+
+- [ ] **R-067** — Analysis agent: dedicated agent for querying and interpreting puzzle generation data
+- [ ] **R-068** — Analysis endpoint(s) as needed by the agent
+
+## Phase 8: Difficulty Rating
 
 Goal: Difficulty rating for all grid sizes and modes, with user-facing difficulty selector.
 
@@ -55,41 +98,30 @@ Goal: Difficulty rating for all grid sizes and modes, with user-facing difficult
 - [ ] **R-032** — Update difficulty rating for Double Queens
 - [ ] **R-034** — UI: difficulty selector (Easy / Medium / Hard)
 
-## Phase 4: Curation + Puzzle Database
-
-Goal: Curated puzzles served from backend. Curation tooling with visual solver. Offline practice.
-
-- [ ] **R-040** — DynamoDB table for puzzles (candidates, curated, metadata)
-- [ ] **R-041** — Terraform: add DynamoDB
-- [ ] **R-042** — Admin generation endpoint: generate N candidates, rank by interest heuristic, return with solver steps
-- [ ] **R-043** — Curation endpoints: list candidates, approve/reject, get solver steps
-- [ ] **R-044** — Puzzle serving API: GET puzzles by mode/difficulty (curated pool)
-- [ ] **R-045** — Frontend: curator mode route — generate, play, watch visual solver, upvote/downvote, approve/reject
-- [ ] **R-046** — Frontend: "pick best of N" comparison mode
-- [ ] **R-047** — Frontend: fetch curated puzzles from API, cache all accessible puzzles in IndexedDB
-- [ ] **R-048** — Frontend: practice mode serves from curated pool (offline after first load)
-- [ ] **R-049** — Offline detection: graceful degradation (practice available offline, curation requires connection)
-
-## Phase 5+: Future (scoped when we get there)
+## Phase 9+: Future (scoped when we get there)
 
 Candidate items — not yet committed or ordered:
 
-- [ ] **R-050** — Daily puzzle scheduling: assign puzzles to dates, serve by date + mode + difficulty
-- [ ] **R-051** — Daily challenge flow: fetch puzzle, timer, submit completion, show percentile
-- [ ] **R-052** — Anonymous completion submission + percentile calculation (stateless for free players)
-- [ ] **R-053** — Leaderboards: premium members visible, daily and overall
-- [ ] **R-054** — Auth provider setup (not Cognito) — Google + Apple OAuth
-- [ ] **R-055** — One-time premium purchase flow
-- [ ] **R-056** — Premium: full puzzle archive access, detailed stats, cross-device sync
-- [ ] **R-057** — Premium themes: Queens Classic (free), Gems, Garden, Neon, Cosmos
-- [ ] **R-058** — Performance audit: Core Web Vitals, Lambda cold starts, DynamoDB latency
-- [ ] **R-059** — Monitoring: CloudWatch dashboards, error alerting
-- [ ] **R-05A** — Dev/prod environment split (Terraform workspaces)
-- [ ] **R-05B** — Accessibility audit: WCAG 2.1 AA compliance
-- [ ] **R-05C** — Colorblind-friendly region palettes
-- [ ] **R-05D** — Rate limiting and abuse prevention on completion API
-- [ ] **R-05E** — Landing page / marketing site
-- [ ] **R-05F** — Open source preparation: LICENSE files, CONTRIBUTING.md, README for generator
+- [ ] **R-070** — Separate production puzzle table: approved puzzles copied from pool for numbered/daily serving
+- [ ] **R-071** — Daily puzzle scheduling: assign puzzles to dates, serve by date + mode + difficulty
+- [ ] **R-072** — Daily challenge flow: fetch puzzle, timer, submit completion, show percentile
+- [ ] **R-073** — Anonymous completion submission + percentile calculation (stateless for free players)
+- [ ] **R-074** — Leaderboards: premium members visible, daily and overall
+- [ ] **R-075** — Auth provider setup (not Cognito) — Google + Apple OAuth
+- [ ] **R-076** — One-time premium purchase flow
+- [ ] **R-077** — Premium: full puzzle archive access, detailed stats, cross-device sync
+- [ ] **R-078** — Premium themes: Queens Classic (free), Gems, Garden, Neon, Cosmos
+- [ ] **R-079** — Performance audit: Core Web Vitals, Lambda cold starts, DynamoDB latency
+- [ ] **R-07A** — Monitoring: CloudWatch dashboards, error alerting
+- [ ] **R-07B** — Dev/prod environment split (Terraform workspaces)
+- [ ] **R-07C** — Accessibility audit: WCAG 2.1 AA compliance
+- [ ] **R-07D** — Colorblind-friendly region palettes
+- [ ] **R-07E** — Rate limiting and abuse prevention on completion API
+- [ ] **R-07F** — Landing page / marketing site
+- [ ] **R-07G** — Open source preparation: LICENSE files, CONTRIBUTING.md, README for generator
+- [ ] **R-07H** — Frontend: curation UI — visual solver, "pick best of N" comparison mode
+- [ ] **R-07I** — Frontend: offline practice from curated pool (IndexedDB caching)
+- [ ] **R-07J** — Offline detection: graceful degradation
 
 ---
 
