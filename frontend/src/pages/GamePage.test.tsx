@@ -19,10 +19,11 @@ vi.mock('react-router-dom', async () => {
 
 // Track generatePuzzle calls
 let lastGenerateOptions: GenerateOptions | undefined;
+let mockGenerateResult: () => Promise<typeof FALLBACK_PUZZLE> = () => Promise.resolve(FALLBACK_PUZZLE);
 vi.mock('../services/puzzleService', () => ({
   generatePuzzle: (options: GenerateOptions) => {
     lastGenerateOptions = options;
-    return Promise.resolve(FALLBACK_PUZZLE);
+    return mockGenerateResult();
   },
 }));
 
@@ -46,6 +47,7 @@ beforeEach(() => {
   mockSaveState.mockClear();
   mockAddCompletion.mockClear();
   lastGenerateOptions = undefined;
+  mockGenerateResult = () => Promise.resolve(FALLBACK_PUZZLE);
   globalThis.fetch = vi.fn().mockResolvedValue({
     ok: true,
     json: () => Promise.resolve(FALLBACK_PUZZLE),
@@ -142,6 +144,61 @@ describe('GamePage back navigation preserves state', () => {
     // The navigate call does NOT include any state-clearing logic;
     // only navigating to /play?new=true triggers a new puzzle generation
     expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining('new=true'));
+  });
+});
+
+describe('GamePage Try Again preserves params', () => {
+  it('Try Again on error retries with same generation params', async () => {
+    // Arrange — make generation fail
+    mockGenerateResult = () => Promise.reject(new Error('generation failed'));
+    renderGamePage('/play?new=true&size=9&mode=double&pipeline=iterative&solver=propagation');
+
+    // Act — wait for error state and click Try Again
+    const errorState = await screen.findByTestId('error-state');
+    expect(errorState).toBeInTheDocument();
+    const tryAgainButton = screen.getByRole('button', { name: /try again/i });
+    fireEvent.click(tryAgainButton);
+
+    // Assert — navigate was called with all the original params preserved
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringContaining('size=9'),
+      expect.objectContaining({ replace: true }),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringContaining('mode=double'),
+      expect.objectContaining({ replace: true }),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringContaining('pipeline=iterative'),
+      expect.objectContaining({ replace: true }),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringContaining('solver=propagation'),
+      expect.objectContaining({ replace: true }),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringContaining('new=true'),
+      expect.objectContaining({ replace: true }),
+    );
+  });
+
+  it('Try Again on error does not navigate to bare /play?new=true', async () => {
+    // Arrange — make generation fail with specific params
+    mockGenerateResult = () => Promise.reject(new Error('generation failed'));
+    renderGamePage('/play?new=true&size=7&mode=standard&regions=wfc');
+
+    // Act
+    const errorState = await screen.findByTestId('error-state');
+    expect(errorState).toBeInTheDocument();
+    const tryAgainButton = screen.getByRole('button', { name: /try again/i });
+    fireEvent.click(tryAgainButton);
+
+    // Assert — should NOT navigate to just '/play?new=true'
+    expect(mockNavigate).not.toHaveBeenCalledWith('/play?new=true', expect.anything());
+    // Should include the original params
+    const navigateUrl = mockNavigate.mock.calls[0]?.[0] as string;
+    expect(navigateUrl).toContain('size=7');
+    expect(navigateUrl).toContain('regions=wfc');
   });
 });
 

@@ -123,7 +123,12 @@ export function GamePage() {
           <p style={{ color: 'var(--color-destructive)', fontWeight: 600 }}>
             Failed to load puzzle: {loadStatus.message}
           </p>
-          <SecondaryButton onClick={() => navigate('/play?new=true', { replace: true })}>
+          <SecondaryButton onClick={() => {
+            // Retry with the same generation params from the current URL
+            const retryParams = new URLSearchParams(searchParams);
+            retryParams.set('new', 'true');
+            navigate(`/play?${retryParams.toString()}`, { replace: true });
+          }}>
             Try Again
           </SecondaryButton>
         </div>

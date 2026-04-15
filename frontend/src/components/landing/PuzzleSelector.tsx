@@ -104,6 +104,19 @@ export function PuzzleSelector({ onSelect }: PuzzleSelectorProps) {
   const handlePresetClick = useCallback((index: number) => {
     setSelectedPresetIndex(index);
     setUseAdvanced(false);
+
+    // Populate advanced controls with the preset's defaults so expanding
+    // the advanced section shows what this preset runs with.
+    const preset = PRESETS[index];
+    if (preset) {
+      setAdvSizeInput(String(preset.size));
+      setAdvSizeError('');
+      setAdvMode(preset.mode);
+      setAdvPipeline('iterative');
+      setAdvSolver('propagation');
+      setAdvRegions('bfs');
+      setAdvVarianceIndex(0); // Uniform (0.0)
+    }
   }, []);
 
   const handleAdvancedChange = useCallback(() => {

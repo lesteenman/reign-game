@@ -193,6 +193,84 @@ func BenchmarkPipeline(b *testing.B) {
 	}
 }
 
+// =============================================================================
+// BenchmarkCombo — targeted parameter combination benchmarks
+// =============================================================================
+//
+// Run with:
+//   go test -bench=BenchmarkCombo -benchtime=3x -timeout=300s ./internal/generator/ -run='^$'
+
+// BenchmarkCombo benchmarks specific parameter combinations to find optimal defaults.
+func BenchmarkCombo(b *testing.B) {
+	propSolver := NewPropagationSolver()
+	backtrackSolver := NewBacktrackSolver()
+
+	bfsRegions := NewBFSRegionGenerator()
+	bfsRegionsDouble := NewBFSRegionGeneratorDouble()
+	wfcRegions := NewWFCRegionGenerator()
+
+	iterPropBFS := NewIterativeRefinementPipeline(propSolver, bfsRegions)
+	iterPropWFC := NewIterativeRefinementPipeline(propSolver, wfcRegions)
+	iterBacktrackBFS := NewIterativeRefinementPipeline(backtrackSolver, bfsRegions)
+	iterPropBFSDouble := NewIterativeRefinementPipeline(propSolver, bfsRegionsDouble)
+	regionFirstProp := NewRegionFirstPipeline(propSolver)
+
+	cases := []benchCase{
+		// -----------------------------------------------------------------
+		// BFS vs WFC regions (Iterative, Propagation, 9x9 Standard, deducible)
+		// -----------------------------------------------------------------
+		{
+			name: "Iterative_Prop_BFS_9x9_ded",
+			pipeline: iterPropBFS, gridSize: 9, markersPerUnit: 1,
+			deducible: true, concurrency: 1, timeout: 120 * time.Second,
+		},
+		{
+			name: "Iterative_Prop_WFC_9x9_ded",
+			pipeline: iterPropWFC, gridSize: 9, markersPerUnit: 1,
+			deducible: true, concurrency: 1, timeout: 120 * time.Second,
+		},
+
+		// -----------------------------------------------------------------
+		// Solver comparison (Iterative, BFS, 9x9 Standard, deducible)
+		// -----------------------------------------------------------------
+		{
+			name: "Iterative_Backtrack_BFS_9x9_ded",
+			pipeline: iterBacktrackBFS, gridSize: 9, markersPerUnit: 1,
+			deducible: true, concurrency: 1, timeout: 120 * time.Second,
+		},
+
+		// -----------------------------------------------------------------
+		// Double Queens combinations (9x9, c=1)
+		// -----------------------------------------------------------------
+		{
+			name: "Iterative_Prop_BFS_9x9DQ_ded",
+			pipeline: iterPropBFSDouble, gridSize: 9, markersPerUnit: 2,
+			deducible: true, concurrency: 1, timeout: 120 * time.Second,
+		},
+		{
+			name: "Iterative_Prop_BFS_9x9DQ_raw",
+			pipeline: iterPropBFSDouble, gridSize: 9, markersPerUnit: 2,
+			deducible: false, concurrency: 1, timeout: 120 * time.Second,
+		},
+		{
+			name: "RegionFirst_Prop_9x9DQ_ded",
+			pipeline: regionFirstProp, gridSize: 9, markersPerUnit: 2,
+			deducible: true, concurrency: 1, timeout: 120 * time.Second,
+		},
+		{
+			name: "RegionFirst_Prop_9x9DQ_raw",
+			pipeline: regionFirstProp, gridSize: 9, markersPerUnit: 2,
+			deducible: false, concurrency: 1, timeout: 120 * time.Second,
+		},
+	}
+
+	for _, bc := range cases {
+		b.Run(bc.name, func(b *testing.B) {
+			runBenchCase(b, bc)
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Solver comparison — BacktrackSolver vs PropagationSolver (5x5 only)
 // ---------------------------------------------------------------------------

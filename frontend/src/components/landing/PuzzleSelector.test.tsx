@@ -198,6 +198,74 @@ describe('PuzzleSelector', () => {
     });
   });
 
+  describe('preset populates advanced controls', () => {
+    it('clicking 5x5 Standard sets advanced controls to preset defaults', () => {
+      // Arrange
+      renderSelector();
+      fireEvent.click(screen.getByTestId('advanced-toggle'));
+      // Change advanced values away from defaults first
+      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '12' } });
+      fireEvent.change(screen.getByTestId('adv-mode'), { target: { value: 'double' } });
+
+      // Act
+      fireEvent.click(screen.getByTestId('preset-0'));
+
+      // Assert
+      expect((screen.getByTestId('adv-size') as HTMLInputElement).value).toBe('5');
+      expect((screen.getByTestId('adv-mode') as HTMLSelectElement).value).toBe('standard');
+      expect((screen.getByTestId('adv-pipeline') as HTMLSelectElement).value).toBe('iterative');
+      expect((screen.getByTestId('adv-solver') as HTMLSelectElement).value).toBe('propagation');
+      expect((screen.getByTestId('adv-regions') as HTMLSelectElement).value).toBe('bfs');
+      expect(screen.getByText('Region Variance: Uniform')).toBeInTheDocument();
+    });
+
+    it('clicking 9x9 Double Queens sets size=9 and mode=double in advanced', () => {
+      // Arrange
+      renderSelector();
+      fireEvent.click(screen.getByTestId('advanced-toggle'));
+
+      // Act
+      fireEvent.click(screen.getByTestId('preset-3'));
+
+      // Assert
+      expect((screen.getByTestId('adv-size') as HTMLInputElement).value).toBe('9');
+      expect((screen.getByTestId('adv-mode') as HTMLSelectElement).value).toBe('double');
+      expect((screen.getByTestId('adv-pipeline') as HTMLSelectElement).value).toBe('iterative');
+      expect((screen.getByTestId('adv-solver') as HTMLSelectElement).value).toBe('propagation');
+      expect((screen.getByTestId('adv-regions') as HTMLSelectElement).value).toBe('bfs');
+    });
+
+    it('clicking 7x7 Standard sets size=7 in advanced', () => {
+      // Arrange
+      renderSelector();
+      fireEvent.click(screen.getByTestId('advanced-toggle'));
+
+      // Act
+      fireEvent.click(screen.getByTestId('preset-1'));
+
+      // Assert
+      expect((screen.getByTestId('adv-size') as HTMLInputElement).value).toBe('7');
+      expect((screen.getByTestId('adv-mode') as HTMLSelectElement).value).toBe('standard');
+    });
+
+    it('advanced controls reflect preset even when section is collapsed then expanded', () => {
+      // Arrange
+      renderSelector();
+
+      // Act — click preset while advanced is collapsed, then expand
+      fireEvent.click(screen.getByTestId('preset-2')); // 9x9 Standard
+      fireEvent.click(screen.getByTestId('advanced-toggle'));
+
+      // Assert
+      expect((screen.getByTestId('adv-size') as HTMLInputElement).value).toBe('9');
+      expect((screen.getByTestId('adv-mode') as HTMLSelectElement).value).toBe('standard');
+      expect((screen.getByTestId('adv-pipeline') as HTMLSelectElement).value).toBe('iterative');
+      expect((screen.getByTestId('adv-solver') as HTMLSelectElement).value).toBe('propagation');
+      expect((screen.getByTestId('adv-regions') as HTMLSelectElement).value).toBe('bfs');
+      expect(screen.getByText('Region Variance: Uniform')).toBeInTheDocument();
+    });
+  });
+
   describe('variance slider', () => {
     it('snaps to 5 discrete values', () => {
       // Arrange
