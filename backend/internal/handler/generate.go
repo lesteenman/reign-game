@@ -45,10 +45,12 @@ func generateTimeout(size int) time.Duration {
 	if size <= 5 {
 		return 5 * time.Second
 	}
+	// API Gateway hard limit is 29s, so cap at 25s to leave margin for
+	// response serialization and network overhead.
 	if size <= 9 {
-		return 30 * time.Second
+		return 25 * time.Second
 	}
-	return 60 * time.Second
+	return 25 * time.Second
 }
 
 // generateParams holds all validated parameters for puzzle generation.

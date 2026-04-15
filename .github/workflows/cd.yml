@@ -37,7 +37,8 @@ jobs:
         working-directory: backend
         run: |
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bootstrap ./cmd/api
-          zip -j lambda.zip bootstrap
+          touch -t 200001010000.00 bootstrap
+          zip -jX lambda.zip bootstrap
 
       - name: Build frontend
         working-directory: frontend
