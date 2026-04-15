@@ -10,6 +10,8 @@
 # Compiled binaries
 backend/bin/
 backend/cmd/*/main
+backend/api
+backend/bootstrap
 *.exe
 *.exe~
 *.dll
