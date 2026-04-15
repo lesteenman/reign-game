@@ -17,3 +17,18 @@ output "frontend_distribution_id" {
   description = "CloudFront distribution ID for cache invalidation"
   value       = module.frontend.cloudfront_distribution_id
 }
+
+output "puzzle_table_name" {
+  description = "DynamoDB puzzle pool table name"
+  value       = module.database.puzzle_table_name
+}
+
+output "sqs_queue_url" {
+  description = "SQS puzzle generation queue URL"
+  value       = module.generation.queue_url
+}
+
+output "generator_function_name" {
+  description = "Generator Lambda function name"
+  value       = module.generation.generator_function_name
+}

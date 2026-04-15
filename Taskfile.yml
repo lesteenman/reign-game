@@ -37,9 +37,37 @@ tasks:
     cmds:
       - go test -bench=. -benchtime=3x -timeout=600s ./internal/generator/ -run='^$'
 
+  dev:localstack:
+    desc: Start LocalStack (DynamoDB + SQS)
+    cmds:
+      - docker compose up localstack
+
   dev:backend:
-    desc: Start backend dev server
+    desc: Start backend dev server with LocalStack endpoints
     dir: backend
+    env:
+      DYNAMODB_ENDPOINT: http://localhost:4566
+      SQS_ENDPOINT: http://localhost:4566
+      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
+      AWS_REGION: us-east-1
+      PUZZLE_TABLE_NAME: puzzle-pool
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    cmds:
+      - go run ./cmd/api
+
+  dev:generator:
+    desc: Start SQS consumer with LocalStack env vars
+    dir: backend
+    env:
+      GENERATOR_MODE: sqs
+      DYNAMODB_ENDPOINT: http://localhost:4566
+      SQS_ENDPOINT: http://localhost:4566
+      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
+      AWS_REGION: us-east-1
+      PUZZLE_TABLE_NAME: puzzle-pool
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
     cmds:
       - go run ./cmd/api
 

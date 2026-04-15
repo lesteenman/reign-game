@@ -43,6 +43,48 @@ resource "aws_iam_role_policy" "lambda_logs" {
   })
 }
 
+# SQS publish policy for API Lambda
+resource "aws_iam_role_policy" "lambda_sqs" {
+  count = var.sqs_queue_arn != "" ? 1 : 0
+  name  = "${local.function_name}-sqs"
+  role  = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage"
+        ]
+        Resource = var.sqs_queue_arn
+      }
+    ]
+  })
+}
+
+# DynamoDB access policy for API Lambda
+resource "aws_iam_role_policy" "lambda_dynamodb" {
+  count = var.puzzle_table_arn != "" ? 1 : 0
+  name  = "${local.function_name}-dynamodb"
+  role  = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "dynamodb:Query",
+          "dynamodb:UpdateItem",
+          "dynamodb:PutItem"
+        ]
+        Resource = var.puzzle_table_arn
+      }
+    ]
+  })
+}
+
 # Lambda function
 resource "aws_lambda_function" "api" {
   function_name = local.function_name
@@ -55,6 +97,13 @@ resource "aws_lambda_function" "api" {
 
   timeout     = 29
   memory_size = 512
+
+  environment {
+    variables = {
+      PUZZLE_TABLE_NAME = var.puzzle_table_name
+      SQS_QUEUE_URL     = var.sqs_queue_url
+    }
+  }
 }
 
 # API Gateway REST API
