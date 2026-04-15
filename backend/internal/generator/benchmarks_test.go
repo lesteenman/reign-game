@@ -299,25 +299,3 @@ func BenchmarkSolver_Propagation_CountSolutions_5x5(b *testing.B) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// Legacy reference — BacktrackSolver full pipeline at 5x5
-// ---------------------------------------------------------------------------
-
-// BenchmarkPipeline_Legacy_Backtrack_5x5_Standard benchmarks the
-// SolutionFirstPipeline with BacktrackSolver + BFS regions at 5x5.
-func BenchmarkPipeline_Legacy_Backtrack_5x5_Standard(b *testing.B) {
-	solver := NewBacktrackSolver()
-	regions := NewBFSRegionGenerator()
-	pipeline := NewSolutionFirstPipeline(solver, regions)
-	opts := GenerateOpts{Timeout: 60 * time.Second}
-	for b.Loop() {
-		start := time.Now()
-		puzzle, err := pipeline.Generate(5, 1, opts)
-		elapsed := time.Since(start)
-		if err != nil {
-			b.Fatalf("Generate(5) failed: %v", err)
-		}
-		b.ReportMetric(elapsed.Seconds(), "sec/puzzle")
-		b.ReportMetric(float64(puzzle.GridSize), "gridSize")
-	}
-}

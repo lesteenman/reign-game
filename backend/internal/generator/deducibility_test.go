@@ -114,10 +114,6 @@ func TestGeneratedPuzzles_AreLogicallyDeducible(t *testing.T) {
 		pipeline PipelineStrategy
 	}{
 		{
-			name:     "SolutionFirst",
-			pipeline: NewSolutionFirstPipeline(NewPropagationSolver(), NewBFSRegionGenerator()),
-		},
-		{
 			name:     "RegionFirst",
 			pipeline: NewRegionFirstPipeline(NewPropagationSolver()),
 		},

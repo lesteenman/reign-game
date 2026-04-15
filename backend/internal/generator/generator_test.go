@@ -41,7 +41,7 @@ func TestGenerate(t *testing.T) {
 					// Act
 					solver := NewBacktrackSolver()
 					regions := NewBFSRegionGenerator()
-					pipeline := NewSolutionFirstPipeline(solver, regions)
+					pipeline := NewIterativeRefinementPipeline(solver, regions)
 					opts := GenerateOpts{Timeout: tt.timeout}
 					puzzle, err := pipeline.Generate(gridSize, 1, opts)
 
@@ -107,7 +107,7 @@ func TestGenerateTimeout(t *testing.T) {
 	// Arrange
 	solver := NewBacktrackSolver()
 	regions := NewBFSRegionGenerator()
-	pipeline := NewSolutionFirstPipeline(solver, regions)
+	pipeline := NewIterativeRefinementPipeline(solver, regions)
 	opts := GenerateOpts{Timeout: 1 * time.Nanosecond}
 
 	// Act

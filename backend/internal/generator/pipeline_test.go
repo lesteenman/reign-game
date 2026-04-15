@@ -71,58 +71,6 @@ type PuzzleResult struct {
 	Solution  [][]bool
 }
 
-func TestSolutionFirstPipeline_5x5(t *testing.T) {
-	tests := []struct {
-		name     string
-		gridSize int
-		timeout  time.Duration
-	}{
-		{
-			name:     "5x5 with propagation solver and BFS regions",
-			gridSize: 5,
-			timeout:  30 * time.Second,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Arrange
-			solver := NewPropagationSolver()
-			regions := NewBFSRegionGenerator()
-			pipeline := NewSolutionFirstPipeline(solver, regions)
-			opts := GenerateOpts{Timeout: tt.timeout}
-
-			// Act
-			puzzle, err := pipeline.Generate(tt.gridSize, 1, opts)
-
-			// Assert
-			if err != nil {
-				t.Fatalf("Generate returned error: %v", err)
-			}
-			assertPuzzleValid(t, &PuzzleResult{
-				ID: puzzle.ID, GridSize: puzzle.GridSize, Mode: puzzle.Mode,
-				RegionMap: puzzle.RegionMap, Solution: puzzle.Solution,
-			}, tt.gridSize)
-		})
-	}
-}
-
-func TestSolutionFirstPipeline_Timeout(t *testing.T) {
-	// Arrange
-	solver := NewPropagationSolver()
-	regions := NewBFSRegionGenerator()
-	pipeline := NewSolutionFirstPipeline(solver, regions)
-	opts := GenerateOpts{Timeout: 1 * time.Nanosecond}
-
-	// Act
-	_, err := pipeline.Generate(5, 1, opts)
-
-	// Assert
-	if err == nil {
-		t.Fatal("expected timeout error, got nil")
-	}
-}
-
 func TestRegionFirstPipeline_5x5(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -293,24 +241,6 @@ func TestConstraintAwarePipeline_Timeout(t *testing.T) {
 	}
 }
 
-func TestDefaultPipeline_5x5(t *testing.T) {
-	// Arrange
-	pipeline := NewDefaultPipeline()
-	opts := GenerateOpts{Timeout: 30 * time.Second}
-
-	// Act
-	puzzle, err := pipeline.Generate(5, 1, opts)
-
-	// Assert
-	if err != nil {
-		t.Fatalf("Generate returned error: %v", err)
-	}
-	assertPuzzleValid(t, &PuzzleResult{
-		ID: puzzle.ID, GridSize: puzzle.GridSize, Mode: puzzle.Mode,
-		RegionMap: puzzle.RegionMap, Solution: puzzle.Solution,
-	}, 5)
-}
-
 func TestGenerateRandomRegions_5x5(t *testing.T) {
 	tests := []struct {
 		name       string
@@ -355,11 +285,9 @@ func TestGenerateRandomRegions_5x5(t *testing.T) {
 
 func TestPipelineStrategy_Interface(t *testing.T) {
 	// Arrange + Assert: verify all pipelines implement PipelineStrategy.
-	var _ PipelineStrategy = NewSolutionFirstPipeline(NewPropagationSolver(), NewBFSRegionGenerator())
 	var _ PipelineStrategy = NewRegionFirstPipeline(NewPropagationSolver())
 	var _ PipelineStrategy = NewIterativeRefinementPipeline(NewPropagationSolver(), NewBFSRegionGenerator())
 	var _ PipelineStrategy = NewConstraintAwarePipeline(NewPropagationSolver())
-	var _ PipelineStrategy = NewDefaultPipeline()
 }
 
 // assertPuzzleValidDouble is a test helper that validates a generated Double
