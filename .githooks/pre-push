@@ -20,6 +20,18 @@ fi
 echo "--- Backend: test ---"
 go test ./... -count=1
 
+# Infrastructure
+echo "--- Terraform: fmt check ---"
+cd "$ROOT/infra"
+if command -v terraform &>/dev/null; then
+  if ! terraform fmt -recursive -check -diff; then
+    echo "ERROR: Terraform files not formatted. Run: terraform -chdir=infra fmt -recursive"
+    exit 1
+  fi
+else
+  echo "WARN: terraform not found, skipping fmt check"
+fi
+
 # Frontend
 echo "--- Frontend: build (includes tsc) ---"
 cd "$ROOT/frontend"

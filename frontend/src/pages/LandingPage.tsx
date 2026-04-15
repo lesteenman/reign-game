@@ -4,7 +4,7 @@ import { useGameStorage } from '../hooks/useGameStorage';
 import { PageShell } from '../components/common/PageShell';
 import { PrimaryButton, SecondaryButton } from '../components/common/Button';
 import { PuzzleSelector } from '../components/landing/PuzzleSelector';
-import type { GenerateOptions } from '../services/puzzleService';
+import type { PuzzleSelection } from '../components/landing/PuzzleSelector';
 
 type PageState =
   | { status: 'loading' }
@@ -31,24 +31,12 @@ function getServerOnlineSnapshot(): boolean {
   return true;
 }
 
-/** Build a URL search string from GenerateOptions. */
-function buildPlayUrl(options: GenerateOptions): string {
+/** Build a URL search string from puzzle selection. */
+function buildPlayUrl(selection: PuzzleSelection): string {
   const params = new URLSearchParams();
   params.set('new', 'true');
-  params.set('size', String(options.size));
-  params.set('mode', options.mode);
-  if (options.pipeline !== undefined) {
-    params.set('pipeline', options.pipeline);
-  }
-  if (options.solver !== undefined) {
-    params.set('solver', options.solver);
-  }
-  if (options.regions !== undefined) {
-    params.set('regions', options.regions);
-  }
-  if (options.regionVariance !== undefined) {
-    params.set('regionVariance', String(options.regionVariance));
-  }
+  params.set('size', String(selection.size));
+  params.set('mode', selection.mode);
   return `/play?${params.toString()}`;
 }
 
@@ -74,7 +62,7 @@ export function LandingPage() {
     return () => { cancelled = true; };
   }, [loadState]);
 
-  const handleNewPuzzle = useCallback((options: GenerateOptions) => {
+  const handleNewPuzzle = useCallback((selection: PuzzleSelection) => {
     if (!navigator.onLine) {
       setState({
         status: 'error',
@@ -82,7 +70,7 @@ export function LandingPage() {
       });
       return;
     }
-    navigate(buildPlayUrl(options));
+    navigate(buildPlayUrl(selection));
   }, [navigate]);
 
   const handleResume = useCallback(() => {

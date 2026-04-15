@@ -57,7 +57,6 @@ describe('LandingPage', () => {
       expect(screen.getByTestId('preset-0')).toBeInTheDocument();
       expect(screen.getByTestId('preset-1')).toBeInTheDocument();
       expect(screen.getByTestId('preset-2')).toBeInTheDocument();
-      expect(screen.getByTestId('preset-3')).toBeInTheDocument();
     });
 
     it('Play navigates with default preset params', async () => {
@@ -78,15 +77,15 @@ describe('LandingPage', () => {
       // Arrange
       renderLanding();
       await waitFor(() => {
-        expect(screen.getByTestId('preset-3')).toBeInTheDocument();
+        expect(screen.getByTestId('preset-2')).toBeInTheDocument();
       });
 
       // Act
-      fireEvent.click(screen.getByTestId('preset-3'));
+      fireEvent.click(screen.getByTestId('preset-2'));
       fireEvent.click(screen.getByTestId('play-button'));
 
       // Assert
-      expect(navigatedTo).toBe('/play?new=true&size=9&mode=double');
+      expect(navigatedTo).toBe('/play?new=true&size=9&mode=standard');
     });
   });
 
@@ -136,7 +135,7 @@ describe('LandingPage', () => {
   });
 
   describe('buildPlayUrl', () => {
-    it('builds URL with basic options', () => {
+    it('builds URL with size and mode', () => {
       // Arrange & Act
       const url = buildPlayUrl({ size: 7, mode: 'standard' });
 
@@ -144,27 +143,15 @@ describe('LandingPage', () => {
       expect(url).toBe('/play?new=true&size=7&mode=standard');
     });
 
-    it('includes all advanced options', () => {
+    it('builds URL with double mode', () => {
       // Arrange & Act
-      const url = buildPlayUrl({
-        size: 9,
-        mode: 'double',
-        pipeline: 'iterative',
-        solver: 'propagation',
-        regions: 'wfc',
-        regionVariance: 0.75,
-      });
+      const url = buildPlayUrl({ size: 9, mode: 'double' });
 
       // Assert
-      expect(url).toContain('size=9');
-      expect(url).toContain('mode=double');
-      expect(url).toContain('pipeline=iterative');
-      expect(url).toContain('solver=propagation');
-      expect(url).toContain('regions=wfc');
-      expect(url).toContain('regionVariance=0.75');
+      expect(url).toBe('/play?new=true&size=9&mode=double');
     });
 
-    it('omits undefined optional params', () => {
+    it('does not include advanced params', () => {
       // Arrange & Act
       const url = buildPlayUrl({ size: 5, mode: 'standard' });
 

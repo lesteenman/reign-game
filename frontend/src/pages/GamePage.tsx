@@ -4,8 +4,7 @@ import { Grid } from '../components/grid/Grid';
 import { useGame } from '../hooks/useGame';
 import { useTimer } from '../hooks/useTimer';
 import { useGameStorage } from '../hooks/useGameStorage';
-import { generatePuzzle } from '../services/puzzleService';
-import type { GenerateOptions } from '../services/puzzleService';
+import { fetchNextPuzzle, updatePuzzleStatus, NoPuzzlesAvailableError } from '../services/puzzleService';
 import { createFreshGameState } from '../storage/utils';
 import { PageShell } from '../components/common/PageShell';
 import { PrimaryButton, SecondaryButton } from '../components/common/Button';
@@ -19,10 +18,17 @@ function formatTime(seconds: number): string {
   return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
+/** Format generation duration for display. */
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
 type LoadState =
   | { status: 'loading' }
   | { status: 'ready'; puzzle: PuzzleData; initialCells: CellState[][]; timerElapsed: number; timerResumedAt: number | null; startedAt: number }
   | { status: 'no-state' }
+  | { status: 'no-puzzles' }
   | { status: 'error'; message: string };
 
 /**
@@ -48,31 +54,8 @@ export function GamePage() {
       const size = Number(searchParams.get('size')) || 5;
       const modeParam = searchParams.get('mode');
       const mode: 'standard' | 'double' = modeParam === 'double' ? 'double' : 'standard';
-      const pipelineParam = searchParams.get('pipeline');
-      const pipeline: GenerateOptions['pipeline'] | undefined =
-        ['region-first', 'iterative', 'constraint-aware'].includes(pipelineParam ?? '')
-          ? (pipelineParam as GenerateOptions['pipeline'])
-          : undefined;
-      const solverParam = searchParams.get('solver');
-      const solver: GenerateOptions['solver'] | undefined =
-        ['backtrack', 'propagation'].includes(solverParam ?? '')
-          ? (solverParam as GenerateOptions['solver'])
-          : undefined;
-      const regionsParam = searchParams.get('regions');
-      const regions: GenerateOptions['regions'] | undefined =
-        ['bfs', 'wfc'].includes(regionsParam ?? '')
-          ? (regionsParam as GenerateOptions['regions'])
-          : undefined;
-      const regionVarianceStr = searchParams.get('regionVariance');
-      const regionVariance = regionVarianceStr !== null ? Number(regionVarianceStr) : undefined;
 
-      const options: GenerateOptions = { size, mode };
-      if (pipeline) options.pipeline = pipeline;
-      if (solver) options.solver = solver;
-      if (regions) options.regions = regions;
-      if (regionVariance !== undefined && !Number.isNaN(regionVariance)) options.regionVariance = regionVariance;
-
-      void generatePuzzle(options).then(async (puzzle) => {
+      void fetchNextPuzzle(size, mode).then(async (puzzle) => {
         if (cancelled) return;
         const gameState = createFreshGameState(puzzle);
         await saveState(gameState);
@@ -86,6 +69,10 @@ export function GamePage() {
         });
       }).catch((err) => {
         if (cancelled) return;
+        if (err instanceof NoPuzzlesAvailableError) {
+          setLoadStatus({ status: 'no-puzzles' });
+          return;
+        }
         const message = err instanceof Error ? err.message : 'Unknown error';
         setLoadStatus({ status: 'error', message });
       });
@@ -136,12 +123,39 @@ export function GamePage() {
             Failed to load puzzle: {loadStatus.message}
           </p>
           <SecondaryButton onClick={() => {
-            // Retry with the same generation params from the current URL
             const retryParams = new URLSearchParams(searchParams);
             retryParams.set('new', 'true');
             navigate(`/play?${retryParams.toString()}`, { replace: true });
           }}>
             Try Again
+          </SecondaryButton>
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (loadStatus.status === 'no-puzzles') {
+    return (
+      <PageShell onBack={handleBack}>
+        <div
+          data-testid="no-puzzles-state"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
+            padding: '48px 0',
+          }}
+        >
+          <p style={{ color: 'var(--color-body)', fontWeight: 600 }}>
+            No puzzles available for this size and mode
+          </p>
+          <SecondaryButton onClick={() => {
+            const retryParams = new URLSearchParams(searchParams);
+            retryParams.set('new', 'true');
+            navigate(`/play?${retryParams.toString()}`, { replace: true });
+          }}>
+            Retry
           </SecondaryButton>
         </div>
       </PageShell>
@@ -312,6 +326,9 @@ function GameBoard({
         time: finalTime,
         completedAt: Date.now(),
       });
+      // Report puzzle as solved to the backend
+      const modeValue = puzzle.mode === 'double' ? 'double' : 'standard';
+      void updatePuzzleStatus(puzzle.puzzleId, puzzle.gridSize, modeValue, 'solved');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSolved]);
@@ -332,7 +349,7 @@ function GameBoard({
     setCompletionTime(0);
   }, [originalResetGame]);
 
-  // Navigate to /play with the same generation params for a new puzzle.
+  // Navigate to /play with the same params for a new puzzle.
   const [currentSearchParams] = useSearchParams();
   const handlePlayAgain = useCallback(() => {
     const replayParams = new URLSearchParams(currentSearchParams);
@@ -436,6 +453,23 @@ function GameBoard({
           </div>
         )}
       </div>
+
+      {/* Puzzle metadata display */}
+      {puzzle.metadata && (
+        <div
+          data-testid="puzzle-metadata"
+          style={{
+            fontFamily: '"Nunito Sans", system-ui, sans-serif',
+            fontSize: '0.75rem',
+            color: 'var(--color-muted)',
+            textAlign: 'center',
+            maxWidth: 600,
+            width: '100%',
+          }}
+        >
+          {puzzle.metadata.pipeline} / {puzzle.metadata.solver} / {formatDuration(puzzle.metadata.generationDurationMs)}
+        </div>
+      )}
 
       {/* Reset button */}
       <SecondaryButton onClick={resetGame}>Reset</SecondaryButton>

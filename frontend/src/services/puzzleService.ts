@@ -1,37 +1,42 @@
 import type { PuzzleData } from '../engine/types';
-import { apiFetch } from './api';
+import { apiFetch, ApiError, apiPut } from './api';
 
-/** Options for the puzzle generator endpoint. */
-export interface GenerateOptions {
-  size: number;
-  mode: 'standard' | 'double';
-  pipeline?: 'region-first' | 'iterative' | 'constraint-aware';
-  solver?: 'backtrack' | 'propagation';
-  regions?: 'bfs' | 'wfc';
-  regionVariance?: number;
+/** Error thrown when the puzzle pool has no puzzles for the requested size/mode. */
+export class NoPuzzlesAvailableError extends Error {
+  constructor(message = 'No puzzles available for this size and mode') {
+    super(message);
+    this.name = 'NoPuzzlesAvailableError';
+  }
 }
 
-/** Request a new puzzle from the backend generate endpoint. */
-export async function generatePuzzle(
-  options: GenerateOptions,
+/** Fetch the next puzzle from the pool for a given size and mode. */
+export async function fetchNextPuzzle(
+  size: number,
+  mode: string,
 ): Promise<PuzzleData> {
-  const params: Record<string, string> = {
-    size: String(options.size),
-    mode: options.mode,
-  };
+  try {
+    return await apiFetch<PuzzleData>('/puzzles/next', {
+      size: String(size),
+      mode,
+    });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      throw new NoPuzzlesAvailableError();
+    }
+    throw err;
+  }
+}
 
-  if (options.pipeline !== undefined) {
-    params.pipeline = options.pipeline;
-  }
-  if (options.solver !== undefined) {
-    params.solver = options.solver;
-  }
-  if (options.regions !== undefined) {
-    params.regions = options.regions;
-  }
-  if (options.regionVariance !== undefined) {
-    params.regionVariance = String(options.regionVariance);
-  }
-
-  return apiFetch<PuzzleData>('/puzzles/generate', params);
+/** Update a puzzle's status after the player completes or skips it. */
+export async function updatePuzzleStatus(
+  puzzleId: string,
+  size: number,
+  mode: string,
+  status: 'solved' | 'skipped',
+): Promise<void> {
+  await apiPut<Record<string, never>>(
+    `/puzzles/${puzzleId}/status`,
+    { status },
+    { size: String(size), mode },
+  );
 }

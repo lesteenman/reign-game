@@ -16,23 +16,9 @@ variable "lambda_zip_path" {
 variable "puzzle_table_name" {
   description = "DynamoDB puzzle pool table name"
   type        = string
-  default     = ""
 }
 
 variable "puzzle_table_arn" {
   description = "DynamoDB puzzle pool table ARN"
   type        = string
-  default     = ""
-}
-
-variable "sqs_queue_url" {
-  description = "SQS puzzle generation queue URL"
-  type        = string
-  default     = ""
-}
-
-variable "sqs_queue_arn" {
-  description = "SQS puzzle generation queue ARN"
-  type        = string
-  default     = ""
 }
