@@ -205,7 +205,7 @@ func TestGenerateHandler(t *testing.T) {
 		// Double Queens mode.
 		{
 			name:       "mode=double with size=9",
-			query:      "?size=9&mode=double",
+			query:      "?size=9&mode=double&deducible=false",
 			wantStatus: http.StatusOK,
 			wantSize:   9,
 			wantMode:   "double",

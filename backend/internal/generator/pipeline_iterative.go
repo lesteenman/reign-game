@@ -73,7 +73,7 @@ func (p *IterativeRefinementPipeline) Generate(gridSize int, markersPerUnit int,
 			continue
 		}
 
-		if !IsLogicallyDeducible(result, gridSize, markersPerUnit) {
+		if opts.Deducible && !IsLogicallyDeducible(result, gridSize, markersPerUnit) {
 			continue
 		}
 

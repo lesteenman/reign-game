@@ -38,7 +38,8 @@ type RegionOpts struct {
 
 // GenerateOpts configures puzzle generation.
 type GenerateOpts struct {
-	Timeout    time.Duration  // maximum time to spend generating
+	Timeout    time.Duration   // maximum time to spend generating
 	Ctx        context.Context // request context; cancelled on client disconnect
-	RegionOpts RegionOpts     // region generation options
+	RegionOpts RegionOpts      // region generation options
+	Deducible  bool            // require puzzles solvable without guessing (naked singles only)
 }

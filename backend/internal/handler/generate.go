@@ -60,6 +60,7 @@ type generateParams struct {
 	regionVariance float64
 	markersPerUnit int
 	minSize        int
+	deducible      bool
 }
 
 // parseGenerateParams validates and extracts all query parameters from a
@@ -94,10 +95,20 @@ func parseGenerateParams(r *http.Request) (generateParams, int, string, string) 
 		return p, http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'"
 	}
 
+	// Validate deducible parameter (default true).
+	deducibleStr := r.URL.Query().Get("deducible")
+	if deducibleStr == "" || deducibleStr == "true" {
+		p.deducible = true
+	} else if deducibleStr == "false" {
+		p.deducible = false
+	} else {
+		return p, http.StatusBadRequest, "invalid_params", "deducible must be 'true' or 'false'"
+	}
+
 	// Validate pipeline parameter.
 	p.pipeline = r.URL.Query().Get("pipeline")
 	if p.pipeline == "" {
-		p.pipeline = PipelineRegionFirst
+		p.pipeline = PipelineIterative
 	}
 	if p.pipeline != PipelineRegionFirst && p.pipeline != PipelineIterative && p.pipeline != PipelineConstraintAware {
 		return p, http.StatusBadRequest, "invalid_params", "pipeline must be 'region-first', 'iterative', or 'constraint-aware'"
@@ -188,7 +199,8 @@ func buildPipeline(p generateParams) generator.PipelineStrategy {
 // Query params:
 //   - size: int 3-15 (required)
 //   - mode: "standard" | "double" (required)
-//   - pipeline: "region-first" | "iterative" | "constraint-aware" (optional, default "region-first")
+//   - deducible: "true" | "false" (optional, default "true" — only produce puzzles solvable without guessing)
+//   - pipeline: "region-first" | "iterative" | "constraint-aware" (optional, default "iterative")
 //   - solver: "backtrack" | "propagation" (optional, default "propagation")
 //   - regions: "bfs" | "wfc" (optional, default "bfs")
 //   - regionVariance: float 0.0-1.0 (optional, default 0.0)
@@ -207,8 +219,9 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 
 	// Build generation options.
 	opts := generator.GenerateOpts{
-		Timeout: generateTimeout(params.size),
-		Ctx:     r.Context(),
+		Timeout:   generateTimeout(params.size),
+		Ctx:       r.Context(),
+		Deducible: params.deducible,
 		RegionOpts: generator.RegionOpts{
 			Variance: params.regionVariance,
 			MinSize:  params.minSize,

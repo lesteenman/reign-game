@@ -134,7 +134,7 @@ func TestGeneratedPuzzles_AreLogicallyDeducible(t *testing.T) {
 	for _, pp := range pipelines {
 		t.Run(pp.name, func(t *testing.T) {
 			// Arrange
-			opts := GenerateOpts{Timeout: 60 * time.Second}
+			opts := GenerateOpts{Timeout: 60 * time.Second, Deducible: true}
 
 			// Act
 			puzzle, err := pp.pipeline.Generate(5, 1, opts)

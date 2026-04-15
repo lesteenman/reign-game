@@ -52,7 +52,7 @@ func (p *SolutionFirstPipeline) Generate(gridSize int, markersPerUnit int, opts 
 			continue
 		}
 
-		if !IsLogicallyDeducible(regionMap, gridSize, markersPerUnit) {
+		if opts.Deducible && !IsLogicallyDeducible(regionMap, gridSize, markersPerUnit) {
 			continue
 		}
 

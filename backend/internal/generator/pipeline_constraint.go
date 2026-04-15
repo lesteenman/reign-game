@@ -56,7 +56,7 @@ func (p *ConstraintAwarePipeline) Generate(gridSize int, markersPerUnit int, opt
 			continue
 		}
 
-		if !IsLogicallyDeducible(regionMap, gridSize, markersPerUnit) {
+		if opts.Deducible && !IsLogicallyDeducible(regionMap, gridSize, markersPerUnit) {
 			continue
 		}
 
