@@ -31,19 +31,23 @@ For each change:
 1. **Search for existing utilities and helpers** that could replace newly written code. Look for similar patterns elsewhere in the codebase.
 2. **Flag any new function that duplicates existing functionality.** Suggest the existing function to use instead.
 3. **Flag any inline logic that could use an existing utility** -- hand-rolled string manipulation, manual path handling, custom environment checks.
+4. **Intra-function structural duplication**: near-identical blocks within a single function (e.g., the same logic repeated for rows, columns, and regions). Suggest extracting a shared helper even if it's only called from one place.
 
 ### Agent 3: Code Quality Review
 
 **Spec-awareness (if project uses OpenSpec):** Before reviewing, check if an OpenSpec change exists for this work (`openspec/changes/*/`). If so, read the spec files to understand the intended behavior. When a local review "fix" would contradict the spec, flag it as a finding instead of auto-fixing.
 
-Review the same changes for hacky patterns:
+Review the same changes for hacky patterns and clean code violations:
 
 1. **Redundant state**: state that duplicates existing state, cached values that could be derived
 2. **Parameter sprawl**: adding new parameters instead of generalizing or restructuring
 3. **Copy-paste with slight variation**: near-duplicate code blocks that should be unified
-4. **Leaky abstractions**: exposing internal details that should be encapsulated
+4. **Leaky abstractions**: exposing internal details that should be encapsulated. Watch for Law of Demeter violations (`a.getB().getC().doSomething()`) -- callers reaching through object chains to access distant internals
 5. **Stringly-typed code**: using raw strings where constants, enums, or branded types already exist
-6. **Unnecessary comments**: comments explaining WHAT the code does (well-named identifiers already do that)
+6. **Poor naming**: names that don't reveal intent (`d` instead of `elapsedTimeInDays`), misleading names (`accountList` for a Map), vague distinctions (`ProductData` vs `ProductInfo`), unpronounce­able or unsearchable names. Function names should be verbs, class/type names should be nouns
+7. **Comments that compensate for bad code**: comments explaining WHAT the code does (the code itself should be clear enough). Redundant comments restating the code. Commented-out code. Exception: legal headers, intent clarification for external libraries, and TODOs are acceptable
+8. **Oversized functions**: functions exceeding ~80 lines, doing more than one thing, or mixing abstraction levels (e.g., high-level orchestration interleaved with low-level bit manipulation). Flag with a suggested decomposition. Also flag functions with 3+ parameters -- consider an options struct or builder
+9. **Poor formatting**: related code separated by unrelated code (vertical density violation), variables declared far from their usage, file not structured top-down (high-level public API should come before private helpers -- the newspaper metaphor)
 
 ### Agent 4: Efficiency Review
 
