@@ -27,7 +27,7 @@ Milestone C (Frontend)                  → Full UI: selectors, advanced mode, a
 | T-212 | API client expansion | C | [x] |
 | T-213 | Landing page selectors | C | [x] |
 | T-214 | Game page header + back nav | C | [x] |
-| T-215 | Milestone C integration + playtest | C | [ ] |
+| T-215 | Milestone C integration + playtest | C | [x] |
 
 ## Tasks
 

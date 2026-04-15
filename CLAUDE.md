@@ -162,6 +162,9 @@ Agents must NOT just summarize or paraphrase a skill. They must read and execute
 5. **First-paint correctness for visual components:** Never render a component at a default/placeholder size then resize after measuring. Use CSS-based sizing or defer rendering until the container is measured. Layout flicker is a user-visible bug.
 6. **Even pixel values for SVG strokes:** Use 2px, 4px — never 2.5px or other subpixel values. Subpixel stroke widths cause anti-aliasing artifacts at line intersections visible on both standard and retina displays.
 7. **Verify production request flow before deploy PRs:** Trace every URL the frontend calls and confirm it reaches the correct backend in production. Check CloudFront behaviors, API Gateway routes, and proxy config. Dev proxies mask routing issues that break in production.
+8. **Lint before commit, not just at push:** Run `golangci-lint run` (backend) and `npx tsc -b` (frontend) before committing. The pre-push hook catches these, but late failures waste time on fix-up commits. Two Phase 2 commits were purely lint fixes that could have been avoided.
+9. **Float API params: always test NaN and Inf:** When adding float parameters to APIs, explicitly test `NaN` and `Inf` inputs. `strconv.ParseFloat` accepts these as valid, and compound range checks like `x < 0 || x > 1` evaluate to false for NaN, letting it through. Use `math.IsNaN` explicitly.
+10. **Validate URL params before type assertion:** When frontend reads URL params and uses them as typed values (enums, numbers), validate against known values before type assertion. URL params are always `string | null` — invalid values passed unchecked will reach the API.
 
 ### Human-in-the-Loop Rule (CRITICAL)
 
