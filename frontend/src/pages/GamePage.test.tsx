@@ -5,7 +5,20 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { GamePage } from './GamePage';
 import { FALLBACK_PUZZLE } from '../App';
-import type { GenerateOptions } from '../services/puzzleService';
+import type { PuzzleData } from '../engine/types';
+
+const MOCK_PUZZLE_WITH_METADATA: PuzzleData = {
+  ...FALLBACK_PUZZLE,
+  puzzleId: 'pool-001',
+  metadata: {
+    pipeline: 'iterative',
+    solver: 'propagation',
+    regions: 'bfs',
+    regionVariance: 0.0,
+    generationDurationMs: 4200,
+    createdAt: '2026-04-15T10:30:00Z',
+  },
+};
 
 // Track navigate calls
 const mockNavigate = vi.fn();
@@ -17,13 +30,22 @@ vi.mock('react-router-dom', async () => {
   };
 });
 
-// Track generatePuzzle calls
-let lastGenerateOptions: GenerateOptions | undefined;
-let mockGenerateResult: () => Promise<typeof FALLBACK_PUZZLE> = () => Promise.resolve(FALLBACK_PUZZLE);
+// Track fetchNextPuzzle and updatePuzzleStatus calls
+let lastFetchArgs: { size: number; mode: string } | undefined;
+let mockFetchResult: () => Promise<PuzzleData> = () => Promise.resolve(MOCK_PUZZLE_WITH_METADATA);
+const mockUpdateStatus = vi.fn().mockResolvedValue(undefined);
+
 vi.mock('../services/puzzleService', () => ({
-  generatePuzzle: (options: GenerateOptions) => {
-    lastGenerateOptions = options;
-    return mockGenerateResult();
+  fetchNextPuzzle: (size: number, mode: string) => {
+    lastFetchArgs = { size, mode };
+    return mockFetchResult();
+  },
+  updatePuzzleStatus: (...args: unknown[]) => mockUpdateStatus(...args),
+  NoPuzzlesAvailableError: class NoPuzzlesAvailableError extends Error {
+    constructor(message = 'No puzzles available') {
+      super(message);
+      this.name = 'NoPuzzlesAvailableError';
+    }
   },
 }));
 
@@ -46,8 +68,9 @@ beforeEach(() => {
   mockLoadState.mockClear();
   mockSaveState.mockClear();
   mockAddCompletion.mockClear();
-  lastGenerateOptions = undefined;
-  mockGenerateResult = () => Promise.resolve(FALLBACK_PUZZLE);
+  mockUpdateStatus.mockClear();
+  lastFetchArgs = undefined;
+  mockFetchResult = () => Promise.resolve(MOCK_PUZZLE_WITH_METADATA);
   globalThis.fetch = vi.fn().mockResolvedValue({
     ok: true,
     json: () => Promise.resolve(FALLBACK_PUZZLE),
@@ -141,79 +164,18 @@ describe('GamePage back navigation preserves state', () => {
 
     // Assert — navigate was called with '/' (not '/play?new=true' which would discard state)
     expect(mockNavigate).toHaveBeenCalledWith('/');
-    // The navigate call does NOT include any state-clearing logic;
-    // only navigating to /play?new=true triggers a new puzzle generation
     expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining('new=true'));
   });
 });
 
-describe('GamePage Try Again preserves params', () => {
-  it('Try Again on error retries with same generation params', async () => {
-    // Arrange — make generation fail
-    mockGenerateResult = () => Promise.reject(new Error('generation failed'));
-    renderGamePage('/play?new=true&size=9&mode=double&pipeline=iterative&solver=propagation');
-
-    // Act — wait for error state and click Try Again
-    const errorState = await screen.findByTestId('error-state');
-    expect(errorState).toBeInTheDocument();
-    const tryAgainButton = screen.getByRole('button', { name: /try again/i });
-    fireEvent.click(tryAgainButton);
-
-    // Assert — navigate was called with all the original params preserved
-    expect(mockNavigate).toHaveBeenCalledWith(
-      expect.stringContaining('size=9'),
-      expect.objectContaining({ replace: true }),
-    );
-    expect(mockNavigate).toHaveBeenCalledWith(
-      expect.stringContaining('mode=double'),
-      expect.objectContaining({ replace: true }),
-    );
-    expect(mockNavigate).toHaveBeenCalledWith(
-      expect.stringContaining('pipeline=iterative'),
-      expect.objectContaining({ replace: true }),
-    );
-    expect(mockNavigate).toHaveBeenCalledWith(
-      expect.stringContaining('solver=propagation'),
-      expect.objectContaining({ replace: true }),
-    );
-    expect(mockNavigate).toHaveBeenCalledWith(
-      expect.stringContaining('new=true'),
-      expect.objectContaining({ replace: true }),
-    );
-  });
-
-  it('Try Again on error does not navigate to bare /play?new=true', async () => {
-    // Arrange — make generation fail with specific params
-    mockGenerateResult = () => Promise.reject(new Error('generation failed'));
-    renderGamePage('/play?new=true&size=7&mode=standard&regions=wfc');
-
-    // Act
-    const errorState = await screen.findByTestId('error-state');
-    expect(errorState).toBeInTheDocument();
-    const tryAgainButton = screen.getByRole('button', { name: /try again/i });
-    fireEvent.click(tryAgainButton);
-
-    // Assert — should NOT navigate to just '/play?new=true'
-    expect(mockNavigate).not.toHaveBeenCalledWith('/play?new=true', expect.anything());
-    // Should include the original params
-    const navigateUrl = mockNavigate.mock.calls[0]?.[0] as string;
-    expect(navigateUrl).toContain('size=7');
-    expect(navigateUrl).toContain('regions=wfc');
-  });
-});
-
-describe('GamePage URL params for puzzle generation', () => {
-  it('reads size and mode from URL params', async () => {
+describe('GamePage fetchNextPuzzle integration', () => {
+  it('calls fetchNextPuzzle with size and mode from URL params', async () => {
     // Arrange & Act
     renderGamePage('/play?new=true&size=7&mode=double');
-
-    // Wait for generation to complete
     await waitForHeader();
 
     // Assert
-    expect(lastGenerateOptions).toBeDefined();
-    expect(lastGenerateOptions?.size).toBe(7);
-    expect(lastGenerateOptions?.mode).toBe('double');
+    expect(lastFetchArgs).toEqual({ size: 7, mode: 'double' });
   });
 
   it('uses default size=5 and mode=standard when params absent', async () => {
@@ -222,34 +184,157 @@ describe('GamePage URL params for puzzle generation', () => {
     await waitForHeader();
 
     // Assert
-    expect(lastGenerateOptions).toBeDefined();
-    expect(lastGenerateOptions?.size).toBe(5);
-    expect(lastGenerateOptions?.mode).toBe('standard');
+    expect(lastFetchArgs).toEqual({ size: 5, mode: 'standard' });
   });
 
-  it('passes optional generator params when present', async () => {
+  it('does not read pipeline, solver, regions, or regionVariance from URL', async () => {
     // Arrange & Act
-    renderGamePage('/play?new=true&size=9&mode=standard&pipeline=iterative&solver=propagation&regions=wfc&regionVariance=0.3');
+    renderGamePage('/play?new=true&size=9&mode=standard&pipeline=iterative&solver=propagation');
+    await waitForHeader();
+
+    // Assert — only size and mode matter now
+    expect(lastFetchArgs).toEqual({ size: 9, mode: 'standard' });
+  });
+});
+
+describe('GamePage error states', () => {
+  it('shows generic error on fetch failure', async () => {
+    // Arrange
+    mockFetchResult = () => Promise.reject(new Error('network error'));
+    renderGamePage('/play?new=true&size=7&mode=standard');
+
+    // Act
+    const errorState = await screen.findByTestId('error-state');
+
+    // Assert
+    expect(errorState).toBeInTheDocument();
+  });
+
+  it('Try Again on error retries with size and mode params', async () => {
+    // Arrange
+    mockFetchResult = () => Promise.reject(new Error('generation failed'));
+    renderGamePage('/play?new=true&size=9&mode=double');
+
+    // Act
+    const errorState = await screen.findByTestId('error-state');
+    expect(errorState).toBeInTheDocument();
+    const tryAgainButton = screen.getByRole('button', { name: /try again/i });
+    fireEvent.click(tryAgainButton);
+
+    // Assert — navigate with size and mode preserved
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringContaining('size=9'),
+      expect.objectContaining({ replace: true }),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringContaining('mode=double'),
+      expect.objectContaining({ replace: true }),
+    );
+  });
+});
+
+describe('GamePage no-puzzles state (FE-04)', () => {
+  it('shows no-puzzles message when fetchNextPuzzle throws NoPuzzlesAvailableError', async () => {
+    // Arrange — import the mock error class
+    const { NoPuzzlesAvailableError } = await import('../services/puzzleService');
+    mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
+    renderGamePage('/play?new=true&size=7&mode=standard');
+
+    // Act
+    const noPuzzlesState = await screen.findByTestId('no-puzzles-state');
+
+    // Assert
+    expect(noPuzzlesState).toBeInTheDocument();
+    expect(noPuzzlesState).toHaveTextContent('No puzzles available for this size and mode');
+  });
+
+  it('shows retry button in no-puzzles state', async () => {
+    // Arrange
+    const { NoPuzzlesAvailableError } = await import('../services/puzzleService');
+    mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
+    renderGamePage('/play?new=true&size=7&mode=standard');
+
+    // Act
+    await screen.findByTestId('no-puzzles-state');
+
+    // Assert
+    expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it('retry button re-fetches by navigating with same params', async () => {
+    // Arrange
+    const { NoPuzzlesAvailableError } = await import('../services/puzzleService');
+    mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
+    renderGamePage('/play?new=true&size=9&mode=double');
+
+    // Act
+    await screen.findByTestId('no-puzzles-state');
+    fireEvent.click(screen.getByRole('button', { name: /retry/i }));
+
+    // Assert
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringContaining('size=9'),
+      expect.objectContaining({ replace: true }),
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.stringContaining('mode=double'),
+      expect.objectContaining({ replace: true }),
+    );
+  });
+});
+
+describe('GamePage metadata display (FE-05)', () => {
+  it('shows metadata when puzzle has metadata', async () => {
+    // Arrange & Act
+    renderGamePage('/play?new=true&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
-    expect(lastGenerateOptions).toBeDefined();
-    expect(lastGenerateOptions?.pipeline).toBe('iterative');
-    expect(lastGenerateOptions?.solver).toBe('propagation');
-    expect(lastGenerateOptions?.regions).toBe('wfc');
-    expect(lastGenerateOptions?.regionVariance).toBe(0.3);
+    const metadata = screen.getByTestId('puzzle-metadata');
+    expect(metadata).toBeInTheDocument();
+    expect(metadata).toHaveTextContent('iterative');
+    expect(metadata).toHaveTextContent('propagation');
+    expect(metadata).toHaveTextContent('4.2s');
   });
 
-  it('omits optional params when not in URL', async () => {
-    // Arrange & Act
-    renderGamePage('/play?new=true&size=6');
+  it('formats duration in ms when under 1000ms', async () => {
+    // Arrange
+    mockFetchResult = () => Promise.resolve({
+      ...MOCK_PUZZLE_WITH_METADATA,
+      metadata: { ...MOCK_PUZZLE_WITH_METADATA.metadata!, generationDurationMs: 450 },
+    });
+    renderGamePage('/play?new=true&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
-    expect(lastGenerateOptions).toBeDefined();
-    expect(lastGenerateOptions?.pipeline).toBeUndefined();
-    expect(lastGenerateOptions?.solver).toBeUndefined();
-    expect(lastGenerateOptions?.regions).toBeUndefined();
-    expect(lastGenerateOptions?.regionVariance).toBeUndefined();
+    const metadata = screen.getByTestId('puzzle-metadata');
+    expect(metadata).toHaveTextContent('450ms');
+  });
+
+  it('does not show metadata when puzzle has no metadata', async () => {
+    // Arrange
+    mockFetchResult = () => Promise.resolve(FALLBACK_PUZZLE);
+    renderGamePage('/play?new=true&size=5&mode=standard');
+    await waitForHeader();
+
+    // Assert
+    expect(screen.queryByTestId('puzzle-metadata')).not.toBeInTheDocument();
+  });
+
+  it('does not show metadata for resumed game without metadata', async () => {
+    // Arrange
+    mockLoadState.mockResolvedValue({
+      id: 'current',
+      puzzle: FALLBACK_PUZZLE,
+      cells: Array.from({ length: 5 }, () => Array(5).fill('empty')),
+      timer: { elapsedAtLastPause: 10, lastResumedAt: null },
+      status: 'in-progress',
+      startedAt: Date.now(),
+    });
+    renderGamePage('/play');
+    await waitForHeader();
+
+    // Assert
+    expect(screen.queryByTestId('puzzle-metadata')).not.toBeInTheDocument();
   });
 });
