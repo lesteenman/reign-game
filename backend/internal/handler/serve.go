@@ -14,7 +14,7 @@ import (
 // PuzzleFetcher retrieves and marks puzzles from the pool.
 type PuzzleFetcher interface {
 	NextReady(ctx context.Context, size int, mode string) (*repository.PuzzleRecord, error)
-	MarkServed(ctx context.Context, pk string, sk string) error
+	MarkServed(ctx context.Context, pk, sk string) error
 }
 
 // serveMetadata is the metadata object included in the serve response.
@@ -29,10 +29,10 @@ type serveMetadata struct {
 
 // serveResponse is the JSON response for the serve endpoint.
 type serveResponse struct {
-	PuzzleID string        `json:"puzzleId"`
-	GridSize int           `json:"gridSize"`
-	Mode     string        `json:"mode"`
-	RegionMap [][]int      `json:"regionMap"`
+	PuzzleID  string        `json:"puzzleId"`
+	GridSize  int           `json:"gridSize"`
+	Mode      string        `json:"mode"`
+	RegionMap [][]int       `json:"regionMap"`
 	Metadata  serveMetadata `json:"metadata"`
 }
 

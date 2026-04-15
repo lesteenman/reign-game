@@ -12,7 +12,7 @@ import (
 
 // StatusUpdater updates puzzle status in the repository.
 type StatusUpdater interface {
-	UpdateStatus(ctx context.Context, pk string, sk string, status string) error
+	UpdateStatus(ctx context.Context, pk, sk, status string) error
 }
 
 // statusRequest is the expected JSON request body for status updates.

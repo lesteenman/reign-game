@@ -33,7 +33,7 @@ type PoolCounter interface {
 
 // MessagePublisher publishes generation requests to an SQS queue.
 type MessagePublisher interface {
-	PublishGenerationRequest(ctx context.Context, req queue.GenerationRequest) error
+	PublishGenerationRequest(ctx context.Context, req *queue.GenerationRequest) error
 }
 
 // triggeredEntry represents a size+mode combo that had generation requests triggered.
@@ -115,7 +115,7 @@ func ReplenishHandler(counter PoolCounter, publisher MessagePublisher) http.Hand
 
 			needed := PoolThreshold - count
 			for i := 0; i < needed; i++ {
-				req := queue.GenerationRequest{
+				req := &queue.GenerationRequest{
 					Size:           combo.Size,
 					Mode:           combo.Mode,
 					Pipeline:       PipelineIterative,

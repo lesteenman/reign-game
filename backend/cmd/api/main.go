@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -71,33 +72,34 @@ func loadAWSConfig(ctx context.Context) (aws.Config, error) {
 
 // newDynamoDBClient creates a DynamoDB client, optionally with a custom
 // endpoint for local development (e.g., LocalStack).
-func newDynamoDBClient(cfg aws.Config) *dynamodb.Client {
+func newDynamoDBClient(cfg *aws.Config) *dynamodb.Client {
 	endpoint := os.Getenv("DYNAMODB_ENDPOINT")
 	if endpoint != "" {
-		return dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
+		return dynamodb.NewFromConfig(*cfg, func(o *dynamodb.Options) {
 			o.BaseEndpoint = aws.String(endpoint)
 		})
 	}
-	return dynamodb.NewFromConfig(cfg)
+	return dynamodb.NewFromConfig(*cfg)
 }
 
 // newSQSClient creates an SQS client, optionally with a custom endpoint
 // for local development (e.g., LocalStack).
-func newSQSClient(cfg aws.Config) *sqs.Client {
+func newSQSClient(cfg *aws.Config) *sqs.Client {
 	endpoint := os.Getenv("SQS_ENDPOINT")
 	if endpoint != "" {
-		return sqs.NewFromConfig(cfg, func(o *sqs.Options) {
+		return sqs.NewFromConfig(*cfg, func(o *sqs.Options) {
 			o.BaseEndpoint = aws.String(endpoint)
 		})
 	}
-	return sqs.NewFromConfig(cfg)
+	return sqs.NewFromConfig(*cfg)
 }
 
 func main() {
 	ctx := context.Background()
 	generatorMode := os.Getenv("GENERATOR_MODE")
 
-	if generatorMode == "sqs" {
+	switch {
+	case generatorMode == "sqs":
 		// SQS consumer mode: generate puzzles from queue messages.
 		cfg, err := loadAWSConfig(ctx)
 		if err != nil {
@@ -109,7 +111,7 @@ func main() {
 			tableName = "puzzle-pool"
 		}
 
-		dynamoClient := newDynamoDBClient(cfg)
+		dynamoClient := newDynamoDBClient(&cfg)
 		repo := repository.NewPuzzleRepository(dynamoClient, tableName)
 		w := worker.NewGeneratorWorker(repo, newUUIDv4)
 
@@ -123,14 +125,11 @@ func main() {
 				log.Fatal("SQS_QUEUE_URL is required for local SQS consumer mode")
 			}
 
-			sqsClient := newSQSClient(cfg)
+			sqsClient := newSQSClient(&cfg)
 
-			pollerCtx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
-			defer cancel()
-
-			worker.RunLocalPoller(pollerCtx, sqsClient, queueURL, w.HandleSQSEvent)
+			runLocalPoller(ctx, sqsClient, queueURL, w.HandleSQSEvent)
 		}
-	} else if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+	case os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "":
 		// Lambda API mode: HTTP routes via API Gateway proxy.
 		cfg, err := loadAWSConfig(ctx)
 		if err != nil {
@@ -143,19 +142,19 @@ func main() {
 		}
 		queueURL := os.Getenv("SQS_QUEUE_URL")
 
-		dynamoClient := newDynamoDBClient(cfg)
+		dynamoClient := newDynamoDBClient(&cfg)
 		repo := repository.NewPuzzleRepository(dynamoClient, tableName)
 
 		var pub *queue.Publisher
 		if queueURL != "" {
-			sqsClient := newSQSClient(cfg)
+			sqsClient := newSQSClient(&cfg)
 			pub = queue.NewPublisher(sqsClient, queueURL)
 		}
 
 		r := newRouter(repo, pub)
 		adapter := chiadapter.New(r)
 		lambda.Start(adapter.ProxyWithContext)
-	} else {
+	default:
 		// Local dev HTTP server mode.
 		var repo *repository.PuzzleRepository
 		var pub *queue.Publisher
@@ -175,13 +174,13 @@ func main() {
 				if tableName == "" {
 					tableName = "puzzle-pool"
 				}
-				dynamoClient := newDynamoDBClient(cfg)
+				dynamoClient := newDynamoDBClient(&cfg)
 				repo = repository.NewPuzzleRepository(dynamoClient, tableName)
 			}
 
 			queueURL := os.Getenv("SQS_QUEUE_URL")
 			if sqsEndpoint != "" && queueURL != "" {
-				sqsClient := newSQSClient(cfg)
+				sqsClient := newSQSClient(&cfg)
 				pub = queue.NewPublisher(sqsClient, queueURL)
 			}
 		}
@@ -198,4 +197,14 @@ func main() {
 			log.Fatalf("server failed: %v", err)
 		}
 	}
+}
+
+// runLocalPoller wraps signal handling and polling in a separate function so
+// that defer cancel() is scoped correctly and does not trigger exitAfterDefer
+// lint warnings in main.
+func runLocalPoller(ctx context.Context, sqsClient worker.SQSConsumerAPI, queueURL string, handleFn func(context.Context, events.SQSEvent) error) {
+	pollerCtx, cancel := signal.NotifyContext(ctx, syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	worker.RunLocalPoller(pollerCtx, sqsClient, queueURL, handleFn)
 }

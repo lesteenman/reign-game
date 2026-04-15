@@ -80,7 +80,7 @@ func buildPK(size int, mode string) string {
 // PutPuzzle writes a puzzle record to DynamoDB with status set to "ready".
 // The partition key is constructed from the puzzle's grid size and mode,
 // and the sort key is the puzzle ID.
-func (r *PuzzleRepository) PutPuzzle(ctx context.Context, puzzle PuzzleRecord) error {
+func (r *PuzzleRepository) PutPuzzle(ctx context.Context, puzzle *PuzzleRecord) error {
 	puzzle.Status = "ready"
 
 	item, err := attributevalue.MarshalMap(puzzle)
@@ -154,7 +154,7 @@ func (r *PuzzleRepository) NextReady(ctx context.Context, size int, mode string)
 
 // MarkServed updates a puzzle's status to "served" and sets the servedAt
 // timestamp to the current time in ISO 8601 format.
-func (r *PuzzleRepository) MarkServed(ctx context.Context, pk string, sk string) error {
+func (r *PuzzleRepository) MarkServed(ctx context.Context, pk, sk string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 
 	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
@@ -180,7 +180,7 @@ func (r *PuzzleRepository) MarkServed(ctx context.Context, pk string, sk string)
 }
 
 // UpdateStatus updates a puzzle's status to the given value.
-func (r *PuzzleRepository) UpdateStatus(ctx context.Context, pk string, sk string, status string) error {
+func (r *PuzzleRepository) UpdateStatus(ctx context.Context, pk, sk, status string) error {
 	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{

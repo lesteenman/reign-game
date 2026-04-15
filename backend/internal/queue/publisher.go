@@ -45,7 +45,7 @@ func NewPublisher(client SQSAPI, queueURL string) *Publisher {
 
 // PublishGenerationRequest serializes a generation request to JSON and sends
 // it to the configured SQS queue.
-func (p *Publisher) PublishGenerationRequest(ctx context.Context, req GenerationRequest) error {
+func (p *Publisher) PublishGenerationRequest(ctx context.Context, req *GenerationRequest) error {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("marshaling generation request: %w", err)

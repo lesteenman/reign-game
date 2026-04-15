@@ -83,7 +83,7 @@ func TestPutPuzzle(t *testing.T) {
 			repo := NewPuzzleRepository(mock, "puzzle-pool")
 
 			// Act
-			err := repo.PutPuzzle(context.Background(), tt.puzzle)
+			err := repo.PutPuzzle(context.Background(), &tt.puzzle)
 
 			// Assert
 			if tt.wantErr {

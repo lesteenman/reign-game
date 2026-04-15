@@ -26,7 +26,7 @@ const generationTimeout = 14 * time.Minute
 
 // PuzzleStore defines the puzzle persistence operations used by the worker.
 type PuzzleStore interface {
-	PutPuzzle(ctx context.Context, puzzle repository.PuzzleRecord) error
+	PutPuzzle(ctx context.Context, puzzle *repository.PuzzleRecord) error
 }
 
 // SQSConsumerAPI defines the SQS operations used by the local poller.
@@ -58,16 +58,16 @@ func NewGeneratorWorker(store PuzzleStore, newUUID UUIDGenerator) *GeneratorWork
 // puzzle is stored in DynamoDB. Returns an error if any message fails (SQS
 // will retry).
 func (w *GeneratorWorker) HandleSQSEvent(ctx context.Context, event events.SQSEvent) error {
-	for _, record := range event.Records {
-		if err := w.processMessage(ctx, record); err != nil {
-			return fmt.Errorf("processing SQS message %s: %w", record.MessageId, err)
+	for i := range event.Records {
+		if err := w.processMessage(ctx, &event.Records[i]); err != nil {
+			return fmt.Errorf("processing SQS message %s: %w", event.Records[i].MessageId, err)
 		}
 	}
 	return nil
 }
 
 // processMessage handles a single SQS message.
-func (w *GeneratorWorker) processMessage(ctx context.Context, record events.SQSMessage) error {
+func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQSMessage) error {
 	var req queue.GenerationRequest
 	if err := json.Unmarshal([]byte(record.Body), &req); err != nil {
 		return fmt.Errorf("deserializing generation request: %w", err)
@@ -132,7 +132,7 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record events.SQSM
 	}
 
 	// Store the generated puzzle.
-	puzzleRecord := repository.PuzzleRecord{
+	puzzleRecord := &repository.PuzzleRecord{
 		GridSize:             req.Size,
 		Mode:                 req.Mode,
 		ID:                   puzzleID,

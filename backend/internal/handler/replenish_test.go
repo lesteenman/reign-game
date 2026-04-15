@@ -36,11 +36,11 @@ type mockMessagePublisher struct {
 	err       error
 }
 
-func (m *mockMessagePublisher) PublishGenerationRequest(_ context.Context, req queue.GenerationRequest) error {
+func (m *mockMessagePublisher) PublishGenerationRequest(_ context.Context, req *queue.GenerationRequest) error {
 	if m.err != nil {
 		return m.err
 	}
-	m.published = append(m.published, req)
+	m.published = append(m.published, *req)
 	return nil
 }
 

@@ -13,10 +13,10 @@ import (
 
 // mockPuzzleStore implements PuzzleStore for testing.
 type mockPuzzleStore struct {
-	putPuzzleFunc func(ctx context.Context, puzzle repository.PuzzleRecord) error
+	putPuzzleFunc func(ctx context.Context, puzzle *repository.PuzzleRecord) error
 }
 
-func (m *mockPuzzleStore) PutPuzzle(ctx context.Context, puzzle repository.PuzzleRecord) error {
+func (m *mockPuzzleStore) PutPuzzle(ctx context.Context, puzzle *repository.PuzzleRecord) error {
 	return m.putPuzzleFunc(ctx, puzzle)
 }
 
@@ -50,8 +50,8 @@ func TestHandleSQSEvent(t *testing.T) {
 			wantSolver: "propagation",
 		},
 		{
-			name: "invalid JSON returns error",
-			req:  queue.GenerationRequest{}, // we override body below
+			name:    "invalid JSON returns error",
+			req:     queue.GenerationRequest{}, // we override body below
 			wantErr: true,
 		},
 	}
@@ -62,8 +62,8 @@ func TestHandleSQSEvent(t *testing.T) {
 				// Arrange
 				var capturedRecord *repository.PuzzleRecord
 				store := &mockPuzzleStore{
-					putPuzzleFunc: func(ctx context.Context, puzzle repository.PuzzleRecord) error {
-						capturedRecord = &puzzle
+					putPuzzleFunc: func(ctx context.Context, puzzle *repository.PuzzleRecord) error {
+						capturedRecord = puzzle
 						return nil
 					},
 				}
@@ -96,8 +96,8 @@ func TestHandleSQSEvent(t *testing.T) {
 			// Arrange
 			var capturedRecord *repository.PuzzleRecord
 			store := &mockPuzzleStore{
-				putPuzzleFunc: func(ctx context.Context, puzzle repository.PuzzleRecord) error {
-					capturedRecord = &puzzle
+				putPuzzleFunc: func(ctx context.Context, puzzle *repository.PuzzleRecord) error {
+					capturedRecord = puzzle
 					return tt.putErr
 				},
 			}

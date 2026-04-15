@@ -22,7 +22,7 @@ func (m *mockPuzzleFetcher) NextReady(ctx context.Context, size int, mode string
 	return m.nextReadyFunc(ctx, size, mode)
 }
 
-func (m *mockPuzzleFetcher) MarkServed(ctx context.Context, pk string, sk string) error {
+func (m *mockPuzzleFetcher) MarkServed(ctx context.Context, pk, sk string) error {
 	return m.markServedFunc(ctx, pk, sk)
 }
 

@@ -77,7 +77,7 @@ func TestPublishGenerationRequest(t *testing.T) {
 			pub := NewPublisher(mock, "https://sqs.us-east-1.amazonaws.com/123456789/puzzle-generation")
 
 			// Act
-			err := pub.PublishGenerationRequest(context.Background(), tt.req)
+			err := pub.PublishGenerationRequest(context.Background(), &tt.req)
 
 			// Assert
 			if tt.wantErr {

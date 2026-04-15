@@ -22,7 +22,7 @@ type mockStatusUpdater struct {
 	lastStatus string
 }
 
-func (m *mockStatusUpdater) UpdateStatus(ctx context.Context, pk string, sk string, status string) error {
+func (m *mockStatusUpdater) UpdateStatus(ctx context.Context, pk, sk, status string) error {
 	m.lastPK = pk
 	m.lastSK = sk
 	m.lastStatus = status
