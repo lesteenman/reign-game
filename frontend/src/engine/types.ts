@@ -12,10 +12,21 @@ export interface Conflict {
   cells: [Position, Position];
 }
 
+/** Generation metadata from the puzzle pool. */
+export interface PuzzleMetadata {
+  pipeline: string;
+  solver: string;
+  regions: string;
+  regionVariance: number;
+  generationDurationMs: number;
+  createdAt: string;
+}
+
 /** Puzzle data from the API */
 export interface PuzzleData {
   puzzleId: string;
   gridSize: number;
   mode: string;
   regionMap: number[][];
+  metadata?: PuzzleMetadata;
 }
