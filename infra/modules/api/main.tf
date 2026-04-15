@@ -45,9 +45,8 @@ resource "aws_iam_role_policy" "lambda_logs" {
 
 # SQS publish policy for API Lambda
 resource "aws_iam_role_policy" "lambda_sqs" {
-  count = var.sqs_queue_arn != "" ? 1 : 0
-  name  = "${local.function_name}-sqs"
-  role  = aws_iam_role.lambda_exec.id
+  name = "${local.function_name}-sqs"
+  role = aws_iam_role.lambda_exec.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -65,9 +64,8 @@ resource "aws_iam_role_policy" "lambda_sqs" {
 
 # DynamoDB access policy for API Lambda
 resource "aws_iam_role_policy" "lambda_dynamodb" {
-  count = var.puzzle_table_arn != "" ? 1 : 0
-  name  = "${local.function_name}-dynamodb"
-  role  = aws_iam_role.lambda_exec.id
+  name = "${local.function_name}-dynamodb"
+  role = aws_iam_role.lambda_exec.id
 
   policy = jsonencode({
     Version = "2012-10-17"
@@ -153,6 +151,7 @@ resource "aws_api_gateway_deployment" "api" {
   depends_on = [
     aws_api_gateway_integration.health_lambda,
     aws_api_gateway_integration.puzzles_proxy_lambda,
+    aws_api_gateway_integration.admin_proxy_lambda,
   ]
 
   # Force new deployment when integrations change
@@ -160,6 +159,7 @@ resource "aws_api_gateway_deployment" "api" {
     redeployment = sha1(jsonencode([
       aws_api_gateway_integration.health_lambda.id,
       aws_api_gateway_integration.puzzles_proxy_lambda.id,
+      aws_api_gateway_integration.admin_proxy_lambda.id,
     ]))
   }
 
@@ -189,11 +189,11 @@ resource "aws_api_gateway_resource" "puzzles_proxy" {
   path_part   = "{proxy+}"
 }
 
-# GET on /puzzles/{proxy+}
-resource "aws_api_gateway_method" "puzzles_proxy_get" {
+# ANY on /puzzles/{proxy+} — covers GET, PUT, POST for all puzzle endpoints
+resource "aws_api_gateway_method" "puzzles_proxy_any" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
   resource_id   = aws_api_gateway_resource.puzzles_proxy.id
-  http_method   = "GET"
+  http_method   = "ANY"
   authorization = "NONE"
 }
 
@@ -201,7 +201,39 @@ resource "aws_api_gateway_method" "puzzles_proxy_get" {
 resource "aws_api_gateway_integration" "puzzles_proxy_lambda" {
   rest_api_id             = aws_api_gateway_rest_api.api.id
   resource_id             = aws_api_gateway_resource.puzzles_proxy.id
-  http_method             = aws_api_gateway_method.puzzles_proxy_get.http_method
+  http_method             = aws_api_gateway_method.puzzles_proxy_any.http_method
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.api.invoke_arn
+}
+
+# /admin resource
+resource "aws_api_gateway_resource" "admin" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
+  path_part   = "admin"
+}
+
+# /admin/{proxy+} for sub-paths like /admin/replenish
+resource "aws_api_gateway_resource" "admin_proxy" {
+  rest_api_id = aws_api_gateway_rest_api.api.id
+  parent_id   = aws_api_gateway_resource.admin.id
+  path_part   = "{proxy+}"
+}
+
+# ANY on /admin/{proxy+}
+resource "aws_api_gateway_method" "admin_proxy_any" {
+  rest_api_id   = aws_api_gateway_rest_api.api.id
+  resource_id   = aws_api_gateway_resource.admin_proxy.id
+  http_method   = "ANY"
+  authorization = "NONE"
+}
+
+# Lambda integration for /admin/{proxy+}
+resource "aws_api_gateway_integration" "admin_proxy_lambda" {
+  rest_api_id             = aws_api_gateway_rest_api.api.id
+  resource_id             = aws_api_gateway_resource.admin_proxy.id
+  http_method             = aws_api_gateway_method.admin_proxy_any.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.api.invoke_arn
