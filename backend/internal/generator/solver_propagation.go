@@ -564,9 +564,8 @@ func IsLogicallyDeducible(regionMap [][]int, gridSize int, markersPerUnit int) b
 	state := newPropagationStateWithRegions(regionMap, gridSize, markersPerUnit)
 
 	// Apply initial forced moves.
-	forcedRes, ok := propApplyForced(state)
+	_, ok := propApplyForced(state)
 	if !ok {
-		_ = forcedRes
 		return false
 	}
 

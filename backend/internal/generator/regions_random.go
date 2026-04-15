@@ -17,7 +17,6 @@ const randomRegionMaxRetries = 50
 // the generated map fails validation.
 func GenerateRandomRegions(gridSize int, opts RegionOpts) ([][]int, error) {
 	numRegions := gridSize
-	total := gridSize * gridSize
 
 	// Compute target sizes.
 	var targets []int
@@ -41,7 +40,7 @@ func GenerateRandomRegions(gridSize int, opts RegionOpts) ([][]int, error) {
 
 	var lastErr error
 	for attempt := 0; attempt < randomRegionMaxRetries; attempt++ {
-		regionMap, err := generateRandomRegionsWithTargets(gridSize, numRegions, total, targets, effectiveMinSize)
+		regionMap, err := generateRandomRegionsWithTargets(gridSize, numRegions, targets, effectiveMinSize)
 		if err == nil {
 			return regionMap, nil
 		}
@@ -52,7 +51,7 @@ func GenerateRandomRegions(gridSize int, opts RegionOpts) ([][]int, error) {
 
 // generateRandomRegionsWithTargets places random seed cells and grows regions
 // via round-robin BFS to their target sizes.
-func generateRandomRegionsWithTargets(gridSize, numRegions, _ int, targets []int, minSize int) ([][]int, error) {
+func generateRandomRegionsWithTargets(gridSize, numRegions int, targets []int, minSize int) ([][]int, error) {
 	regionMap := make([][]int, gridSize)
 	for r := 0; r < gridSize; r++ {
 		regionMap[r] = make([]int, gridSize)

@@ -101,6 +101,14 @@ func (p *IterativeRefinementPipeline) refine(regionMap [][]int, gridSize, marker
 		return nil
 	}
 
+	// Pre-compute region sizes to avoid O(N²) scans on every swap attempt.
+	regionSize := make([]int, gridSize)
+	for row := 0; row < gridSize; row++ {
+		for col := 0; col < gridSize; col++ {
+			regionSize[currentMap[row][col]]++
+		}
+	}
+
 	for iter := 0; iter < maxSwapIterations; iter++ {
 		if time.Now().After(deadline) {
 			return nil
@@ -112,9 +120,9 @@ func (p *IterativeRefinementPipeline) refine(regionMap [][]int, gridSize, marker
 
 		// Find an adjacent cell in a different region.
 		dirs := [4][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
-		shuffledDirs := rand.Perm(4)
+		shuffledDirs := [4]int{0, 1, 2, 3}
+		rand.Shuffle(4, func(i, j int) { shuffledDirs[i], shuffledDirs[j] = shuffledDirs[j], shuffledDirs[i] })
 
-		swapped := false
 		for _, di := range shuffledDirs {
 			d := dirs[di]
 			nr, nc := r+d[0], c+d[1]
@@ -129,9 +137,8 @@ func (p *IterativeRefinementPipeline) refine(regionMap [][]int, gridSize, marker
 			oldRid := currentMap[r][c]
 			newRid := currentMap[nr][nc]
 
-			// Count cells in old region — don't let it drop below minimum.
-			oldSize := countRegionCells(currentMap, gridSize, oldRid)
-			if oldSize <= minSize {
+			// Don't let the old region drop below the minimum size.
+			if regionSize[oldRid] <= minSize {
 				continue
 			}
 
@@ -146,6 +153,8 @@ func (p *IterativeRefinementPipeline) refine(regionMap [][]int, gridSize, marker
 			// Check if the swap improves things.
 			newCount := p.solver.CountSolutions(currentMap, gridSize, markersPerUnit, 2)
 			if newCount == 1 {
+				regionSize[oldRid]--
+				regionSize[newRid]++
 				return currentMap
 			}
 			if newCount == 0 || newCount > currentCount {
@@ -156,11 +165,10 @@ func (p *IterativeRefinementPipeline) refine(regionMap [][]int, gridSize, marker
 
 			// Swap is at least as good (newCount <= currentCount), keep it.
 			currentCount = newCount
-			swapped = true
+			regionSize[oldRid]--
+			regionSize[newRid]++
 			break
 		}
-
-		_ = swapped
 	}
 
 	return nil
@@ -174,19 +182,6 @@ func copyRegionMap(regionMap [][]int, gridSize int) [][]int {
 		copy(result[r], regionMap[r])
 	}
 	return result
-}
-
-// countRegionCells counts how many cells belong to a specific region.
-func countRegionCells(regionMap [][]int, gridSize, rid int) int {
-	count := 0
-	for r := 0; r < gridSize; r++ {
-		for c := 0; c < gridSize; c++ {
-			if regionMap[r][c] == rid {
-				count++
-			}
-		}
-	}
-	return count
 }
 
 // isRegionStillContiguous checks whether a specific region is still contiguous

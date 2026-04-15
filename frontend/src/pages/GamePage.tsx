@@ -48,9 +48,21 @@ export function GamePage() {
       const size = Number(searchParams.get('size')) || 5;
       const modeParam = searchParams.get('mode');
       const mode: 'standard' | 'double' = modeParam === 'double' ? 'double' : 'standard';
-      const pipeline = searchParams.get('pipeline') as GenerateOptions['pipeline'] | null;
-      const solver = searchParams.get('solver') as GenerateOptions['solver'] | null;
-      const regions = searchParams.get('regions') as GenerateOptions['regions'] | null;
+      const pipelineParam = searchParams.get('pipeline');
+      const pipeline: GenerateOptions['pipeline'] | undefined =
+        ['region-first', 'iterative', 'constraint-aware'].includes(pipelineParam ?? '')
+          ? (pipelineParam as GenerateOptions['pipeline'])
+          : undefined;
+      const solverParam = searchParams.get('solver');
+      const solver: GenerateOptions['solver'] | undefined =
+        ['backtrack', 'propagation'].includes(solverParam ?? '')
+          ? (solverParam as GenerateOptions['solver'])
+          : undefined;
+      const regionsParam = searchParams.get('regions');
+      const regions: GenerateOptions['regions'] | undefined =
+        ['bfs', 'wfc'].includes(regionsParam ?? '')
+          ? (regionsParam as GenerateOptions['regions'])
+          : undefined;
       const regionVarianceStr = searchParams.get('regionVariance');
       const regionVariance = regionVarianceStr !== null ? Number(regionVarianceStr) : undefined;
 
@@ -320,10 +332,13 @@ function GameBoard({
     setCompletionTime(0);
   }, [originalResetGame]);
 
-  // Fix 4: navigate to /play?new=true instead of reloading
+  // Navigate to /play with the same generation params for a new puzzle.
+  const [currentSearchParams] = useSearchParams();
   const handlePlayAgain = useCallback(() => {
-    navigate('/play?new=true', { replace: true });
-  }, [navigate]);
+    const replayParams = new URLSearchParams(currentSearchParams);
+    replayParams.set('new', 'true');
+    navigate(`/play?${replayParams.toString()}`, { replace: true });
+  }, [navigate, currentSearchParams]);
 
   const handleGoHome = useCallback(() => {
     navigate('/');

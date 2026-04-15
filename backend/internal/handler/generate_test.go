@@ -152,6 +152,12 @@ func TestGenerateHandler(t *testing.T) {
 			wantStatus: http.StatusBadRequest,
 			wantError:  "invalid_params",
 		},
+		{
+			name:       "regionVariance=NaN rejected",
+			query:      "?size=5&mode=standard&regionVariance=NaN",
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
 		// Solution-first pipeline not exposed via API.
 		{
 			name:       "solution-first pipeline rejected",
