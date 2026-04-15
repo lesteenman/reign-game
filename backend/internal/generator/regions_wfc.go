@@ -249,7 +249,7 @@ func (g *WFCRegionGenerator) tryWFC(solution [][]bool, gridSize int, targets []i
 // chooseWeighted selects a region from the given options, weighted by how many
 // cells each region still needs (deficit from target). Regions further from
 // their target are more likely to be chosen, which helps produce balanced sizes.
-func (g *WFCRegionGenerator) chooseWeighted(options []int, targets, regionSize []int) int {
+func (g *WFCRegionGenerator) chooseWeighted(options, targets, regionSize []int) int {
 	if len(options) == 1 {
 		return options[0]
 	}

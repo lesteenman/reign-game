@@ -158,10 +158,10 @@ func TestBFSRegionGenerator_WithVariance(t *testing.T) {
 	}
 
 	tests := []struct {
-		name         string
-		gridSize     int
-		opts         RegionOpts
-		wantUniform  bool
+		name        string
+		gridSize    int
+		opts        RegionOpts
+		wantUniform bool
 	}{
 		{
 			name:     "zero variance produces uniform regions",

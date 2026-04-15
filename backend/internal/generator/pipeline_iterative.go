@@ -30,7 +30,7 @@ func NewIterativeRefinementPipeline(solver SolverStrategy, regions RegionStrateg
 // then iteratively swapping non-marker cells between adjacent regions to reduce
 // the number of valid solutions. It retries from scratch if max iterations are
 // exceeded or the timeout expires.
-func (p *IterativeRefinementPipeline) Generate(gridSize int, markersPerUnit int, opts GenerateOpts) (*model.Puzzle, error) {
+func (p *IterativeRefinementPipeline) Generate(gridSize, markersPerUnit int, opts GenerateOpts) (*model.Puzzle, error) {
 	deadline := time.Now().Add(opts.Timeout)
 
 	for {

@@ -28,7 +28,7 @@ func NewConstraintAwarePipeline(solver SolverStrategy) *ConstraintAwarePipeline 
 // Generate creates a puzzle by generating a solution, seeding regions from
 // marker positions, then greedily assigning each remaining cell to the adjacent
 // region that most reduces the solution count.
-func (p *ConstraintAwarePipeline) Generate(gridSize int, markersPerUnit int, opts GenerateOpts) (*model.Puzzle, error) {
+func (p *ConstraintAwarePipeline) Generate(gridSize, markersPerUnit int, opts GenerateOpts) (*model.Puzzle, error) {
 	deadline := time.Now().Add(opts.Timeout)
 
 	for {

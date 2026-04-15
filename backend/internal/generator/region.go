@@ -251,7 +251,7 @@ func generateRegionMapWithTargets(solution [][]bool, gridSize int, targetSizes [
 // frontier cells claims one random neighbor. If all regions with frontiers are
 // at or above their target, any region with frontier cells is used as a
 // fallback to prevent stranding.
-func growRegionsBFS(regionMap [][]int, regionSize []int, targetSizes []int, gridSize int) error {
+func growRegionsBFS(regionMap [][]int, regionSize, targetSizes []int, gridSize int) error {
 	dirs := [][2]int{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}
 	numRegions := len(regionSize)
 
@@ -364,7 +364,7 @@ func ValidateRegionMap(regionMap [][]int, gridSize int) error {
 // all region IDs are in [0, gridSize), number of distinct regions equals gridSize,
 // total cells equal gridSize*gridSize, each region has at least minSize cells,
 // and each region is contiguous (connected via horizontal/vertical adjacency).
-func ValidateRegionMapWithMinSize(regionMap [][]int, gridSize int, minSize int) error {
+func ValidateRegionMapWithMinSize(regionMap [][]int, gridSize, minSize int) error {
 	// Check row count.
 	if len(regionMap) != gridSize {
 		return fmt.Errorf("validating region map: row count %d does not match grid size %d", len(regionMap), gridSize)

@@ -27,7 +27,7 @@ func NewRegionFirstPipeline(solver SolverStrategy) *RegionFirstPipeline {
 // Generate creates a puzzle by generating random region maps and checking each
 // for a unique solution. It retries until a unique-solution region map is found
 // or the timeout expires.
-func (p *RegionFirstPipeline) Generate(gridSize int, markersPerUnit int, opts GenerateOpts) (*model.Puzzle, error) {
+func (p *RegionFirstPipeline) Generate(gridSize, markersPerUnit int, opts GenerateOpts) (*model.Puzzle, error) {
 	deadline := time.Now().Add(opts.Timeout)
 
 	for {

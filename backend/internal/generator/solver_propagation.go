@@ -239,7 +239,7 @@ func (s *propagationState) undoEliminations(eliminated [][2]int) {
 // GenerateSolution produces a random valid marker placement for the given grid
 // using backtracking with constraint propagation. It returns nil if no valid
 // placement is found.
-func (s *PropagationSolver) GenerateSolution(gridSize int, markersPerUnit int) [][]bool {
+func (s *PropagationSolver) GenerateSolution(gridSize, markersPerUnit int) [][]bool {
 	state := newPropagationState(gridSize, markersPerUnit)
 	if !propGenRow(state, 0) {
 		return nil
@@ -520,7 +520,7 @@ func propUndoForced(s *propagationState, result forcedResult) {
 
 // CountSolutions returns the number of valid solutions (stops at maxSolutions)
 // using backtracking with constraint propagation including region constraints.
-func (s *PropagationSolver) CountSolutions(regionMap [][]int, gridSize int, markersPerUnit int, maxSolutions int) int {
+func (s *PropagationSolver) CountSolutions(regionMap [][]int, gridSize, markersPerUnit, maxSolutions int) int {
 	state := newPropagationStateWithRegions(regionMap, gridSize, markersPerUnit)
 	count := 0
 	countPropRow(state, 0, maxSolutions, &count)
@@ -560,7 +560,7 @@ func countPropRow(s *propagationState, row, maxSolutions int, count *int) {
 // propagates constraints and applies cascading forced moves. If at any point
 // the solver would need to try a second candidate for the same row (i.e.,
 // backtrack), the puzzle is not deducible.
-func IsLogicallyDeducible(regionMap [][]int, gridSize int, markersPerUnit int) bool {
+func IsLogicallyDeducible(regionMap [][]int, gridSize, markersPerUnit int) bool {
 	state := newPropagationStateWithRegions(regionMap, gridSize, markersPerUnit)
 
 	// Apply initial forced moves.

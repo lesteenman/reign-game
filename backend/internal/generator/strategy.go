@@ -11,7 +11,7 @@ import (
 // Different pipelines use fundamentally different approaches to producing
 // puzzles with unique solutions.
 type PipelineStrategy interface {
-	Generate(gridSize int, markersPerUnit int, opts GenerateOpts) (*model.Puzzle, error)
+	Generate(gridSize, markersPerUnit int, opts GenerateOpts) (*model.Puzzle, error)
 }
 
 // SolverStrategy generates random solutions and counts valid solutions.

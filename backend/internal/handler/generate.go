@@ -68,7 +68,7 @@ type generateParams struct {
 // parseGenerateParams validates and extracts all query parameters from a
 // generate request. Returns an error message tuple (status, code, message)
 // on validation failure.
-func parseGenerateParams(r *http.Request) (generateParams, int, string, string) {
+func parseGenerateParams(r *http.Request) (params generateParams, status int, errCode, errMsg string) {
 	var p generateParams
 
 	// Validate size parameter.
@@ -99,11 +99,12 @@ func parseGenerateParams(r *http.Request) (generateParams, int, string, string) 
 
 	// Validate deducible parameter (default true).
 	deducibleStr := r.URL.Query().Get("deducible")
-	if deducibleStr == "" || deducibleStr == "true" {
+	switch deducibleStr {
+	case "", "true":
 		p.deducible = true
-	} else if deducibleStr == "false" {
+	case "false":
 		p.deducible = false
-	} else {
+	default:
 		return p, http.StatusBadRequest, "invalid_params", "deducible must be 'true' or 'false'"
 	}
 
@@ -173,7 +174,7 @@ func parseGenerateParams(r *http.Request) (generateParams, int, string, string) 
 
 // buildPipeline constructs the appropriate pipeline strategy from validated
 // parameters.
-func buildPipeline(p generateParams) generator.PipelineStrategy {
+func buildPipeline(p *generateParams) generator.PipelineStrategy {
 	// Construct solver strategy.
 	var solver generator.SolverStrategy
 	switch p.solver {
@@ -232,7 +233,7 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build pipeline from parameters.
-	pipeline := buildPipeline(params)
+	pipeline := buildPipeline(&params)
 
 	// Build generation options.
 	opts := generator.GenerateOpts{

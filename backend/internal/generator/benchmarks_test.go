@@ -34,7 +34,7 @@ type benchCase struct {
 }
 
 // runBenchCase executes a single benchmark case with standard metric reporting.
-func runBenchCase(b *testing.B, bc benchCase) {
+func runBenchCase(b *testing.B, bc *benchCase) {
 	b.Helper()
 	opts := GenerateOpts{
 		Timeout:     bc.timeout,
@@ -90,22 +90,22 @@ func BenchmarkPipeline(b *testing.B) {
 		// Standard mode (deducible=true): RegionFirst
 		// -----------------------------------------------------------------
 		{
-			name: "RegionFirst/5x5_Standard/deducible/c1",
+			name:     "RegionFirst/5x5_Standard/deducible/c1",
 			pipeline: regionFirst, gridSize: 5, markersPerUnit: 1,
 			deducible: true, concurrency: 1, timeout: 60 * time.Second,
 		},
 		{
-			name: "RegionFirst/7x7_Standard/deducible/c1",
+			name:     "RegionFirst/7x7_Standard/deducible/c1",
 			pipeline: regionFirst, gridSize: 7, markersPerUnit: 1,
 			deducible: true, concurrency: 1, timeout: 60 * time.Second,
 		},
 		{
-			name: "RegionFirst/9x9_Standard/deducible/c1",
+			name:     "RegionFirst/9x9_Standard/deducible/c1",
 			pipeline: regionFirst, gridSize: 9, markersPerUnit: 1,
 			deducible: true, concurrency: 1, timeout: 120 * time.Second,
 		},
 		{
-			name: "RegionFirst/9x9_Standard/deducible/c4",
+			name:     "RegionFirst/9x9_Standard/deducible/c4",
 			pipeline: regionFirst, gridSize: 9, markersPerUnit: 1,
 			deducible: true, concurrency: 4, timeout: 120 * time.Second,
 		},
@@ -114,22 +114,22 @@ func BenchmarkPipeline(b *testing.B) {
 		// Standard mode (deducible=true): Iterative
 		// -----------------------------------------------------------------
 		{
-			name: "Iterative/5x5_Standard/deducible/c1",
+			name:     "Iterative/5x5_Standard/deducible/c1",
 			pipeline: iterative, gridSize: 5, markersPerUnit: 1,
 			deducible: true, concurrency: 1, timeout: 60 * time.Second,
 		},
 		{
-			name: "Iterative/7x7_Standard/deducible/c1",
+			name:     "Iterative/7x7_Standard/deducible/c1",
 			pipeline: iterative, gridSize: 7, markersPerUnit: 1,
 			deducible: true, concurrency: 1, timeout: 60 * time.Second,
 		},
 		{
-			name: "Iterative/9x9_Standard/deducible/c1",
+			name:     "Iterative/9x9_Standard/deducible/c1",
 			pipeline: iterative, gridSize: 9, markersPerUnit: 1,
 			deducible: true, concurrency: 1, timeout: 120 * time.Second,
 		},
 		{
-			name: "Iterative/9x9_Standard/deducible/c4",
+			name:     "Iterative/9x9_Standard/deducible/c4",
 			pipeline: iterative, gridSize: 9, markersPerUnit: 1,
 			deducible: true, concurrency: 4, timeout: 120 * time.Second,
 		},
@@ -138,7 +138,7 @@ func BenchmarkPipeline(b *testing.B) {
 		// Standard mode (deducible=false): RegionFirst baseline
 		// -----------------------------------------------------------------
 		{
-			name: "RegionFirst/9x9_Standard/raw/c1",
+			name:     "RegionFirst/9x9_Standard/raw/c1",
 			pipeline: regionFirst, gridSize: 9, markersPerUnit: 1,
 			deducible: false, concurrency: 1, timeout: 120 * time.Second,
 		},
@@ -147,12 +147,12 @@ func BenchmarkPipeline(b *testing.B) {
 		// Double Queens (deducible=false, 9x9): RegionFirst
 		// -----------------------------------------------------------------
 		{
-			name: "RegionFirst/9x9_Double/raw/c1",
+			name:     "RegionFirst/9x9_Double/raw/c1",
 			pipeline: regionFirst, gridSize: 9, markersPerUnit: 2,
 			deducible: false, concurrency: 1, timeout: 120 * time.Second,
 		},
 		{
-			name: "RegionFirst/9x9_Double/raw/c4",
+			name:     "RegionFirst/9x9_Double/raw/c4",
 			pipeline: regionFirst, gridSize: 9, markersPerUnit: 2,
 			deducible: false, concurrency: 4, timeout: 120 * time.Second,
 		},
@@ -161,12 +161,12 @@ func BenchmarkPipeline(b *testing.B) {
 		// Double Queens (deducible=false, 9x9): Iterative
 		// -----------------------------------------------------------------
 		{
-			name: "Iterative/9x9_Double/raw/c1",
+			name:     "Iterative/9x9_Double/raw/c1",
 			pipeline: iterativeDouble, gridSize: 9, markersPerUnit: 2,
 			deducible: false, concurrency: 1, timeout: 120 * time.Second,
 		},
 		{
-			name: "Iterative/9x9_Double/raw/c4",
+			name:     "Iterative/9x9_Double/raw/c4",
 			pipeline: iterativeDouble, gridSize: 9, markersPerUnit: 2,
 			deducible: false, concurrency: 4, timeout: 120 * time.Second,
 		},
@@ -175,12 +175,12 @@ func BenchmarkPipeline(b *testing.B) {
 		// Region variance impact (9x9 standard, deducible=true): Iterative
 		// -----------------------------------------------------------------
 		{
-			name: "Iterative/9x9_Standard/deducible/variance0.00/c1",
+			name:     "Iterative/9x9_Standard/deducible/variance0.00/c1",
 			pipeline: iterative, gridSize: 9, markersPerUnit: 1,
 			deducible: true, concurrency: 1, regionVariance: 0.0, timeout: 120 * time.Second,
 		},
 		{
-			name: "Iterative/9x9_Standard/deducible/variance0.25/c1",
+			name:     "Iterative/9x9_Standard/deducible/variance0.25/c1",
 			pipeline: iterative, gridSize: 9, markersPerUnit: 1,
 			deducible: true, concurrency: 1, regionVariance: 0.25, timeout: 120 * time.Second,
 		},
@@ -188,7 +188,7 @@ func BenchmarkPipeline(b *testing.B) {
 
 	for _, bc := range cases {
 		b.Run(bc.name, func(b *testing.B) {
-			runBenchCase(b, bc)
+			runBenchCase(b, &bc)
 		})
 	}
 }
@@ -220,12 +220,12 @@ func BenchmarkCombo(b *testing.B) {
 		// BFS vs WFC regions (Iterative, Propagation, 9x9 Standard, deducible)
 		// -----------------------------------------------------------------
 		{
-			name: "Iterative_Prop_BFS_9x9_ded",
+			name:     "Iterative_Prop_BFS_9x9_ded",
 			pipeline: iterPropBFS, gridSize: 9, markersPerUnit: 1,
 			deducible: true, concurrency: 1, timeout: 120 * time.Second,
 		},
 		{
-			name: "Iterative_Prop_WFC_9x9_ded",
+			name:     "Iterative_Prop_WFC_9x9_ded",
 			pipeline: iterPropWFC, gridSize: 9, markersPerUnit: 1,
 			deducible: true, concurrency: 1, timeout: 120 * time.Second,
 		},
@@ -234,7 +234,7 @@ func BenchmarkCombo(b *testing.B) {
 		// Solver comparison (Iterative, BFS, 9x9 Standard, deducible)
 		// -----------------------------------------------------------------
 		{
-			name: "Iterative_Backtrack_BFS_9x9_ded",
+			name:     "Iterative_Backtrack_BFS_9x9_ded",
 			pipeline: iterBacktrackBFS, gridSize: 9, markersPerUnit: 1,
 			deducible: true, concurrency: 1, timeout: 120 * time.Second,
 		},
@@ -243,22 +243,22 @@ func BenchmarkCombo(b *testing.B) {
 		// Double Queens combinations (9x9, c=1)
 		// -----------------------------------------------------------------
 		{
-			name: "Iterative_Prop_BFS_9x9DQ_ded",
+			name:     "Iterative_Prop_BFS_9x9DQ_ded",
 			pipeline: iterPropBFSDouble, gridSize: 9, markersPerUnit: 2,
 			deducible: true, concurrency: 1, timeout: 120 * time.Second,
 		},
 		{
-			name: "Iterative_Prop_BFS_9x9DQ_raw",
+			name:     "Iterative_Prop_BFS_9x9DQ_raw",
 			pipeline: iterPropBFSDouble, gridSize: 9, markersPerUnit: 2,
 			deducible: false, concurrency: 1, timeout: 120 * time.Second,
 		},
 		{
-			name: "RegionFirst_Prop_9x9DQ_ded",
+			name:     "RegionFirst_Prop_9x9DQ_ded",
 			pipeline: regionFirstProp, gridSize: 9, markersPerUnit: 2,
 			deducible: true, concurrency: 1, timeout: 120 * time.Second,
 		},
 		{
-			name: "RegionFirst_Prop_9x9DQ_raw",
+			name:     "RegionFirst_Prop_9x9DQ_raw",
 			pipeline: regionFirstProp, gridSize: 9, markersPerUnit: 2,
 			deducible: false, concurrency: 1, timeout: 120 * time.Second,
 		},
@@ -266,7 +266,7 @@ func BenchmarkCombo(b *testing.B) {
 
 	for _, bc := range cases {
 		b.Run(bc.name, func(b *testing.B) {
-			runBenchCase(b, bc)
+			runBenchCase(b, &bc)
 		})
 	}
 }
@@ -298,4 +298,3 @@ func BenchmarkSolver_Propagation_CountSolutions_5x5(b *testing.B) {
 		}
 	}
 }
-
