@@ -42,6 +42,9 @@ export function useTimer(): UseTimerReturn {
 
   const startTick = useCallback(() => {
     clearTick();
+    // Trigger an immediate re-render so the timer display updates instantly,
+    // then tick every second after that.
+    setTick((t) => t + 1);
     intervalRef.current = setInterval(() => {
       setTick((t) => t + 1);
     }, 1000);

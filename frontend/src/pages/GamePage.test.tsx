@@ -32,12 +32,14 @@ vi.mock('react-router-dom', async () => {
 
 // Track fetchNextPuzzle and updatePuzzleStatus calls
 let lastFetchArgs: { size: number; mode: string } | undefined;
+let fetchCallCount = 0;
 let mockFetchResult: () => Promise<PuzzleData> = () => Promise.resolve(MOCK_PUZZLE_WITH_METADATA);
 const mockUpdateStatus = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../services/puzzleService', () => ({
   fetchNextPuzzle: (size: number, mode: string) => {
     lastFetchArgs = { size, mode };
+    fetchCallCount++;
     return mockFetchResult();
   },
   updatePuzzleStatus: (...args: unknown[]) => mockUpdateStatus(...args),
@@ -69,6 +71,7 @@ beforeEach(() => {
   mockSaveState.mockClear();
   mockAddCompletion.mockClear();
   mockUpdateStatus.mockClear();
+  fetchCallCount = 0;
   lastFetchArgs = undefined;
   mockFetchResult = () => Promise.resolve(MOCK_PUZZLE_WITH_METADATA);
   globalThis.fetch = vi.fn().mockResolvedValue({
@@ -210,26 +213,22 @@ describe('GamePage error states', () => {
     expect(errorState).toBeInTheDocument();
   });
 
-  it('Try Again on error retries with size and mode params', async () => {
+  it('Try Again on error retries fetch without navigating', async () => {
     // Arrange
     mockFetchResult = () => Promise.reject(new Error('generation failed'));
     renderGamePage('/play?new=true&size=9&mode=double');
 
     // Act
-    const errorState = await screen.findByTestId('error-state');
-    expect(errorState).toBeInTheDocument();
-    const tryAgainButton = screen.getByRole('button', { name: /try again/i });
-    fireEvent.click(tryAgainButton);
+    await screen.findByTestId('error-state');
+    const initialCalls = fetchCallCount;
+    mockFetchResult = () => Promise.resolve(MOCK_PUZZLE_WITH_METADATA);
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }));
 
-    // Assert — navigate with size and mode preserved
-    expect(mockNavigate).toHaveBeenCalledWith(
-      expect.stringContaining('size=9'),
-      expect.objectContaining({ replace: true }),
-    );
-    expect(mockNavigate).toHaveBeenCalledWith(
-      expect.stringContaining('mode=double'),
-      expect.objectContaining({ replace: true }),
-    );
+    // Assert — re-fetches without navigating
+    await waitFor(() => {
+      expect(fetchCallCount).toBeGreaterThan(initialCalls);
+    });
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
 
@@ -261,7 +260,7 @@ describe('GamePage no-puzzles state (FE-04)', () => {
     expect(screen.getByRole('button', { name: /retry/i })).toBeInTheDocument();
   });
 
-  it('retry button re-fetches by navigating with same params', async () => {
+  it('retry button re-fetches without navigating', async () => {
     // Arrange
     const { NoPuzzlesAvailableError } = await import('../services/puzzleService');
     mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
@@ -269,17 +268,15 @@ describe('GamePage no-puzzles state (FE-04)', () => {
 
     // Act
     await screen.findByTestId('no-puzzles-state');
+    const initialCalls = fetchCallCount;
+    mockFetchResult = () => Promise.resolve(MOCK_PUZZLE_WITH_METADATA);
     fireEvent.click(screen.getByRole('button', { name: /retry/i }));
 
-    // Assert
-    expect(mockNavigate).toHaveBeenCalledWith(
-      expect.stringContaining('size=9'),
-      expect.objectContaining({ replace: true }),
-    );
-    expect(mockNavigate).toHaveBeenCalledWith(
-      expect.stringContaining('mode=double'),
-      expect.objectContaining({ replace: true }),
-    );
+    // Assert — re-fetches without navigating
+    await waitFor(() => {
+      expect(fetchCallCount).toBeGreaterThan(initialCalls);
+    });
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 });
 

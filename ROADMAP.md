@@ -133,10 +133,10 @@ Candidate items — not yet committed or ordered:
 | KI-002 | Low | CloudFront missing security response headers (HSTS, X-Content-Type-Options, CSP). Add before production. | R-004 |
 | KI-003 | Low | S3 bucket has no explicit server-side encryption config (AWS defaults to SSE-S3, but should be explicit). | R-004 |
 | KI-004 | Low | PWA service worker disabled — vite-plugin-pwa lacks Vite 8 support. Track [vite-pwa/vite-plugin-pwa#923](https://github.com/vite-pwa/vite-plugin-pwa/issues/923). Manifest + icons in place; re-add plugin when compatible. | R-01A |
-| KI-005 | Low | Timer does not start immediately when opening a new puzzle. Noticeable delay before first tick. | R-019 |
-| KI-006 | Medium | Every CD deploy updates the Lambda function even when there are no backend changes. Should only rebuild/deploy Lambda when backend/ files change. | R-006 |
+| KI-005 | ~~Low~~ Fixed | ~~Timer does not start immediately when opening a new puzzle.~~ Fixed: immediate tick on timer start. | R-019 |
+| KI-006 | ~~Medium~~ Fixed | ~~Every CD deploy updates the Lambda function even when there are no backend changes.~~ Fixed: reproducible zip (touch + zip -X) means identical source produces identical hash. | R-006 |
 | KI-007 | High | Double Queens puzzle generation too slow (12+ min for 7x7) with deducibility check. Disabled in replenish and UI. Needs generator algorithm optimization before re-enabling. | R-030, R-031 |
-| KI-008 | Medium | "Play Again" and "Retry" buttons don't work. Both navigate to the same URL with unchanged search params, so React Router doesn't trigger a re-render/re-fetch. Affects: completion overlay "Play Again" and pool-empty "Retry". | R-044 |
+| KI-008 | ~~Medium~~ Fixed | ~~"Play Again" and "Retry" buttons don't work.~~ Fixed: buttons now trigger re-fetch via state reset instead of URL navigation. | R-044 |
 
 ---
 

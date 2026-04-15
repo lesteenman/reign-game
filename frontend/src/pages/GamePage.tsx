@@ -40,6 +40,13 @@ export function GamePage() {
   const [searchParams] = useSearchParams();
   const { loadState, saveState, addCompletion } = useGameStorage();
   const [loadStatus, setLoadStatus] = useState<LoadState>({ status: 'loading' });
+  const [fetchKey, setFetchKey] = useState(0);
+
+  /** Force a re-fetch of the current puzzle params (used by Retry / Play Again). */
+  const retryFetch = useCallback(() => {
+    setLoadStatus({ status: 'loading' });
+    setFetchKey((k) => k + 1);
+  }, []);
 
   /** Navigate back to home without clearing game state. */
   const handleBack = useCallback(() => {
@@ -96,7 +103,7 @@ export function GamePage() {
       });
     }
     return () => { cancelled = true; };
-  }, [searchParams, loadState, saveState]);
+  }, [searchParams, loadState, saveState, fetchKey]);
 
   if (loadStatus.status === 'loading') {
     return (
@@ -122,11 +129,7 @@ export function GamePage() {
           <p style={{ color: 'var(--color-destructive)', fontWeight: 600 }}>
             Failed to load puzzle: {loadStatus.message}
           </p>
-          <SecondaryButton onClick={() => {
-            const retryParams = new URLSearchParams(searchParams);
-            retryParams.set('new', 'true');
-            navigate(`/play?${retryParams.toString()}`, { replace: true });
-          }}>
+          <SecondaryButton onClick={retryFetch}>
             Try Again
           </SecondaryButton>
         </div>
@@ -150,11 +153,7 @@ export function GamePage() {
           <p style={{ color: 'var(--color-body)', fontWeight: 600 }}>
             No puzzles available for this size and mode
           </p>
-          <SecondaryButton onClick={() => {
-            const retryParams = new URLSearchParams(searchParams);
-            retryParams.set('new', 'true');
-            navigate(`/play?${retryParams.toString()}`, { replace: true });
-          }}>
+          <SecondaryButton onClick={retryFetch}>
             Retry
           </SecondaryButton>
         </div>
@@ -178,6 +177,7 @@ export function GamePage() {
       saveState={saveState}
       addCompletion={addCompletion}
       onBack={handleBack}
+      onPlayAgain={retryFetch}
     />
   );
 }
@@ -199,6 +199,7 @@ interface GameBoardProps {
   saveState: (state: GameState) => Promise<void>;
   addCompletion: (record: CompletionRecord) => Promise<void>;
   onBack: () => void;
+  onPlayAgain: () => void;
 }
 
 /** Build the current GameState from refs, preserving the original startedAt. */
@@ -229,6 +230,7 @@ function GameBoard({
   saveState,
   addCompletion,
   onBack,
+  onPlayAgain,
 }: GameBoardProps) {
   const [ready, setReady] = useState(false);
   useLayoutEffect(() => { setReady(true); }, []);
@@ -349,13 +351,7 @@ function GameBoard({
     setCompletionTime(0);
   }, [originalResetGame]);
 
-  // Navigate to /play with the same params for a new puzzle.
-  const [currentSearchParams] = useSearchParams();
-  const handlePlayAgain = useCallback(() => {
-    const replayParams = new URLSearchParams(currentSearchParams);
-    replayParams.set('new', 'true');
-    navigate(`/play?${replayParams.toString()}`, { replace: true });
-  }, [navigate, currentSearchParams]);
+  const handlePlayAgain = onPlayAgain;
 
   const handleGoHome = useCallback(() => {
     navigate('/');
