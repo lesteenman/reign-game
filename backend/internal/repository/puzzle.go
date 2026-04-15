@@ -109,6 +109,10 @@ func (r *PuzzleRepository) PutPuzzle(ctx context.Context, puzzle *PuzzleRecord) 
 func (r *PuzzleRepository) NextReady(ctx context.Context, size int, mode string) (*PuzzleRecord, error) {
 	pk := buildPK(size, mode)
 
+	// Note: DynamoDB Limit applies before FilterExpression, so we cannot
+	// use Limit=1 here — it would read one item and discard it if the
+	// status doesn't match. Instead we scan the full partition (small,
+	// typically <60 items) and filter server-side.
 	output, err := r.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(r.tableName),
 		KeyConditionExpression: aws.String("PK = :pk"),
@@ -120,7 +124,6 @@ func (r *PuzzleRepository) NextReady(ctx context.Context, size int, mode string)
 			":pk":     &types.AttributeValueMemberS{Value: pk},
 			":status": &types.AttributeValueMemberS{Value: "ready"},
 		},
-		Limit: aws.Int32(1),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("querying next ready puzzle for %s: %w", pk, err)
