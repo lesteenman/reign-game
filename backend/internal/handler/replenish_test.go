@@ -75,12 +75,10 @@ func TestReplenishHandler(t *testing.T) {
 				keyFor(5, "standard"): 3,
 				keyFor(7, "standard"): 5,
 				keyFor(9, "standard"): 3,
-				keyFor(7, "double"):   4,
-				keyFor(9, "double"):   3,
 			},
 			wantStatus:    http.StatusOK,
 			wantTriggered: 0,
-			wantSkipped:   5,
+			wantSkipped:   3,
 			wantMessages:  0,
 		},
 		{
@@ -89,13 +87,11 @@ func TestReplenishHandler(t *testing.T) {
 				keyFor(5, "standard"): 3,
 				keyFor(7, "standard"): 1,
 				keyFor(9, "standard"): 0,
-				keyFor(7, "double"):   3,
-				keyFor(9, "double"):   2,
 			},
 			wantStatus:    http.StatusOK,
-			wantTriggered: 3,
-			wantSkipped:   2,
-			wantMessages:  2 + 3 + 1, // 7std needs 2, 9std needs 3, 9dbl needs 1
+			wantTriggered: 2,
+			wantSkipped:   1,
+			wantMessages:  2 + 3, // 7std needs 2, 9std needs 3
 		},
 		{
 			name: "all pools empty",
@@ -103,25 +99,22 @@ func TestReplenishHandler(t *testing.T) {
 				keyFor(5, "standard"): 0,
 				keyFor(7, "standard"): 0,
 				keyFor(9, "standard"): 0,
-				keyFor(7, "double"):   0,
-				keyFor(9, "double"):   0,
 			},
 			wantStatus:    http.StatusOK,
-			wantTriggered: 5,
+			wantTriggered: 3,
 			wantSkipped:   0,
-			wantMessages:  15, // 5 combos * 3 each
+			wantMessages:  9, // 3 combos * 3 each
 		},
 		{
 			name:  "filter by size=7 only",
 			query: "?size=7",
 			counts: map[string]int{
 				keyFor(7, "standard"): 1,
-				keyFor(7, "double"):   0,
 			},
 			wantStatus:    http.StatusOK,
-			wantTriggered: 2,
+			wantTriggered: 1,
 			wantSkipped:   0,
-			wantMessages:  2 + 3, // 7std needs 2, 7dbl needs 3
+			wantMessages:  2, // 7std needs 2
 		},
 		{
 			name:  "filter by size=9 and mode=standard",

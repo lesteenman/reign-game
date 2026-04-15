@@ -57,7 +57,6 @@ describe('LandingPage', () => {
       expect(screen.getByTestId('preset-0')).toBeInTheDocument();
       expect(screen.getByTestId('preset-1')).toBeInTheDocument();
       expect(screen.getByTestId('preset-2')).toBeInTheDocument();
-      expect(screen.getByTestId('preset-3')).toBeInTheDocument();
     });
 
     it('Play navigates with default preset params', async () => {
@@ -78,15 +77,15 @@ describe('LandingPage', () => {
       // Arrange
       renderLanding();
       await waitFor(() => {
-        expect(screen.getByTestId('preset-3')).toBeInTheDocument();
+        expect(screen.getByTestId('preset-2')).toBeInTheDocument();
       });
 
       // Act
-      fireEvent.click(screen.getByTestId('preset-3'));
+      fireEvent.click(screen.getByTestId('preset-2'));
       fireEvent.click(screen.getByTestId('play-button'));
 
       // Assert
-      expect(navigatedTo).toBe('/play?new=true&size=9&mode=double');
+      expect(navigatedTo).toBe('/play?new=true&size=9&mode=standard');
     });
   });
 

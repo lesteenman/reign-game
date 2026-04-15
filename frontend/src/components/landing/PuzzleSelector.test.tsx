@@ -12,7 +12,7 @@ function renderSelector(onSelect = vi.fn()) {
 
 describe('PuzzleSelector', () => {
   describe('preset buttons', () => {
-    it('renders all 4 preset buttons', () => {
+    it('renders all preset buttons', () => {
       // Arrange & Act
       renderSelector();
 
@@ -30,7 +30,6 @@ describe('PuzzleSelector', () => {
       expect(screen.getByTestId('preset-0')).toHaveTextContent('5\u00D75 Standard');
       expect(screen.getByTestId('preset-1')).toHaveTextContent('7\u00D77 Standard');
       expect(screen.getByTestId('preset-2')).toHaveTextContent('9\u00D79 Standard');
-      expect(screen.getByTestId('preset-3')).toHaveTextContent('9\u00D79 Double Queens');
     });
 
     it('first preset is selected by default', () => {
@@ -65,17 +64,8 @@ describe('PuzzleSelector', () => {
       expect(onSelect).toHaveBeenCalledWith({ size: 5, mode: 'standard' });
     });
 
-    it('Play with 9x9 Double Queens preset sends correct options', () => {
-      // Arrange
-      const { onSelect } = renderSelector();
-
-      // Act
-      fireEvent.click(screen.getByTestId('preset-3'));
-      fireEvent.click(screen.getByTestId('play-button'));
-
-      // Assert
-      expect(onSelect).toHaveBeenCalledWith({ size: 9, mode: 'double' });
-    });
+    // Double Queens preset disabled until generator optimization.
+    // Re-enable when double queens is added back to PRESETS.
   });
 
   describe('no advanced section', () => {

@@ -17,7 +17,9 @@ const PRESETS: Preset[] = [
   { label: '5\u00D75 Standard', size: 5, mode: 'standard' },
   { label: '7\u00D77 Standard', size: 7, mode: 'standard' },
   { label: '9\u00D79 Standard', size: 9, mode: 'standard' },
-  { label: '9\u00D79 Double Queens', size: 9, mode: 'double' },
+  // Double Queens disabled: generation too slow with current algorithm.
+  // Re-enable after generator optimization.
+  // { label: '9\u00D79 Double Queens', size: 9, mode: 'double' },
 ];
 
 interface PuzzleSelectorProps {

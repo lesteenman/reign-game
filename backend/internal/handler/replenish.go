@@ -22,8 +22,10 @@ var sizeModeCombos = []struct {
 	{5, ModeStandard},
 	{7, ModeStandard},
 	{9, ModeStandard},
-	{7, ModeDouble},
-	{9, ModeDouble},
+	// Double Queens disabled: generation too slow with current deducibility
+	// check (12+ minutes for 7x7). Re-enable after generator optimization.
+	// {7, ModeDouble},
+	// {9, ModeDouble},
 }
 
 // PoolCounter counts ready puzzles for a given size and mode.
