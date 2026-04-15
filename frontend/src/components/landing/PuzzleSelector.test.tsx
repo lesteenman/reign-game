@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { PuzzleSelector, PRESETS, VARIANCE_STOPS } from './PuzzleSelector';
+import { PuzzleSelector, PRESETS } from './PuzzleSelector';
 
 afterEach(() => {
   cleanup();
@@ -78,8 +78,16 @@ describe('PuzzleSelector', () => {
     });
   });
 
-  describe('advanced toggle', () => {
-    it('advanced section is hidden by default', () => {
+  describe('no advanced section', () => {
+    it('does not render an advanced toggle', () => {
+      // Arrange & Act
+      renderSelector();
+
+      // Assert
+      expect(screen.queryByTestId('advanced-toggle')).not.toBeInTheDocument();
+    });
+
+    it('does not render an advanced section', () => {
       // Arrange & Act
       renderSelector();
 
@@ -87,337 +95,21 @@ describe('PuzzleSelector', () => {
       expect(screen.queryByTestId('advanced-section')).not.toBeInTheDocument();
     });
 
-    it('clicking Advanced toggles the advanced section open', () => {
-      // Arrange
-      renderSelector();
-
-      // Act
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Assert
-      expect(screen.getByTestId('advanced-section')).toBeInTheDocument();
-    });
-
-    it('clicking Advanced again hides the advanced section', () => {
-      // Arrange
-      renderSelector();
-
-      // Act
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Assert
-      expect(screen.queryByTestId('advanced-section')).not.toBeInTheDocument();
-    });
-
-    it('toggle has correct aria-expanded state', () => {
-      // Arrange
-      renderSelector();
-      const toggle = screen.getByTestId('advanced-toggle');
-
-      // Assert (closed)
-      expect(toggle).toHaveAttribute('aria-expanded', 'false');
-
-      // Act
-      fireEvent.click(toggle);
-
-      // Assert (open)
-      expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    });
-  });
-
-  describe('advanced options', () => {
-    it('renders all advanced controls when expanded', () => {
-      // Arrange
-      renderSelector();
-
-      // Act
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Assert
-      expect(screen.getByTestId('adv-size')).toBeInTheDocument();
-      expect(screen.getByTestId('adv-mode')).toBeInTheDocument();
-      expect(screen.getByTestId('adv-pipeline')).toBeInTheDocument();
-      expect(screen.getByTestId('adv-solver')).toBeInTheDocument();
-      expect(screen.getByTestId('adv-regions')).toBeInTheDocument();
-      expect(screen.getByTestId('adv-variance')).toBeInTheDocument();
-    });
-
-    it('changing advanced options overrides preset selection', () => {
+    it('onSelect only receives size and mode, no pipeline/solver/regions', () => {
       // Arrange
       const { onSelect } = renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Act
-      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '12' } });
-      fireEvent.click(screen.getByTestId('play-button'));
-
-      // Assert
-      expect(onSelect).toHaveBeenCalledWith(
-        expect.objectContaining({ size: 12 }),
-      );
-    });
-
-    it('sends all advanced params when Play is clicked', () => {
-      // Arrange
-      const { onSelect } = renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Act
-      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '7' } });
-      fireEvent.change(screen.getByTestId('adv-mode'), { target: { value: 'double' } });
-      fireEvent.change(screen.getByTestId('adv-pipeline'), { target: { value: 'iterative' } });
-      fireEvent.change(screen.getByTestId('adv-solver'), { target: { value: 'propagation' } });
-      fireEvent.change(screen.getByTestId('adv-regions'), { target: { value: 'wfc' } });
-      fireEvent.change(screen.getByTestId('adv-variance'), { target: { value: '4' } });
-      fireEvent.click(screen.getByTestId('play-button'));
-
-      // Assert
-      expect(onSelect).toHaveBeenCalledWith({
-        size: 7,
-        mode: 'double',
-        pipeline: 'iterative',
-        solver: 'propagation',
-        regions: 'wfc',
-        regionVariance: 1.0,
-      });
-    });
-
-    it('clicking a preset after using advanced reverts to preset mode', () => {
-      // Arrange
-      const { onSelect } = renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '12' } });
 
       // Act
       fireEvent.click(screen.getByTestId('preset-1'));
       fireEvent.click(screen.getByTestId('play-button'));
 
       // Assert
-      expect(onSelect).toHaveBeenCalledWith({ size: 7, mode: 'standard' });
-    });
-  });
-
-  describe('preset populates advanced controls', () => {
-    it('clicking 5x5 Standard sets advanced controls to preset defaults', () => {
-      // Arrange
-      renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-      // Change advanced values away from defaults first
-      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '12' } });
-      fireEvent.change(screen.getByTestId('adv-mode'), { target: { value: 'double' } });
-
-      // Act
-      fireEvent.click(screen.getByTestId('preset-0'));
-
-      // Assert
-      expect((screen.getByTestId('adv-size') as HTMLInputElement).value).toBe('5');
-      expect((screen.getByTestId('adv-mode') as HTMLSelectElement).value).toBe('standard');
-      expect((screen.getByTestId('adv-pipeline') as HTMLSelectElement).value).toBe('iterative');
-      expect((screen.getByTestId('adv-solver') as HTMLSelectElement).value).toBe('propagation');
-      expect((screen.getByTestId('adv-regions') as HTMLSelectElement).value).toBe('bfs');
-      expect(screen.getByText('Region Variance: Uniform')).toBeInTheDocument();
-    });
-
-    it('clicking 9x9 Double Queens sets size=9 and mode=double in advanced', () => {
-      // Arrange
-      renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Act
-      fireEvent.click(screen.getByTestId('preset-3'));
-
-      // Assert
-      expect((screen.getByTestId('adv-size') as HTMLInputElement).value).toBe('9');
-      expect((screen.getByTestId('adv-mode') as HTMLSelectElement).value).toBe('double');
-      expect((screen.getByTestId('adv-pipeline') as HTMLSelectElement).value).toBe('iterative');
-      expect((screen.getByTestId('adv-solver') as HTMLSelectElement).value).toBe('propagation');
-      expect((screen.getByTestId('adv-regions') as HTMLSelectElement).value).toBe('bfs');
-    });
-
-    it('clicking 7x7 Standard sets size=7 in advanced', () => {
-      // Arrange
-      renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Act
-      fireEvent.click(screen.getByTestId('preset-1'));
-
-      // Assert
-      expect((screen.getByTestId('adv-size') as HTMLInputElement).value).toBe('7');
-      expect((screen.getByTestId('adv-mode') as HTMLSelectElement).value).toBe('standard');
-    });
-
-    it('advanced controls reflect preset even when section is collapsed then expanded', () => {
-      // Arrange
-      renderSelector();
-
-      // Act — click preset while advanced is collapsed, then expand
-      fireEvent.click(screen.getByTestId('preset-2')); // 9x9 Standard
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Assert
-      expect((screen.getByTestId('adv-size') as HTMLInputElement).value).toBe('9');
-      expect((screen.getByTestId('adv-mode') as HTMLSelectElement).value).toBe('standard');
-      expect((screen.getByTestId('adv-pipeline') as HTMLSelectElement).value).toBe('iterative');
-      expect((screen.getByTestId('adv-solver') as HTMLSelectElement).value).toBe('propagation');
-      expect((screen.getByTestId('adv-regions') as HTMLSelectElement).value).toBe('bfs');
-      expect(screen.getByText('Region Variance: Uniform')).toBeInTheDocument();
-    });
-  });
-
-  describe('variance slider', () => {
-    it('snaps to 5 discrete values', () => {
-      // Arrange
-      renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-      const slider = screen.getByTestId('adv-variance') as HTMLInputElement;
-
-      // Assert
-      expect(slider.min).toBe('0');
-      expect(slider.max).toBe('4');
-      expect(slider.step).toBe('1');
-    });
-
-    it('shows all 5 variance labels', () => {
-      // Arrange
-      renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Assert
-      for (const stop of VARIANCE_STOPS) {
-        expect(screen.getByText(stop.label)).toBeInTheDocument();
-      }
-    });
-
-    it('indicates current value in label', () => {
-      // Arrange
-      renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Assert — default is Moderate (index 2)
-      expect(screen.getByText('Region Variance: Moderate')).toBeInTheDocument();
-    });
-
-    it('updates label when slider value changes', () => {
-      // Arrange
-      renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Act
-      fireEvent.change(screen.getByTestId('adv-variance'), { target: { value: '4' } });
-
-      // Assert
-      expect(screen.getByText('Region Variance: Wild')).toBeInTheDocument();
-    });
-
-    it('maps slider positions to correct numeric values', () => {
-      // Arrange
-      const { onSelect } = renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Act — set to Slight (index 1, value 0.25)
-      fireEvent.change(screen.getByTestId('adv-variance'), { target: { value: '1' } });
-      // Need to trigger advanced mode by also changing something
-      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '5' } });
-      fireEvent.click(screen.getByTestId('play-button'));
-
-      // Assert
-      expect(onSelect).toHaveBeenCalledWith(
-        expect.objectContaining({ regionVariance: 0.25 }),
-      );
-    });
-  });
-
-  describe('grid size validation', () => {
-    it('shows error when grid size is below 3', () => {
-      // Arrange
-      const { onSelect } = renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Act
-      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '2' } });
-      fireEvent.click(screen.getByTestId('play-button'));
-
-      // Assert
-      expect(screen.getByTestId('adv-size-error')).toHaveTextContent(
-        'Grid size must be between 3 and 15',
-      );
-      expect(onSelect).not.toHaveBeenCalled();
-    });
-
-    it('shows error when grid size is above 15', () => {
-      // Arrange
-      const { onSelect } = renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Act
-      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '20' } });
-      fireEvent.click(screen.getByTestId('play-button'));
-
-      // Assert
-      expect(screen.getByTestId('adv-size-error')).toHaveTextContent(
-        'Grid size must be between 3 and 15',
-      );
-      expect(onSelect).not.toHaveBeenCalled();
-    });
-
-    it('shows error when grid size is empty', () => {
-      // Arrange
-      const { onSelect } = renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Act
-      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '' } });
-      fireEvent.click(screen.getByTestId('play-button'));
-
-      // Assert
-      expect(screen.getByTestId('adv-size-error')).toHaveTextContent(
-        'Grid size must be between 3 and 15',
-      );
-      expect(onSelect).not.toHaveBeenCalled();
-    });
-
-    it('clears error when value changes to valid range', () => {
-      // Arrange
-      renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '2' } });
-      fireEvent.click(screen.getByTestId('play-button'));
-      expect(screen.getByTestId('adv-size-error')).toBeInTheDocument();
-
-      // Act
-      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '10' } });
-
-      // Assert
-      expect(screen.queryByTestId('adv-size-error')).not.toBeInTheDocument();
-    });
-
-    it('allows typing 10 by clearing field first', () => {
-      // Arrange
-      const { onSelect } = renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Act — simulate mobile: clear field, then type "10"
-      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '' } });
-      fireEvent.change(screen.getByTestId('adv-size'), { target: { value: '10' } });
-      fireEvent.click(screen.getByTestId('play-button'));
-
-      // Assert
-      expect(onSelect).toHaveBeenCalledWith(
-        expect.objectContaining({ size: 10 }),
-      );
-    });
-
-    it('does not have min or max HTML attributes on grid size input', () => {
-      // Arrange
-      renderSelector();
-      fireEvent.click(screen.getByTestId('advanced-toggle'));
-
-      // Assert
-      const input = screen.getByTestId('adv-size');
-      expect(input).not.toHaveAttribute('min');
-      expect(input).not.toHaveAttribute('max');
+      const callArg = onSelect.mock.calls[0]![0] as Record<string, unknown>;
+      expect(callArg).toEqual({ size: 7, mode: 'standard' });
+      expect(callArg).not.toHaveProperty('pipeline');
+      expect(callArg).not.toHaveProperty('solver');
+      expect(callArg).not.toHaveProperty('regions');
+      expect(callArg).not.toHaveProperty('regionVariance');
     });
   });
 });
