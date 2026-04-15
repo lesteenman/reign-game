@@ -51,15 +51,15 @@ Goal: 7x7 and 9x9 puzzles playable in both Standard and Double Queens modes.
 
 Goal: Pre-generate puzzles into a pool, serve from the pool instead of generating on the fly. Measure generation performance across engines and grid sizes.
 
-- [ ] **R-040** — DynamoDB `puzzle-pool` table (PK=size#mode, SK=puzzleId, status/verdict/metadata)
-- [ ] **R-041** — Terraform: DynamoDB table, SQS queue + DLQ, Generator Lambda (15min timeout)
-- [ ] **R-042** — SQS-based generation: API Lambda publishes messages, Generator Lambda consumes and writes puzzles to DB
-- [ ] **R-043** — `POST /admin/replenish` endpoint: check pool levels, publish SQS messages for gaps (pool size = 3 per size+mode)
-- [ ] **R-044** — `GET /puzzles/next?size=N&mode=M` endpoint: serve next ready puzzle with generation metadata, mark as served
-- [ ] **R-045** — LocalStack SQS setup: local dev parity with two processes (API server + SQS consumer)
-- [ ] **R-046** — Frontend: replace `generatePuzzle()` with `/puzzles/next`, remove advanced options from PuzzleSelector
-- [ ] **R-047** — Frontend: show generation metadata (pipeline, solver, duration) subtly on puzzle page
-- [ ] **R-048** — Frontend: "no puzzles available" state with retry button when pool is empty
+- [x] **R-040** — DynamoDB `puzzle-pool` table (PK=size#mode, SK=puzzleId, status/verdict/metadata)
+- [x] **R-041** — Terraform: DynamoDB table, SQS queue + DLQ, Generator Lambda (15min timeout)
+- [x] **R-042** — SQS-based generation: API Lambda publishes messages, Generator Lambda consumes and writes puzzles to DB
+- [x] **R-043** — `POST /admin/replenish` endpoint: check pool levels, publish SQS messages for gaps (pool size = 3 per size+mode)
+- [x] **R-044** — `GET /puzzles/next?size=N&mode=M` endpoint: serve next ready puzzle with generation metadata, mark as served
+- [x] **R-045** — LocalStack SQS setup: local dev parity with two processes (API server + SQS consumer)
+- [x] **R-046** — Frontend: replace `generatePuzzle()` with `/puzzles/next`, remove advanced options from PuzzleSelector
+- [x] **R-047** — Frontend: show generation metadata (pipeline, solver, duration) subtly on puzzle page
+- [x] **R-048** — Frontend: "no puzzles available" state with retry button when pool is empty
 
 ## Phase 4: Admin Pool Management
 
