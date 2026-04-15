@@ -41,11 +41,11 @@ Goal: Play randomly generated 5x5 Standard Mode puzzles in the browser, hosted o
 
 Goal: 7x7 and 9x9 puzzles playable in both Standard and Double Queens modes.
 
-- [ ] **R-020** — Extend generator + solver for 7x7 and 9x9 grids
-- [ ] **R-022** — UI: grid size selector
-- [ ] **R-030** — Extend solver for Double Queens constraints (2 per row/column/region)
-- [ ] **R-031** — Extend generator for Double Queens puzzles
-- [ ] **R-033** — UI: mode toggle (Standard / Double Queens)
+- [x] **R-020** — Extend generator + solver for 7x7 and 9x9 grids
+- [x] **R-022** — UI: grid size selector
+- [x] **R-030** — Extend solver for Double Queens constraints (2 per row/column/region)
+- [x] **R-031** — Extend generator for Double Queens puzzles
+- [x] **R-033** — UI: mode toggle (Standard / Double Queens)
 
 ## Phase 3: Difficulty Rating
 
