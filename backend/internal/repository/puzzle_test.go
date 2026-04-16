@@ -14,6 +14,7 @@ type mockDynamoDBClient struct {
 	putItemFunc    func(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	queryFunc      func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 	updateItemFunc func(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
+	getItemFunc    func(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 }
 
 func (m *mockDynamoDBClient) PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
@@ -26,6 +27,10 @@ func (m *mockDynamoDBClient) Query(ctx context.Context, params *dynamodb.QueryIn
 
 func (m *mockDynamoDBClient) UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
 	return m.updateItemFunc(ctx, params, optFns...)
+}
+
+func (m *mockDynamoDBClient) GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	return m.getItemFunc(ctx, params, optFns...)
 }
 
 func TestPutPuzzle(t *testing.T) {
@@ -429,4 +434,360 @@ func TestCountReady(t *testing.T) {
 			}
 		})
 	}
+}
+
+// helper to build a DynamoDB item map for a config record.
+func buildConfigItem(sk string, pipeline string, enabled bool) map[string]types.AttributeValue {
+	return map[string]types.AttributeValue{
+		"PK":             &types.AttributeValueMemberS{Value: "CONFIG"},
+		"SK":             &types.AttributeValueMemberS{Value: sk},
+		"pipeline":       &types.AttributeValueMemberS{Value: pipeline},
+		"solver":         &types.AttributeValueMemberS{Value: "propagation"},
+		"regions":        &types.AttributeValueMemberS{Value: "bfs"},
+		"regionVariance": &types.AttributeValueMemberN{Value: "0.3"},
+		"deducible":      &types.AttributeValueMemberBOOL{Value: true},
+		"concurrency":    &types.AttributeValueMemberN{Value: "4"},
+		"threshold":      &types.AttributeValueMemberN{Value: "10"},
+		"enabled":        &types.AttributeValueMemberBOOL{Value: enabled},
+	}
+}
+
+func TestGetAllConfigs(t *testing.T) {
+	tests := []struct {
+		name       string
+		queryItems []map[string]types.AttributeValue
+		queryErr   error
+		wantErr    bool
+		wantCount  int
+		wantSizes  []int
+		wantModes  []string
+	}{
+		{
+			name:       "returns empty slice when no configs",
+			queryItems: []map[string]types.AttributeValue{},
+			wantErr:    false,
+			wantCount:  0,
+		},
+		{
+			name: "returns multiple configs with parsed Size and Mode",
+			queryItems: []map[string]types.AttributeValue{
+				buildConfigItem("5#standard", "iterative", true),
+				buildConfigItem("7#double", "random", false),
+			},
+			wantErr:   false,
+			wantCount: 2,
+			wantSizes: []int{5, 7},
+			wantModes: []string{"standard", "double"},
+		},
+		{
+			name:     "propagates DynamoDB error",
+			queryErr: errors.New("dynamodb query error"),
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mock := &mockDynamoDBClient{
+				queryFunc: func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+					if tt.queryErr != nil {
+						return nil, tt.queryErr
+					}
+					return &dynamodb.QueryOutput{
+						Items: tt.queryItems,
+						Count: int32(len(tt.queryItems)),
+					}, nil
+				},
+			}
+			repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+			// Act
+			configs, err := repo.GetAllConfigs(context.Background())
+
+			// Assert
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(configs) != tt.wantCount {
+				t.Fatalf("config count = %d, want %d", len(configs), tt.wantCount)
+			}
+			for i, cfg := range configs {
+				if i < len(tt.wantSizes) && cfg.Size != tt.wantSizes[i] {
+					t.Errorf("configs[%d].Size = %d, want %d", i, cfg.Size, tt.wantSizes[i])
+				}
+				if i < len(tt.wantModes) && cfg.Mode != tt.wantModes[i] {
+					t.Errorf("configs[%d].Mode = %q, want %q", i, cfg.Mode, tt.wantModes[i])
+				}
+			}
+		})
+	}
+}
+
+func TestGetConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		size     int
+		mode     string
+		item     map[string]types.AttributeValue
+		getErr   error
+		wantNil  bool
+		wantErr  bool
+		wantPipe string
+	}{
+		{
+			name:     "returns config when found",
+			size:     5,
+			mode:     "standard",
+			item:     buildConfigItem("5#standard", "iterative", true),
+			wantNil:  false,
+			wantErr:  false,
+			wantPipe: "iterative",
+		},
+		{
+			name:    "returns nil when not found",
+			size:    9,
+			mode:    "standard",
+			item:    nil,
+			wantNil: true,
+			wantErr: false,
+		},
+		{
+			name:    "propagates DynamoDB error",
+			size:    5,
+			mode:    "standard",
+			getErr:  errors.New("dynamodb get error"),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			mock := &mockDynamoDBClient{
+				getItemFunc: func(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+					if tt.getErr != nil {
+						return nil, tt.getErr
+					}
+					return &dynamodb.GetItemOutput{Item: tt.item}, nil
+				},
+			}
+			repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+			// Act
+			result, err := repo.GetConfig(context.Background(), tt.size, tt.mode)
+
+			// Assert
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantNil {
+				if result != nil {
+					t.Fatalf("expected nil result, got %+v", result)
+				}
+				return
+			}
+			if result == nil {
+				t.Fatal("expected non-nil result, got nil")
+			}
+			if result.Size != tt.size {
+				t.Errorf("Size = %d, want %d", result.Size, tt.size)
+			}
+			if result.Mode != tt.mode {
+				t.Errorf("Mode = %q, want %q", result.Mode, tt.mode)
+			}
+			if result.Pipeline != tt.wantPipe {
+				t.Errorf("Pipeline = %q, want %q", result.Pipeline, tt.wantPipe)
+			}
+		})
+	}
+}
+
+func TestPutConfig(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  ConfigRecord
+		putErr  error
+		wantErr bool
+		wantPK  string
+		wantSK  string
+	}{
+		{
+			name: "writes config correctly",
+			config: ConfigRecord{
+				Size:           5,
+				Mode:           "standard",
+				Pipeline:       "iterative",
+				Solver:         "propagation",
+				Regions:        "bfs",
+				RegionVariance: 0.3,
+				Deducible:      true,
+				Concurrency:    4,
+				Threshold:      10,
+				Enabled:        true,
+			},
+			wantErr: false,
+			wantPK:  "CONFIG",
+			wantSK:  "5#standard",
+		},
+		{
+			name: "propagates DynamoDB error",
+			config: ConfigRecord{
+				Size: 7,
+				Mode: "double",
+			},
+			putErr:  errors.New("dynamodb put error"),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			var capturedInput *dynamodb.PutItemInput
+			mock := &mockDynamoDBClient{
+				putItemFunc: func(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+					capturedInput = params
+					return &dynamodb.PutItemOutput{}, tt.putErr
+				},
+			}
+			repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+			// Act
+			err := repo.PutConfig(context.Background(), &tt.config)
+
+			// Assert
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if capturedInput == nil {
+				t.Fatal("PutItem was not called")
+			}
+			pk := capturedInput.Item["PK"].(*types.AttributeValueMemberS).Value
+			if pk != tt.wantPK {
+				t.Errorf("PK = %q, want %q", pk, tt.wantPK)
+			}
+			sk := capturedInput.Item["SK"].(*types.AttributeValueMemberS).Value
+			if sk != tt.wantSK {
+				t.Errorf("SK = %q, want %q", sk, tt.wantSK)
+			}
+			if capturedInput.ConditionExpression != nil {
+				t.Error("PutConfig should not have a condition expression")
+			}
+		})
+	}
+}
+
+func TestCreateConfig(t *testing.T) {
+	tests := []struct {
+		name          string
+		config        ConfigRecord
+		putErr        error
+		wantErr       bool
+		wantConflict  bool
+		wantCondition string
+	}{
+		{
+			name: "creates config successfully",
+			config: ConfigRecord{
+				Size:     5,
+				Mode:     "standard",
+				Pipeline: "iterative",
+			},
+			wantErr:       false,
+			wantCondition: "attribute_not_exists(PK)",
+		},
+		{
+			name: "returns ConfigAlreadyExistsError on conflict",
+			config: ConfigRecord{
+				Size: 5,
+				Mode: "standard",
+			},
+			putErr:       &types.ConditionalCheckFailedException{Message: strPtr("conditional check failed")},
+			wantErr:      true,
+			wantConflict: true,
+		},
+		{
+			name: "propagates other DynamoDB errors",
+			config: ConfigRecord{
+				Size: 7,
+				Mode: "double",
+			},
+			putErr:       errors.New("dynamodb connection error"),
+			wantErr:      true,
+			wantConflict: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			var capturedInput *dynamodb.PutItemInput
+			mock := &mockDynamoDBClient{
+				putItemFunc: func(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+					capturedInput = params
+					return &dynamodb.PutItemOutput{}, tt.putErr
+				},
+			}
+			repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+			// Act
+			err := repo.CreateConfig(context.Background(), &tt.config)
+
+			// Assert
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				if tt.wantConflict {
+					var conflictErr *ConfigAlreadyExistsError
+					if !errors.As(err, &conflictErr) {
+						t.Fatalf("expected ConfigAlreadyExistsError, got %T: %v", err, err)
+					}
+					if conflictErr.Size != tt.config.Size {
+						t.Errorf("conflict Size = %d, want %d", conflictErr.Size, tt.config.Size)
+					}
+					if conflictErr.Mode != tt.config.Mode {
+						t.Errorf("conflict Mode = %q, want %q", conflictErr.Mode, tt.config.Mode)
+					}
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if capturedInput == nil {
+				t.Fatal("PutItem was not called")
+			}
+			if capturedInput.ConditionExpression == nil || *capturedInput.ConditionExpression != tt.wantCondition {
+				got := "<nil>"
+				if capturedInput.ConditionExpression != nil {
+					got = *capturedInput.ConditionExpression
+				}
+				t.Errorf("ConditionExpression = %q, want %q", got, tt.wantCondition)
+			}
+		})
+	}
+}
+
+func strPtr(s string) *string {
+	return &s
 }
