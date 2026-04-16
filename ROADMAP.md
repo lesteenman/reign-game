@@ -65,9 +65,15 @@ Goal: Pre-generate puzzles into a pool, serve from the pool instead of generatin
 
 Goal: Admin UI to view pool status per size+mode and tune generation settings.
 
-- [ ] **R-060** — `GET/PUT /admin/config` endpoints: per-combo generation settings + pool size
-- [ ] **R-061** — `GET /admin/puzzles` endpoint: filtered puzzle listing (by status, pipeline, size, mode)
-- [ ] **R-062** — Frontend: admin page — pool counts per size+mode, replenish button, generation settings
+- [x] **R-050** — DynamoDB CONFIG items in `puzzle-pool` table (PK=CONFIG, SK={size}#{mode})
+- [x] **R-051** — `GET /admin/pool` endpoint: merged config + ready counts per combo
+- [x] **R-052** — `PUT /admin/config/{size}/{mode}` endpoint: update combo config
+- [x] **R-053** — `POST /admin/config` endpoint: create new combo
+- [x] **R-054** — Refactor replenish: dynamic config-driven combo discovery + per-combo threshold/params
+- [x] **R-055** — Replenish filter: optional `?size=X&mode=Y` for per-combo replenish
+- [x] **R-056** — Frontend: `/admin` page — pool table, config editing (modal), replenish controls
+- [x] **R-057** — Frontend: admin link in PageShell header
+- [x] **R-058** — LocalStack seed: initial CONFIG items for local dev
 
 ## Phase 5: Verdict System
 
