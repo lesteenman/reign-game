@@ -15,7 +15,9 @@ export default defineConfig(({ mode }) => ({
   server: {
     proxy: {
       "/puzzles": "http://localhost:5181",
-      "/admin": "http://localhost:5181",
+      "/admin/pool": "http://localhost:5181",
+      "/admin/config": "http://localhost:5181",
+      "/admin/replenish": "http://localhost:5181",
     },
   },
   test: {

@@ -49,10 +49,30 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
-  # Route /puzzles/* to API Gateway (no caching, forward query strings)
+  # Route /puzzles/* to API Gateway (no caching, forward all methods + query strings)
   ordered_cache_behavior {
     path_pattern           = "/puzzles/*"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
+    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "api-gateway"
+    viewer_protocol_policy = "redirect-to-https"
+
+    forwarded_values {
+      query_string = true
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl     = 0
+    default_ttl = 0
+    max_ttl     = 0
+  }
+
+  # Route /admin/* to API Gateway (no caching, forward all methods + query strings)
+  ordered_cache_behavior {
+    path_pattern           = "/admin/*"
+    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods         = ["GET", "HEAD"]
     target_origin_id       = "api-gateway"
     viewer_protocol_policy = "redirect-to-https"
