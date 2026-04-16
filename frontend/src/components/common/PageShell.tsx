@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { useDarkMode } from '../../theme/useDarkMode';
 
 interface PageShellProps {
@@ -79,7 +80,25 @@ export function PageShell({ children, onBack, backLabel = 'Back to home' }: Page
           Reign
         </h1>
 
-        {/* Right: dark mode toggle */}
+        {/* Right: admin link + dark mode toggle */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <Link
+          to="/admin"
+          data-testid="admin-link"
+          style={{
+            color: 'var(--color-muted)',
+            fontSize: '0.75rem',
+            textDecoration: 'none',
+            padding: '8px',
+            minWidth: 44,
+            minHeight: 44,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          Admin
+        </Link>
         <button
           type="button"
           onClick={toggle}
@@ -102,6 +121,7 @@ export function PageShell({ children, onBack, backLabel = 'Back to home' }: Page
         >
           {isDark ? '\u2600' : '\u263E'}
         </button>
+        </div>
       </div>
       {children}
     </div>

@@ -1,4 +1,5 @@
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { PageShell } from './PageShell';
 
@@ -6,10 +7,14 @@ afterEach(() => {
   cleanup();
 });
 
+function renderShell(ui: React.ReactElement) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
+
 describe('PageShell', () => {
   it('renders children', () => {
     // Arrange & Act
-    render(<PageShell><p>Hello</p></PageShell>);
+    renderShell(<PageShell><p>Hello</p></PageShell>);
 
     // Assert
     expect(screen.getByText('Hello')).toBeInTheDocument();
@@ -17,7 +22,7 @@ describe('PageShell', () => {
 
   it('renders Reign heading', () => {
     // Arrange & Act
-    render(<PageShell><p>content</p></PageShell>);
+    renderShell(<PageShell><p>content</p></PageShell>);
 
     // Assert
     expect(screen.getByRole('heading', { name: /reign/i })).toBeInTheDocument();
@@ -25,7 +30,7 @@ describe('PageShell', () => {
 
   it('renders dark mode toggle', () => {
     // Arrange & Act
-    render(<PageShell><p>content</p></PageShell>);
+    renderShell(<PageShell><p>content</p></PageShell>);
 
     // Assert
     expect(screen.getByTestId('dark-mode-toggle')).toBeInTheDocument();
@@ -33,7 +38,7 @@ describe('PageShell', () => {
 
   it('does not render back button when onBack is not provided', () => {
     // Arrange & Act
-    render(<PageShell><p>content</p></PageShell>);
+    renderShell(<PageShell><p>content</p></PageShell>);
 
     // Assert
     expect(screen.queryByTestId('back-button')).not.toBeInTheDocument();
@@ -44,7 +49,7 @@ describe('PageShell', () => {
     const onBack = vi.fn();
 
     // Act
-    render(<PageShell onBack={onBack}><p>content</p></PageShell>);
+    renderShell(<PageShell onBack={onBack}><p>content</p></PageShell>);
 
     // Assert
     expect(screen.getByTestId('back-button')).toBeInTheDocument();
@@ -53,7 +58,7 @@ describe('PageShell', () => {
   it('calls onBack when back button is clicked', () => {
     // Arrange
     const onBack = vi.fn();
-    render(<PageShell onBack={onBack}><p>content</p></PageShell>);
+    renderShell(<PageShell onBack={onBack}><p>content</p></PageShell>);
 
     // Act
     fireEvent.click(screen.getByTestId('back-button'));
@@ -64,7 +69,7 @@ describe('PageShell', () => {
 
   it('uses custom backLabel for aria-label', () => {
     // Arrange & Act
-    render(<PageShell onBack={vi.fn()} backLabel="Go back"><p>content</p></PageShell>);
+    renderShell(<PageShell onBack={vi.fn()} backLabel="Go back"><p>content</p></PageShell>);
 
     // Assert
     expect(screen.getByTestId('back-button')).toHaveAttribute('aria-label', 'Go back');
@@ -72,7 +77,7 @@ describe('PageShell', () => {
 
   it('toggles dark mode on click', () => {
     // Arrange
-    render(<PageShell><p>content</p></PageShell>);
+    renderShell(<PageShell><p>content</p></PageShell>);
     const toggle = screen.getByTestId('dark-mode-toggle');
     const initialLabel = toggle.getAttribute('aria-label');
 
