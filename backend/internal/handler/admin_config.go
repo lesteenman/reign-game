@@ -38,7 +38,7 @@ type configRequest struct {
 
 // validateConfigFields validates the config-specific fields of a configRequest.
 // Returns (0, "", "") on success, or (status, errCode, errMsg) on failure.
-func validateConfigFields(req *configRequest) (int, string, string) {
+func validateConfigFields(req *configRequest) (status int, errCode, errMsg string) {
 	if req.Pipeline != PipelineRegionFirst && req.Pipeline != PipelineIterative && req.Pipeline != PipelineConstraintAware {
 		return http.StatusBadRequest, "invalid_params", "pipeline must be 'region-first', 'iterative', or 'constraint-aware'"
 	}

@@ -224,9 +224,9 @@ func TestReplenishHandler(t *testing.T) {
 			wantStatus: http.StatusInternalServerError,
 		},
 		{
-			name:    "empty config list returns empty response",
-			configs: []repository.ConfigRecord{},
-			counts:  map[string]int{},
+			name:          "empty config list returns empty response",
+			configs:       []repository.ConfigRecord{},
+			counts:        map[string]int{},
 			wantStatus:    http.StatusOK,
 			wantTriggered: 0,
 			wantSkipped:   0,

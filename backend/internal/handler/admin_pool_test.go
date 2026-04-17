@@ -15,9 +15,9 @@ import (
 
 // mockConfigAndCountRepo implements handler.ConfigAndCountRepo for testing.
 type mockConfigAndCountRepo struct {
-	configs    []repository.ConfigRecord
-	configsErr error
-	readyCounts map[string]int
+	configs       []repository.ConfigRecord
+	configsErr    error
+	readyCounts   map[string]int
 	countReadyErr error
 }
 
@@ -35,15 +35,15 @@ func (m *mockConfigAndCountRepo) CountReady(_ context.Context, size int, mode st
 
 func TestAdminPoolHandler(t *testing.T) {
 	tests := []struct {
-		name           string
-		configs        []repository.ConfigRecord
-		configsErr     error
-		readyCounts    map[string]int
-		countReadyErr  error
-		wantStatus     int
-		wantError      string
-		wantCombos     int
-		checkCombos    func(t *testing.T, combos []comboStatusJSON)
+		name          string
+		configs       []repository.ConfigRecord
+		configsErr    error
+		readyCounts   map[string]int
+		countReadyErr error
+		wantStatus    int
+		wantError     string
+		wantCombos    int
+		checkCombos   func(t *testing.T, combos []comboStatusJSON)
 	}{
 		{
 			name: "mixed enabled and disabled combos",
@@ -138,7 +138,7 @@ func TestAdminPoolHandler(t *testing.T) {
 			}
 			h := handler.AdminPoolHandler(repo)
 
-			req := httptest.NewRequest(http.MethodGet, "/admin/pool", nil)
+			req := httptest.NewRequest(http.MethodGet, "/admin/pool", http.NoBody)
 			rec := httptest.NewRecorder()
 
 			// Act

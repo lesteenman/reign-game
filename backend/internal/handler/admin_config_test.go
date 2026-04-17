@@ -80,15 +80,15 @@ func TestUpdateConfigHandler(t *testing.T) {
 	}
 
 	tests := []struct {
-		name           string
-		size           string
-		mode           string
-		body           string
-		getConfigFunc  func(ctx context.Context, size int, mode string) (*repository.ConfigRecord, error)
-		putConfigFunc  func(ctx context.Context, config *repository.ConfigRecord) error
-		wantStatus     int
-		wantError      string
-		wantMessage    string
+		name          string
+		size          string
+		mode          string
+		body          string
+		getConfigFunc func(ctx context.Context, size int, mode string) (*repository.ConfigRecord, error)
+		putConfigFunc func(ctx context.Context, config *repository.ConfigRecord) error
+		wantStatus    int
+		wantError     string
+		wantMessage   string
 	}{
 		{
 			name: "valid update returns 200",

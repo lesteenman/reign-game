@@ -437,7 +437,7 @@ func TestCountReady(t *testing.T) {
 }
 
 // helper to build a DynamoDB item map for a config record.
-func buildConfigItem(sk string, pipeline string, enabled bool) map[string]types.AttributeValue {
+func buildConfigItem(sk, pipeline string, enabled bool) map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
 		"PK":             &types.AttributeValueMemberS{Value: "CONFIG"},
 		"SK":             &types.AttributeValueMemberS{Value: sk},
