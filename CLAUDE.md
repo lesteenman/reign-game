@@ -22,29 +22,60 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build Commands
 
 ```bash
-# Using Taskfile (recommended)
+# Build / test
 task build              # Build backend + frontend
 task test               # Run all tests
 task build:backend      # Build Go backend
 task test:backend       # Run backend tests
 task lint:backend       # Run golangci-lint
-task dev:backend        # Start backend dev server (localhost:8080)
 task build:frontend     # Build frontend
 task test:frontend      # Run frontend unit tests
-task dev:frontend       # Start Vite dev server
 task deploy             # Build + terraform apply
-
-# Direct commands (if Taskfile not installed)
-cd backend && go build ./...
-cd backend && go test ./... -v
-cd backend && golangci-lint run
-cd frontend && npm run build
-cd frontend && npm test
-cd frontend && npx playwright test   # Phase 1+
-cd frontend && npm run dev
-cd backend && go run ./cmd/api
-docker compose up localstack         # Phase 4+
 ```
+
+## Running the Dev Stack (STANDARD — always use these)
+
+The dev stack (LocalStack + backend + generator + frontend) runs as background
+processes with logs streamed to `./logs/*.log`. **Always use these tasks** — do
+not launch `go run ./cmd/api` or `npm run dev` directly. Doing so breaks the
+shared logging/lifecycle contract and leaves orphan processes.
+
+```bash
+task dev:up             # Start LocalStack + backend + generator + frontend (waits for readiness)
+task dev:down           # Stop everything
+task dev:restart        # Stop + start
+task dev:status         # Show what's running (PIDs + ports)
+
+task dev:logs            # Stream backend + generator + frontend logs to stdout (Ctrl+C to exit)
+task dev:logs:backend    # Stream only backend logs
+task dev:logs:generator  # Stream only generator logs
+task dev:logs:frontend   # Stream only frontend logs
+
+# Individual services
+task dev:up:backend         # Start backend only (also brings up LocalStack via deps)
+task dev:up:generator       # Start SQS generator worker only
+task dev:up:frontend        # Start frontend only
+task dev:up:localstack      # Start LocalStack only
+task dev:down:backend       # Stop backend
+task dev:down:generator     # Stop generator
+task dev:down:frontend      # Stop frontend
+task dev:down:localstack    # Stop LocalStack
+task dev:restart:backend    # Restart backend (picks up Go code changes)
+task dev:restart:generator  # Restart generator (picks up Go code changes)
+task dev:restart:frontend   # Restart frontend
+```
+
+**How it works:**
+- Services run detached via `nohup ... &`; stdout+stderr redirect to `./logs/{backend,generator,frontend}.log`.
+- `dev:up` polls each service until healthy before returning. Backend check hits `/health`; frontend check waits for port `:5180` to listen; generator waits for the "starting local SQS poller" log line.
+- Backend/frontend identity tracked by port (`lsof -ti:PORT`). Generator has no port, so its PID is persisted to `./logs/generator.pid` — robust against orphaned files because a stale PID is detected and cleaned up.
+- LocalStack readiness check waits for BOTH the `/_localstack/health` endpoint AND the init-aws.sh script to finish (puzzle-generation queue exists + puzzle-pool table is ACTIVE). Without this, services race with init and log spurious `NonExistentQueue` errors.
+- Task's built-in shell (mvdan/sh) runs commands in-process, so `$!` and `kill -0` against external PIDs are unreliable. Generator lifecycle blocks wrap their logic in `bash <<'BASH' ... BASH` heredocs to get real POSIX semantics.
+- `./logs/` is gitignored.
+- LocalStack runs in Docker via the existing `docker-compose.yml`; init script `.localstack/init-aws.sh` creates the `puzzle-pool` DynamoDB table, the SQS queues, and seeds initial CONFIG items.
+
+**After changing Go source:** `task dev:restart:backend` and/or `task dev:restart:generator` (neither is hot-reloaded).
+**After changing frontend source:** Vite HMR handles most updates; if you edit `vite.config.ts` or similar, `task dev:restart:frontend`.
 
 ## Testing
 
@@ -64,12 +95,14 @@ Configure with: `git config core.hooksPath .githooks`
 
 ## Dev Server Ports
 
-| Service | Port | Command |
-|---------|------|---------|
-| Frontend | 5180 | `npm run dev` (configured in package.json) |
-| Backend | 5181 | `go run ./cmd/api` (default in main.go) |
+| Service    | Port | Started by                 |
+|------------|------|----------------------------|
+| Frontend   | 5180 | `task dev:up:frontend`     |
+| Backend    | 5181 | `task dev:up:backend`      |
+| Generator  | —    | `task dev:up:generator` (SQS consumer, no HTTP port; PID in `logs/generator.pid`) |
+| LocalStack | 4566 | `task dev:up:localstack`   |
 
-Always start the frontend with `--host 0.0.0.0` for mobile testing over the local network. The Vite proxy forwards `/puzzles/*` to `localhost:5181`.
+Frontend already binds `--host 0.0.0.0` (for mobile testing over LAN) and the Vite proxy forwards `/puzzles/*` and `/admin/*` to `localhost:5181`. Do not start services with raw `go run`/`npm run dev` — always go through `task dev:up` (see "Running the Dev Stack" above).
 
 ## Project Structure
 

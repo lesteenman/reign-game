@@ -37,7 +37,7 @@ Before starting:
 ## Prerequisites
 
 Verify the environment:
-1. Docker is running with the application accessible (frontend + backend)
+1. The full dev stack is up: `task dev:up` (brings up LocalStack + backend on :5181 + frontend on :5180). Confirm with `task dev:status`. Never start the servers with raw `go run`/`npm run dev` — use the `task dev:*` commands so logs land in `./logs/*.log` and both the agent and the human can read them.
 2. Playwright is installed (`npx playwright install chromium`)
 3. OpenSpec specs exist at `openspec/specs/` or `openspec/changes/*/specs/`
 4. An e2e test plan exists (e.g., `openspec/e2e-test-plan.md` or similar)

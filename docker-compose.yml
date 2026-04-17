@@ -6,6 +6,7 @@ services:
     environment:
       - SERVICES=dynamodb,sqs
       - DEFAULT_REGION=us-east-1
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_TOKEN}
     volumes:
       - ./.localstack:/etc/localstack/init/ready.d
       - localstack-data:/var/lib/localstack

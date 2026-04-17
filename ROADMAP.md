@@ -75,28 +75,49 @@ Goal: Admin UI to view pool status per size+mode and tune generation settings.
 - [x] **R-057** — Frontend: admin link in PageShell header
 - [x] **R-058** — LocalStack seed: initial CONFIG items for local dev
 
-## Phase 5: Verdict System
+## Phase 4.5: API Prefix
+
+Goal: Prefix all backend API routes with `/api` to cleanly separate API traffic from frontend routes. Eliminates proxy/CloudFront path conflicts (e.g., `/admin` page vs `/admin/*` API).
+
+- [ ] **R-059** — Backend: mount all routes under `/api` prefix (`/api/puzzles/*`, `/api/admin/*`, `/api/health`)
+- [ ] **R-05A** — Frontend: update API base path, Vite proxy, and service calls to use `/api` prefix
+- [ ] **R-05B** — Infra: replace per-path CloudFront behaviors + API Gateway resources with single `/api/*` pattern
+- [ ] **R-05C** — Verify production request flow end-to-end after migration
+
+## Phase 4.6: Undo / Redo
+
+Goal: Let players step backwards and forwards through their move history on a puzzle.
+
+- [ ] **R-060** — Frontend: undo/redo buttons in the puzzle UI. Stack-based history of placements/exclusions/clears; redo stack cleared on new action. Keyboard shortcuts (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z). Persists with the rest of the game state in IndexedDB so undo survives reload. No server changes.
+
+## Phase 5: Generator Rework
+
+Goal: Rework the puzzle generator based on new designs (to be detailed via design-flow). Expected motivations: faster generation (especially Double Queens — see KI-007), higher-quality region shapes, more reliable deducibility guarantees. Scope and task breakdown come from the design session.
+
+- [ ] **R-061** — Design-flow: capture the new generator design, decide algorithm(s), and split into implementation tasks (R-062, R-069, R-06A+ as needed)
+
+## Phase 6: Verdict System
 
 Goal: Rate puzzles after playing them — upvote, downvote, or skip.
 
 - [ ] **R-063** — `PUT /puzzles/:id/verdict` endpoint: upvote/downvote/skip
 - [ ] **R-064** — Frontend: verdict buttons on puzzle completion/skip
 
-## Phase 6: Puzzle Replay
+## Phase 7: Puzzle Replay
 
 Goal: Admin can browse played puzzles and replay them to review quality.
 
 - [ ] **R-065** — `GET /puzzles/:id` endpoint: load any puzzle by ID for replay
 - [ ] **R-066** — Frontend: played puzzle list in admin UI, replay by ID
 
-## Phase 7: Puzzle Analysis Agent
+## Phase 8: Puzzle Analysis Agent
 
 Goal: Automated analysis of played puzzles — generation performance, verdict patterns, engine comparison.
 
 - [ ] **R-067** — Analysis agent: dedicated agent for querying and interpreting puzzle generation data
 - [ ] **R-068** — Analysis endpoint(s) as needed by the agent
 
-## Phase 8: Difficulty Rating
+## Phase 9: Difficulty Rating
 
 Goal: Difficulty rating for all grid sizes and modes, with user-facing difficulty selector.
 
@@ -104,7 +125,7 @@ Goal: Difficulty rating for all grid sizes and modes, with user-facing difficult
 - [ ] **R-032** — Update difficulty rating for Double Queens
 - [ ] **R-034** — UI: difficulty selector (Easy / Medium / Hard)
 
-## Phase 9+: Future (scoped when we get there)
+## Phase 10+: Future (scoped when we get there)
 
 Candidate items — not yet committed or ordered:
 

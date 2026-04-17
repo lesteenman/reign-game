@@ -50,21 +50,23 @@ reign-game/
 git clone git@github.com:lesteenman/reign-game.git
 cd reign-game
 
-# Backend
-cd backend
-go mod download
-go test ./... -v
-go run ./cmd/api
+# Install deps
+cd backend  && go mod download && cd ..
+cd frontend && npm install       && cd ..
 
-# Frontend
-cd frontend
-npm install
-npm run dev          # dev server at localhost:5173
-npm run test         # unit tests
-npm run build        # production build
+# Run the full dev stack (LocalStack + backend + frontend)
+# Logs stream to ./logs/{backend,frontend}.log
+task dev:up             # start everything (frontend :5180, backend :5181)
+task dev:logs           # tail both logs to stdout
+task dev:status         # show what's running
+task dev:down           # stop everything
+task dev:restart        # restart the stack (use after Go source changes)
 
-# Local DynamoDB
-docker compose up localstack
+# Tests
+task test               # run all tests (backend + frontend)
+cd backend  && go test ./... -v
+cd frontend && npm run test       # unit tests
+cd frontend && npx playwright test # e2e tests
 
 # Infrastructure (requires AWS credentials)
 cd infra

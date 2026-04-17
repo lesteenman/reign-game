@@ -108,3 +108,319 @@ tasks:
     dir: infra
     cmds:
       - terraform apply
+
+  # ---------------------------------------------------------------------------
+  # Dev lifecycle (STANDARD — use these to start/stop the stack during testing).
+  # Logs stream to ./logs/{backend,frontend}.log (gitignored).
+  # Port-based process tracking: whatever is listening on the port owns it.
+  # ---------------------------------------------------------------------------
+
+  dev:up:localstack:
+    desc: Start LocalStack container (DynamoDB + SQS) and wait for ready
+    cmds:
+      - docker compose up -d localstack
+      - |
+        echo "waiting for LocalStack on :4566..."
+        for i in $(seq 1 60); do
+          if curl -sf http://localhost:4566/_localstack/health >/dev/null 2>&1; then
+            break
+          fi
+          sleep 1
+        done
+        # Wait for init-aws.sh to finish: the puzzle-generation queue must exist
+        # and the puzzle-pool DynamoDB table must be ACTIVE. LocalStack health
+        # returns ready before init scripts complete.
+        echo "waiting for init (puzzle-generation queue + puzzle-pool table)..."
+        for i in $(seq 1 60); do
+          q_ok=n
+          if docker compose exec -T localstack awslocal sqs get-queue-url --queue-name puzzle-generation >/dev/null 2>&1; then
+            q_ok=y
+          fi
+          t_ok=$(docker compose exec -T localstack awslocal dynamodb describe-table --table-name puzzle-pool --query 'Table.TableStatus' --output text 2>/dev/null || true)
+          if [ "$q_ok" = "y" ] && [ "$t_ok" = "ACTIVE" ]; then
+            echo "LocalStack ready (queue + table provisioned)"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "LocalStack init did not finish in 60s — check: docker compose logs localstack"
+        exit 1
+
+  dev:up:backend:
+    desc: Start backend in background (logs -> logs/backend.log)
+    deps:
+      - dev:up:localstack
+    dir: backend
+    env:
+      DYNAMODB_ENDPOINT: http://localhost:4566
+      SQS_ENDPOINT: http://localhost:4566
+      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
+      AWS_REGION: us-east-1
+      PUZZLE_TABLE_NAME: puzzle-pool
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    cmds:
+      - mkdir -p ../logs
+      - |
+        if lsof -ti:5181 -sTCP:LISTEN >/dev/null 2>&1; then
+          echo "backend already running on :5181 (PID $(lsof -ti:5181 -sTCP:LISTEN))"
+          exit 0
+        fi
+        : > ../logs/backend.log
+        nohup go run ./cmd/api >> ../logs/backend.log 2>&1 </dev/null &
+        echo "backend starting, logs: logs/backend.log"
+        for i in $(seq 1 60); do
+          if curl -sf http://localhost:5181/health >/dev/null 2>&1; then
+            echo "backend ready on :5181 (PID $(lsof -ti:5181 -sTCP:LISTEN))"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "backend did not become ready in 60s — check logs/backend.log"
+        exit 1
+
+  dev:up:generator:
+    desc: Start SQS generator worker in background (logs -> logs/generator.log)
+    deps:
+      - dev:up:localstack
+    dir: backend
+    env:
+      GENERATOR_MODE: sqs
+      DYNAMODB_ENDPOINT: http://localhost:4566
+      SQS_ENDPOINT: http://localhost:4566
+      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
+      AWS_REGION: us-east-1
+      PUZZLE_TABLE_NAME: puzzle-pool
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    cmds:
+      - mkdir -p ../logs
+      # Run the whole block in system bash — Task's built-in shell (mvdan/sh)
+      # returns goroutine handles (g1, g2…) for $! and has unreliable `kill -0`
+      # against external PIDs. We need real bash for background-PID tracking.
+      - |
+        bash <<'BASH'
+        set -e
+        LOGDIR=../logs
+        mkdir -p "$LOGDIR"
+        if [ -f "$LOGDIR/generator.pid" ] && kill -0 "$(cat "$LOGDIR/generator.pid")" 2>/dev/null; then
+          echo "generator already running (PID $(cat "$LOGDIR/generator.pid"))"
+          exit 0
+        fi
+        rm -f "$LOGDIR/generator.pid"
+        : > "$LOGDIR/generator.log"
+        nohup go run ./cmd/api >> "$LOGDIR/generator.log" 2>&1 </dev/null &
+        GENPID=$!
+        echo "$GENPID" > "$LOGDIR/generator.pid"
+        echo "generator starting (PID $GENPID), logs: logs/generator.log"
+        for i in $(seq 1 30); do
+          if ! kill -0 "$GENPID" 2>/dev/null; then
+            echo "generator exited during startup — check logs/generator.log"
+            rm -f "$LOGDIR/generator.pid"
+            exit 1
+          fi
+          if grep -q "starting local SQS poller" "$LOGDIR/generator.log" 2>/dev/null; then
+            echo "generator ready (PID $GENPID)"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "generator did not report ready in 30s — check logs/generator.log"
+        exit 1
+        BASH
+
+  dev:up:frontend:
+    desc: Start frontend in background (logs -> logs/frontend.log)
+    dir: frontend
+    cmds:
+      - mkdir -p ../logs
+      - |
+        if lsof -ti:5180 -sTCP:LISTEN >/dev/null 2>&1; then
+          echo "frontend already running on :5180 (PID $(lsof -ti:5180 -sTCP:LISTEN))"
+          exit 0
+        fi
+        : > ../logs/frontend.log
+        nohup npm run dev -- --host 0.0.0.0 >> ../logs/frontend.log 2>&1 </dev/null &
+        echo "frontend starting, logs: logs/frontend.log"
+        for i in $(seq 1 60); do
+          if lsof -ti:5180 -sTCP:LISTEN >/dev/null 2>&1; then
+            echo "frontend ready on :5180"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "frontend did not start in 60s — check logs/frontend.log"
+        exit 1
+
+  dev:up:
+    desc: Start LocalStack + backend + generator + frontend (standard dev stack)
+    cmds:
+      - task: dev:up:backend
+      - task: dev:up:generator
+      - task: dev:up:frontend
+      - |
+        echo ""
+        echo "All services up:"
+        echo "  frontend:  http://localhost:5180/"
+        echo "  backend:   http://localhost:5181/ (health: /health)"
+        echo "  admin:     http://localhost:5180/admin"
+        echo "  generator: PID $(cat logs/generator.pid 2>/dev/null || echo ?)"
+        echo "  logs:      task dev:logs   (or dev:logs:{backend,generator,frontend})"
+        echo "  status:    task dev:status"
+        echo "  stop:      task dev:down"
+
+  dev:down:backend:
+    desc: Stop the backend (kills whatever is on :5181)
+    cmds:
+      - |
+        pids=$(lsof -ti:5181 2>/dev/null || true)
+        if [ -n "$pids" ]; then
+          kill $pids 2>/dev/null || true
+          for i in 1 2 3 4 5; do
+            if ! lsof -ti:5181 >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          kill -9 $(lsof -ti:5181 2>/dev/null) 2>/dev/null || true
+          echo "backend stopped (was $pids)"
+        else
+          echo "backend not running"
+        fi
+
+  dev:down:frontend:
+    desc: Stop the frontend (kills whatever is on :5180)
+    cmds:
+      - |
+        pids=$(lsof -ti:5180 2>/dev/null || true)
+        if [ -n "$pids" ]; then
+          kill $pids 2>/dev/null || true
+          for i in 1 2 3 4 5; do
+            if ! lsof -ti:5180 >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          kill -9 $(lsof -ti:5180 2>/dev/null) 2>/dev/null || true
+          echo "frontend stopped (was $pids)"
+        else
+          echo "frontend not running"
+        fi
+
+  dev:down:generator:
+    desc: Stop the generator worker
+    cmds:
+      - |
+        bash <<'BASH'
+        set -e
+        if [ ! -f logs/generator.pid ]; then
+          echo "generator not running"
+          exit 0
+        fi
+        pid=$(cat logs/generator.pid)
+        if ! kill -0 "$pid" 2>/dev/null; then
+          echo "generator not running (stale PID file removed)"
+          rm -f logs/generator.pid
+          exit 0
+        fi
+        pkill -P "$pid" 2>/dev/null || true
+        kill "$pid" 2>/dev/null || true
+        for i in 1 2 3 4 5; do
+          if ! kill -0 "$pid" 2>/dev/null; then break; fi
+          sleep 1
+        done
+        pkill -9 -P "$pid" 2>/dev/null || true
+        kill -9 "$pid" 2>/dev/null || true
+        rm -f logs/generator.pid
+        echo "generator stopped (was PID $pid)"
+        BASH
+
+  dev:down:localstack:
+    desc: Stop LocalStack container
+    cmds:
+      - docker compose stop localstack
+
+  dev:down:
+    desc: Stop all dev services (frontend, generator, backend, LocalStack)
+    cmds:
+      - task: dev:down:frontend
+      - task: dev:down:generator
+      - task: dev:down:backend
+      - task: dev:down:localstack
+
+  dev:restart:
+    desc: Restart the full dev stack
+    cmds:
+      - task: dev:down
+      - task: dev:up
+
+  dev:restart:backend:
+    desc: Restart only the backend (picks up Go source changes)
+    cmds:
+      - task: dev:down:backend
+      - task: dev:up:backend
+
+  dev:restart:frontend:
+    desc: Restart only the frontend
+    cmds:
+      - task: dev:down:frontend
+      - task: dev:up:frontend
+
+  dev:restart:generator:
+    desc: Restart only the generator worker
+    cmds:
+      - task: dev:down:generator
+      - task: dev:up:generator
+
+  dev:logs:
+    desc: Stream backend + generator + frontend logs to stdout (Ctrl+C to stop)
+    cmds:
+      - mkdir -p logs
+      - touch logs/backend.log logs/generator.log logs/frontend.log
+      - tail -n 100 -F logs/backend.log logs/generator.log logs/frontend.log
+
+  dev:logs:backend:
+    desc: Stream backend logs to stdout
+    cmds:
+      - mkdir -p logs
+      - touch logs/backend.log
+      - tail -n 200 -F logs/backend.log
+
+  dev:logs:frontend:
+    desc: Stream frontend logs to stdout
+    cmds:
+      - mkdir -p logs
+      - touch logs/frontend.log
+      - tail -n 200 -F logs/frontend.log
+
+  dev:logs:generator:
+    desc: Stream generator logs to stdout
+    cmds:
+      - mkdir -p logs
+      - touch logs/generator.log
+      - tail -n 200 -F logs/generator.log
+
+  dev:status:
+    desc: Show status of dev services
+    cmds:
+      - |
+        bash <<'BASH'
+        check_port() {
+          local name=$1 port=$2
+          local pid
+          pid=$(lsof -ti:$port -sTCP:LISTEN 2>/dev/null || true)
+          if [ -n "$pid" ]; then
+            echo "$name: running (PID $pid, port $port)"
+          else
+            echo "$name: stopped (port $port)"
+          fi
+        }
+        check_port backend  5181
+        check_port frontend 5180
+        if [ -f logs/generator.pid ] && kill -0 "$(cat logs/generator.pid)" 2>/dev/null; then
+          echo "generator: running (PID $(cat logs/generator.pid))"
+        else
+          echo "generator: stopped"
+        fi
+        if docker compose ps --services --filter status=running 2>/dev/null | grep -qx localstack; then
+          echo "localstack: running"
+        else
+          echo "localstack: stopped"
+        fi
+        BASH
