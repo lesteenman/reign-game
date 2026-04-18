@@ -335,3 +335,145 @@ describe('GamePage metadata display (FE-05)', () => {
     expect(screen.queryByTestId('puzzle-metadata')).not.toBeInTheDocument();
   });
 });
+
+describe('GamePage undo/redo (R-060)', () => {
+  const emptyGrid5 = () => Array.from({ length: 5 }, () => Array(5).fill('empty'));
+
+  function mockStateWithUndoable() {
+    const empty = emptyGrid5();
+    const afterTap: ('empty' | 'excluded' | 'marked')[][] = emptyGrid5();
+    afterTap[0]![0] = 'excluded';
+    mockLoadState.mockResolvedValue({
+      id: 'current',
+      puzzle: FALLBACK_PUZZLE,
+      cells: afterTap,
+      timer: { elapsedAtLastPause: 10, lastResumedAt: null },
+      status: 'in-progress',
+      startedAt: Date.now(),
+      history: { past: [empty], future: [] },
+    });
+  }
+
+  it('renders undo and redo buttons, initially disabled for fresh puzzle', async () => {
+    // Arrange & Act
+    renderGamePage('/play?new=true');
+    await waitForHeader();
+
+    // Assert
+    const undoBtn = await screen.findByTestId('undo-button');
+    expect(undoBtn).toBeDisabled();
+    expect(screen.getByTestId('redo-button')).toBeDisabled();
+  });
+
+  it('undo button is enabled when loaded state has past history', async () => {
+    // Arrange
+    mockStateWithUndoable();
+
+    // Act
+    renderGamePage('/play');
+    await waitForHeader();
+
+    // Assert
+    const undoBtn = await screen.findByTestId('undo-button');
+    expect(undoBtn).not.toBeDisabled();
+    expect(screen.getByTestId('redo-button')).toBeDisabled();
+  });
+
+  it('clicking undo reverts state and flips button enabled states', async () => {
+    // Arrange
+    mockStateWithUndoable();
+    renderGamePage('/play');
+    await waitForHeader();
+    const undoBtn = await screen.findByTestId('undo-button');
+    expect(undoBtn).not.toBeDisabled();
+
+    // Act
+    fireEvent.click(undoBtn);
+
+    // Assert
+    await waitFor(() => expect(undoBtn).toBeDisabled());
+    expect(screen.getByTestId('redo-button')).not.toBeDisabled();
+  });
+
+  it('Ctrl+Z triggers undo when history is available', async () => {
+    // Arrange
+    mockStateWithUndoable();
+    renderGamePage('/play');
+    await waitForHeader();
+    await screen.findByTestId('undo-button');
+
+    // Act
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+
+    // Assert
+    await waitFor(() => expect(screen.getByTestId('undo-button')).toBeDisabled());
+    expect(screen.getByTestId('redo-button')).not.toBeDisabled();
+  });
+
+  it('Ctrl+Shift+Z triggers redo after an undo', async () => {
+    // Arrange
+    mockStateWithUndoable();
+    renderGamePage('/play');
+    await waitForHeader();
+    await screen.findByTestId('undo-button');
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
+    await waitFor(() => expect(screen.getByTestId('redo-button')).not.toBeDisabled());
+
+    // Act
+    fireEvent.keyDown(window, { key: 'z', ctrlKey: true, shiftKey: true });
+
+    // Assert
+    await waitFor(() => expect(screen.getByTestId('redo-button')).toBeDisabled());
+    expect(screen.getByTestId('undo-button')).not.toBeDisabled();
+  });
+
+  it('Meta+Z also triggers undo (Mac chord)', async () => {
+    // Arrange
+    mockStateWithUndoable();
+    renderGamePage('/play');
+    await waitForHeader();
+    await screen.findByTestId('undo-button');
+
+    // Act
+    fireEvent.keyDown(window, { key: 'z', metaKey: true });
+
+    // Assert
+    await waitFor(() => expect(screen.getByTestId('undo-button')).toBeDisabled());
+  });
+
+  it('plain Z (no modifier) does not trigger undo', async () => {
+    // Arrange
+    mockStateWithUndoable();
+    renderGamePage('/play');
+    await waitForHeader();
+    const undoBtn = await screen.findByTestId('undo-button');
+
+    // Act
+    fireEvent.keyDown(window, { key: 'z' });
+
+    // Assert — still enabled, nothing happened
+    expect(undoBtn).not.toBeDisabled();
+  });
+
+  it('saveState payload includes history after an undo', async () => {
+    // Arrange
+    mockStateWithUndoable();
+    renderGamePage('/play');
+    await waitForHeader();
+    const undoBtn = await screen.findByTestId('undo-button');
+    mockSaveState.mockClear();
+
+    // Act
+    fireEvent.click(undoBtn);
+
+    // Assert — debounced save eventually fires with future populated (undone state)
+    await waitFor(() => {
+      const calls = mockSaveState.mock.calls;
+      const withFuture = calls.find((c: unknown[]) => {
+        const state = c[0] as { history?: { past: unknown[]; future: unknown[] } };
+        return state.history !== undefined && state.history.future.length > 0;
+      });
+      expect(withFuture).toBeDefined();
+    }, { timeout: 1000 });
+  });
+});

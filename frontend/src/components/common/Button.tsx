@@ -5,6 +5,8 @@ interface ButtonProps {
   onClick?: MouseEventHandler<HTMLButtonElement>;
   disabled?: boolean;
   type?: 'button' | 'submit' | 'reset';
+  'aria-label'?: string;
+  'data-testid'?: string;
 }
 
 const baseStyle: CSSProperties = {
@@ -29,12 +31,13 @@ function handleLeave(e: React.MouseEvent<HTMLButtonElement>, shadowColor: string
 }
 
 /** Accent-colored primary action button. */
-export function PrimaryButton({ children, onClick, disabled, type = 'button' }: ButtonProps) {
+export function PrimaryButton({ children, onClick, disabled, type = 'button', ...rest }: ButtonProps) {
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
+      {...rest}
       style={{
         ...baseStyle,
         backgroundColor: 'var(--color-accent)',
@@ -50,12 +53,13 @@ export function PrimaryButton({ children, onClick, disabled, type = 'button' }: 
 }
 
 /** Surface-colored secondary action button. */
-export function SecondaryButton({ children, onClick, disabled, type = 'button' }: ButtonProps) {
+export function SecondaryButton({ children, onClick, disabled, type = 'button', ...rest }: ButtonProps) {
   return (
     <button
       type={type}
       onClick={onClick}
       disabled={disabled}
+      {...rest}
       style={{
         ...baseStyle,
         backgroundColor: 'var(--color-surface)',
