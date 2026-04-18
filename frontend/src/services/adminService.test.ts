@@ -77,7 +77,7 @@ describe('fetchPoolStatus', () => {
     expect(result).toEqual(MOCK_POOL_STATUS);
     const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
     const url = calls[0]![0] as string;
-    expect(url).toContain('/admin/pool');
+    expect(url).toContain('/api/admin/pool');
   });
 
   test('throws ApiError on server error', async () => {
@@ -127,7 +127,7 @@ describe('updateConfig', () => {
     expect(result).toEqual(MOCK_CONFIG);
     const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
     const url = calls[0]![0] as string;
-    expect(url).toContain('/admin/config/5/standard');
+    expect(url).toContain('/api/admin/config/5/standard');
     const options = calls[0]![1] as RequestInit;
     expect(options.method).toBe('PUT');
     expect(JSON.parse(options.body as string)).toEqual(MOCK_CONFIG);
@@ -182,7 +182,7 @@ describe('createConfig', () => {
     expect(result).toEqual(MOCK_CONFIG);
     const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
     const url = calls[0]![0] as string;
-    expect(url).toContain('/admin/config');
+    expect(url).toContain('/api/admin/config');
     const options = calls[0]![1] as RequestInit;
     expect(options.method).toBe('POST');
     expect(JSON.parse(options.body as string)).toEqual(createPayload);
@@ -237,7 +237,7 @@ describe('triggerReplenish', () => {
     expect(result).toEqual(MOCK_REPLENISH_RESULT);
     const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
     const url = calls[0]![0] as string;
-    expect(url).toContain('/admin/replenish');
+    expect(url).toContain('/api/admin/replenish');
     expect(url).not.toContain('size=');
     expect(url).not.toContain('mode=');
     const options = calls[0]![1] as RequestInit;

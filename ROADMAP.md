@@ -79,10 +79,10 @@ Goal: Admin UI to view pool status per size+mode and tune generation settings.
 
 Goal: Prefix all backend API routes with `/api` to cleanly separate API traffic from frontend routes. Eliminates proxy/CloudFront path conflicts (e.g., `/admin` page vs `/admin/*` API).
 
-- [ ] **R-059** — Backend: mount all routes under `/api` prefix (`/api/puzzles/*`, `/api/admin/*`, `/api/health`)
-- [ ] **R-05A** — Frontend: update API base path, Vite proxy, and service calls to use `/api` prefix
-- [ ] **R-05B** — Infra: replace per-path CloudFront behaviors + API Gateway resources with single `/api/*` pattern
-- [ ] **R-05C** — Verify production request flow end-to-end after migration
+- [x] **R-059** — Backend: mount all routes under `/api` prefix (`/api/puzzles/*`, `/api/admin/*`, `/api/health`)
+- [x] **R-05A** — Frontend: update API base path, Vite proxy, and service calls to use `/api` prefix
+- [x] **R-05B** — Infra: replace per-path CloudFront behaviors + API Gateway resources with single `/api/*` pattern
+- [x] **R-05C** — Verify production request flow end-to-end after migration
 
 ## Phase 4.6: Undo / Redo
 

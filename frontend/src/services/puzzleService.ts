@@ -15,7 +15,7 @@ export async function fetchNextPuzzle(
   mode: string,
 ): Promise<PuzzleData> {
   try {
-    return await apiFetch<PuzzleData>('/puzzles/next', {
+    return await apiFetch<PuzzleData>('/api/puzzles/next', {
       size: String(size),
       mode,
     });
@@ -35,7 +35,7 @@ export async function updatePuzzleStatus(
   status: 'solved' | 'skipped',
 ): Promise<void> {
   await apiPut<Record<string, never>>(
-    `/puzzles/${puzzleId}/status`,
+    `/api/puzzles/${puzzleId}/status`,
     { status },
     { size: String(size), mode },
   );
