@@ -67,7 +67,7 @@ task dev:restart:frontend   # Restart frontend
 
 **How it works:**
 - Services run detached via `nohup ... &`; stdout+stderr redirect to `./logs/{backend,generator,frontend}.log`.
-- `dev:up` polls each service until healthy before returning. Backend check hits `/health`; frontend check waits for port `:5180` to listen; generator waits for the "starting local SQS poller" log line.
+- `dev:up` polls each service until healthy before returning. Backend check hits `/api/health`; frontend check waits for port `:5180` to listen; generator waits for the "starting local SQS poller" log line.
 - Backend/frontend identity tracked by port (`lsof -ti:PORT`). Generator has no port, so its PID is persisted to `./logs/generator.pid` — robust against orphaned files because a stale PID is detected and cleaned up.
 - LocalStack readiness check waits for BOTH the `/_localstack/health` endpoint AND the init-aws.sh script to finish (puzzle-generation queue exists + puzzle-pool table is ACTIVE). Without this, services race with init and log spurious `NonExistentQueue` errors.
 - Task's built-in shell (mvdan/sh) runs commands in-process, so `$!` and `kill -0` against external PIDs are unreliable. Generator lifecycle blocks wrap their logic in `bash <<'BASH' ... BASH` heredocs to get real POSIX semantics.
@@ -125,7 +125,7 @@ Configure with: `git config core.hooksPath .githooks`
 | Generator  | —    | `task dev:up:generator` (SQS consumer, no HTTP port; PID in `logs/generator.pid`) |
 | LocalStack | 4566 | `task dev:up:localstack`   |
 
-Frontend already binds `--host 0.0.0.0` (for mobile testing over LAN) and the Vite proxy forwards `/puzzles/*` and `/admin/*` to `localhost:5181`. Do not start services with raw `go run`/`npm run dev` — always go through `task dev:up` (see "Running the Dev Stack" above).
+Frontend already binds `--host 0.0.0.0` (for mobile testing over LAN) and the Vite proxy forwards `/api/*` to `localhost:5181`. All backend routes live under `/api/` — SPA routes (e.g., `/admin` page) stay on the frontend. Do not start services with raw `go run`/`npm run dev` — always go through `task dev:up` (see "Running the Dev Stack" above).
 
 ## Project Structure
 

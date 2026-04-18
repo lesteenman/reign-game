@@ -46,7 +46,7 @@ export interface CreateConfigRequest extends ConfigData {
 
 /** Fetch the current pool status for all combos. */
 export async function fetchPoolStatus(): Promise<PoolStatus> {
-  return apiFetch<PoolStatus>('/admin/pool');
+  return apiFetch<PoolStatus>('/api/admin/pool');
 }
 
 /** Update the config for an existing combo. */
@@ -55,14 +55,14 @@ export async function updateConfig(
   mode: string,
   config: ConfigData,
 ): Promise<ConfigData> {
-  return apiPut<ConfigData>(`/admin/config/${size}/${mode}`, config);
+  return apiPut<ConfigData>(`/api/admin/config/${size}/${mode}`, config);
 }
 
 /** Create a new combo config. */
 export async function createConfig(
   data: CreateConfigRequest,
 ): Promise<ConfigData> {
-  return apiPost<ConfigData>('/admin/config', data);
+  return apiPost<ConfigData>('/api/admin/config', data);
 }
 
 /** Trigger replenishment for all combos, or a specific one if size/mode provided. */
@@ -77,5 +77,5 @@ export async function triggerReplenish(
   if (mode !== undefined) {
     params.mode = mode;
   }
-  return apiPost<ReplenishResult>('/admin/replenish', {}, params);
+  return apiPost<ReplenishResult>('/api/admin/replenish', {}, params);
 }

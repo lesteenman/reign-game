@@ -37,25 +37,27 @@ func newUUIDv4() (string, error) {
 		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }
 
-// newRouter builds and returns the application router with all routes.
+// newRouter builds and returns the application router with all routes mounted
+// under the /api prefix. The prefix separates API traffic from SPA routes
+// (e.g., the frontend's /admin page vs. the /api/admin/* backend endpoints).
 func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux {
 	r := chi.NewRouter()
-	r.Get("/health", handler.HealthCheck)
-	r.Get("/puzzles/generate", handler.GenerateHandler)
+	r.Route("/api", func(r chi.Router) {
+		r.Get("/health", handler.HealthCheck)
+		r.Get("/puzzles/generate", handler.GenerateHandler)
 
-	// Pool management routes.
-	if repo != nil {
-		r.Get("/puzzles/next", handler.ServeHandler(repo))
-		r.Put("/puzzles/{id}/status", handler.StatusHandler(repo))
+		if repo != nil {
+			r.Get("/puzzles/next", handler.ServeHandler(repo))
+			r.Put("/puzzles/{id}/status", handler.StatusHandler(repo))
 
-		// Admin routes.
-		r.Get("/admin/pool", handler.AdminPoolHandler(repo))
-		r.Put("/admin/config/{size}/{mode}", handler.UpdateConfigHandler(repo))
-		r.Post("/admin/config", handler.CreateConfigHandler(repo))
-	}
-	if repo != nil && pub != nil {
-		r.Post("/admin/replenish", handler.ReplenishHandler(repo, repo, pub))
-	}
+			r.Get("/admin/pool", handler.AdminPoolHandler(repo))
+			r.Put("/admin/config/{size}/{mode}", handler.UpdateConfigHandler(repo))
+			r.Post("/admin/config", handler.CreateConfigHandler(repo))
+		}
+		if repo != nil && pub != nil {
+			r.Post("/admin/replenish", handler.ReplenishHandler(repo, repo, pub))
+		}
+	})
 
 	return r
 }

@@ -110,31 +110,6 @@ resource "aws_api_gateway_rest_api" "api" {
   description = "${var.project_name} REST API"
 }
 
-# /health resource
-resource "aws_api_gateway_resource" "health" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
-  path_part   = "health"
-}
-
-# GET method on /health
-resource "aws_api_gateway_method" "health_get" {
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.health.id
-  http_method   = "GET"
-  authorization = "NONE"
-}
-
-# Lambda integration
-resource "aws_api_gateway_integration" "health_lambda" {
-  rest_api_id             = aws_api_gateway_rest_api.api.id
-  resource_id             = aws_api_gateway_resource.health.id
-  http_method             = aws_api_gateway_method.health_get.http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.api.invoke_arn
-}
-
 # Permission for API Gateway to invoke Lambda
 resource "aws_lambda_permission" "api_gateway" {
   statement_id  = "AllowAPIGatewayInvoke"
@@ -149,17 +124,13 @@ resource "aws_api_gateway_deployment" "api" {
   rest_api_id = aws_api_gateway_rest_api.api.id
 
   depends_on = [
-    aws_api_gateway_integration.health_lambda,
-    aws_api_gateway_integration.puzzles_proxy_lambda,
-    aws_api_gateway_integration.admin_proxy_lambda,
+    aws_api_gateway_integration.api_proxy_lambda,
   ]
 
   # Force new deployment when integrations change
   triggers = {
     redeployment = sha1(jsonencode([
-      aws_api_gateway_integration.health_lambda.id,
-      aws_api_gateway_integration.puzzles_proxy_lambda.id,
-      aws_api_gateway_integration.admin_proxy_lambda.id,
+      aws_api_gateway_integration.api_proxy_lambda.id,
     ]))
   }
 
@@ -175,65 +146,35 @@ resource "aws_api_gateway_stage" "api" {
   stage_name    = var.environment
 }
 
-# /puzzles resource
-resource "aws_api_gateway_resource" "puzzles" {
+# /api resource — all backend routes live under this prefix
+# (puzzles, admin, health). SPA routes like /admin stay on CloudFront's S3
+# origin; only /api/* is forwarded to Lambda.
+resource "aws_api_gateway_resource" "api_root" {
   rest_api_id = aws_api_gateway_rest_api.api.id
   parent_id   = aws_api_gateway_rest_api.api.root_resource_id
-  path_part   = "puzzles"
+  path_part   = "api"
 }
 
-# /puzzles/{proxy+} for sub-paths like /puzzles/generate
-resource "aws_api_gateway_resource" "puzzles_proxy" {
+# /api/{proxy+} catches every backend path
+resource "aws_api_gateway_resource" "api_proxy" {
   rest_api_id = aws_api_gateway_rest_api.api.id
-  parent_id   = aws_api_gateway_resource.puzzles.id
+  parent_id   = aws_api_gateway_resource.api_root.id
   path_part   = "{proxy+}"
 }
 
-# ANY on /puzzles/{proxy+} — covers GET, PUT, POST for all puzzle endpoints
-resource "aws_api_gateway_method" "puzzles_proxy_any" {
+# ANY on /api/{proxy+} — covers every HTTP method the backend serves
+resource "aws_api_gateway_method" "api_proxy_any" {
   rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.puzzles_proxy.id
+  resource_id   = aws_api_gateway_resource.api_proxy.id
   http_method   = "ANY"
   authorization = "NONE"
 }
 
-# Lambda integration for /puzzles/{proxy+}
-resource "aws_api_gateway_integration" "puzzles_proxy_lambda" {
+# Lambda integration for /api/{proxy+}
+resource "aws_api_gateway_integration" "api_proxy_lambda" {
   rest_api_id             = aws_api_gateway_rest_api.api.id
-  resource_id             = aws_api_gateway_resource.puzzles_proxy.id
-  http_method             = aws_api_gateway_method.puzzles_proxy_any.http_method
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.api.invoke_arn
-}
-
-# /admin resource
-resource "aws_api_gateway_resource" "admin" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  parent_id   = aws_api_gateway_rest_api.api.root_resource_id
-  path_part   = "admin"
-}
-
-# /admin/{proxy+} for sub-paths like /admin/replenish
-resource "aws_api_gateway_resource" "admin_proxy" {
-  rest_api_id = aws_api_gateway_rest_api.api.id
-  parent_id   = aws_api_gateway_resource.admin.id
-  path_part   = "{proxy+}"
-}
-
-# ANY on /admin/{proxy+}
-resource "aws_api_gateway_method" "admin_proxy_any" {
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.admin_proxy.id
-  http_method   = "ANY"
-  authorization = "NONE"
-}
-
-# Lambda integration for /admin/{proxy+}
-resource "aws_api_gateway_integration" "admin_proxy_lambda" {
-  rest_api_id             = aws_api_gateway_rest_api.api.id
-  resource_id             = aws_api_gateway_resource.admin_proxy.id
-  http_method             = aws_api_gateway_method.admin_proxy_any.http_method
+  resource_id             = aws_api_gateway_resource.api_proxy.id
+  http_method             = aws_api_gateway_method.api_proxy_any.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.api.invoke_arn

@@ -55,7 +55,7 @@ describe('apiFetch', () => {
     });
 
     const { apiFetch } = await import('./api');
-    const result = await apiFetch<PuzzleData>('/puzzles/generate', {
+    const result = await apiFetch<PuzzleData>('/api/puzzles/generate', {
       size: '5',
       mode: 'standard',
     });
@@ -63,7 +63,7 @@ describe('apiFetch', () => {
     expect(result).toEqual(MOCK_PUZZLE);
     const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
     const url = calls[0]![0] as string;
-    expect(url).toContain('/puzzles/generate');
+    expect(url).toContain('/api/puzzles/generate');
     expect(url).toContain('size=5');
     expect(url).toContain('mode=standard');
   });
@@ -77,7 +77,7 @@ describe('apiFetch', () => {
 
     const { apiFetch, ApiError } = await import('./api');
     try {
-      await apiFetch('/puzzles/generate');
+      await apiFetch('/api/puzzles/generate');
       expect.fail('should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(ApiError);
@@ -95,7 +95,7 @@ describe('apiFetch', () => {
 
     const { apiFetch, ApiError } = await import('./api');
     try {
-      await apiFetch('/puzzles/generate');
+      await apiFetch('/api/puzzles/generate');
       expect.fail('should have thrown');
     } catch (err) {
       expect(err).toBeInstanceOf(ApiError);
@@ -107,7 +107,7 @@ describe('apiFetch', () => {
     globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
 
     const { apiFetch } = await import('./api');
-    await expect(apiFetch('/puzzles/generate')).rejects.toThrow(
+    await expect(apiFetch('/api/puzzles/generate')).rejects.toThrow(
       'Failed to fetch',
     );
   });
@@ -124,7 +124,7 @@ describe('fetchNextPuzzle', () => {
     globalThis.fetch = originalFetch;
   });
 
-  test('calls GET /puzzles/next with size and mode params', async () => {
+  test('calls GET /api/puzzles/next with size and mode params', async () => {
     // Arrange
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -142,7 +142,7 @@ describe('fetchNextPuzzle', () => {
     expect(result.metadata).toEqual(MOCK_API_RESPONSE.metadata);
     const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
     const url = calls[0]![0] as string;
-    expect(url).toContain('/puzzles/next');
+    expect(url).toContain('/api/puzzles/next');
     expect(url).toContain('size=7');
     expect(url).toContain('mode=standard');
   });
@@ -215,7 +215,7 @@ describe('updatePuzzleStatus', () => {
     globalThis.fetch = originalFetch;
   });
 
-  test('calls PUT /puzzles/{id}/status with correct body and params', async () => {
+  test('calls PUT /api/puzzles/{id}/status with correct body and params', async () => {
     // Arrange
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -229,7 +229,7 @@ describe('updatePuzzleStatus', () => {
     // Assert
     const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
     const url = calls[0]![0] as string;
-    expect(url).toContain('/puzzles/puzzle-123/status');
+    expect(url).toContain('/api/puzzles/puzzle-123/status');
     expect(url).toContain('size=7');
     expect(url).toContain('mode=standard');
     const options = calls[0]![1] as RequestInit;

@@ -79,10 +79,10 @@ Goal: Admin UI to view pool status per size+mode and tune generation settings.
 
 Goal: Prefix all backend API routes with `/api` to cleanly separate API traffic from frontend routes. Eliminates proxy/CloudFront path conflicts (e.g., `/admin` page vs `/admin/*` API).
 
-- [ ] **R-059** — Backend: mount all routes under `/api` prefix (`/api/puzzles/*`, `/api/admin/*`, `/api/health`)
-- [ ] **R-05A** — Frontend: update API base path, Vite proxy, and service calls to use `/api` prefix
-- [ ] **R-05B** — Infra: replace per-path CloudFront behaviors + API Gateway resources with single `/api/*` pattern
-- [ ] **R-05C** — Verify production request flow end-to-end after migration
+- [x] **R-059** — Backend: mount all routes under `/api` prefix (`/api/puzzles/*`, `/api/admin/*`, `/api/health`)
+- [x] **R-05A** — Frontend: update API base path, Vite proxy, and service calls to use `/api` prefix
+- [x] **R-05B** — Infra: replace per-path CloudFront behaviors + API Gateway resources with single `/api/*` pattern
+- [x] **R-05C** — Verify production request flow end-to-end after migration
 
 ## Phase 4.6: Undo / Redo
 
@@ -164,8 +164,8 @@ Candidate items — not yet committed or ordered:
 | KI-006 | ~~Medium~~ Fixed | ~~Every CD deploy updates the Lambda function even when there are no backend changes.~~ Fixed: reproducible zip (touch + zip -X) means identical source produces identical hash. | R-006 |
 | KI-007 | High | Double Queens puzzle generation too slow (12+ min for 7x7) with deducibility check. Disabled in replenish and UI. Needs generator algorithm optimization before re-enabling. | R-030, R-031 |
 | KI-008 | ~~Medium~~ Fixed | ~~"Play Again" and "Retry" buttons don't work.~~ Fixed: buttons now trigger re-fetch via state reset instead of URL navigation. | R-044 |
-| KI-009 | **Critical** (pre-production) | `/admin/*` routes (`GET /admin/pool`, `PUT /admin/config/{size}/{mode}`, `POST /admin/config`, `POST /admin/replenish`) have no authentication in the backend, API Gateway (`authorization = "NONE"`), or CloudFront. Any anonymous caller can read pool state, mutate generation configs, and trigger replenish. Must be gated before exposing the admin UI to any non-trusted network. Pairs with auth rollout in R-075. Interim mitigation landed in this cycle: threshold capped at 50 to blunt SQS amplification; CloudFront now forwards `Authorization` so the future token flow is ready. | R-051, R-052, R-053, R-054, R-075 |
-| KI-010 | Medium | `GET /admin/pool` (`backend/internal/handler/admin_pool.go`) does 1 Query for configs plus 1 per-combo `CountReady` Query serially — N+1 on Lambda cold-start path. Fix with `errgroup` (bounded) or a single pre-aggregated count attribute. | R-051 |
+| KI-009 | **Critical** (pre-production) | `/api/admin/*` routes (`GET /api/admin/pool`, `PUT /api/admin/config/{size}/{mode}`, `POST /api/admin/config`, `POST /api/admin/replenish`) have no authentication in the backend, API Gateway (`authorization = "NONE"`), or CloudFront. Any anonymous caller can read pool state, mutate generation configs, and trigger replenish. Must be gated before exposing the admin UI to any non-trusted network. Pairs with auth rollout in R-075. Interim mitigation: threshold capped at 50 to blunt SQS amplification; CloudFront forwards `Authorization` so the future token flow is ready. | R-051, R-052, R-053, R-054, R-075 |
+| KI-010 | Medium | `GET /api/admin/pool` (`backend/internal/handler/admin_pool.go`) does 1 Query for configs plus 1 per-combo `CountReady` Query serially — N+1 on Lambda cold-start path. Fix with `errgroup` (bounded) or a single pre-aggregated count attribute. | R-051 |
 | KI-011 | Medium | `repository.CountReady` and `repository.NextReady` (`backend/internal/repository/puzzle.go`) use a `FilterExpression` on `status = "ready"`, which forces DynamoDB to read the full partition (including historical served/solved/skipped puzzles) before filtering. Cost + latency grow with lifetime pool volume, not ready inventory. Fix with a sparse GSI keyed on `{size}#{mode}#ready` that only ready items populate (writers add attributes on put, `MarkServed` / `UpdateStatus` remove them). | R-040, R-044 |
 | KI-012 | Medium | `ReplenishHandler` (`backend/internal/handler/replenish.go`) publishes one SQS message per unit of `threshold - count` in a serial loop. For 5 combos at threshold 10 with an empty pool that is 50 sequential `SendMessage` calls inside an HTTP handler. Switch to `SendMessageBatch` (up to 10/call) and/or parallelize across combos. Add a `PublishBatch` method to `queue.Publisher`. | R-042, R-043, R-054 |
 | KI-013 | Low | The config payload shape is re-declared four times: `repository.ConfigRecord`, `handler.configRequest`, `handler.configResponse`, and the hand-rolled `handler.buildConfigResponseMap`. A new field must be added in four places. Unify by adding JSON tags to `ConfigRecord` and encoding it directly, or by extracting a shared DTO. | R-050, R-052 |

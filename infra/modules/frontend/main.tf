@@ -49,31 +49,13 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
-  # Route /puzzles/* to API Gateway (no caching, forward all methods + query strings)
-  ordered_cache_behavior {
-    path_pattern           = "/puzzles/*"
-    allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "api-gateway"
-    viewer_protocol_policy = "redirect-to-https"
-
-    forwarded_values {
-      query_string = true
-      cookies {
-        forward = "none"
-      }
-    }
-
-    min_ttl     = 0
-    default_ttl = 0
-    max_ttl     = 0
-  }
-
-  # Route /admin/* to API Gateway (no caching, forward all methods + query strings).
+  # Route /api/* to API Gateway (no caching, forward all methods + query strings).
   # The Authorization header is forwarded so that when real auth lands (roadmap
   # R-075 / KI-009), tokens/credentials reach the Lambda without an infra change.
+  # All backend routes live under /api/ to keep SPA routes (e.g. /admin page)
+  # cleanly separated from API traffic.
   ordered_cache_behavior {
-    path_pattern           = "/admin/*"
+    path_pattern           = "/api/*"
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods         = ["GET", "HEAD"]
     target_origin_id       = "api-gateway"
