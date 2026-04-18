@@ -65,32 +65,59 @@ Goal: Pre-generate puzzles into a pool, serve from the pool instead of generatin
 
 Goal: Admin UI to view pool status per size+mode and tune generation settings.
 
-- [ ] **R-060** — `GET/PUT /admin/config` endpoints: per-combo generation settings + pool size
-- [ ] **R-061** — `GET /admin/puzzles` endpoint: filtered puzzle listing (by status, pipeline, size, mode)
-- [ ] **R-062** — Frontend: admin page — pool counts per size+mode, replenish button, generation settings
+- [x] **R-050** — DynamoDB CONFIG items in `puzzle-pool` table (PK=CONFIG, SK={size}#{mode})
+- [x] **R-051** — `GET /admin/pool` endpoint: merged config + ready counts per combo
+- [x] **R-052** — `PUT /admin/config/{size}/{mode}` endpoint: update combo config
+- [x] **R-053** — `POST /admin/config` endpoint: create new combo
+- [x] **R-054** — Refactor replenish: dynamic config-driven combo discovery + per-combo threshold/params
+- [x] **R-055** — Replenish filter: optional `?size=X&mode=Y` for per-combo replenish
+- [x] **R-056** — Frontend: `/admin` page — pool table, config editing (modal), replenish controls
+- [x] **R-057** — Frontend: admin link in PageShell header
+- [x] **R-058** — LocalStack seed: initial CONFIG items for local dev
 
-## Phase 5: Verdict System
+## Phase 4.5: API Prefix
+
+Goal: Prefix all backend API routes with `/api` to cleanly separate API traffic from frontend routes. Eliminates proxy/CloudFront path conflicts (e.g., `/admin` page vs `/admin/*` API).
+
+- [ ] **R-059** — Backend: mount all routes under `/api` prefix (`/api/puzzles/*`, `/api/admin/*`, `/api/health`)
+- [ ] **R-05A** — Frontend: update API base path, Vite proxy, and service calls to use `/api` prefix
+- [ ] **R-05B** — Infra: replace per-path CloudFront behaviors + API Gateway resources with single `/api/*` pattern
+- [ ] **R-05C** — Verify production request flow end-to-end after migration
+
+## Phase 4.6: Undo / Redo
+
+Goal: Let players step backwards and forwards through their move history on a puzzle.
+
+- [ ] **R-060** — Frontend: undo/redo buttons in the puzzle UI. Stack-based history of placements/exclusions/clears; redo stack cleared on new action. Keyboard shortcuts (Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z). Persists with the rest of the game state in IndexedDB so undo survives reload. No server changes.
+
+## Phase 5: Generator Rework
+
+Goal: Rework the puzzle generator based on new designs (to be detailed via design-flow). Expected motivations: faster generation (especially Double Queens — see KI-007), higher-quality region shapes, more reliable deducibility guarantees. Scope and task breakdown come from the design session.
+
+- [ ] **R-061** — Design-flow: capture the new generator design, decide algorithm(s), and split into implementation tasks (R-062, R-069, R-06A+ as needed)
+
+## Phase 6: Verdict System
 
 Goal: Rate puzzles after playing them — upvote, downvote, or skip.
 
 - [ ] **R-063** — `PUT /puzzles/:id/verdict` endpoint: upvote/downvote/skip
 - [ ] **R-064** — Frontend: verdict buttons on puzzle completion/skip
 
-## Phase 6: Puzzle Replay
+## Phase 7: Puzzle Replay
 
 Goal: Admin can browse played puzzles and replay them to review quality.
 
 - [ ] **R-065** — `GET /puzzles/:id` endpoint: load any puzzle by ID for replay
 - [ ] **R-066** — Frontend: played puzzle list in admin UI, replay by ID
 
-## Phase 7: Puzzle Analysis Agent
+## Phase 8: Puzzle Analysis Agent
 
 Goal: Automated analysis of played puzzles — generation performance, verdict patterns, engine comparison.
 
 - [ ] **R-067** — Analysis agent: dedicated agent for querying and interpreting puzzle generation data
 - [ ] **R-068** — Analysis endpoint(s) as needed by the agent
 
-## Phase 8: Difficulty Rating
+## Phase 9: Difficulty Rating
 
 Goal: Difficulty rating for all grid sizes and modes, with user-facing difficulty selector.
 
@@ -98,7 +125,7 @@ Goal: Difficulty rating for all grid sizes and modes, with user-facing difficult
 - [ ] **R-032** — Update difficulty rating for Double Queens
 - [ ] **R-034** — UI: difficulty selector (Easy / Medium / Hard)
 
-## Phase 9+: Future (scoped when we get there)
+## Phase 10+: Future (scoped when we get there)
 
 Candidate items — not yet committed or ordered:
 
@@ -137,6 +164,18 @@ Candidate items — not yet committed or ordered:
 | KI-006 | ~~Medium~~ Fixed | ~~Every CD deploy updates the Lambda function even when there are no backend changes.~~ Fixed: reproducible zip (touch + zip -X) means identical source produces identical hash. | R-006 |
 | KI-007 | High | Double Queens puzzle generation too slow (12+ min for 7x7) with deducibility check. Disabled in replenish and UI. Needs generator algorithm optimization before re-enabling. | R-030, R-031 |
 | KI-008 | ~~Medium~~ Fixed | ~~"Play Again" and "Retry" buttons don't work.~~ Fixed: buttons now trigger re-fetch via state reset instead of URL navigation. | R-044 |
+| KI-009 | **Critical** (pre-production) | `/admin/*` routes (`GET /admin/pool`, `PUT /admin/config/{size}/{mode}`, `POST /admin/config`, `POST /admin/replenish`) have no authentication in the backend, API Gateway (`authorization = "NONE"`), or CloudFront. Any anonymous caller can read pool state, mutate generation configs, and trigger replenish. Must be gated before exposing the admin UI to any non-trusted network. Pairs with auth rollout in R-075. Interim mitigation landed in this cycle: threshold capped at 50 to blunt SQS amplification; CloudFront now forwards `Authorization` so the future token flow is ready. | R-051, R-052, R-053, R-054, R-075 |
+| KI-010 | Medium | `GET /admin/pool` (`backend/internal/handler/admin_pool.go`) does 1 Query for configs plus 1 per-combo `CountReady` Query serially — N+1 on Lambda cold-start path. Fix with `errgroup` (bounded) or a single pre-aggregated count attribute. | R-051 |
+| KI-011 | Medium | `repository.CountReady` and `repository.NextReady` (`backend/internal/repository/puzzle.go`) use a `FilterExpression` on `status = "ready"`, which forces DynamoDB to read the full partition (including historical served/solved/skipped puzzles) before filtering. Cost + latency grow with lifetime pool volume, not ready inventory. Fix with a sparse GSI keyed on `{size}#{mode}#ready` that only ready items populate (writers add attributes on put, `MarkServed` / `UpdateStatus` remove them). | R-040, R-044 |
+| KI-012 | Medium | `ReplenishHandler` (`backend/internal/handler/replenish.go`) publishes one SQS message per unit of `threshold - count` in a serial loop. For 5 combos at threshold 10 with an empty pool that is 50 sequential `SendMessage` calls inside an HTTP handler. Switch to `SendMessageBatch` (up to 10/call) and/or parallelize across combos. Add a `PublishBatch` method to `queue.Publisher`. | R-042, R-043, R-054 |
+| KI-013 | Low | The config payload shape is re-declared four times: `repository.ConfigRecord`, `handler.configRequest`, `handler.configResponse`, and the hand-rolled `handler.buildConfigResponseMap`. A new field must be added in four places. Unify by adding JSON tags to `ConfigRecord` and encoding it directly, or by extracting a shared DTO. | R-050, R-052 |
+| KI-014 | Low | `frontend/src/services/api.ts` has `apiFetch`, `apiPut`, `apiPost` as three near-identical functions (~25 lines each) differing only by HTTP method and whether a body is sent. Empty-body response handling is also inconsistent across them. Collapse into one `apiRequest(method, path, opts)` with thin wrappers. | R-046, R-056 |
+| KI-015 | Low | `AdminPage.tsx` `ConfigForm` takes 9 primitive props, four of which (`createSize`, `createMode`, `onCreateSizeChange`, `onCreateModeChange`) are dead weight in the edit case and passed as defaulted no-ops. Split into `<EditConfigForm>` + `<CreateConfigForm>` sharing a `<ConfigFields>` child, or pass a discriminated `createMeta?` prop. | R-056 |
+| KI-016 | Low | Pipeline/solver/regions/mode literals in `AdminPage.tsx` (`PIPELINE_OPTIONS`, `SOLVER_OPTIONS`, `REGIONS_OPTIONS`, `MODE_OPTIONS`) are `string[]`, and `ConfigData.pipeline` etc. are `string`. Backend has typed constants (`PipelineRegionFirst`, `SolverBacktrack`, …). Export equivalents from `adminService.ts` as `as const` unions so an invalid literal is a compile error. | R-056 |
+| KI-017 | Low | `Taskfile.yml` `dev:up:backend` / `dev:up:frontend` and `dev:down:backend` / `dev:down:frontend` are near-duplicate shell blocks differing only by port, command, and log file. ~100 lines could collapse to an internal helper task with `vars:`. Low priority because divergence risk is small. | — |
+| KI-018 | Low | `AdminPage.tsx` re-fetches the whole pool after every mutation (`loadPool()` called from `replenish` / `update` / `create`). Single-combo edits should update local state from the response and only re-read that combo's `readyCount`. Also, `fetchPoolStatus` has no `AbortSignal` plumbing, so unmounting mid-load sets state on an unmounted component. | R-056 |
+| KI-019 | Low | Config validation rules are duplicated between `backend/internal/handler/admin_config.go:validateConfigFields` and `backend/internal/handler/pipeline.go:ParseGenerateParams`. Error messages are byte-for-byte identical in places, and the two paths already disagree on edge cases (admin checks `Inf` explicitly, generate-params doesn't). Extract per-field validators (`validatePipeline`, `validateRegionVariance`, …) and call from both sites. | R-013, R-052, R-053 |
+| KI-020 | Low | `Taskfile.yml` `dev:up:localstack` polls `docker compose exec -T localstack awslocal ...` twice per second while waiting for init, incurring ~200-500ms container-exec overhead per probe (up to 60 iterations × 2 probes). Call the localstack endpoints directly from the host (`aws --endpoint-url http://localhost:4566 ...`) to skip the exec hop. | — |
 
 ---
 

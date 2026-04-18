@@ -47,9 +47,14 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 	if repo != nil {
 		r.Get("/puzzles/next", handler.ServeHandler(repo))
 		r.Put("/puzzles/{id}/status", handler.StatusHandler(repo))
+
+		// Admin routes.
+		r.Get("/admin/pool", handler.AdminPoolHandler(repo))
+		r.Put("/admin/config/{size}/{mode}", handler.UpdateConfigHandler(repo))
+		r.Post("/admin/config", handler.CreateConfigHandler(repo))
 	}
 	if repo != nil && pub != nil {
-		r.Post("/admin/replenish", handler.ReplenishHandler(repo, pub))
+		r.Post("/admin/replenish", handler.ReplenishHandler(repo, repo, pub))
 	}
 
 	return r

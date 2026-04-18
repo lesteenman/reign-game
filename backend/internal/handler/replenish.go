@@ -8,24 +8,12 @@ import (
 	"strconv"
 
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
+	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
-// PoolThreshold is the minimum number of ready puzzles per size+mode combo.
-// If a combo falls below this, replenish publishes generation requests.
-const PoolThreshold = 3
-
-// sizeModeCombos defines all supported size+mode combinations for the pool.
-var sizeModeCombos = []struct {
-	Size int
-	Mode string
-}{
-	{5, ModeStandard},
-	{7, ModeStandard},
-	{9, ModeStandard},
-	// Double Queens disabled: generation too slow with current deducibility
-	// check (12+ minutes for 7x7). Re-enable after generator optimization.
-	// {7, ModeDouble},
-	// {9, ModeDouble},
+// ConfigReader reads config records for dynamic combo discovery.
+type ConfigReader interface {
+	GetAllConfigs(ctx context.Context) ([]repository.ConfigRecord, error)
 }
 
 // PoolCounter counts ready puzzles for a given size and mode.
@@ -61,7 +49,7 @@ type replenishResponse struct {
 // ReplenishHandler creates an HTTP handler for POST /admin/replenish.
 // It checks pool levels for all (or filtered) size+mode combos and publishes
 // SQS generation requests when pools are below threshold.
-func ReplenishHandler(counter PoolCounter, publisher MessagePublisher) http.HandlerFunc {
+func ReplenishHandler(configs ConfigReader, counter PoolCounter, publisher MessagePublisher) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -85,63 +73,73 @@ func ReplenishHandler(counter PoolCounter, publisher MessagePublisher) http.Hand
 			filterMode = modeStr
 		}
 
+		allConfigs, err := configs.GetAllConfigs(r.Context())
+		if err != nil {
+			log.Printf("error fetching configs: %v", err)
+			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve configs")
+			return
+		}
+
 		resp := replenishResponse{
 			Triggered: []triggeredEntry{},
 			Skipped:   []skippedEntry{},
 		}
 
-		for _, combo := range sizeModeCombos {
-			// Apply filters if specified.
-			if filterSize != 0 && combo.Size != filterSize {
-				continue
-			}
-			if filterMode != "" && combo.Mode != filterMode {
+		for _, config := range allConfigs {
+			if !config.Enabled {
 				continue
 			}
 
-			count, err := counter.CountReady(r.Context(), combo.Size, combo.Mode)
+			// Apply filters if specified.
+			if filterSize != 0 && config.Size != filterSize {
+				continue
+			}
+			if filterMode != "" && config.Mode != filterMode {
+				continue
+			}
+
+			count, err := counter.CountReady(r.Context(), config.Size, config.Mode)
 			if err != nil {
-				log.Printf("error counting ready puzzles for %dx%d %s: %v", combo.Size, combo.Size, combo.Mode, err)
+				log.Printf("error counting ready puzzles for %dx%d %s: %v", config.Size, config.Size, config.Mode, err)
 				writeError(w, http.StatusInternalServerError, "internal_error", "Failed to check pool levels")
 				return
 			}
 
-			if count >= PoolThreshold {
+			if count >= config.Threshold {
 				resp.Skipped = append(resp.Skipped, skippedEntry{
-					Size:  combo.Size,
-					Mode:  combo.Mode,
+					Size:  config.Size,
+					Mode:  config.Mode,
 					Ready: count,
 				})
 				continue
 			}
 
-			needed := PoolThreshold - count
+			needed := config.Threshold - count
 			for i := 0; i < needed; i++ {
 				req := &queue.GenerationRequest{
-					Size:           combo.Size,
-					Mode:           combo.Mode,
-					Pipeline:       PipelineIterative,
-					Solver:         SolverPropagation,
-					Regions:        RegionsBFS,
-					RegionVariance: 0.0,
-					Deducible:      true,
-					Concurrency:    1,
+					Size:           config.Size,
+					Mode:           config.Mode,
+					Pipeline:       config.Pipeline,
+					Solver:         config.Solver,
+					Regions:        config.Regions,
+					RegionVariance: config.RegionVariance,
+					Deducible:      config.Deducible,
+					Concurrency:    config.Concurrency,
 				}
 				if err := publisher.PublishGenerationRequest(r.Context(), req); err != nil {
-					log.Printf("error publishing generation request for %dx%d %s: %v", combo.Size, combo.Size, combo.Mode, err)
+					log.Printf("error publishing generation request for %dx%d %s: %v", config.Size, config.Size, config.Mode, err)
 					writeError(w, http.StatusInternalServerError, "internal_error", "Failed to publish generation request")
 					return
 				}
 			}
 
 			resp.Triggered = append(resp.Triggered, triggeredEntry{
-				Size:  combo.Size,
-				Mode:  combo.Mode,
+				Size:  config.Size,
+				Mode:  config.Mode,
 				Count: needed,
 			})
 		}
 
-		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			log.Printf("replenish handler write failed: %v", err)
 		}

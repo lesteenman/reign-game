@@ -3,6 +3,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -18,6 +19,34 @@ type DynamoDBAPI interface {
 	PutItem(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 	UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
+	GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+}
+
+// ConfigRecord represents a generation config stored in the puzzle-pool DynamoDB table.
+// Config items share the table with puzzles, using PK="CONFIG" and SK="{size}#{mode}".
+type ConfigRecord struct {
+	Size           int     `dynamodbav:"-"`
+	Mode           string  `dynamodbav:"-"`
+	Pipeline       string  `dynamodbav:"pipeline"`
+	Solver         string  `dynamodbav:"solver"`
+	Regions        string  `dynamodbav:"regions"`
+	RegionVariance float64 `dynamodbav:"regionVariance"`
+	Deducible      bool    `dynamodbav:"deducible"`
+	Concurrency    int     `dynamodbav:"concurrency"`
+	Threshold      int     `dynamodbav:"threshold"`
+	Enabled        bool    `dynamodbav:"enabled"`
+}
+
+// ConfigAlreadyExistsError is returned when CreateConfig is called for a config
+// that already exists in the table.
+type ConfigAlreadyExistsError struct {
+	Size int
+	Mode string
+}
+
+// Error implements the error interface for ConfigAlreadyExistsError.
+func (e *ConfigAlreadyExistsError) Error() string {
+	return fmt.Sprintf("config already exists for %d#%s", e.Size, e.Mode)
 }
 
 // PuzzleRecord represents a puzzle stored in the puzzle-pool DynamoDB table.
@@ -200,6 +229,126 @@ func (r *PuzzleRepository) UpdateStatus(ctx context.Context, pk, sk, status stri
 	})
 	if err != nil {
 		return fmt.Errorf("updating puzzle %s/%s status to %s: %w", pk, sk, status, err)
+	}
+
+	return nil
+}
+
+// GetAllConfigs returns all config records from the puzzle-pool table.
+// Config items are stored with PK="CONFIG" and SK="{size}#{mode}".
+func (r *PuzzleRepository) GetAllConfigs(ctx context.Context) ([]ConfigRecord, error) {
+	output, err := r.client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(r.tableName),
+		KeyConditionExpression: aws.String("PK = :pk"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk": &types.AttributeValueMemberS{Value: "CONFIG"},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("querying configs: %w", err)
+	}
+
+	configs := make([]ConfigRecord, 0, len(output.Items))
+	for _, item := range output.Items {
+		var record ConfigRecord
+		if err := attributevalue.UnmarshalMap(item, &record); err != nil {
+			return nil, fmt.Errorf("unmarshaling config record: %w", err)
+		}
+
+		// Parse Size and Mode from SK since they are tagged with "-".
+		if skAttr, ok := item["SK"].(*types.AttributeValueMemberS); ok {
+			var parsedSize int
+			var parsedMode string
+			if _, err := fmt.Sscanf(skAttr.Value, "%d#%s", &parsedSize, &parsedMode); err == nil {
+				record.Size = parsedSize
+				record.Mode = parsedMode
+			}
+		}
+
+		configs = append(configs, record)
+	}
+
+	return configs, nil
+}
+
+// GetConfig returns a single config record for the given size and mode.
+// Returns nil, nil if no config is found.
+func (r *PuzzleRepository) GetConfig(ctx context.Context, size int, mode string) (*ConfigRecord, error) {
+	sk := buildPK(size, mode)
+
+	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "CONFIG"},
+			"SK": &types.AttributeValueMemberS{Value: sk},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getting config for %s: %w", sk, err)
+	}
+
+	if output.Item == nil {
+		return nil, nil
+	}
+
+	var record ConfigRecord
+	if err := attributevalue.UnmarshalMap(output.Item, &record); err != nil {
+		return nil, fmt.Errorf("unmarshaling config record: %w", err)
+	}
+
+	record.Size = size
+	record.Mode = mode
+
+	return &record, nil
+}
+
+// PutConfig writes a config record to DynamoDB, unconditionally overwriting
+// any existing config for the same size and mode.
+func (r *PuzzleRepository) PutConfig(ctx context.Context, config *ConfigRecord) error {
+	item, err := attributevalue.MarshalMap(config)
+	if err != nil {
+		return fmt.Errorf("marshaling config record: %w", err)
+	}
+
+	sk := buildPK(config.Size, config.Mode)
+	item["PK"] = &types.AttributeValueMemberS{Value: "CONFIG"}
+	item["SK"] = &types.AttributeValueMemberS{Value: sk}
+
+	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(r.tableName),
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("putting config %s: %w", sk, err)
+	}
+
+	return nil
+}
+
+// CreateConfig writes a config record to DynamoDB only if one does not already
+// exist for the same size and mode. Returns ConfigAlreadyExistsError if a
+// config already exists.
+func (r *PuzzleRepository) CreateConfig(ctx context.Context, config *ConfigRecord) error {
+	item, err := attributevalue.MarshalMap(config)
+	if err != nil {
+		return fmt.Errorf("marshaling config record: %w", err)
+	}
+
+	sk := buildPK(config.Size, config.Mode)
+	item["PK"] = &types.AttributeValueMemberS{Value: "CONFIG"}
+	item["SK"] = &types.AttributeValueMemberS{Value: sk}
+
+	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:           aws.String(r.tableName),
+		Item:                item,
+		ConditionExpression: aws.String("attribute_not_exists(PK)"),
+	})
+	if err != nil {
+		var ccfe *types.ConditionalCheckFailedException
+		if errors.As(err, &ccfe) {
+			return &ConfigAlreadyExistsError{Size: config.Size, Mode: config.Mode}
+		}
+		return fmt.Errorf("creating config %s: %w", sk, err)
 	}
 
 	return nil

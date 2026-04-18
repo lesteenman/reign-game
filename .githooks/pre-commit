@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Pre-commit hook: fast checks on staged files only.
+# Heavier checks (full test suites, npm audit, gitleaks) live in pre-push.
+# Goal: prevent lint-only fix commits that used to slip through until push.
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+
+# Ensure Go binaries are in PATH
+export PATH="$PATH:$(go env GOPATH)/bin"
+
+# Staged files, separated by domain
+STAGED_GO=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^backend/.*\.go$' || true)
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^frontend/.*\.(ts|tsx)$' || true)
+
+if [ -z "$STAGED_GO" ] && [ -z "$STAGED_TS" ]; then
+  exit 0
+fi
+
+echo "=== Pre-commit checks ==="
+
+# --- Backend: gofmt + golangci-lint (fast, staged-only) ---
+if [ -n "$STAGED_GO" ]; then
+  echo "--- Backend: gofmt on staged files ---"
+  UNFORMATTED=$(echo "$STAGED_GO" | xargs gofmt -l)
+  if [ -n "$UNFORMATTED" ]; then
+    echo "ERROR: gofmt would reformat these staged files:"
+    echo "$UNFORMATTED"
+    echo "Run: gofmt -w <file> and re-stage."
+    exit 1
+  fi
+
+  echo "--- Backend: golangci-lint ---"
+  cd "$ROOT/backend"
+  if command -v golangci-lint &>/dev/null; then
+    # Run the full lint -- golangci-lint respects build context so it's accurate
+    # and fast on a warm cache. If this becomes slow, switch to --new-from-rev.
+    golangci-lint run
+  else
+    echo "WARN: golangci-lint not found, skipping lint (pre-push will catch it)"
+  fi
+  cd "$ROOT"
+fi
+
+# --- Frontend: tsc type-check (staged-only is awkward; check the whole project) ---
+if [ -n "$STAGED_TS" ]; then
+  echo "--- Frontend: tsc type-check ---"
+  cd "$ROOT/frontend"
+  if command -v npx &>/dev/null; then
+    npx tsc -b
+  else
+    echo "WARN: npx not found, skipping tsc (pre-push will catch it)"
+  fi
+  cd "$ROOT"
+fi
+
+echo "=== Pre-commit checks passed ==="

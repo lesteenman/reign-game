@@ -157,17 +157,28 @@ design/
 
 ## API Endpoints
 
+### Implemented
+
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | GET | /health | No | Health check |
-| GET | /puzzles/:id | No | Get puzzle by ID (region map, no solution) |
-| GET | /daily | No | Get today's daily puzzles (6 total: 3 Standard + 3 Double Queens) |
-| POST | /completions | Device ID | Submit puzzle completion (puzzle ID, time) |
-| GET | /leaderboard/:puzzleId | No | Get leaderboard for a daily puzzle (percentile, rank, total) |
-| POST | /auth/register | No | Create user account via OAuth (Phase 2) |
-| GET | /users/me | JWT | Get current user profile + stats (Phase 2) |
-| PUT | /users/me/device | JWT | Link device to account (Phase 2) |
-| GET | /puzzles/archive | JWT + Premium | Browse full puzzle archive (Phase 2) |
+| GET | /puzzles/generate | No | On-demand puzzle generation (legacy, slow for large grids) |
+| GET | /puzzles/next | No | Serve next ready puzzle from pool by size + mode |
+| PUT | /puzzles/{id}/status | No | Update puzzle status (solved/skipped) |
+| GET | /admin/pool | No | All combos with merged config + ready counts |
+| PUT | /admin/config/{size}/{mode} | No | Update config for an existing combo |
+| POST | /admin/config | No | Create a new combo config |
+| POST | /admin/replenish | No | Replenish pools (optional ?size=X&mode=Y filter) |
+
+### Future (not yet implemented)
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| PUT | /puzzles/{id}/verdict | No | Upvote/downvote/skip puzzle (Phase 5) |
+| GET | /puzzles/{id} | No | Load puzzle by ID for replay (Phase 6) |
+| GET | /daily | No | Get today's daily puzzles (Phase 9+) |
+| POST | /completions | Device ID | Submit puzzle completion (Phase 9+) |
+| GET | /leaderboard/{puzzleId} | No | Leaderboard for a daily puzzle (Phase 9+) |
 
 ---
 

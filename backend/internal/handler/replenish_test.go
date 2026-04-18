@@ -4,13 +4,28 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
+	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
+
+// mockConfigReader implements handler.ConfigReader for testing.
+type mockConfigReader struct {
+	configs []repository.ConfigRecord
+	err     error
+}
+
+func (m *mockConfigReader) GetAllConfigs(_ context.Context) ([]repository.ConfigRecord, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.configs, nil
+}
 
 // mockPoolCounter implements handler.PoolCounter for testing.
 type mockPoolCounter struct {
@@ -27,7 +42,7 @@ func (m *mockPoolCounter) CountReady(_ context.Context, size int, mode string) (
 }
 
 func keyFor(size int, mode string) string {
-	return mode + string(rune('0'+size))
+	return fmt.Sprintf("%s%d", mode, size)
 }
 
 // mockMessagePublisher implements handler.MessagePublisher for testing.
@@ -57,10 +72,27 @@ type replenishResp struct {
 	} `json:"skipped"`
 }
 
+func defaultConfig(size int, mode string, threshold int) repository.ConfigRecord {
+	return repository.ConfigRecord{
+		Size:           size,
+		Mode:           mode,
+		Pipeline:       "iterative",
+		Solver:         "propagation",
+		Regions:        "bfs",
+		RegionVariance: 0.0,
+		Deducible:      true,
+		Concurrency:    1,
+		Threshold:      threshold,
+		Enabled:        true,
+	}
+}
+
 func TestReplenishHandler(t *testing.T) {
 	tests := []struct {
 		name          string
 		query         string
+		configs       []repository.ConfigRecord
+		configErr     error
 		counts        map[string]int
 		countErr      error
 		publishErr    error
@@ -70,7 +102,29 @@ func TestReplenishHandler(t *testing.T) {
 		wantMessages  int
 	}{
 		{
+			name: "all configs enabled and below threshold — triggers all",
+			configs: []repository.ConfigRecord{
+				defaultConfig(5, "standard", 3),
+				defaultConfig(7, "standard", 3),
+				defaultConfig(9, "standard", 3),
+			},
+			counts: map[string]int{
+				keyFor(5, "standard"): 0,
+				keyFor(7, "standard"): 0,
+				keyFor(9, "standard"): 0,
+			},
+			wantStatus:    http.StatusOK,
+			wantTriggered: 3,
+			wantSkipped:   0,
+			wantMessages:  9, // 3 combos * 3 each
+		},
+		{
 			name: "all pools full — nothing triggered",
+			configs: []repository.ConfigRecord{
+				defaultConfig(5, "standard", 3),
+				defaultConfig(7, "standard", 3),
+				defaultConfig(9, "standard", 3),
+			},
 			counts: map[string]int{
 				keyFor(5, "standard"): 3,
 				keyFor(7, "standard"): 5,
@@ -83,6 +137,11 @@ func TestReplenishHandler(t *testing.T) {
 		},
 		{
 			name: "some pools below threshold",
+			configs: []repository.ConfigRecord{
+				defaultConfig(5, "standard", 3),
+				defaultConfig(7, "standard", 3),
+				defaultConfig(9, "standard", 3),
+			},
 			counts: map[string]int{
 				keyFor(5, "standard"): 3,
 				keyFor(7, "standard"): 1,
@@ -94,20 +153,48 @@ func TestReplenishHandler(t *testing.T) {
 			wantMessages:  2 + 3, // 7std needs 2, 9std needs 3
 		},
 		{
-			name: "all pools empty",
+			name: "disabled configs are skipped",
+			configs: []repository.ConfigRecord{
+				defaultConfig(5, "standard", 3),
+				func() repository.ConfigRecord {
+					c := defaultConfig(7, "standard", 3)
+					c.Enabled = false
+					return c
+				}(),
+				defaultConfig(9, "standard", 3),
+			},
 			counts: map[string]int{
 				keyFor(5, "standard"): 0,
-				keyFor(7, "standard"): 0,
 				keyFor(9, "standard"): 0,
 			},
 			wantStatus:    http.StatusOK,
-			wantTriggered: 3,
+			wantTriggered: 2,
 			wantSkipped:   0,
-			wantMessages:  9, // 3 combos * 3 each
+			wantMessages:  6, // 2 combos * 3 each
+		},
+		{
+			name: "different thresholds per combo",
+			configs: []repository.ConfigRecord{
+				defaultConfig(5, "standard", 5),
+				defaultConfig(7, "standard", 2),
+			},
+			counts: map[string]int{
+				keyFor(5, "standard"): 3, // below 5 → needs 2
+				keyFor(7, "standard"): 2, // at 2 → skipped
+			},
+			wantStatus:    http.StatusOK,
+			wantTriggered: 1,
+			wantSkipped:   1,
+			wantMessages:  2,
 		},
 		{
 			name:  "filter by size=7 only",
 			query: "?size=7",
+			configs: []repository.ConfigRecord{
+				defaultConfig(5, "standard", 3),
+				defaultConfig(7, "standard", 3),
+				defaultConfig(9, "standard", 3),
+			},
 			counts: map[string]int{
 				keyFor(7, "standard"): 1,
 			},
@@ -119,6 +206,11 @@ func TestReplenishHandler(t *testing.T) {
 		{
 			name:  "filter by size=9 and mode=standard",
 			query: "?size=9&mode=standard",
+			configs: []repository.ConfigRecord{
+				defaultConfig(5, "standard", 3),
+				defaultConfig(7, "standard", 3),
+				defaultConfig(9, "standard", 3),
+			},
 			counts: map[string]int{
 				keyFor(9, "standard"): 1,
 			},
@@ -128,17 +220,18 @@ func TestReplenishHandler(t *testing.T) {
 			wantMessages:  2,
 		},
 		{
-			name:       "DynamoDB error returns 500",
-			countErr:   errors.New("dynamodb error"),
+			name:       "GetAllConfigs error returns 500",
+			configErr:  errors.New("dynamo error"),
 			wantStatus: http.StatusInternalServerError,
 		},
 		{
-			name: "SQS publish error returns 500",
-			counts: map[string]int{
-				keyFor(5, "standard"): 0,
-			},
-			publishErr: errors.New("sqs error"),
-			wantStatus: http.StatusInternalServerError,
+			name:          "empty config list returns empty response",
+			configs:       []repository.ConfigRecord{},
+			counts:        map[string]int{},
+			wantStatus:    http.StatusOK,
+			wantTriggered: 0,
+			wantSkipped:   0,
+			wantMessages:  0,
 		},
 		{
 			name:       "invalid size param returns 400",
@@ -150,14 +243,34 @@ func TestReplenishHandler(t *testing.T) {
 			query:      "?mode=triple",
 			wantStatus: http.StatusBadRequest,
 		},
+		{
+			name: "DynamoDB CountReady error returns 500",
+			configs: []repository.ConfigRecord{
+				defaultConfig(5, "standard", 3),
+			},
+			countErr:   errors.New("dynamodb error"),
+			wantStatus: http.StatusInternalServerError,
+		},
+		{
+			name: "SQS publish error returns 500",
+			configs: []repository.ConfigRecord{
+				defaultConfig(5, "standard", 3),
+			},
+			counts: map[string]int{
+				keyFor(5, "standard"): 0,
+			},
+			publishErr: errors.New("sqs error"),
+			wantStatus: http.StatusInternalServerError,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
+			configReader := &mockConfigReader{configs: tt.configs, err: tt.configErr}
 			counter := &mockPoolCounter{counts: tt.counts, err: tt.countErr}
 			pub := &mockMessagePublisher{err: tt.publishErr}
-			h := handler.ReplenishHandler(counter, pub)
+			h := handler.ReplenishHandler(configReader, counter, pub)
 
 			req := httptest.NewRequest(http.MethodPost, "/admin/replenish"+tt.query, http.NoBody)
 			rec := httptest.NewRecorder()
@@ -188,22 +301,68 @@ func TestReplenishHandler(t *testing.T) {
 			if len(pub.published) != tt.wantMessages {
 				t.Errorf("published messages = %d, want %d", len(pub.published), tt.wantMessages)
 			}
-
-			// Verify all published messages have correct defaults.
-			for i, msg := range pub.published {
-				if msg.Pipeline != "iterative" {
-					t.Errorf("message[%d].Pipeline = %q, want %q", i, msg.Pipeline, "iterative")
-				}
-				if msg.Solver != "propagation" {
-					t.Errorf("message[%d].Solver = %q, want %q", i, msg.Solver, "propagation")
-				}
-				if msg.Regions != "bfs" {
-					t.Errorf("message[%d].Regions = %q, want %q", i, msg.Regions, "bfs")
-				}
-				if !msg.Deducible {
-					t.Errorf("message[%d].Deducible = false, want true", i)
-				}
-			}
 		})
+	}
+}
+
+func TestReplenishHandler_GenerationParams(t *testing.T) {
+	// Arrange
+	configs := []repository.ConfigRecord{
+		{
+			Size:           7,
+			Mode:           "standard",
+			Pipeline:       "constraint-aware",
+			Solver:         "backtrack",
+			Regions:        "wfc",
+			RegionVariance: 0.3,
+			Deducible:      false,
+			Concurrency:    4,
+			Threshold:      2,
+			Enabled:        true,
+		},
+	}
+	configReader := &mockConfigReader{configs: configs}
+	counter := &mockPoolCounter{counts: map[string]int{keyFor(7, "standard"): 0}}
+	pub := &mockMessagePublisher{}
+	h := handler.ReplenishHandler(configReader, counter, pub)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/replenish", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	// Act
+	h.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d; body = %s", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if len(pub.published) != 2 {
+		t.Fatalf("published messages = %d, want 2", len(pub.published))
+	}
+
+	msg := pub.published[0]
+	if msg.Size != 7 {
+		t.Errorf("Size = %d, want 7", msg.Size)
+	}
+	if msg.Mode != "standard" {
+		t.Errorf("Mode = %q, want %q", msg.Mode, "standard")
+	}
+	if msg.Pipeline != "constraint-aware" {
+		t.Errorf("Pipeline = %q, want %q", msg.Pipeline, "constraint-aware")
+	}
+	if msg.Solver != "backtrack" {
+		t.Errorf("Solver = %q, want %q", msg.Solver, "backtrack")
+	}
+	if msg.Regions != "wfc" {
+		t.Errorf("Regions = %q, want %q", msg.Regions, "wfc")
+	}
+	if msg.RegionVariance != 0.3 {
+		t.Errorf("RegionVariance = %f, want 0.3", msg.RegionVariance)
+	}
+	if msg.Deducible {
+		t.Errorf("Deducible = true, want false")
+	}
+	if msg.Concurrency != 4 {
+		t.Errorf("Concurrency = %d, want 4", msg.Concurrency)
 	}
 }
