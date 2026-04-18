@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -41,7 +42,7 @@ func (m *mockPoolCounter) CountReady(_ context.Context, size int, mode string) (
 }
 
 func keyFor(size int, mode string) string {
-	return mode + string(rune('0'+size))
+	return fmt.Sprintf("%s%d", mode, size)
 }
 
 // mockMessagePublisher implements handler.MessagePublisher for testing.

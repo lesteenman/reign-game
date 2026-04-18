@@ -15,6 +15,13 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
+// maxConfigThreshold caps how many ready puzzles a single CONFIG item can
+// demand. Replenish enqueues one SQS message per unit of threshold-minus-count,
+// so an unbounded threshold combined with an unauthenticated admin surface
+// (see KI-009) would let any caller amplify a single HTTP request into
+// arbitrary SQS load. 50 is generous for real pool sizes.
+const maxConfigThreshold = 50
+
 // ConfigRepo defines the repository methods needed by config handlers.
 type ConfigRepo interface {
 	GetConfig(ctx context.Context, size int, mode string) (*repository.ConfigRecord, error)
@@ -62,8 +69,8 @@ func validateConfigFields(req *configRequest) (status int, errCode, errMsg strin
 		return http.StatusBadRequest, "invalid_params", "concurrency must be between 1 and 8"
 	}
 
-	if req.Threshold < 1 {
-		return http.StatusBadRequest, "invalid_params", "threshold must be at least 1"
+	if req.Threshold < 1 || req.Threshold > maxConfigThreshold {
+		return http.StatusBadRequest, "invalid_params", fmt.Sprintf("threshold must be between 1 and %d", maxConfigThreshold)
 	}
 
 	return 0, "", ""
@@ -155,7 +162,6 @@ func UpdateConfigHandler(repo ConfigRepo) http.HandlerFunc {
 			return
 		}
 
-		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(buildConfigResponseMap(config)); err != nil {
 			log.Printf("write response error: %v", err)
 		}

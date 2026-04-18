@@ -69,7 +69,9 @@ resource "aws_cloudfront_distribution" "frontend" {
     max_ttl     = 0
   }
 
-  # Route /admin/* to API Gateway (no caching, forward all methods + query strings)
+  # Route /admin/* to API Gateway (no caching, forward all methods + query strings).
+  # The Authorization header is forwarded so that when real auth lands (roadmap
+  # R-075 / KI-009), tokens/credentials reach the Lambda without an infra change.
   ordered_cache_behavior {
     path_pattern           = "/admin/*"
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
@@ -79,6 +81,7 @@ resource "aws_cloudfront_distribution" "frontend" {
 
     forwarded_values {
       query_string = true
+      headers      = ["Authorization"]
       cookies {
         forward = "none"
       }

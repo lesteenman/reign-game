@@ -140,7 +140,6 @@ func ReplenishHandler(configs ConfigReader, counter PoolCounter, publisher Messa
 			})
 		}
 
-		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			log.Printf("replenish handler write failed: %v", err)
 		}

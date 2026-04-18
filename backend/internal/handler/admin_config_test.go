@@ -235,6 +235,20 @@ func TestUpdateConfigHandler(t *testing.T) {
 			wantError:  "invalid_params",
 		},
 		{
+			name: "threshold above cap returns 400",
+			size: "7",
+			mode: "standard",
+			body: `{"pipeline":"iterative","solver":"backtrack","regions":"bfs","regionVariance":0.5,"concurrency":2,"threshold":51}`,
+			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
+				return existingConfig, nil
+			},
+			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
+				return nil
+			},
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
 			name: "DynamoDB GetConfig error returns 500",
 			size: "7",
 			mode: "standard",

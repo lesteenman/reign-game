@@ -18,6 +18,46 @@ const SOLVER_OPTIONS = ['backtrack', 'propagation'];
 const REGIONS_OPTIONS = ['bfs', 'wfc'];
 const MODE_OPTIONS = ['standard', 'double'];
 
+const labelStyle: React.CSSProperties = {
+  display: 'flex',
+  justifyContent: 'space-between',
+  alignItems: 'center',
+  gap: '8px',
+  fontSize: '0.875rem',
+  color: 'var(--color-ink)',
+};
+
+const inputStyle: React.CSSProperties = {
+  padding: '6px 10px',
+  border: '2px solid var(--color-border)',
+  borderRadius: '6px',
+  backgroundColor: 'var(--color-background)',
+  color: 'var(--color-ink)',
+  fontSize: '0.875rem',
+  fontFamily: 'inherit',
+  minHeight: '36px',
+};
+
+const buttonStyle: React.CSSProperties = {
+  padding: '8px 14px',
+  border: '2px solid var(--color-border)',
+  borderRadius: '8px',
+  backgroundColor: 'var(--color-surface)',
+  color: 'var(--color-ink)',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  fontSize: '0.8125rem',
+  fontWeight: 600,
+  minHeight: '44px',
+  minWidth: '44px',
+};
+
+const accentButtonStyle: React.CSSProperties = {
+  ...buttonStyle,
+  backgroundColor: 'var(--color-accent)',
+  color: '#fff',
+};
+
 /** Format a combo label like "5x5 Standard" or "7x7 Double Queens". */
 function comboLabel(size: number, mode: string): string {
   const modeLabel = mode === 'double' ? 'Double Queens' : 'Standard';
@@ -63,26 +103,6 @@ function ConfigForm({
   onCancel,
   saving,
 }: ConfigFormProps) {
-  const labelStyle: React.CSSProperties = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    gap: '8px',
-    fontSize: '0.875rem',
-    color: 'var(--color-ink)',
-  };
-
-  const inputStyle: React.CSSProperties = {
-    padding: '6px 10px',
-    border: '2px solid var(--color-border)',
-    borderRadius: '6px',
-    backgroundColor: 'var(--color-background)',
-    color: 'var(--color-ink)',
-    fontSize: '0.875rem',
-    fontFamily: 'inherit',
-    minHeight: '36px',
-  };
-
   return (
     <div
       data-testid="config-form"
@@ -444,26 +464,6 @@ export function AdminPage() {
     }
   };
 
-  const buttonStyle: React.CSSProperties = {
-    padding: '8px 14px',
-    border: '2px solid var(--color-border)',
-    borderRadius: '8px',
-    backgroundColor: 'var(--color-surface)',
-    color: 'var(--color-ink)',
-    cursor: 'pointer',
-    fontFamily: 'inherit',
-    fontSize: '0.8125rem',
-    fontWeight: 600,
-    minHeight: '44px',
-    minWidth: '44px',
-  };
-
-  const accentButtonStyle: React.CSSProperties = {
-    ...buttonStyle,
-    backgroundColor: 'var(--color-accent)',
-    color: '#fff',
-  };
-
   return (
     <PageShell onBack={() => navigate('/')}>
       <div
@@ -475,7 +475,6 @@ export function AdminPage() {
           gap: '16px',
         }}
       >
-        {/* Title row */}
         <div
           style={{
             display: 'flex',
@@ -503,7 +502,6 @@ export function AdminPage() {
           </button>
         </div>
 
-        {/* Status / error messages */}
         {statusMessage && (
           <div
             data-testid="status-message"
@@ -538,14 +536,12 @@ export function AdminPage() {
           </div>
         )}
 
-        {/* Loading */}
         {loading && (
           <div data-testid="loading" role="status" style={{ textAlign: 'center', padding: '24px', color: 'var(--color-muted)' }}>
             Loading pool status...
           </div>
         )}
 
-        {/* Pool table */}
         {!loading && !error && (
           <div
             data-testid="pool-table"
@@ -574,7 +570,6 @@ export function AdminPage() {
                     flexWrap: 'wrap',
                   }}
                 >
-                  {/* Status dot */}
                   <span
                     aria-label={combo.config.enabled ? 'Enabled' : 'Disabled'}
                     style={{
@@ -588,7 +583,6 @@ export function AdminPage() {
                     }}
                   />
 
-                  {/* Label */}
                   <span
                     style={{
                       fontWeight: 600,
@@ -600,7 +594,6 @@ export function AdminPage() {
                     {comboLabel(combo.size, combo.mode)}
                   </span>
 
-                  {/* Pool count */}
                   <span
                     style={{
                       fontSize: '0.875rem',
@@ -611,7 +604,6 @@ export function AdminPage() {
                     {combo.readyCount} / {combo.config.threshold}
                   </span>
 
-                  {/* Actions */}
                   <button
                     type="button"
                     onClick={() =>
@@ -637,7 +629,6 @@ export function AdminPage() {
           </div>
         )}
 
-        {/* Edit form */}
         {editingCombo && (
           <ConfigForm
             config={editConfig}
@@ -653,7 +644,6 @@ export function AdminPage() {
           />
         )}
 
-        {/* Add combo button */}
         {!loading && !showCreate && (
           <button
             type="button"
@@ -665,7 +655,6 @@ export function AdminPage() {
           </button>
         )}
 
-        {/* Create form */}
         {showCreate && (
           <ConfigForm
             config={newComboConfig}

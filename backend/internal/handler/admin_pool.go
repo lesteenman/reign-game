@@ -80,7 +80,6 @@ func AdminPoolHandler(repo ConfigAndCountRepo) http.HandlerFunc {
 		}
 
 		resp := adminPoolResponse{Combos: combos}
-		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			log.Printf("admin pool: failed to write response: %v", err)
 		}

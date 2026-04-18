@@ -97,7 +97,7 @@ describe('AdminPage', () => {
   });
 
   it('renders pool table with combo data after fetch', async () => {
-    // Arrange & Act
+    // Act (arrange is the default mocks from beforeEach)
     renderAdmin();
 
     // Assert
@@ -156,7 +156,7 @@ describe('AdminPage', () => {
   });
 
   it('shows Pool Management heading', async () => {
-    // Arrange & Act
+    // Act (arrange is the default mocks from beforeEach)
     renderAdmin();
 
     // Assert
@@ -166,7 +166,7 @@ describe('AdminPage', () => {
   });
 
   it('shows Add Combo button after loading', async () => {
-    // Arrange & Act
+    // Act (arrange is the default mocks from beforeEach)
     renderAdmin();
 
     // Assert
