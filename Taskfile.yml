@@ -111,8 +111,16 @@ tasks:
 
   # ---------------------------------------------------------------------------
   # Dev lifecycle (STANDARD — use these to start/stop the stack during testing).
-  # Logs stream to ./logs/{backend,frontend}.log (gitignored).
-  # Port-based process tracking: whatever is listening on the port owns it.
+  # Logs stream to ./logs/{backend,generator,frontend}.log (gitignored).
+  #
+  # Process tracking strategy differs per service:
+  #   - backend (:5181) + frontend (:5180): port-based via `lsof -ti:PORT`.
+  #     This is ground truth — whatever is listening on the port owns it. It
+  #     catches orphans from prior runs, handles processes started outside
+  #     `task dev:up`, and doesn't go stale.
+  #   - generator (no port): PID file at ./logs/generator.pid, because there's
+  #     nothing to probe. Trade-off: only tracks processes we started; stale
+  #     PID files are detected via `kill -0` and cleaned up.
   # ---------------------------------------------------------------------------
 
   dev:up:localstack:
