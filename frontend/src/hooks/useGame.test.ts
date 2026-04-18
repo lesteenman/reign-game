@@ -1,4 +1,4 @@
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act } from '../test-utils';
 import { describe, it, expect } from 'vitest';
 import { useGame } from './useGame';
 import type { PuzzleData } from '../engine/types';

@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '../../test-utils';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { PuzzleSelector, PRESETS } from './PuzzleSelector';
 

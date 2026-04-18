@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup } from './test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import { expect, test, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider } from './theme/ThemeContext';
