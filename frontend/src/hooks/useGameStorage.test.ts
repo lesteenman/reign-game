@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook } from '../test-utils';
 import { useGameStorage } from './useGameStorage';
 import { resetDBCache } from '../storage/db';
 import type { GameState, CompletionRecord } from '../storage/types';

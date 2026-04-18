@@ -1,4 +1,4 @@
-import { render, fireEvent, cleanup } from '@testing-library/react';
+import { render, fireEvent, cleanup } from '../../test-utils';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Grid, getMinCellSize } from './Grid';
 import { ThemeProvider } from '../../theme/ThemeContext';
