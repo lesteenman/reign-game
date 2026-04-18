@@ -9,7 +9,8 @@ import { createFreshGameState } from '../storage/utils';
 import { PageShell } from '../components/common/PageShell';
 import { PrimaryButton, SecondaryButton } from '../components/common/Button';
 import type { PuzzleData, CellState } from '../engine/types';
-import type { GameState, CompletionRecord } from '../storage/types';
+import type { GameState, GameHistory, CompletionRecord } from '../storage/types';
+import { EMPTY_HISTORY } from '../storage/types';
 
 /** Format seconds as MM:SS. */
 function formatTime(seconds: number): string {
@@ -26,7 +27,7 @@ function formatDuration(ms: number): string {
 
 type LoadState =
   | { status: 'loading' }
-  | { status: 'ready'; puzzle: PuzzleData; initialCells: CellState[][]; timerElapsed: number; timerResumedAt: number | null; startedAt: number }
+  | { status: 'ready'; puzzle: PuzzleData; initialCells: CellState[][]; initialHistory: GameHistory; timerElapsed: number; timerResumedAt: number | null; startedAt: number }
   | { status: 'no-state' }
   | { status: 'no-puzzles' }
   | { status: 'error'; message: string };
@@ -70,6 +71,7 @@ export function GamePage() {
           status: 'ready',
           puzzle: gameState.puzzle,
           initialCells: gameState.cells,
+          initialHistory: gameState.history ?? EMPTY_HISTORY,
           timerElapsed: 0,
           timerResumedAt: null,
           startedAt: gameState.startedAt,
@@ -94,6 +96,7 @@ export function GamePage() {
           status: 'ready',
           puzzle: saved.puzzle,
           initialCells: saved.cells,
+          initialHistory: saved.history ?? EMPTY_HISTORY,
           timerElapsed: saved.timer.elapsedAtLastPause,
           timerResumedAt: saved.timer.lastResumedAt,
           startedAt: saved.startedAt,
@@ -170,6 +173,7 @@ export function GamePage() {
       key={loadStatus.puzzle.puzzleId}
       puzzle={loadStatus.puzzle}
       initialCells={loadStatus.initialCells}
+      initialHistory={loadStatus.initialHistory}
       timerElapsed={loadStatus.timerElapsed}
       timerResumedAt={loadStatus.timerResumedAt}
       startedAt={loadStatus.startedAt}
@@ -192,6 +196,7 @@ function RedirectToHome() {
 interface GameBoardProps {
   puzzle: PuzzleData;
   initialCells: CellState[][];
+  initialHistory: GameHistory;
   timerElapsed: number;
   timerResumedAt: number | null;
   startedAt: number;
@@ -206,6 +211,7 @@ interface GameBoardProps {
 function buildCurrentState(
   puzzle: PuzzleData,
   cellsRef: React.RefObject<CellState[][]>,
+  historyRef: React.RefObject<GameHistory>,
   timerRef: React.RefObject<ReturnType<typeof useTimer>>,
   isSolvedRef: React.RefObject<boolean>,
   startedAtRef: React.RefObject<number>,
@@ -217,12 +223,14 @@ function buildCurrentState(
     timer: timerRef.current.timerState,
     status: isSolvedRef.current ? 'solved' : 'in-progress',
     startedAt: startedAtRef.current,
+    history: historyRef.current,
   };
 }
 
 function GameBoard({
   puzzle,
   initialCells,
+  initialHistory,
   timerElapsed,
   timerResumedAt,
   startedAt,
@@ -240,11 +248,16 @@ function GameBoard({
     conflicts,
     isSolved,
     draggedCells,
+    canUndo,
+    canRedo,
+    history,
     handlePointerDown,
     handleDragEnter,
     handlePointerUp: originalPointerUp,
     resetGame: originalResetGame,
-  } = useGame(puzzle, initialCells);
+    undo,
+    redo,
+  } = useGame(puzzle, initialCells, initialHistory);
 
   const timer = useTimer();
   const timerStartedRef = useRef(false);
@@ -252,7 +265,8 @@ function GameBoard({
   const [showCompletion, setShowCompletion] = useState(false);
   const [completionTime, setCompletionTime] = useState(0);
 
-  // Fix 3: capture startedAt once, never overwrite
+  // Preserve the original startedAt across puzzle-state refreshes so a
+  // mid-game re-render can't reset the elapsed-time anchor.
   const startedAtRef = useRef(startedAt);
 
   // Restore timer on mount
@@ -271,28 +285,30 @@ function GameBoard({
   // Refs for debounced saves
   const cellsRef = useRef(cells);
   cellsRef.current = cells;
+  const historyRef = useRef(history);
+  historyRef.current = history;
   const timerRef = useRef(timer);
   timerRef.current = timer;
   const isSolvedRef = useRef(isSolved);
   isSolvedRef.current = isSolved;
 
-  // Debounced save on cell changes
+  // Debounced save on cell or history changes
   useEffect(() => {
     if (!ready) return;
     const timeout = setTimeout(() => {
-      void saveState(buildCurrentState(puzzle, cellsRef, timerRef, isSolvedRef, startedAtRef));
+      void saveState(buildCurrentState(puzzle, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
     }, 200);
     return () => clearTimeout(timeout);
-    // Save whenever cells change
+    // Save whenever cells or history change
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cells, ready]);
+  }, [cells, history, ready]);
 
   // Visibility change: pause/resume timer + save
   useEffect(() => {
     function handleVisibility() {
       if (document.hidden) {
         timerRef.current.pause();
-        void saveState(buildCurrentState(puzzle, cellsRef, timerRef, isSolvedRef, startedAtRef));
+        void saveState(buildCurrentState(puzzle, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
       } else {
         if (timerStartedRef.current && !isSolvedRef.current) {
           timerRef.current.start();
@@ -307,7 +323,7 @@ function GameBoard({
   useEffect(() => {
     function handleBeforeUnload() {
       timerRef.current.pause();
-      void saveState(buildCurrentState(puzzle, cellsRef, timerRef, isSolvedRef, startedAtRef));
+      void saveState(buildCurrentState(puzzle, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
     }
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
@@ -322,7 +338,7 @@ function GameBoard({
       setCompletionTime(finalTime);
       setShowCompletion(true);
       // Save final state + completion record
-      void saveState(buildCurrentState(puzzle, cellsRef, timerRef, isSolvedRef, startedAtRef));
+      void saveState(buildCurrentState(puzzle, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
       void addCompletion({
         puzzleId: puzzle.puzzleId,
         time: finalTime,
@@ -334,6 +350,27 @@ function GameBoard({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSolved]);
+
+  // Keyboard shortcuts: Ctrl/Cmd+Z = undo, Ctrl/Cmd+Shift+Z = redo.
+  // Skip when focus is inside an input/textarea so typing Z works normally.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (e.key !== 'z' && e.key !== 'Z') return;
+      const target = e.target as HTMLElement | null;
+      if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable) {
+        return;
+      }
+      e.preventDefault();
+      if (e.shiftKey) {
+        redo();
+      } else {
+        undo();
+      }
+    }
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [undo, redo]);
 
   // Wrap pointerUp to start timer on first interaction
   const handlePointerUp = useCallback(() => {
@@ -467,8 +504,34 @@ function GameBoard({
         </div>
       )}
 
-      {/* Reset button */}
-      <SecondaryButton onClick={resetGame}>Reset</SecondaryButton>
+      <div
+        style={{
+          display: 'flex',
+          gap: '12px',
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+        }}
+      >
+        <SecondaryButton
+          onClick={undo}
+          disabled={!canUndo}
+          data-testid="undo-button"
+          aria-label="Undo (Ctrl+Z)"
+        >
+          Undo
+        </SecondaryButton>
+        <SecondaryButton
+          onClick={redo}
+          disabled={!canRedo}
+          data-testid="redo-button"
+          aria-label="Redo (Ctrl+Shift+Z)"
+        >
+          Redo
+        </SecondaryButton>
+        <SecondaryButton onClick={resetGame} data-testid="reset-button">
+          Reset
+        </SecondaryButton>
+      </div>
     </PageShell>
   );
 }

@@ -1,12 +1,17 @@
-import { useState, useCallback, useRef, useMemo } from 'react';
+import { useState, useCallback, useRef, useMemo, useReducer } from 'react';
 import type { CellState, Conflict, PuzzleData } from '../engine/types';
 import { getAllConflicts } from '../engine/constraints';
+import type { GameHistory } from '../storage/types';
+import { EMPTY_HISTORY } from '../storage/types';
 
 type DragIntent = 'exclude' | 'clear' | null;
 
 export function cellKey(row: number, col: number): string {
   return `${row},${col}`;
 }
+
+/** Cap on past-stack depth. Dropped from the oldest end when exceeded. */
+const HISTORY_LIMIT = 200;
 
 /** Return value of the useGame hook. */
 export interface UseGameReturn {
@@ -15,10 +20,16 @@ export interface UseGameReturn {
   isSolved: boolean;
   /** Set of "row,col" strings for cells highlighted during current drag. */
   draggedCells: Set<string>;
+  canUndo: boolean;
+  canRedo: boolean;
+  /** Current history stacks (for persistence). */
+  history: GameHistory;
   handlePointerDown: (row: number, col: number) => void;
   handleDragEnter: (row: number, col: number) => void;
   handlePointerUp: () => void;
   resetGame: () => void;
+  undo: () => void;
+  redo: () => void;
 }
 
 function createEmptyCells(size: number): CellState[][] {
@@ -42,6 +53,19 @@ function cloneCells(cells: CellState[][]): CellState[][] {
   return cells.map((row) => [...row]);
 }
 
+function cellsEqual(a: CellState[][], b: CellState[][]): boolean {
+  if (a.length !== b.length) return false;
+  for (let r = 0; r < a.length; r++) {
+    const rowA = a[r]!;
+    const rowB = b[r]!;
+    if (rowA.length !== rowB.length) return false;
+    for (let c = 0; c < rowA.length; c++) {
+      if (rowA[c] !== rowB[c]) return false;
+    }
+  }
+  return true;
+}
+
 /**
  * All interactions are deferred to pointer-up:
  * - Tap (down + up, no drag): three-tap cycle on that cell
@@ -51,12 +75,73 @@ function cloneCells(cells: CellState[][]): CellState[][] {
  *   - Started on marked cell → no drag
  *
  * During drag, cells matching the intent are highlighted but not modified.
+ *
+ * GameHistory is a snapshot stack: every mutation that actually changes cells
+ * pushes the pre-mutation grid onto `past` and clears `future`. Undo pops
+ * from `past` onto the current grid (and pushes the current grid onto
+ * `future`); redo is the mirror. Reset is treated as a normal mutation, so
+ * Ctrl+Z can recover from an accidental reset.
  */
-export function useGame(puzzle: PuzzleData, initialCells?: CellState[][]): UseGameReturn {
+interface HistoryState {
+  cells: CellState[][];
+  past: CellState[][][];
+  future: CellState[][][];
+}
+
+type HistoryAction =
+  | { type: 'commit'; compute: (prev: CellState[][]) => CellState[][] }
+  | { type: 'undo' }
+  | { type: 'redo' };
+
+function historyReducer(state: HistoryState, action: HistoryAction): HistoryState {
+  switch (action.type) {
+    case 'commit': {
+      const next = action.compute(state.cells);
+      if (cellsEqual(state.cells, next)) return state;
+      // Drop the oldest entry in one allocation when at the cap, rather than
+      // allocating a length-(LIMIT+1) array and slicing it back down.
+      const past = state.past.length >= HISTORY_LIMIT
+        ? [...state.past.slice(-(HISTORY_LIMIT - 1)), state.cells]
+        : [...state.past, state.cells];
+      return { cells: next, past, future: [] };
+    }
+    case 'undo': {
+      if (state.past.length === 0) return state;
+      const prev = state.past[state.past.length - 1]!;
+      return {
+        cells: prev,
+        past: state.past.slice(0, -1),
+        future: [...state.future, state.cells],
+      };
+    }
+    case 'redo': {
+      if (state.future.length === 0) return state;
+      const next = state.future[state.future.length - 1]!;
+      return {
+        cells: next,
+        past: [...state.past, state.cells],
+        future: state.future.slice(0, -1),
+      };
+    }
+  }
+}
+
+export function useGame(
+  puzzle: PuzzleData,
+  initialCells?: CellState[][],
+  initialHistory?: GameHistory,
+): UseGameReturn {
   const { gridSize, regionMap } = puzzle;
-  const [cells, setCells] = useState<CellState[][]>(() =>
-    initialCells ?? createEmptyCells(gridSize),
+  const [{ cells, past, future }, dispatch] = useReducer(
+    historyReducer,
+    undefined,
+    (): HistoryState => ({
+      cells: initialCells ?? createEmptyCells(gridSize),
+      past: initialHistory?.past ?? EMPTY_HISTORY.past,
+      future: initialHistory?.future ?? EMPTY_HISTORY.future,
+    }),
   );
+
   // draggedCells is tracked in a ref (for stable callbacks) and mirrored
   // to state (for re-render on highlight changes).
   const draggedCellsRef = useRef<Set<string>>(new Set());
@@ -84,15 +169,35 @@ export function useGame(puzzle: PuzzleData, initialCells?: CellState[][]): UseGa
     return markerCount === gridSize * markersPerUnit && conflicts.length === 0;
   }, [cells, gridSize, markersPerUnit, conflicts]);
 
+  // cellsRef mirrors the reducer's cells so handlePointerDown can stay
+  // reference-stable — it reads cell state at the moment of pointer-down,
+  // not at callback setup, so a ref is the right shape.
+  const cellsRef = useRef(cells);
+  cellsRef.current = cells;
+
+  // Commit dispatches a pure compute function; the reducer owns the state
+  // read, so no external cells mirror is needed on the write path.
+  const commit = useCallback((compute: (prev: CellState[][]) => CellState[][]) => {
+    dispatch({ type: 'commit', compute });
+  }, []);
+
+  // Clear all drag-tracking refs + state. Shared by pointerUp (end of drag)
+  // and resetGame (throw away any in-progress drag).
+  const clearDragState = useCallback(() => {
+    startCellRef.current = null;
+    hasDraggedRef.current = false;
+    dragIntentRef.current = null;
+    draggedCellsRef.current = new Set();
+    setDraggedCells(new Set());
+  }, []);
+
   const handlePointerDown = useCallback((row: number, col: number) => {
     startCellRef.current = { row, col };
     hasDraggedRef.current = false;
     draggedCellsRef.current = new Set();
     setDraggedCells(new Set());
 
-    // Read cell state directly from the cells ref captured by closure.
-    // This is safe because cells state doesn't change during pointer-down.
-    const state = cells[row]?.[col];
+    const state = cellsRef.current[row]?.[col];
     if (state === 'empty') {
       dragIntentRef.current = 'exclude';
     } else if (state === 'excluded') {
@@ -100,7 +205,7 @@ export function useGame(puzzle: PuzzleData, initialCells?: CellState[][]): UseGa
     } else {
       dragIntentRef.current = null;
     }
-  }, [cells]);
+  }, []);
 
   const handleDragEnter = useCallback((row: number, col: number) => {
     if (!startCellRef.current) return;
@@ -129,7 +234,7 @@ export function useGame(puzzle: PuzzleData, initialCells?: CellState[][]): UseGa
 
     if (!hasDraggedRef.current) {
       // Single tap: apply three-tap cycle to starting cell
-      setCells((prev) => {
+      commit((prev) => {
         const currentState = prev[start.row]![start.col]!;
         const next = cloneCells(prev);
         next[start.row]![start.col] = nextCellState(currentState);
@@ -140,7 +245,7 @@ export function useGame(puzzle: PuzzleData, initialCells?: CellState[][]): UseGa
       const intent = dragIntentRef.current;
       const allKeys = new Set(draggedCellsRef.current);
       allKeys.add(cellKey(start.row, start.col));
-      setCells((prev) => {
+      commit((prev) => {
         const next = cloneCells(prev);
         for (const key of allKeys) {
           const [rowStr, colStr] = key.split(',');
@@ -156,30 +261,35 @@ export function useGame(puzzle: PuzzleData, initialCells?: CellState[][]): UseGa
       });
     }
 
-    startCellRef.current = null;
-    hasDraggedRef.current = false;
-    dragIntentRef.current = null;
-    draggedCellsRef.current = new Set();
-    setDraggedCells(new Set());
-  }, []);
+    clearDragState();
+  }, [commit, clearDragState]);
 
   const resetGame = useCallback(() => {
-    setCells(createEmptyCells(gridSize));
-    startCellRef.current = null;
-    hasDraggedRef.current = false;
-    dragIntentRef.current = null;
-    draggedCellsRef.current = new Set();
-    setDraggedCells(new Set());
-  }, [gridSize]);
+    commit(() => createEmptyCells(gridSize));
+    clearDragState();
+  }, [commit, clearDragState, gridSize]);
+
+  const undo = useCallback(() => dispatch({ type: 'undo' }), []);
+  const redo = useCallback(() => dispatch({ type: 'redo' }), []);
+
+  // past and future come from reducer state; every commit/undo/redo produces
+  // new array references already, so a useMemo wrapper would only add a
+  // shallow-equal check that can never skip.
+  const history: GameHistory = { past, future };
 
   return {
     cells,
     conflicts,
     isSolved,
     draggedCells,
+    canUndo: past.length > 0,
+    canRedo: future.length > 0,
+    history,
     handlePointerDown,
     handleDragEnter,
     handlePointerUp,
     resetGame,
+    undo,
+    redo,
   };
 }

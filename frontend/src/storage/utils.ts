@@ -1,5 +1,6 @@
 import type { PuzzleData, CellState } from '../engine/types';
 import type { GameState } from './types';
+import { EMPTY_HISTORY } from './types';
 
 /** Create a fresh GameState for a newly fetched puzzle. */
 export function createFreshGameState(puzzle: PuzzleData): GameState {
@@ -12,5 +13,6 @@ export function createFreshGameState(puzzle: PuzzleData): GameState {
     timer: { elapsedAtLastPause: 0, lastResumedAt: null },
     status: 'in-progress',
     startedAt: Date.now(),
+    history: EMPTY_HISTORY,
   };
 }

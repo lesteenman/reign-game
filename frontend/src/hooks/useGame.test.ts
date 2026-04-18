@@ -172,6 +172,182 @@ describe('useGame', () => {
   });
 });
 
+describe('useGame (undo/redo)', () => {
+  it('canUndo is false initially, becomes true after a move', () => {
+    // Arrange
+    const { result } = renderHook(() => useGame(testPuzzle));
+
+    // Assert initial
+    expect(result.current.canUndo).toBe(false);
+    expect(result.current.canRedo).toBe(false);
+
+    // Act
+    tap(result, 0, 0);
+
+    // Assert after move
+    expect(result.current.canUndo).toBe(true);
+    expect(result.current.canRedo).toBe(false);
+  });
+
+  it('undo reverts a single tap', () => {
+    // Arrange
+    const { result } = renderHook(() => useGame(testPuzzle));
+    tap(result, 0, 0); // empty → excluded
+    expect(result.current.cells[0]![0]).toBe('excluded');
+
+    // Act
+    act(() => result.current.undo());
+
+    // Assert
+    expect(result.current.cells[0]![0]).toBe('empty');
+    expect(result.current.canUndo).toBe(false);
+    expect(result.current.canRedo).toBe(true);
+  });
+
+  it('redo reapplies an undone move', () => {
+    // Arrange
+    const { result } = renderHook(() => useGame(testPuzzle));
+    tap(result, 0, 0); // excluded
+    act(() => result.current.undo()); // empty
+
+    // Act
+    act(() => result.current.redo());
+
+    // Assert
+    expect(result.current.cells[0]![0]).toBe('excluded');
+    expect(result.current.canUndo).toBe(true);
+    expect(result.current.canRedo).toBe(false);
+  });
+
+  it('undo reverts a drag-batch as one unit', () => {
+    // Arrange
+    const { result } = renderHook(() => useGame(testPuzzle));
+    act(() => result.current.handlePointerDown(0, 0));
+    act(() => result.current.handleDragEnter(0, 1));
+    act(() => result.current.handleDragEnter(0, 2));
+    act(() => result.current.handlePointerUp());
+    expect(result.current.cells[0]![0]).toBe('excluded');
+    expect(result.current.cells[0]![1]).toBe('excluded');
+    expect(result.current.cells[0]![2]).toBe('excluded');
+
+    // Act
+    act(() => result.current.undo());
+
+    // Assert — all three revert together
+    expect(result.current.cells[0]![0]).toBe('empty');
+    expect(result.current.cells[0]![1]).toBe('empty');
+    expect(result.current.cells[0]![2]).toBe('empty');
+  });
+
+  it('new move clears the redo stack', () => {
+    // Arrange
+    const { result } = renderHook(() => useGame(testPuzzle));
+    tap(result, 0, 0); // excluded
+    act(() => result.current.undo()); // empty
+    expect(result.current.canRedo).toBe(true);
+
+    // Act
+    tap(result, 1, 1); // new move
+
+    // Assert
+    expect(result.current.canRedo).toBe(false);
+  });
+
+  it('multiple undos walk back through history', () => {
+    // Arrange
+    const { result } = renderHook(() => useGame(testPuzzle));
+    tap(result, 0, 0); // A: excluded
+    tap(result, 1, 1); // B: excluded
+    tap(result, 1, 1); // C: marked
+
+    // Act
+    act(() => result.current.undo()); // undo C
+    act(() => result.current.undo()); // undo B
+
+    // Assert
+    expect(result.current.cells[0]![0]).toBe('excluded'); // A still applied
+    expect(result.current.cells[1]![1]).toBe('empty');    // B & C undone
+    expect(result.current.canUndo).toBe(true);
+    expect(result.current.canRedo).toBe(true);
+  });
+
+  it('resetGame is undoable', () => {
+    // Arrange
+    const { result } = renderHook(() => useGame(testPuzzle));
+    tap(result, 0, 0);
+    tap(result, 1, 1);
+    act(() => result.current.resetGame());
+    expect(result.current.cells[0]![0]).toBe('empty');
+    expect(result.current.cells[1]![1]).toBe('empty');
+
+    // Act
+    act(() => result.current.undo());
+
+    // Assert — cells restored to pre-reset state
+    expect(result.current.cells[0]![0]).toBe('excluded');
+    expect(result.current.cells[1]![1]).toBe('excluded');
+  });
+
+  it('undo is a no-op when past is empty', () => {
+    // Arrange
+    const { result } = renderHook(() => useGame(testPuzzle));
+
+    // Act
+    act(() => result.current.undo());
+
+    // Assert
+    for (const row of result.current.cells) {
+      for (const cell of row) expect(cell).toBe('empty');
+    }
+    expect(result.current.canUndo).toBe(false);
+  });
+
+  it('redo is a no-op when future is empty', () => {
+    // Arrange
+    const { result } = renderHook(() => useGame(testPuzzle));
+    tap(result, 0, 0);
+
+    // Act
+    act(() => result.current.redo());
+
+    // Assert — still the post-tap state, not re-applied twice
+    expect(result.current.cells[0]![0]).toBe('excluded');
+    expect(result.current.canRedo).toBe(false);
+  });
+
+  it('accepts initialPast/initialFuture for rehydration', () => {
+    // Arrange
+    const emptyGrid = Array.from({ length: 5 }, () =>
+      Array.from<import('../engine/types').CellState>({ length: 5 }).fill('empty'),
+    );
+    const currentCells: import('../engine/types').CellState[][] = emptyGrid.map((r) => [...r]);
+    currentCells[0]![0] = 'excluded';
+
+    // Act — restore a state that already has one undo available
+    const { result } = renderHook(() =>
+      useGame(testPuzzle, currentCells, { past: [emptyGrid], future: [] }),
+    );
+
+    // Assert
+    expect(result.current.canUndo).toBe(true);
+    expect(result.current.canRedo).toBe(false);
+
+    act(() => result.current.undo());
+    expect(result.current.cells[0]![0]).toBe('empty');
+  });
+
+  it('pointerUp without a prior pointerDown is a no-op and does not push history', () => {
+    // Arrange
+    const { result } = renderHook(() => useGame(testPuzzle));
+
+    // Act
+    act(() => result.current.handlePointerUp());
+
+    // Assert
+    expect(result.current.canUndo).toBe(false);
+  });
+});
+
 describe('useGame (Double Queens, mode=double)', () => {
   // 4x4 grid with 4 regions, each 2x2
   const doublePuzzle: PuzzleData = {
