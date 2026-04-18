@@ -9,7 +9,19 @@ Review the current working changes (or branch diff from main) for issues across 
 
 ## Phase 1: Identify Changes
 
-Run `git diff` (or `git diff HEAD` if there are staged changes) to see what changed. If the working tree is clean, use `git diff main...HEAD`. If both are empty, tell the user there's nothing to review.
+**Always fetch first** — stale refs will make you miss or misattribute changes:
+
+```bash
+git fetch --prune origin main
+```
+
+Then collect the full set of changes on the branch, not just the current session's diff:
+
+1. `git diff main...HEAD` — the branch-vs-base diff. This is what the PR will contain and what human reviewers see. **Use this as the primary review scope.**
+2. `git diff` / `git diff --cached` — uncommitted + staged changes. Review these too; they're about to join the branch diff.
+3. `git log --oneline main..HEAD` — the commit list. Scan for prior-session commits you didn't personally author this session. **Do not narrow the review to only the current session's commits** — prior commits that never got reviewed (fast-merged WIP, commits made before /review existed on this branch, commits from another agent's session) can ship unchecked unless this skill catches them. Pre-push hooks have caught lint issues in prior-session commits more than once; this skill should surface higher-value findings in those same commits.
+
+If `git diff main...HEAD` is empty AND the working tree is clean, tell the user there's nothing to review.
 
 ## Phase 2: Launch Four Review Agents in Parallel
 

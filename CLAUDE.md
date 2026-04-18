@@ -77,6 +77,29 @@ task dev:restart:frontend   # Restart frontend
 **After changing Go source:** `task dev:restart:backend` and/or `task dev:restart:generator` (neither is hot-reloaded).
 **After changing frontend source:** Vite HMR handles most updates; if you edit `vite.config.ts` or similar, `task dev:restart:frontend`.
 
+**Taskfile shell pitfalls (read before editing Taskfile.yml):**
+Task runs `cmds:` blocks in its built-in interpreter (`mvdan.cc/sh`), not system sh or bash. It mostly matches POSIX but diverges in a few places that bite process-lifecycle code:
+
+- `$!` after a background job returns a **goroutine handle** (e.g. `g1`), not an OS PID. Capturing `echo $! > file.pid` stores garbage.
+- `kill -0 "$PID"` against **external** OS PIDs is unreliable — it can report "not alive" for a process that is demonstrably running.
+- `disown` is not implemented.
+- `set -e` behavior around command substitution differs from bash in edge cases.
+
+When a task needs to track a backgrounded process by PID (anything without a port to probe via `lsof -ti:PORT`), wrap the whole block in a bash heredoc:
+
+```yaml
+cmds:
+  - |
+    bash <<'BASH'
+    set -e
+    nohup long-running-cmd > log 2>&1 </dev/null &
+    echo $! > pid
+    # ...check readiness, verify alive, etc.
+    BASH
+```
+
+Port-based lifecycle (`lsof -ti:PORT` for status, `kill $(lsof -ti:PORT)` for down) works fine in Task's shell and is preferred whenever a port exists.
+
 ## Testing
 
 - Always run the full test suite after making changes
@@ -198,6 +221,7 @@ Agents must NOT just summarize or paraphrase a skill. They must read and execute
 8. **Lint before commit, not just at push:** Run `golangci-lint run` (backend) and `npx tsc -b` (frontend) before committing. The pre-push hook catches these, but late failures waste time on fix-up commits. Two Phase 2 commits were purely lint fixes that could have been avoided.
 9. **Float API params: always test NaN and Inf:** When adding float parameters to APIs, explicitly test `NaN` and `Inf` inputs. `strconv.ParseFloat` accepts these as valid, and compound range checks like `x < 0 || x > 1` evaluate to false for NaN, letting it through. Use `math.IsNaN` explicitly.
 10. **Validate URL params before type assertion:** When frontend reads URL params and uses them as typed values (enums, numbers), validate against known values before type assertion. URL params are always `string | null` — invalid values passed unchecked will reach the API.
+11. **Fetch before reporting git state:** Before reporting branch status, upstream existence, "PR exists?", or ahead/behind counts, run `git fetch --prune` first. Stale refs (especially after a branch is deleted post-merge) produce confidently wrong analysis and push scoping decisions down the wrong path. Treat local refs as cache that needs invalidating, not source of truth.
 
 ### Human-in-the-Loop Rule (CRITICAL)
 
