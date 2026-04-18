@@ -124,7 +124,7 @@ describe('fetchNextPuzzle', () => {
     globalThis.fetch = originalFetch;
   });
 
-  test('calls GET /puzzles/next with size and mode params', async () => {
+  test('calls GET /api/puzzles/next with size and mode params', async () => {
     // Arrange
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -215,7 +215,7 @@ describe('updatePuzzleStatus', () => {
     globalThis.fetch = originalFetch;
   });
 
-  test('calls PUT /puzzles/{id}/status with correct body and params', async () => {
+  test('calls PUT /api/puzzles/{id}/status with correct body and params', async () => {
     // Arrange
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,

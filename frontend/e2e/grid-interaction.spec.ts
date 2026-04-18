@@ -17,7 +17,7 @@ test.describe("Grid Interaction", () => {
   test.beforeEach(async ({ page }) => {
     // Intercept puzzle API calls and return mock data so tests
     // don't depend on a running backend.
-    await page.route("**/api/puzzles/**", (route) =>
+    await page.route("**/api/puzzles/generate*", (route) =>
       route.fulfill({
         status: 200,
         contentType: "application/json",

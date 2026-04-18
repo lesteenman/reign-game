@@ -38,10 +38,10 @@ backend/
 │       └── main.go              # Lambda entry point
 ├── internal/
 │   ├── handler/                 # API Gateway Lambda handlers
-│   │   ├── puzzle.go            # GET /puzzles/:id, GET /daily
-│   │   ├── completion.go        # POST /completions
-│   │   ├── leaderboard.go       # GET /leaderboard/:puzzleId
-│   │   └── health.go            # GET /health
+│   │   ├── puzzle.go            # GET /api/puzzles/:id, GET /api/daily
+│   │   ├── completion.go        # POST /api/completions
+│   │   ├── leaderboard.go       # GET /api/leaderboard/:puzzleId
+│   │   └── health.go            # GET /api/health
 │   ├── model/                   # Domain types
 │   │   ├── puzzle.go            # Puzzle, Region, Grid
 │   │   ├── completion.go        # Completion record
@@ -161,24 +161,24 @@ design/
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | /health | No | Health check |
-| GET | /puzzles/generate | No | On-demand puzzle generation (legacy, slow for large grids) |
-| GET | /puzzles/next | No | Serve next ready puzzle from pool by size + mode |
-| PUT | /puzzles/{id}/status | No | Update puzzle status (solved/skipped) |
-| GET | /admin/pool | No | All combos with merged config + ready counts |
-| PUT | /admin/config/{size}/{mode} | No | Update config for an existing combo |
-| POST | /admin/config | No | Create a new combo config |
-| POST | /admin/replenish | No | Replenish pools (optional ?size=X&mode=Y filter) |
+| GET | /api/health | No | Health check |
+| GET | /api/puzzles/generate | No | On-demand puzzle generation (legacy, slow for large grids) |
+| GET | /api/puzzles/next | No | Serve next ready puzzle from pool by size + mode |
+| PUT | /api/puzzles/{id}/status | No | Update puzzle status (solved/skipped) |
+| GET | /api/admin/pool | No | All combos with merged config + ready counts |
+| PUT | /api/admin/config/{size}/{mode} | No | Update config for an existing combo |
+| POST | /api/admin/config | No | Create a new combo config |
+| POST | /api/admin/replenish | No | Replenish pools (optional ?size=X&mode=Y filter) |
 
 ### Future (not yet implemented)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| PUT | /puzzles/{id}/verdict | No | Upvote/downvote/skip puzzle (Phase 5) |
-| GET | /puzzles/{id} | No | Load puzzle by ID for replay (Phase 6) |
-| GET | /daily | No | Get today's daily puzzles (Phase 9+) |
-| POST | /completions | Device ID | Submit puzzle completion (Phase 9+) |
-| GET | /leaderboard/{puzzleId} | No | Leaderboard for a daily puzzle (Phase 9+) |
+| PUT | /api/puzzles/{id}/verdict | No | Upvote/downvote/skip puzzle (Phase 5) |
+| GET | /api/puzzles/{id} | No | Load puzzle by ID for replay (Phase 6) |
+| GET | /api/daily | No | Get today's daily puzzles (Phase 9+) |
+| POST | /api/completions | Device ID | Submit puzzle completion (Phase 9+) |
+| GET | /api/leaderboard/{puzzleId} | No | Leaderboard for a daily puzzle (Phase 9+) |
 
 ---
 

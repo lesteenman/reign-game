@@ -178,7 +178,7 @@ tasks:
         nohup go run ./cmd/api >> ../logs/backend.log 2>&1 </dev/null &
         echo "backend starting, logs: logs/backend.log"
         for i in $(seq 1 60); do
-          if curl -sf http://localhost:5181/health >/dev/null 2>&1; then
+          if curl -sf http://localhost:5181/api/health >/dev/null 2>&1; then
             echo "backend ready on :5181 (PID $(lsof -ti:5181 -sTCP:LISTEN))"
             exit 0
           fi
@@ -270,7 +270,7 @@ tasks:
         echo ""
         echo "All services up:"
         echo "  frontend:  http://localhost:5180/"
-        echo "  backend:   http://localhost:5181/ (health: /health)"
+        echo "  backend:   http://localhost:5181/ (health: /api/health)"
         echo "  admin:     http://localhost:5180/admin"
         echo "  generator: PID $(cat logs/generator.pid 2>/dev/null || echo ?)"
         echo "  logs:      task dev:logs   (or dev:logs:{backend,generator,frontend})"

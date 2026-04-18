@@ -62,7 +62,7 @@ describe('fetchPoolStatus', () => {
     globalThis.fetch = originalFetch;
   });
 
-  test('calls GET /admin/pool and returns pool status', async () => {
+  test('calls GET /api/admin/pool and returns pool status', async () => {
     // Arrange
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -112,7 +112,7 @@ describe('updateConfig', () => {
     globalThis.fetch = originalFetch;
   });
 
-  test('calls PUT /admin/config/{size}/{mode} with config body', async () => {
+  test('calls PUT /api/admin/config/{size}/{mode} with config body', async () => {
     // Arrange
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -166,7 +166,7 @@ describe('createConfig', () => {
     globalThis.fetch = originalFetch;
   });
 
-  test('calls POST /admin/config with full config payload', async () => {
+  test('calls POST /api/admin/config with full config payload', async () => {
     // Arrange
     const createPayload = { ...MOCK_CONFIG, size: 9, mode: 'standard' };
     globalThis.fetch = vi.fn().mockResolvedValue({
@@ -222,7 +222,7 @@ describe('triggerReplenish', () => {
     globalThis.fetch = originalFetch;
   });
 
-  test('calls POST /admin/replenish with no params for replenish all', async () => {
+  test('calls POST /api/admin/replenish with no params for replenish all', async () => {
     // Arrange
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
@@ -244,7 +244,7 @@ describe('triggerReplenish', () => {
     expect(options.method).toBe('POST');
   });
 
-  test('calls POST /admin/replenish with size and mode params', async () => {
+  test('calls POST /api/admin/replenish with size and mode params', async () => {
     // Arrange
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
