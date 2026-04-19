@@ -183,6 +183,8 @@ Locked decision #1. Every module that the spec describes in terms of "2 marks pe
 - Forward-check: `rowsRemaining * k >= (K - colCount[c])` for every column `c`.
 - The spec's "c1 < c2 with c2 − c1 ≥ 2" pair filter generalizes to **strictly increasing column sequences with pairwise column gap ≥ 2**.
 
+**Implementation note — grid-order row visiting (deviation from input-spec §4.1):** the spec calls for "rows visited in randomized order to diversify output." We do NOT do that. Instead we visit rows 0..n-1 in grid order and shuffle the *filtered k-combinations per row* before recursion. Rationale: the prev-row adjacency mask (`adjacentColumnsMask(rowMarks[row-1], n)`) prunes aggressively only when "previous row" means "grid-adjacent previous row." Shuffling the visit order turns that pruning into dead code (non-grid-adjacent rows don't forbid each other's columns), which blew up to multi-minute sampler hangs at N=13 k=2 during R-063 smoke. Grid-order visiting plus per-row combo shuffling preserves the spec's diversity goal (verified by `TestSampleDistinct`) and keeps N=14 benchmarks under 100µs for both k. PG-03 has been updated to reflect the implementation.
+
 ### 4.2 Rule tiers
 
 Every rule statement that references "2" in the spec is templated on `k`:

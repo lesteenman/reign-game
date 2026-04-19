@@ -33,7 +33,7 @@ The input spec in `input-spec.md` was written without visibility into our codeba
 
 ## 3. N range — probe up to 12, measure higher as a stretch
 
-**Decision:** target N=5..12 as the committed range. Run Step 11 benchmarks up to N=14 or N=15 out of curiosity; if they stay within a usable envelope (decision: what counts as "usable" is post-Step-11), expose them as desktop-only puzzle sizes. Do not commit to N>12 until the data is in.
+**Decision:** target **N=6..12 for k=1**, **N=9..12 for k=2** as the committed ranges. These floors emerged from R-063's feasibility probe (`backend/internal/generator/v2/bench/n-feasibility.md` and `n-feasibility-deep.md`): N=5 k=1 has exactly 14 solutions (too narrow for long-term content variety), N=6 k=1 has 90; N=8 k=2 has exactly 2 solutions (content-dead), N=9 k=2 has 664+. Run Step 11 benchmarks up to N=14 out of curiosity; if they stay within a usable envelope (decision: what counts as "usable" is post-Step-11), expose them as desktop-only puzzle sizes. Do not commit to N>12 until the data is in.
 
 **Performance:** the "<2s at N=12" number in the input spec is an estimate, not a contract. **Measure first, then decide what sizes ship.**
 

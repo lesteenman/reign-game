@@ -21,7 +21,7 @@ func TestNewValidatesN(t *testing.T) {
 		{name: "zero rejected", n: 0, wantErr: true},
 		{name: "negative rejected", n: -1, wantErr: true},
 		{name: "seventeen rejected", n: 17, wantErr: true},
-		{name: "five accepted (N_min interim)", n: 5, wantErr: false},
+		{name: "five accepted (below NMin but above hard floor)", n: 5, wantErr: false},
 		{name: "fourteen accepted", n: 14, wantErr: false},
 		{name: "sixteen accepted (upper bound)", n: 16, wantErr: false},
 	}
@@ -188,8 +188,8 @@ func TestNMinConstant(t *testing.T) {
 	t.Parallel()
 
 	// Arrange / Act / Assert
-	if NMin != 5 {
-		t.Errorf("expected NMin == 5, got %d", NMin)
+	if NMin != 6 {
+		t.Errorf("expected NMin == 6, got %d", NMin)
 	}
 }
 
