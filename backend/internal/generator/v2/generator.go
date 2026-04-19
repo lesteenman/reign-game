@@ -152,6 +152,20 @@ type Generator struct {
 	// rowCombos[row] is the filtered & shuffled list of candidate column
 	// bitmasks considered for that row at the current backtracker depth.
 	rowCombos [nMax][maxCombosPerRow]uint16
+
+	// Grower / mutator scratch. Reused across attempts via reset, not
+	// reallocated. regionOf is the authoritative cell-to-region assignment
+	// for the current attempt (-1 = unclaimed during growth; no -1 values
+	// after growRegions returns).
+	regionOf [nMax][nMax]int8
+	// solver holds the deductive solver state for the orchestrator's solve
+	// pass. Pre-allocated so Generate does not allocate an 8KB state per
+	// attempt.
+	solver solverState
+	// traceBuf backs solver.trace during the final classification pass. The
+	// mutator's probe passes keep solver.trace == nil (NF3: zero alloc in
+	// the hot loop).
+	traceBuf ruleTrace
 }
 
 // maxCombosPerRow bounds the number of valid k-combinations of columns for a
@@ -187,17 +201,95 @@ func New(n, marksPerUnit int, opts ...Option) (*Generator, error) {
 		seed = time.Now().UnixNano()
 	}
 	g := &Generator{
-		cfg:    cfg,
-		n:      n,
-		k:      marksPerUnit,
-		rng:    rand.New(rand.NewPCG(uint64(seed), uint64(seed)^0x9E3779B97F4A7C15)),
-		solBuf: make([]Mark, 0, n*marksPerUnit),
+		cfg:      cfg,
+		n:        n,
+		k:        marksPerUnit,
+		rng:      rand.New(rand.NewPCG(uint64(seed), uint64(seed)^0x9E3779B97F4A7C15)),
+		solBuf:   make([]Mark, 0, n*marksPerUnit),
+		traceBuf: make(ruleTrace, 0, defaultTraceCap),
 	}
 	return g, nil
 }
 
-// Generate produces one puzzle. The scaffold slice (R-062) returns
-// "not implemented"; the real implementation lands in R-065.
-func (g *Generator) Generate(_ context.Context) (Puzzle, error) {
-	return Puzzle{}, errors.New("generator: not implemented")
+// defaultTraceCap caps the rule-trace backing slice. Even Expert puzzles
+// rarely exceed a few dozen rule firings — 512 is ample headroom and lets
+// the append in (*solverState).record never reallocate.
+const defaultTraceCap = 512
+
+// ErrMaxAttemptsExhausted is returned by Generate when the configured
+// WithMaxAttempts cap is hit without producing a valid, unique,
+// deducible puzzle that matches the optional WithDifficulty filter.
+var ErrMaxAttemptsExhausted = errors.New("generator: max attempts exhausted")
+
+// Generate produces one puzzle. Runs up to g.cfg.maxAttempts iterations of
+// the pipeline described in PG-11 / input-spec §11 Step 8:
+//
+//	sample -> pair -> grow -> solve+mutate -> brute-uniqueness ->
+//	  classify -> (optional difficulty filter) -> convert
+//
+// Honors ctx cancellation between attempts; returns ctx.Err() unchanged so
+// callers can distinguish Canceled/DeadlineExceeded from domain errors.
+//
+// On total failure (budget exhausted) returns ErrMaxAttemptsExhausted.
+func (g *Generator) Generate(ctx context.Context) (Puzzle, error) {
+	maxAttempts := g.cfg.maxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = defaultMaxAttempts
+	}
+
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return Puzzle{}, err
+		}
+
+		marks, ok := g.sampleSolution()
+		if !ok {
+			continue
+		}
+		seeds := pairSeeds(marks, g.n, g.k)
+		if !g.growRegions(seeds, &g.regionOf) {
+			continue
+		}
+		if outcome := g.solveAndMutate(seeds); outcome != mutationSolved {
+			continue
+		}
+		// Brute-uniqueness check. The solver in g.solver holds the
+		// deductive solution; we also want to confirm no alternative
+		// solution exists.
+		rm := convertRegionsToSlices(&g.regionOf, g.n)
+		sols, err := bruteSolveAll(rm, g.n, g.k, 2)
+		if err != nil || len(sols) != 1 {
+			continue
+		}
+
+		// Trace-enabled classification pass. Reset the solver state with
+		// trace recording, re-solve, then classify.
+		g.solver.trace = g.traceBuf[:0]
+		if err := g.solver.initFromRegionMap(rm, g.n, g.k); err != nil {
+			continue
+		}
+		if solve(&g.solver) != OutcomeSolved {
+			// Extremely unlikely — the just-solved puzzle should be
+			// deducible. Skip on any mismatch.
+			continue
+		}
+		difficulty, metrics := classify(g.solver.trace)
+		g.traceBuf = g.solver.trace // cache back for reuse
+
+		if g.cfg.difficulty != DifficultyUnknown && difficulty != g.cfg.difficulty {
+			continue
+		}
+
+		solution := g.solver.appendSolutionMarks(make([]Mark, 0, g.n*g.k))
+		return Puzzle{
+			N:            g.n,
+			MarksPerUnit: g.k,
+			Regions:      convertRegionsToSlices(&g.regionOf, g.n),
+			Solution:     solution,
+			Difficulty:   difficulty,
+			Metrics:      metrics,
+		}, nil
+	}
+
+	return Puzzle{}, ErrMaxAttemptsExhausted
 }
