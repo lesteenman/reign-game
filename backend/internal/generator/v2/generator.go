@@ -8,13 +8,18 @@ import (
 	"time"
 )
 
-// NMin is the interim package-level floor for the grid size N.
+// NMin is the package-level floor for the grid size N.
 //
-// R-063's feasibility probe may raise this value but must never lower it below
-// 5 (proposal AC-10). The constant is informational at the R-062 scaffold
-// slice: New does not yet enforce n >= NMin — only the absolute mask-width
-// bounds are checked here.
-const NMin = 5
+// Empirically chosen from R-063's feasibility probe (bench/n-feasibility.md):
+//   - N=4 k=1 has exactly 2 solutions.
+//   - N=5 k=1 has exactly 14 solutions.
+//   - N=6 k=1 has exactly 90 solutions (brute-verified, not capped).
+//
+// 14 unique base solutions at N=5 is too narrow a pool for long-term content
+// variety (solutions × region maps grown over them). N=6 gives ~6× more.
+// The constant is informational: New does not enforce n >= NMin; downstream
+// orchestrators (R-065) respect it.
+const NMin = 6
 
 // nMax is the bitmask-width ceiling. The solver uses uint16 masks, so n > 16
 // is unrepresentable.

@@ -88,15 +88,15 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error)
 
 ---
 
-## PG-04: N-feasibility probe and N_min
+## PG-04: N-feasibility probe and NMin
 
-**Requirement.** A `go test`-executable probe runs the sampler for a bounded time budget (default 5s) at N in [4, 5, 6, 7, 8] for each k in {1, 2} and reports distinct solutions found. The result refines `N_min`.
+**Requirement.** A `go test`-executable probe runs the sampler for a bounded time budget (default 5s) at N in [4, 5, 6, 7, 8] for each k in {1, 2} and reports distinct solutions found. An opt-in deep probe (`DEEP_PROBE=1`) extends to N∈[4..14] and cross-checks against `bruteSolveAll` with per-row regions to get exact solution counts up to a cap.
 
-**Interim value.** `N_min = 5` is the initial package-level constant, committed in R-063 before the probe runs. This is the **interim floor** (proposal AC-10). The probe's data may raise `N_min` (never lower it below 5); any change to the constant must be justified in the R-063 PR description and referenced in `bench/n-feasibility.md`.
+**Value.** `NMin = 6` is the k=1 package-level constant, determined empirically by R-063's deep probe: N=5 k=1 has exactly 14 solutions (too narrow for content variety), N=6 k=1 has exactly 90 solutions. For k=2 the orchestrator (R-065) enforces a separate floor of N=9: N=4..7 k=2 have 0 solutions, N=8 k=2 has exactly 2 solutions (content-dead), N=9 k=2 has 664+ distinct. Both floors are documented in `backend/internal/generator/v2/bench/n-feasibility.md` and `n-feasibility-deep.md`.
 
-**Why.** `input-spec.md` §11 Step 2; locked decision #3 requires empirically-grounded lower bound. The interim value (5) exists so the sampler's 200-sample unit tests have a defined range to iterate at PR time without waiting for the probe to complete.
+**Why.** `input-spec.md` §11 Step 2; locked decision #3 requires an empirically-grounded lower bound that considers both correctness (solutions must exist) and content-adequacy (the pool must be wide enough for long-term play).
 
-**Verification.** `backend/internal/generator/bench/n-feasibility.md` exists and records the table. `N_min` is declared as a package-level constant with initial value 5. `New(n, k)` rejects `n < N_min` with a typed error.
+**Verification.** `backend/internal/generator/v2/bench/n-feasibility.md` and `n-feasibility-deep.md` exist and record the tables. `NMin` is declared as a package-level constant with value 6. The generator's `New(n, k)` validates the absolute mask-width bounds ([1, 16]); content-adequacy floors are enforced by the orchestrator in R-065 with a typed error.
 
 ---
 

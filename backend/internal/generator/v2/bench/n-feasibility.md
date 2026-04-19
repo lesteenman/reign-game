@@ -5,18 +5,19 @@ Sampler for 5 seconds wall-clock and counted distinct placements.
 
 | N | k | samples/sec | distinct solutions in 5s |
 |---|---|-------------|--------------------------|
-| 4 | 1 | 5217744 | 2 |
-| 5 | 1 | 4790900 | 14 |
-| 6 | 1 | 3641307 | 90 |
-| 7 | 1 | 2974576 | 646 |
-| 8 | 1 | 2248869 | 5242 |
-| 4 | 2 | 11859389 | 0 |
-| 5 | 2 | 6097211 | 0 |
-| 6 | 2 | 3284695 | 0 |
-| 7 | 2 | 995592 | 0 |
-| 8 | 2 | 276110 | 2 |
+| 4 | 1 | 5167380 | 2 |
+| 5 | 1 | 4983896 | 14 |
+| 6 | 1 | 3883425 | 90 |
+| 7 | 1 | 3094291 | 646 |
+| 8 | 1 | 2460875 | 5242 |
+| 4 | 2 | 11150874 | 0 |
+| 5 | 2 | 5684186 | 0 |
+| 6 | 2 | 3226191 | 0 |
+| 7 | 2 | 1049914 | 0 |
+| 8 | 2 | 289240 | 2 |
 
 ## Interpretation
 
-- NMin is interim-locked at 5 (proposal AC-10). k=1 produces >=10 distinct solutions at N=5, consistent with NMin=5. k=2 is empirically infeasible for N<8 (see TestSampleConstraints' minFeasibleN map). The orchestrator in R-065 should reject k=2 requests below N=8 with a typed error.
+- NMin = 6. Empirically verified by TestDeepFeasibility (cross-checks sampler against bruteSolveAll with per-row regions): N=5 k=1 has exactly 14 solutions, N=6 k=1 has exactly 90 solutions. 14 is too narrow a pool for long-term content variety (solutions × region maps grown over them), so the package floor sits at 6 rather than 5.
+- k=2 is empirically infeasible for N<8 (0 solutions). N=8 k=2 has exactly 2 solutions — a content-dead floor. R-065's orchestrator should reject k=2 requests below N=9 (N=9 k=2 has 664+ distinct).
 

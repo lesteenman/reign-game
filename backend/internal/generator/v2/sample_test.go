@@ -57,15 +57,24 @@ func assertValidSolution(t *testing.T, marks []Mark, n, k int) {
 	}
 }
 
-// minFeasibleN is the empirical per-k lower bound below which the sampler
-// is genuinely unsatisfiable (no valid N*k-mark placement exists under the
-// row/col/adjacency constraints). Values verified by TestFeasibility.
+// minFeasibleN is the per-k lower bound at which the generator considers
+// the (N, k) combination fit for production. Two criteria stack:
+//  1. Correctness — the sampler must be able to find solutions at all.
+//  2. Content adequacy — the solution pool must be wide enough that the
+//     puzzle variety (solutions × region maps grown over them) supports
+//     long-term play without trivial exhaustion.
 //
-// The package constant NMin is 5; for k=2 the constraints tighten such that
-// N < 8 has no solution. The constraint test uses max(NMin, minFeasibleN[k]).
+// Values verified by TestFeasibility + brute-cross-checked by
+// TestDeepFeasibility (bench/n-feasibility-deep.md).
+//
+// k=1: NMin (package constant = 6). N=5 has exactly 14 solutions, too narrow;
+// N=6 has exactly 90, the accepted floor.
+// k=2: 9. N<8 has zero solutions (hard infeasibility). N=8 has exactly 2
+// solutions (content-dead). N=9 has 664+ distinct, the accepted floor.
+// R-065's orchestrator rejects requests below these floors with a typed error.
 var minFeasibleN = map[int]int{
 	1: NMin,
-	2: 8,
+	2: 9,
 }
 
 // TestSampleConstraints asserts that 200 samples per (N, k) satisfy every
