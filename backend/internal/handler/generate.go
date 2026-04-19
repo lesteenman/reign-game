@@ -3,92 +3,106 @@ package handler
 import (
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
-	"time"
+	"strconv"
 
 	"github.com/eriksteenman/reign-game/backend/internal/generator"
 	"github.com/eriksteenman/reign-game/backend/internal/model"
 )
 
-// generateTimeout returns the puzzle generation timeout based on grid size.
-// Larger grids need more time for the backtracking solver.
-func generateTimeout(size int) time.Duration {
-	if size <= 5 {
-		return 5 * time.Second
-	}
-	// API Gateway hard limit is 29s, so cap at 25s to leave margin for
-	// response serialization and network overhead.
-	if size <= 9 {
-		return 25 * time.Second
-	}
-	return 25 * time.Second
-}
-
-// GenerateHandler handles GET /puzzles/generate.
+// GenerateHandler handles GET /api/puzzles/generate. The debug endpoint
+// generates one puzzle inline and returns it without persisting to the pool.
+//
 // Query params:
-//   - size: int 3-15 (required)
+//   - size: int 3..15 (required; generator also rejects below NMin)
 //   - mode: "standard" | "double" (required)
-//   - deducible: "true" | "false" (optional, default "true" — only produce puzzles solvable without guessing)
-//   - pipeline: "region-first" | "iterative" | "constraint-aware" (optional, default "iterative")
-//   - solver: "backtrack" | "propagation" (optional, default "propagation")
-//   - regions: "bfs" | "wfc" (optional, default "bfs")
-//   - regionVariance: float 0.0-1.0 (optional, default 0.0)
-//   - concurrency: int 1-8 (optional, default 1 — number of parallel generation goroutines)
+//
+// Other query params (pipeline, solver, regions, regionVariance, concurrency,
+// deducible) from the legacy strategy matrix are silently ignored so
+// bookmarked URLs continue to work during and after the Phase 5 cutover.
 func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	// Parse and validate all parameters.
-	params, status, errCode, errMsg := ParseGenerateParams(r)
+	size, mode, status, errCode, errMsg := parseSizeMode(r)
 	if status != 0 {
 		writeError(w, status, errCode, errMsg)
 		return
 	}
 
-	// Build pipeline from parameters.
-	pipeline := BuildPipeline(&params)
-
-	// Build generation options.
-	opts := generator.GenerateOpts{
-		Timeout:   generateTimeout(params.Size),
-		Ctx:       r.Context(),
-		Deducible: params.Deducible,
-		RegionOpts: generator.RegionOpts{
-			Variance: params.RegionVariance,
-			MinSize:  params.MinSize,
-		},
-	}
-
-	// Generate the puzzle.
-	var puzzle *model.Puzzle
-	var err error
-	if params.Concurrency > 1 {
-		opts.Concurrency = params.Concurrency
-		puzzle, err = generator.GenerateConcurrent(pipeline, params.Size, params.MarkersPerUnit, opts)
-	} else {
-		puzzle, err = pipeline.Generate(params.Size, params.MarkersPerUnit, opts)
-	}
+	g, err := generator.New(size, MarksPerUnitFromMode(mode))
 	if err != nil {
-		log.Printf("puzzle generation failed: %v", err)
+		log.Printf("generator construction failed: %v", err)
+		writeError(w, http.StatusBadRequest, "invalid_params", err.Error())
+		return
+	}
+
+	pz, err := g.Generate(r.Context())
+	if err != nil {
+		if errors.Is(err, r.Context().Err()) {
+			// Context canceled — client gave up. Nothing to return.
+			return
+		}
+		log.Printf("puzzle generation failed (size=%d, mode=%s): %v", size, mode, err)
 		writeError(w, http.StatusInternalServerError, "generation_failed", "Could not generate a puzzle. Please try again.")
 		return
 	}
 
-	// Stamp puzzle mode (pipelines return Mode="", handler owns this).
-	puzzle.Mode = params.Mode
-
-	// Assign a UUID v4.
-	puzzle.ID, err = newUUIDv4()
+	puzzleID, err := newUUIDv4()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "generation_failed", "failed to generate puzzle ID")
 		return
+	}
+
+	solution := make([][]bool, pz.N)
+	for i := range solution {
+		solution[i] = make([]bool, pz.N)
+	}
+	for _, m := range pz.Solution {
+		solution[m.Row][m.Col] = true
+	}
+
+	puzzle := &model.Puzzle{
+		ID:        puzzleID,
+		GridSize:  pz.N,
+		Mode:      mode,
+		RegionMap: pz.Regions,
+		Solution:  solution,
 	}
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(puzzle); err != nil {
 		log.Printf("generate handler write failed: %v", err)
 	}
+}
+
+// parseSizeMode validates the shared size+mode params used by
+// /api/puzzles/generate, /api/puzzles/next, and /api/puzzles/{id}/status.
+// Returns (0, "", "") on success.
+func parseSizeMode(r *http.Request) (size int, mode string, status int, errCode, errMsg string) {
+	sizeStr := r.URL.Query().Get("size")
+	if sizeStr == "" {
+		return 0, "", http.StatusBadRequest, "invalid_params", "size parameter is required"
+	}
+	size, err := strconv.Atoi(sizeStr)
+	if err != nil {
+		return 0, "", http.StatusBadRequest, "invalid_params", "size must be an integer"
+	}
+	if size < 3 || size > 15 {
+		return 0, "", http.StatusBadRequest, "invalid_params", "size must be between 3 and 15"
+	}
+
+	mode = r.URL.Query().Get("mode")
+	if mode == "" {
+		return 0, "", http.StatusBadRequest, "invalid_params", "mode parameter is required"
+	}
+	if mode != ModeStandard && mode != ModeDouble {
+		return 0, "", http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'"
+	}
+
+	return size, mode, 0, "", ""
 }
 
 // newUUIDv4 generates a UUID v4 string using crypto/rand.

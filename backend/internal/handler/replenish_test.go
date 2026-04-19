@@ -74,16 +74,10 @@ type replenishResp struct {
 
 func defaultConfig(size int, mode string, threshold int) repository.ConfigRecord {
 	return repository.ConfigRecord{
-		Size:           size,
-		Mode:           mode,
-		Pipeline:       "iterative",
-		Solver:         "propagation",
-		Regions:        "bfs",
-		RegionVariance: 0.0,
-		Deducible:      true,
-		Concurrency:    1,
-		Threshold:      threshold,
-		Enabled:        true,
+		Size:      size,
+		Mode:      mode,
+		Threshold: threshold,
+		Enabled:   true,
 	}
 }
 
@@ -309,16 +303,11 @@ func TestReplenishHandler_GenerationParams(t *testing.T) {
 	// Arrange
 	configs := []repository.ConfigRecord{
 		{
-			Size:           7,
-			Mode:           "standard",
-			Pipeline:       "constraint-aware",
-			Solver:         "backtrack",
-			Regions:        "wfc",
-			RegionVariance: 0.3,
-			Deducible:      false,
-			Concurrency:    4,
-			Threshold:      2,
-			Enabled:        true,
+			Size:        7,
+			Mode:        "standard",
+			Threshold:   2,
+			Enabled:     true,
+			MaxAttempts: 15,
 		},
 	}
 	configReader := &mockConfigReader{configs: configs}
@@ -347,22 +336,7 @@ func TestReplenishHandler_GenerationParams(t *testing.T) {
 	if msg.Mode != "standard" {
 		t.Errorf("Mode = %q, want %q", msg.Mode, "standard")
 	}
-	if msg.Pipeline != "constraint-aware" {
-		t.Errorf("Pipeline = %q, want %q", msg.Pipeline, "constraint-aware")
-	}
-	if msg.Solver != "backtrack" {
-		t.Errorf("Solver = %q, want %q", msg.Solver, "backtrack")
-	}
-	if msg.Regions != "wfc" {
-		t.Errorf("Regions = %q, want %q", msg.Regions, "wfc")
-	}
-	if msg.RegionVariance != 0.3 {
-		t.Errorf("RegionVariance = %f, want 0.3", msg.RegionVariance)
-	}
-	if msg.Deducible {
-		t.Errorf("Deducible = true, want false")
-	}
-	if msg.Concurrency != 4 {
-		t.Errorf("Concurrency = %d, want 4", msg.Concurrency)
+	if msg.MaxAttempts != 15 {
+		t.Errorf("MaxAttempts = %d, want 15", msg.MaxAttempts)
 	}
 }

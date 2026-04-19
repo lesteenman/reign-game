@@ -500,7 +500,7 @@ function GameBoard({
             width: '100%',
           }}
         >
-          {puzzle.metadata.pipeline} / {puzzle.metadata.solver} / {formatDuration(puzzle.metadata.generationDurationMs)}
+          difficulty {puzzle.metadata.difficulty} / {formatDuration(puzzle.metadata.generationDurationMs)}
         </div>
       )}
 

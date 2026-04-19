@@ -23,13 +23,12 @@ awslocal sqs create-queue \
     "RedrivePolicy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:us-east-1:000000000000:puzzle-generation-dlq\",\"maxReceiveCount\":\"3\"}"
   }'
 
-echo "Seeding CONFIG items (Phase 5 shape: deducible/threshold/enabled)..."
+echo "Seeding CONFIG items (Phase 5 shape: threshold/enabled)..."
 awslocal dynamodb put-item \
   --table-name puzzle-pool \
   --item '{
     "PK": {"S": "CONFIG"},
     "SK": {"S": "7#standard"},
-    "deducible": {"BOOL": true},
     "threshold": {"N": "3"},
     "enabled": {"BOOL": true}
   }'
@@ -39,7 +38,6 @@ awslocal dynamodb put-item \
   --item '{
     "PK": {"S": "CONFIG"},
     "SK": {"S": "9#standard"},
-    "deducible": {"BOOL": true},
     "threshold": {"N": "3"},
     "enabled": {"BOOL": true}
   }'
@@ -49,7 +47,6 @@ awslocal dynamodb put-item \
   --item '{
     "PK": {"S": "CONFIG"},
     "SK": {"S": "7#double"},
-    "deducible": {"BOOL": true},
     "threshold": {"N": "3"},
     "enabled": {"BOOL": false}
   }'
@@ -59,7 +56,6 @@ awslocal dynamodb put-item \
   --item '{
     "PK": {"S": "CONFIG"},
     "SK": {"S": "9#double"},
-    "deducible": {"BOOL": true},
     "threshold": {"N": "3"},
     "enabled": {"BOOL": false}
   }'

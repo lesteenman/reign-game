@@ -1,9 +1,6 @@
-// Package generator is the Phase 5 replacement for backend/internal/generator.
-//
-// It is currently located under the v2/ subdirectory alongside the legacy
-// package so the two can coexist while R-063..R-066 build out the algorithm.
-// The v2 suffix vanishes at cutover (R-067), at which point this package moves
-// up to backend/internal/generator/ and the old files are deleted.
+// Package generator produces Reign puzzles (Queens-style row/column/region
+// grids with an adjacency constraint). It is the Phase 5 replacement for the
+// legacy strategy-matrix pipeline.
 //
 // The package is self-contained per INV-GEN-1: it does not import from
 // backend/internal/model, backend/internal/repository, backend/internal/queue,

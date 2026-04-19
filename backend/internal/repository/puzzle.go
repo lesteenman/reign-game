@@ -25,16 +25,11 @@ type DynamoDBAPI interface {
 // ConfigRecord represents a generation config stored in the puzzle-pool DynamoDB table.
 // Config items share the table with puzzles, using PK="CONFIG" and SK="{size}#{mode}".
 type ConfigRecord struct {
-	Size           int     `dynamodbav:"-"`
-	Mode           string  `dynamodbav:"-"`
-	Pipeline       string  `dynamodbav:"pipeline"`
-	Solver         string  `dynamodbav:"solver"`
-	Regions        string  `dynamodbav:"regions"`
-	RegionVariance float64 `dynamodbav:"regionVariance"`
-	Deducible      bool    `dynamodbav:"deducible"`
-	Concurrency    int     `dynamodbav:"concurrency"`
-	Threshold      int     `dynamodbav:"threshold"`
-	Enabled        bool    `dynamodbav:"enabled"`
+	Size        int    `dynamodbav:"-"`
+	Mode        string `dynamodbav:"-"`
+	Threshold   int    `dynamodbav:"threshold"`
+	Enabled     bool   `dynamodbav:"enabled"`
+	MaxAttempts int    `dynamodbav:"maxAttempts,omitempty"`
 }
 
 // ConfigAlreadyExistsError is returned when CreateConfig is called for a config
@@ -66,18 +61,15 @@ type PuzzleRecord struct {
 	RegionMap [][]int `dynamodbav:"regionMap"`
 	// Solution is a 2D boolean array indicating correct marker placements.
 	Solution [][]bool `dynamodbav:"solution"`
-	// Pipeline is the generation pipeline strategy used (e.g., "iterative").
-	Pipeline string `dynamodbav:"pipeline"`
-	// Solver is the solver strategy used (e.g., "propagation").
-	Solver string `dynamodbav:"solver"`
-	// Regions is the region generation strategy used (e.g., "bfs").
-	Regions string `dynamodbav:"regions"`
-	// RegionVariance controls region shape irregularity (0.0 to 1.0).
-	RegionVariance float64 `dynamodbav:"regionVariance"`
-	// Deducible indicates whether the puzzle is solvable without guessing.
-	Deducible bool `dynamodbav:"deducible"`
-	// Concurrency is the number of goroutines used during generation.
-	Concurrency int `dynamodbav:"concurrency"`
+	// Difficulty is the generator-assigned tier (0 unknown, 1 Easy, 2 Medium,
+	// 3 Hard, 4 Expert).
+	Difficulty int `dynamodbav:"difficulty"`
+	// MaxTier is the highest rule tier that fired during the deductive solve.
+	MaxTier int `dynamodbav:"maxTier"`
+	// TierCounts is the per-tier rule firing count (length 5; index 0 unused).
+	TierCounts []int `dynamodbav:"tierCounts"`
+	// TraceLen is the total number of rule firings in the deductive trace.
+	TraceLen int `dynamodbav:"traceLen"`
 	// GenerationDurationMs is the wall-clock generation time in milliseconds.
 	GenerationDurationMs int64 `dynamodbav:"generationDurationMs"`
 	// CreatedAt is the ISO 8601 timestamp when the puzzle was generated.

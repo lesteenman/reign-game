@@ -32,7 +32,6 @@ type ConfigRepo interface {
 type configRequest struct {
 	Size        int    `json:"size"`
 	Mode        string `json:"mode"`
-	Deducible   bool   `json:"deducible"`
 	Threshold   int    `json:"threshold"`
 	Enabled     bool   `json:"enabled"`
 	MaxAttempts int    `json:"maxAttempts,omitempty"`
@@ -55,7 +54,6 @@ func buildConfigResponseMap(rec *repository.ConfigRecord) map[string]any {
 	resp := map[string]any{
 		"size":      rec.Size,
 		"mode":      rec.Mode,
-		"deducible": rec.Deducible,
 		"threshold": rec.Threshold,
 		"enabled":   rec.Enabled,
 	}
@@ -119,7 +117,6 @@ func UpdateConfigHandler(repo ConfigRepo) http.HandlerFunc {
 		config := &repository.ConfigRecord{
 			Size:        size,
 			Mode:        mode,
-			Deducible:   req.Deducible,
 			Threshold:   req.Threshold,
 			Enabled:     req.Enabled,
 			MaxAttempts: req.MaxAttempts,
@@ -169,7 +166,6 @@ func CreateConfigHandler(repo ConfigRepo) http.HandlerFunc {
 		config := &repository.ConfigRecord{
 			Size:        req.Size,
 			Mode:        req.Mode,
-			Deducible:   req.Deducible,
 			Threshold:   req.Threshold,
 			Enabled:     req.Enabled,
 			MaxAttempts: req.MaxAttempts,
