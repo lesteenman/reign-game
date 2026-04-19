@@ -40,13 +40,16 @@ func (g *Generator) growRegionsSolverGuided(seeds [][]Mark, dst *[nMax][nMax]int
 	// during probes. Start FROM the scratch so setup is not duplicated.
 	var gs growState = g.scoringGrow
 
-	frontierBuf := make([]int, 0, n*n)
+	// Reuse the pre-allocated frontier buffer on the Generator. growCheapLoopOn
+	// uses the same buffer when invoked from probeAssignment — that's safe
+	// because probeAssignment calls growCheapLoopOn serially, not nested.
+	g.growFrontierBuf = g.growFrontierBuf[:0]
 	// candidates holds the region ids whose frontier contains the current
 	// cell. Sized for worst case (every region has the cell as frontier).
 	var candidates [nMax]int
 
 	for gs.remaining > 0 {
-		frontierBuf = frontierBuf[:0]
+		g.growFrontierBuf = g.growFrontierBuf[:0]
 		for r := range n {
 			var union uint16
 			for gid := range n {
@@ -57,17 +60,17 @@ func (g *Generator) growRegionsSolverGuided(seeds [][]Mark, dst *[nMax][nMax]int
 			for m != 0 {
 				c := bits.TrailingZeros16(m)
 				m &^= 1 << c
-				frontierBuf = append(frontierBuf, r*n+c)
+				g.growFrontierBuf = append(g.growFrontierBuf, r*n+c)
 			}
 		}
-		if len(frontierBuf) == 0 {
+		if len(g.growFrontierBuf) == 0 {
 			return false
 		}
 
 		// Pick a frontier cell. We use the RNG here (matching the cheap
 		// variant's stream) so that WithSeed stays meaningful.
-		pickIdx := g.rng.IntN(len(frontierBuf))
-		cell := frontierBuf[pickIdx]
+		pickIdx := g.rng.IntN(len(g.growFrontierBuf))
+		cell := g.growFrontierBuf[pickIdx]
 		cr, cc := cell/n, cell%n
 		cellBit := uint16(1) << uint(cc)
 
@@ -149,24 +152,13 @@ func (g *Generator) probeAssignment(gs *growState, cr, cc, gid int) int {
 		}
 	}
 
-	// Build a region-map slice from the scratch regionOf. We could
-	// shortcut initFromRegionMap by writing directly into scoringSolver's
-	// fields, but initFromRegionMap is the audited code path — cheap
-	// enough (one pass over n×n), and guarantees invariants.
-	//
-	// TODO(R-068 or dedicated perf slice): the `make([][]int, n)` +
-	// `n × make([]int, n)` inside convertRegionsToSlices allocates per
-	// probe. At N=12 / k=1 that's ~120-180 allocations/attempt (~20 KB
-	// GC pressure/attempt). A direct writer into scoringSolver.{regOf,
-	// regCellsByRow, colNeed, regNeed, rowNeed, cands, marks} would
-	// eliminate both the allocation and the redundant validation pass.
-	// Deferred because current end-to-end Generate is comfortably under
-	// the 2 s/op budget (85.5 ms at N=12 k=1) and the direct writer needs
-	// its own invariant audit to be safe.
-	rm := convertRegionsToSlices(&g.scoringGrow.regionOf, g.n)
-
+	// Initialize the scoring solver directly from the scratch regionOf
+	// array. initFromRegionOf is semantically identical to
+	// initFromRegionMap but skips the per-probe [][]int allocation that
+	// convertRegionsToSlices would produce. At N=12 k=1 with 120-180
+	// probes per attempt this removes ~20 KB of GC pressure per attempt.
 	g.scoringSolver.trace = nil
-	if err := g.scoringSolver.initFromRegionMap(rm, g.n, g.k); err != nil {
+	if err := g.scoringSolver.initFromRegionOf(&g.scoringGrow.regionOf, g.n, g.k); err != nil {
 		return 0
 	}
 
@@ -187,10 +179,13 @@ func (g *Generator) growCheapLoopOn(gs *growState) bool {
 		weight int
 	}
 	var regionBuf [nMax]weighted
-	frontierBuf := make([]int, 0, n*n)
 
+	// Reuse the Generator's pre-allocated frontier buffer. Safe under nested
+	// use (growRegionsSolverGuided -> probeAssignment -> growCheapLoopOn)
+	// because the outer caller resets [:0] at each iteration top and does
+	// not re-read the buffer after calling into the inner scope.
 	for gs.remaining > 0 {
-		frontierBuf = frontierBuf[:0]
+		g.growFrontierBuf = g.growFrontierBuf[:0]
 		for r := range n {
 			var union uint16
 			for gid := range n {
@@ -201,15 +196,15 @@ func (g *Generator) growCheapLoopOn(gs *growState) bool {
 			for m != 0 {
 				c := bits.TrailingZeros16(m)
 				m &^= 1 << c
-				frontierBuf = append(frontierBuf, r*n+c)
+				g.growFrontierBuf = append(g.growFrontierBuf, r*n+c)
 			}
 		}
-		if len(frontierBuf) == 0 {
+		if len(g.growFrontierBuf) == 0 {
 			return false
 		}
 
-		pickIdx := g.rng.IntN(len(frontierBuf))
-		cell := frontierBuf[pickIdx]
+		pickIdx := g.rng.IntN(len(g.growFrontierBuf))
+		cell := g.growFrontierBuf[pickIdx]
 		cr, cc := cell/n, cell%n
 		cellBit := uint16(1) << uint(cc)
 

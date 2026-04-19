@@ -171,6 +171,10 @@ type Generator struct {
 	// Holds the tentative completion while probing a candidate region
 	// assignment. Pre-allocated to keep probes alloc-free.
 	scoringGrow growState
+	// growFrontierBuf is the scratch frontier list reused by every grower
+	// invocation (cheap and solver-guided). Sized at New() to nMax*nMax so
+	// it never needs to grow. Callers use g.growFrontierBuf[:0] to reset.
+	growFrontierBuf []int
 	// traceBuf backs solver.trace during the final classification pass. The
 	// mutator's probe passes keep solver.trace == nil (NF3: zero alloc in
 	// the hot loop).
@@ -210,12 +214,13 @@ func New(n, marksPerUnit int, opts ...Option) (*Generator, error) {
 		seed = time.Now().UnixNano()
 	}
 	g := &Generator{
-		cfg:      cfg,
-		n:        n,
-		k:        marksPerUnit,
-		rng:      rand.New(rand.NewPCG(uint64(seed), uint64(seed)^0x9E3779B97F4A7C15)),
-		solBuf:   make([]Mark, 0, n*marksPerUnit),
-		traceBuf: make(ruleTrace, 0, defaultTraceCap),
+		cfg:             cfg,
+		n:               n,
+		k:               marksPerUnit,
+		rng:             rand.New(rand.NewPCG(uint64(seed), uint64(seed)^0x9E3779B97F4A7C15)),
+		solBuf:          make([]Mark, 0, n*marksPerUnit),
+		growFrontierBuf: make([]int, 0, nMax*nMax),
+		traceBuf:        make(ruleTrace, 0, defaultTraceCap),
 	}
 	return g, nil
 }
