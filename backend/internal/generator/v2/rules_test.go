@@ -10,9 +10,23 @@ import (
 // Test helpers
 // ---------------------------------------------------------------------------
 
+// eightNeighborOffsets is the set of (dr, dc) deltas for the 8 king-move
+// neighbors of a cell. Package-scope so tests that simulate R1 (adjacency
+// elimination) do not re-declare the literal inline.
+var eightNeighborOffsets = [8][2]int{
+	{-1, -1}, {-1, 0}, {-1, 1},
+	{0, -1}, {0, 1},
+	{1, -1}, {1, 0}, {1, 1},
+}
+
 // buildState constructs a solverState from a region map, optionally
 // pre-placing marks at the given (r, c) pairs (by passing them through the
 // normal placeMark path so all derived fields stay consistent).
+//
+// placeMark is a low-level mutation that does NOT eliminate 8-neighbor
+// candidates — that is R1's job. If the test needs "marks placed AND R1
+// applied around them", pass the marks to applyR1AroundMarks AFTER buildState
+// OR chain buildState + applyR1AroundMarks.
 func buildState(t *testing.T, regionMap [][]int, n, k int, placed ...Mark) *solverState {
 	t.Helper()
 
@@ -24,6 +38,36 @@ func buildState(t *testing.T, regionMap [][]int, n, k int, placed ...Mark) *solv
 		if !s.placeMark(m.Row, m.Col) {
 			t.Fatalf("placeMark(%d, %d) failed", m.Row, m.Col)
 		}
+	}
+	return s
+}
+
+// applyR1AroundMarks simulates R1 (adjacency elimination) around each of the
+// given marks. Used by necessity tests that pre-place a prefix of a known
+// solution and need R1 effects applied before measuring what a later rule
+// would do from that state.
+func applyR1AroundMarks(s *solverState, marks []Mark, n int) {
+	for _, m := range marks {
+		for _, d := range eightNeighborOffsets {
+			nr, nc := m.Row+d[0], m.Col+d[1]
+			if nr < 0 || nr >= n || nc < 0 || nc >= n {
+				continue
+			}
+			s.eliminateCand(nr, nc)
+		}
+	}
+}
+
+// newSolverState constructs a solverState outside a testing.T context —
+// used by fixture factories (rXFixture helpers, factory closures in
+// necessity tests) that are reusable across callers. Panics on invalid
+// input because the fixtures are hand-authored and any error is a test-
+// data bug rather than a runtime condition. testing.T-aware callers should
+// use buildState instead.
+func newSolverState(regionMap [][]int, n, k int) *solverState {
+	s := &solverState{}
+	if err := s.initFromRegionMap(regionMap, n, k); err != nil {
+		panic("newSolverState: " + err.Error())
 	}
 	return s
 }
@@ -552,8 +596,7 @@ func TestNecessity_R1(t *testing.T) {
 	rm := uniqueFixtureRegionMap()
 	sol := uniqueFixtureSolution()
 	factory := func() *solverState {
-		s := &solverState{}
-		_ = s.initFromRegionMap(rm, 5, 1)
+		s := newSolverState(rm, 5, 1)
 		// Place 0, 1, 2 directly — but also apply R1 around them so the
 		// cands are consistent.
 		for i := 0; i < 3; i++ {
@@ -579,21 +622,12 @@ func TestNecessity_R2(t *testing.T) {
 	rm := uniqueFixtureRegionMap()
 	sol := uniqueFixtureSolution()
 	factory := func() *solverState {
-		s := &solverState{}
-		_ = s.initFromRegionMap(rm, 5, 1)
-		// Place marks 0..3 and apply R1 by hand (so R2 is the rule that
-		// drives the rest).
+		s := newSolverState(rm, 5, 1)
+		// Place marks 0..3 with R1 applied by hand so R2 is the rule that
+		// drives the rest.
+		applyR1AroundMarks(s, sol[:4], 5)
 		for i := 0; i < 4; i++ {
-			m := sol[i]
-			// R1-like elimination around m.
-			for _, d := range [8][2]int{{-1, -1}, {-1, 0}, {-1, 1}, {0, -1}, {0, 1}, {1, -1}, {1, 0}, {1, 1}} {
-				nr, nc := m.Row+d[0], m.Col+d[1]
-				if nr < 0 || nr >= 5 || nc < 0 || nc >= 5 {
-					continue
-				}
-				s.eliminateCand(nr, nc)
-			}
-			s.placeMark(m.Row, m.Col)
+			s.placeMark(sol[i].Row, sol[i].Col)
 		}
 		return s
 	}
@@ -610,18 +644,10 @@ func TestNecessity_R3(t *testing.T) {
 	rm := uniqueFixtureRegionMap()
 	sol := uniqueFixtureSolution()
 	factory := func() *solverState {
-		s := &solverState{}
-		_ = s.initFromRegionMap(rm, 5, 1)
+		s := newSolverState(rm, 5, 1)
+		applyR1AroundMarks(s, sol[:4], 5)
 		for i := 0; i < 4; i++ {
-			m := sol[i]
-			for _, d := range [8][2]int{{-1, -1}, {-1, 0}, {-1, 1}, {0, -1}, {0, 1}, {1, -1}, {1, 0}, {1, 1}} {
-				nr, nc := m.Row+d[0], m.Col+d[1]
-				if nr < 0 || nr >= 5 || nc < 0 || nc >= 5 {
-					continue
-				}
-				s.eliminateCand(nr, nc)
-			}
-			s.placeMark(m.Row, m.Col)
+			s.placeMark(sol[i].Row, sol[i].Col)
 		}
 		return s
 	}
@@ -674,8 +700,7 @@ func r4Fixture() *solverState {
 		{2, 3, 3, 1},
 		{2, 3, 3, 3},
 	}
-	s := &solverState{}
-	_ = s.initFromRegionMap(regionMap, 4, 1)
+	s := newSolverState(regionMap, 4, 1)
 	return s
 }
 
@@ -718,8 +743,7 @@ func r5Fixture() *solverState {
 		{2, 2, 3, 3, 4},
 		{2, 2, 4, 4, 4},
 	}
-	s := &solverState{}
-	_ = s.initFromRegionMap(regionMap, 5, 1)
+	s := newSolverState(regionMap, 5, 1)
 	// Reduce row 0 to cands {0, 1} by eliminating cols 2, 3, 4.
 	s.eliminateCand(0, 2)
 	s.eliminateCand(0, 3)
@@ -764,8 +788,7 @@ func r6Fixture() *solverState {
 		{0, 3, 3, 3},
 		{2, 2, 3, 3},
 	}
-	s := &solverState{}
-	_ = s.initFromRegionMap(regionMap, 4, 1)
+	s := newSolverState(regionMap, 4, 1)
 	s.eliminateCand(0, 1)
 	s.eliminateCand(0, 2)
 	s.eliminateCand(0, 3)
@@ -807,8 +830,7 @@ func r7Fixture() *solverState {
 		{0, 3, 1, 4, 4},
 		{0, 0, 4, 4, 4},
 	}
-	s := &solverState{}
-	_ = s.initFromRegionMap(regionMap, 5, 1)
+	s := newSolverState(regionMap, 5, 1)
 	s.eliminateCand(2, 0)
 	s.eliminateCand(3, 0)
 	s.eliminateCand(4, 0)
@@ -851,8 +873,7 @@ func TestNecessity_R7(t *testing.T) {
 // signal available given the subsumption.
 func r8Fixture() *solverState {
 	regionMap := rowStripeMap(6)
-	s := &solverState{}
-	_ = s.initFromRegionMap(regionMap, 6, 2)
+	s := newSolverState(regionMap, 6, 2)
 	for c := 0; c < 6; c++ {
 		if c == 0 || c == 3 {
 			continue
@@ -910,8 +931,7 @@ func r9Fixture() *solverState {
 	regionMap[7] = []int{8, 8, 8, 8, 8, 8, 8, 8, 8}
 	regionMap[8] = []int{0, 0, 0, 1, 1, 1, 2, 2, 2}
 
-	s := &solverState{}
-	_ = s.initFromRegionMap(regionMap, 9, 2)
+	s := newSolverState(regionMap, 9, 2)
 	for c := 0; c < 9; c++ {
 		if c == 0 || c == 5 || c == 7 {
 			continue

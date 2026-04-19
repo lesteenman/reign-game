@@ -42,7 +42,7 @@ func BenchmarkSolverFixedPoint(b *testing.B) {
 	}
 
 	// Allocate solverState once; reset before each iteration.
-	s := &solverState{}
+	s := newSolverState(rm, n, k)
 
 	b.ResetTimer()
 	b.ReportAllocs()
@@ -52,15 +52,8 @@ func BenchmarkSolverFixedPoint(b *testing.B) {
 		if err := s.initFromRegionMap(rm, n, k); err != nil {
 			b.Fatalf("initFromRegionMap: %v", err)
 		}
+		applyR1AroundMarks(s, preMarks, n)
 		for _, m := range preMarks {
-			// Apply R1-like elimination around each hint.
-			for _, d := range [8][2]int{{-1, -1}, {-1, 0}, {-1, 1}, {0, -1}, {0, 1}, {1, -1}, {1, 0}, {1, 1}} {
-				nr, nc := m.Row+d[0], m.Col+d[1]
-				if nr < 0 || nr >= n || nc < 0 || nc >= n {
-					continue
-				}
-				s.eliminateCand(nr, nc)
-			}
 			s.placeMark(m.Row, m.Col)
 		}
 		b.StartTimer()

@@ -350,21 +350,30 @@ func (s *solverState) solved() bool {
 	return true
 }
 
-// solutionMarks collects the current marks as a []Mark in row-major order.
-// Used by the cross-check harness + debug tracing.
-func (s *solverState) solutionMarks() []Mark {
-	total := 0
-	for r := range s.n {
-		total += bits.OnesCount16(s.marks[r])
-	}
-	out := make([]Mark, 0, total)
+// appendSolutionMarks appends the current marks in row-major order to dst and
+// returns the resulting slice. Passing a dst pre-sized to the solution cap
+// (n*k) lets the caller reuse the backing array across Generate calls — the
+// R-065 orchestrator will borrow a buffer from the Generator, so this API
+// must not allocate on its own hot path.
+func (s *solverState) appendSolutionMarks(dst []Mark) []Mark {
 	for r := range s.n {
 		m := s.marks[r]
 		for m != 0 {
 			c := bits.TrailingZeros16(m)
 			m &^= 1 << c
-			out = append(out, Mark{Row: r, Col: c})
+			dst = append(dst, Mark{Row: r, Col: c})
 		}
 	}
-	return out
+	return dst
+}
+
+// solutionMarks is a convenience wrapper that allocates a fresh []Mark.
+// Prefer appendSolutionMarks in any hot path; this is for tests + one-off
+// debug callers where the extra allocation does not matter.
+func (s *solverState) solutionMarks() []Mark {
+	total := 0
+	for r := range s.n {
+		total += bits.OnesCount16(s.marks[r])
+	}
+	return s.appendSolutionMarks(make([]Mark, 0, total))
 }

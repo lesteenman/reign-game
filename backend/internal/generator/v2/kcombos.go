@@ -32,13 +32,9 @@ import (
 //     caller, but the shared shape leaves the door open if a rule needs to
 //     enumerate k-subsets of a row's candidate mask.
 func appendKCombos(dst []uint16, n, k int, available uint16, perColCap uint8, perColCount *[nMax]uint8) []uint16 {
-	appendGuarded := func(mask uint16) []uint16 {
-		if len(dst) == cap(dst) {
-			panic(fmt.Sprintf("appendKCombos: dst capacity %d exceeded (n=%d, k=%d)", cap(dst), n, k))
-		}
-		return append(dst, mask)
-	}
-
+	// Hot loop: the capacity guard is inlined at each append to keep
+	// appendKCombos from closing over `dst` (a closure forces the slice
+	// header onto the heap and costs ~2-3% across the sampler benchmark).
 	switch k {
 	case 1:
 		m := available
@@ -48,7 +44,10 @@ func appendKCombos(dst []uint16, n, k int, available uint16, perColCap uint8, pe
 			if perColCount != nil && perColCount[c] >= perColCap {
 				continue
 			}
-			dst = appendGuarded(uint16(1) << uint(c))
+			if len(dst) == cap(dst) {
+				panic(fmt.Sprintf("appendKCombos: dst capacity %d exceeded (n=%d, k=%d)", cap(dst), n, k))
+			}
+			dst = append(dst, uint16(1)<<uint(c))
 		}
 		return dst
 	case 2:
@@ -68,7 +67,10 @@ func appendKCombos(dst []uint16, n, k int, available uint16, perColCap uint8, pe
 				if perColCount != nil && perColCount[c2] >= perColCap {
 					continue
 				}
-				dst = appendGuarded(bit1 | bit2)
+				if len(dst) == cap(dst) {
+					panic(fmt.Sprintf("appendKCombos: dst capacity %d exceeded (n=%d, k=%d)", cap(dst), n, k))
+				}
+				dst = append(dst, bit1|bit2)
 			}
 		}
 		return dst

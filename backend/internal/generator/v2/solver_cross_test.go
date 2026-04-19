@@ -47,20 +47,11 @@ func TestDeductiveBruteCrossCheck(t *testing.T) {
 	)
 
 	for i, e := range corpus {
-		s := &solverState{}
-		if err := s.initFromRegionMap(e.rm, e.n, e.k); err != nil {
-			t.Fatalf("corpus[%d]: initFromRegionMap: %v", i, err)
-		}
+		s := buildState(t, e.rm, e.n, e.k)
+		// Apply R1-style elimination around each hint before placing
+		// so the state stays consistent with the solver's own rules.
+		applyR1AroundMarks(s, e.hintMarks, e.n)
 		for _, hint := range e.hintMarks {
-			// Apply R1-style elimination around each hint before placing
-			// so the state stays consistent with the solver's own rules.
-			for _, d := range [8][2]int{{-1, -1}, {-1, 0}, {-1, 1}, {0, -1}, {0, 1}, {1, -1}, {1, 0}, {1, 1}} {
-				nr, nc := hint.Row+d[0], hint.Col+d[1]
-				if nr < 0 || nr >= e.n || nc < 0 || nc >= e.n {
-					continue
-				}
-				s.eliminateCand(nr, nc)
-			}
 			if !s.placeMark(hint.Row, hint.Col) {
 				t.Fatalf("corpus[%d]: placeMark(%d, %d) failed (hint)", i, hint.Row, hint.Col)
 			}
@@ -135,16 +126,10 @@ func buildCrossCheckCorpus(t *testing.T, target int) []crossCheckEntry {
 
 	corpus := make([]crossCheckEntry, 0, target)
 
-	// Base fixture: R-063 unique 5x5.
-	baseRM := [][]int{
-		{3, 3, 2, 2, 0},
-		{3, 2, 2, 0, 0},
-		{3, 4, 2, 0, 1},
-		{3, 4, 4, 0, 1},
-		{4, 4, 1, 1, 1},
-	}
+	// Base fixture: R-063 unique 5x5 (shared with rules_test.go).
+	baseRM := uniqueFixtureRegionMap()
 
-	// Apply D4 symmetry transforms. The Queens-style adjacency constraint
+	// Apply D4 symmetry transforms. The 8-neighbor adjacency constraint
 	// is D4-symmetric, so every transform preserves uniqueness.
 	transforms := allD4Transforms(baseRM)
 	var baseEntries []crossCheckEntry
