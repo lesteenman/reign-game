@@ -172,6 +172,101 @@ func assertRegionsConnected(t *testing.T, sample int, rm *[nMax][nMax]int8, n in
 	}
 }
 
+// TestGrowRegionsSolverGuidedInvariants: solver-guided variant (R-066)
+// must produce identical structural invariants as the cheap variant —
+// valid 4-connected partition, seeds in their own regions, exactly N
+// regions used. The success rate is exercised separately in Step 7.
+func TestGrowRegionsSolverGuidedInvariants(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		n, k    int
+		samples int
+	}{
+		{n: 6, k: 1, samples: 40},
+		{n: 9, k: 1, samples: 40},
+		{n: 12, k: 1, samples: 40},
+		{n: 9, k: 2, samples: 40},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(namef(tc.n, tc.k), func(t *testing.T) {
+			t.Parallel()
+
+			// Arrange
+			g, err := New(tc.n, tc.k, WithSeed(int64(2000*tc.n+tc.k)))
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+
+			grown := 0
+			attempts := 0
+			const maxAttemptsFactor = 6
+			for grown < tc.samples && attempts < tc.samples*maxAttemptsFactor {
+				attempts++
+				sol, ok := g.sampleSolution()
+				if !ok {
+					t.Fatalf("attempt %d: sampler failed", attempts)
+				}
+				seeds := pairSeeds(sol, tc.n, tc.k)
+
+				// Act
+				var rm [nMax][nMax]int8
+				if !g.growRegionsSolverGuided(seeds, &rm) {
+					continue
+				}
+
+				// Assert
+				assertPartition(t, grown, &rm, tc.n)
+				assertSeedsInRegion(t, grown, &rm, seeds)
+				assertRegionsConnected(t, grown, &rm, tc.n)
+				grown++
+			}
+			if grown < tc.samples {
+				t.Fatalf("only %d/%d solver-guided grows succeeded in %d attempts (%.1f%%)",
+					grown, tc.samples, attempts, 100*float64(grown)/float64(attempts))
+			}
+		})
+	}
+}
+
+// TestGrowRegionsSolverGuidedDeterministic: same seed -> same region map
+// for the solver-guided variant. Determinism proof for the R-066 variant.
+func TestGrowRegionsSolverGuidedDeterministic(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	const n, k = 9, 1
+	g1, _ := New(n, k, WithSeed(4242))
+	g2, _ := New(n, k, WithSeed(4242))
+	sol, ok := g1.sampleSolution()
+	if !ok {
+		t.Fatal("sampler failed")
+	}
+	_, _ = g2.sampleSolution() // keep RNG streams aligned
+	seeds := pairSeeds(sol, n, k)
+
+	// Act
+	var rm1, rm2 [nMax][nMax]int8
+	if !g1.growRegionsSolverGuided(seeds, &rm1) {
+		t.Fatal("solver-guided grow 1 failed")
+	}
+	if !g2.growRegionsSolverGuided(seeds, &rm2) {
+		t.Fatal("solver-guided grow 2 failed")
+	}
+
+	// Assert
+	for r := range n {
+		for c := range n {
+			if rm1[r][c] != rm2[r][c] {
+				t.Fatalf("determinism: rm1[%d][%d]=%d, rm2=%d",
+					r, c, rm1[r][c], rm2[r][c])
+			}
+		}
+	}
+}
+
 // TestGrowRegionsDeterministicWithSeed: two generators with the same seed
 // must produce the same region map from the same seeds input.
 func TestGrowRegionsDeterministicWithSeed(t *testing.T) {

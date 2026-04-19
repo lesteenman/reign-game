@@ -11,12 +11,19 @@ import (
 // supported (N, k) grid. PG-11's committed gate points are (N=12, k=1) and
 // (N=9, k=2) at >=80%.
 //
-// **R-065 intentionally does not enforce the gate.** The cheap grower+mutator
-// in this slice fails at (N=12, k=1) ~15% and (N=9, k=2) ~0%; R-066
-// (solver-guided growth) is the conditional fallback that the spec declares
-// for exactly this case (see tasks.md: "If either gate fails, proceed to
-// R-066"). Once R-066 lands, the gate check below MUST be promoted from
-// t.Logf to t.Errorf on the gatedCombos block.
+// R-066 promotes gate enforcement from t.Logf to t.Errorf. The committed
+// gate is (N=9, k=2) >=80% — R-066 achieves this via the solver-guided
+// grower plus soundness fixes to R9/R8 and contradicts() at k=2.
+//
+// (N=12, k=1) is a separate case: R-066's per-attempt improvement is
+// marginal because the limit at N=12 is the boundary-swap mutator, not
+// the grower. With WithMaxAttempts(10) the gate is NOT reached. The
+// ceiling is 52% — documented with Logf, not Errorf, because it requires
+// mutator changes outside R-066 scope (grill-point-(b) catalog: plateau
+// acceptance / widened neighborhood / pair-swaps / random restart). The
+// owner's intent (see the R-066 brief: "Be honest. Commit what passes;
+// report which combos missed and by how much.") is to ship R-066 with
+// the gate clearly distinguishing what it fixed from what remains.
 //
 // This test is NOT run with -short.
 func TestStep7Gate(t *testing.T) {
@@ -25,13 +32,14 @@ func TestStep7Gate(t *testing.T) {
 	}
 	t.Parallel()
 
-	// Committed gate points. Gate enforcement is deferred to R-066 — see
-	// comment block above.
+	// Committed gate points. Gate enforcement is LIVE at (N=9, k=2);
+	// (N=12, k=1) remains reported-only pending a future mutator slice.
 	gatedCombos := []struct {
-		n, k int
+		n, k    int
+		enforce bool
 	}{
-		{n: 12, k: 1},
-		{n: 9, k: 2},
+		{n: 9, k: 2, enforce: true},
+		{n: 12, k: 1, enforce: false}, // see comment above
 	}
 
 	// These are reported for transparency.
@@ -62,9 +70,13 @@ func TestStep7Gate(t *testing.T) {
 		report(c.n, c.k, succ)
 		rate := float64(succ) / float64(attempts)
 		if rate < gateRate {
-			// NOTE: R-066 promotes this to t.Errorf (and deletes the log).
-			t.Logf("Step 7 gate DEFERRED at N=%d k=%d: rate %.1f%% < %.1f%% — R-066 is responsible for lifting this",
-				c.n, c.k, 100*rate, 100*gateRate)
+			if c.enforce {
+				t.Errorf("Step 7 gate FAILED at N=%d k=%d: rate %.1f%% < %.1f%%",
+					c.n, c.k, 100*rate, 100*gateRate)
+			} else {
+				t.Logf("Step 7 gate BELOW THRESHOLD (non-enforcing) at N=%d k=%d: rate %.1f%% < %.1f%% — see R-066 comment for mutator follow-up",
+					c.n, c.k, 100*rate, 100*gateRate)
+			}
 		}
 	}
 

@@ -129,9 +129,12 @@ func ruleCountSaturation(s *solverState) bool {
 //
 // K-parameterized: "m" ranges over [1, k]; the rule is symmetric in k.
 //
-// Safety: after placing, the state may be immediately contradictory if the
-// m candidates were pairwise 8-neighbor adjacent. The fixed-point loop's
-// contradicts() check catches this before another rule runs on corrupt data.
+// Soundness (R-066 fix): at k=2 the m candidates might be pairwise 8-neighbor
+// adjacent, which would make the "forced placement" INVALID. R3 now skips the
+// firing when any pair of candidates-to-place is 8-adjacent. A separate rule
+// (R1/R7) is expected to eliminate the offending cand; if no elimination is
+// possible, the puzzle genuinely has no solution and another rule (or the
+// contradicts() check) will flag it.
 func ruleForcedPlacement(s *solverState) bool {
 	n := s.n
 	changed := false
@@ -144,6 +147,12 @@ func ruleForcedPlacement(s *solverState) bool {
 		}
 		cands := s.cands[r]
 		if bits.OnesCount16(cands) != need {
+			continue
+		}
+		// Soundness: reject if any pair of chosen columns is intra-row
+		// adjacent. cands & (cands << 1) has bits where c AND c-1 are
+		// both set — i.e. an adjacent pair exists.
+		if cands&(cands<<1) != 0 {
 			continue
 		}
 		m := cands
@@ -164,6 +173,11 @@ func ruleForcedPlacement(s *solverState) bool {
 		}
 		cmask := s.colCandidateMask(c)
 		if bits.OnesCount16(cmask) != need {
+			continue
+		}
+		// Soundness: reject if any pair of chosen rows is intra-column
+		// adjacent.
+		if cmask&(cmask<<1) != 0 {
 			continue
 		}
 		m := cmask
@@ -189,6 +203,11 @@ func ruleForcedPlacement(s *solverState) bool {
 		if total != need {
 			continue
 		}
+		// Soundness (k>=2): reject if any two region cands are 8-adjacent.
+		// For k=1 this is a no-op (single cell).
+		if s.k >= 2 && regionHasAdjacentCands(s, g) {
+			continue
+		}
 		for r := range n {
 			mask := s.regCellsByRow[g][r]
 			for mask != 0 {
@@ -205,6 +224,37 @@ func ruleForcedPlacement(s *solverState) bool {
 		s.record(ruleEvent{Rule: ruleR3})
 	}
 	return changed
+}
+
+// regionHasAdjacentCands returns true iff region g has any two remaining
+// candidate cells that are 8-neighbor adjacent. Used by R3 at k>=2 to skip
+// firing when placing all cands would create an adjacency violation.
+func regionHasAdjacentCands(s *solverState, g int) bool {
+	n := s.n
+	for r := range n {
+		row := s.regCellsByRow[g][r]
+		if row == 0 {
+			continue
+		}
+		// Intra-row adjacency within region cands.
+		if row&(row<<1) != 0 {
+			return true
+		}
+		// Next-row adjacency (vertical + diagonal).
+		if r+1 < n {
+			below := s.regCellsByRow[g][r+1]
+			if below == 0 {
+				continue
+			}
+			full := uint16(1)<<uint(n) - 1
+			spread := row | (row << 1) | (row >> 1)
+			spread &= full
+			if below&spread != 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // ---------------------------------------------------------------------------
@@ -741,6 +791,17 @@ func ruleKLineSubset(s *solverState) bool {
 			if bits.OnesCount16(combined) != k {
 				continue
 			}
+			// Soundness (R-066): at k=2, the two columns must hold both
+			// rows' k marks simultaneously. If the two columns are
+			// intra-row adjacent, no valid placement exists (8-adjacency
+			// violation in each row). If r2=r1+1 and adjacent columns
+			// exist, diagonal adjacency blocks it too. Skip in these
+			// cases — the rule would otherwise make unsound eliminations
+			// on the "other rows" whose cands this fixture can't
+			// actually constrain.
+			if combined&(combined<<1) != 0 {
+				continue
+			}
 			// Those K columns hold every mark for r1, r2. Eliminate those
 			// columns' candidates in other rows.
 			for rr := range n {
@@ -767,6 +828,10 @@ func ruleKLineSubset(s *solverState) bool {
 			m2 := s.colCandidateMask(c2)
 			combined := m1 | m2
 			if bits.OnesCount16(combined) != k {
+				continue
+			}
+			// Soundness (R-066): symmetric adjacency check on the rows.
+			if combined&(combined<<1) != 0 {
 				continue
 			}
 			// Those K rows hold every mark for c1, c2. Eliminate (other)
@@ -802,7 +867,26 @@ func ruleKLineSubset(s *solverState) bool {
 //
 // For k=1, K=1: one region contributes one cell in a line; single region
 // coverage — R5 territory. R9 is non-trivial at k>=2.
+//
+// DISABLED at k=2 (R-066 finding): the rule as implemented is unsound.
+// Its preconditions assert "g1 and g2 together supply ALL k marks in
+// this row" but the implementation only checks that g1 and g2's combined
+// row cands == k — which can fire when g1/g2 put their marks in OTHER
+// rows entirely (leaving this row's marks to come from other regions).
+// Soundness repair is deferred; disabling R9 is safe because it is
+// subsumed in practice (like R6/R8 — see design.md §4.2). The solver
+// still reaches unique solutions via R1..R8 at k=2.
 func ruleRegionPairExclusion(s *solverState) bool {
+	// Temporarily disabled (R-066): unsound precondition at k=2.
+	// See comment above.
+	_ = s
+	return false
+}
+
+// ruleRegionPairExclusionOriginal preserves the original (unsound) R9
+// implementation. Retained for historical reference and as a target for
+// a future soundness fix; not registered in defaultRuleset.
+func ruleRegionPairExclusionOriginal(s *solverState) bool {
 	n := s.n
 	k := s.k
 	changed := false

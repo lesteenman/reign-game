@@ -162,6 +162,15 @@ type Generator struct {
 	// pass. Pre-allocated so Generate does not allocate an 8KB state per
 	// attempt.
 	solver solverState
+	// scoringSolver is the solver-guided grower's scratch state (R-066).
+	// Pre-allocated on the Generator so solver-guided probes use value-copy
+	// clone (*dst = *src) rather than reallocating. Trace recording is OFF
+	// on this state (set and stays nil).
+	scoringSolver solverState
+	// scoringGrow is the solver-guided grower's grow-state scratch (R-066).
+	// Holds the tentative completion while probing a candidate region
+	// assignment. Pre-allocated to keep probes alloc-free.
+	scoringGrow growState
 	// traceBuf backs solver.trace during the final classification pass. The
 	// mutator's probe passes keep solver.trace == nil (NF3: zero alloc in
 	// the hot loop).
@@ -221,6 +230,14 @@ const defaultTraceCap = 512
 // deducible puzzle that matches the optional WithDifficulty filter.
 var ErrMaxAttemptsExhausted = errors.New("generator: max attempts exhausted")
 
+// cheapAttemptsBeforeEscalation is the number of cheap-grower attempts
+// per Generate call before the orchestrator escalates to the R-066
+// solver-guided variant. Cheap combos (most N at k=1) hit >90% in one
+// attempt; hard combos (N>=10 k=1, all k=2) usually need the guided
+// variant. Escalating after 2 failures avoids paying the guidance cost
+// for cheap combos that succeed on attempt 1.
+const cheapAttemptsBeforeEscalation = 2
+
 // Generate produces one puzzle. Runs up to g.cfg.maxAttempts iterations of
 // the pipeline described in PG-11 / input-spec §11 Step 8:
 //
@@ -247,7 +264,25 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error) {
 			continue
 		}
 		seeds := pairSeeds(marks, g.n, g.k)
-		if !g.growRegions(seeds, &g.regionOf) {
+		// Cheap grower for the first attempts (fast, >90% on most (N, k)).
+		// On continued failure, escalate to the R-066 solver-guided variant:
+		// expensive per-attempt but dramatically better success on hard
+		// combos (N>=10 k=1, all k=2).
+		//
+		// Short-circuit for cases where cheap is known to fail (N>=11 k=1 or
+		// any k=2): start with solver-guided immediately. Burning 2 cheap
+		// attempts that empirically succeed <30% is waste when guided is
+		// ~2x more expensive but ~5x more successful.
+		useSolverGuided := attempt >= cheapAttemptsBeforeEscalation ||
+			(g.k == 2) ||
+			(g.n >= 11)
+		var grew bool
+		if useSolverGuided {
+			grew = g.growRegionsSolverGuided(seeds, &g.regionOf)
+		} else {
+			grew = g.growRegions(seeds, &g.regionOf)
+		}
+		if !grew {
 			continue
 		}
 		if outcome := g.solveAndMutate(seeds); outcome != mutationSolved {
