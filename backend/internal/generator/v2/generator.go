@@ -256,7 +256,7 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error) {
 		// Brute-uniqueness check. The solver in g.solver holds the
 		// deductive solution; we also want to confirm no alternative
 		// solution exists.
-		rm := makeRegionMapFromArray(&g.regionOf, g.n)
+		rm := convertRegionsToSlices(&g.regionOf, g.n)
 		sols, err := bruteSolveAll(rm, g.n, g.k, 2)
 		if err != nil || len(sols) != 1 {
 			continue

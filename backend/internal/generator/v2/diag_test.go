@@ -1,3 +1,5 @@
+//go:build diag
+
 package generator
 
 import (
@@ -9,7 +11,10 @@ import (
 // Categorizes each attempt as: sample failure, grow failure, mutator failure,
 // brute-non-unique, or full success.
 //
-// Run with: go test -run TestDiagPipelineStages -v
+// Build-tag gated so it never runs in default CI (200+ attempts × 3 cells
+// × two passes is measurable wall-clock). Invoke explicitly when tuning:
+//
+//	go test -tags=diag -run TestDiagPipelineStages -v ./internal/generator/v2/...
 func TestDiagPipelineStages(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping diag under -short")
@@ -54,7 +59,7 @@ func TestDiagPipelineStages(t *testing.T) {
 					mutateFail++
 					continue
 				}
-				rm := makeRegionMapFromArray(&g.regionOf, c.n)
+				rm := convertRegionsToSlices(&g.regionOf, c.n)
 				sols, err := bruteSolveAll(rm, c.n, c.k, 2)
 				if err != nil {
 					mutateFail++
@@ -84,7 +89,7 @@ func TestDiagPipelineStages(t *testing.T) {
 				if !g2.growRegions(seeds, &g2.regionOf) {
 					continue
 				}
-				rm := makeRegionMapFromArray(&g2.regionOf, c.n)
+				rm := convertRegionsToSlices(&g2.regionOf, c.n)
 				g2.solver.trace = nil
 				_ = g2.solver.initFromRegionMap(rm, c.n, c.k)
 				_ = solve(&g2.solver)

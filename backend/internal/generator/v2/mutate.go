@@ -36,7 +36,7 @@ const (
 func (g *Generator) solveAndMutate(seeds [][]Mark) mutationOutcome {
 	// Prepare region map in the solver-friendly shape: solver needs a
 	// [][]int slice. Build once, mutate in place across swaps.
-	rm := makeRegionMapFromArray(&g.regionOf, g.n)
+	rm := convertRegionsToSlices(&g.regionOf, g.n)
 
 	g.solver.trace = nil // no recording during probe solves
 	if err := g.solver.initFromRegionMap(rm, g.n, g.k); err != nil {
@@ -214,50 +214,29 @@ func fromRegionConnectedWithoutCell(
 	seeds [][]Mark,
 	n int,
 ) bool {
-	// Pick a start cell: any seed of this region works (and guarantees
-	// the seed belongs to the "kept" set).
+	// Pick a start cell: the first seed of this region that is not the
+	// cell being removed. Also reject if (r, c) is itself a seed — that's
+	// the caller's responsibility to filter, but be defensive.
 	var start Mark
 	found := false
 	for _, m := range seeds[fromID] {
 		if m.Row == r && m.Col == c {
-			// A seed cell would be the one removed — not allowed. The
-			// caller already filters seed cells out, but be defensive.
 			return false
 		}
-		start = m
-		found = true
+		if !found {
+			start = m
+			found = true
+		}
 	}
 	if !found {
 		return false
 	}
 
 	var visited [nMax][nMax]bool
-	visited[start.Row][start.Col] = true
-	queue := []Mark{start}
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		for _, d := range fourNeighborOffsets {
-			nr, nc := cur.Row+d[0], cur.Col+d[1]
-			if nr < 0 || nr >= n || nc < 0 || nc >= n {
-				continue
-			}
-			if visited[nr][nc] {
-				continue
-			}
-			// Skip the cell being removed.
-			if nr == r && nc == c {
-				continue
-			}
-			if int(regionOf[nr][nc]) != fromID {
-				continue
-			}
-			visited[nr][nc] = true
-			queue = append(queue, Mark{Row: nr, Col: nc})
-		}
-	}
-	// Every seed must be visited, and the total visited cells must equal
-	// fromID's cell count minus 1.
+	bfsRegionVisit(regionOf, fromID, start.Row, start.Col, r, c, n, &visited)
+
+	// Every seed must be visited (the removed cell (r, c) is already
+	// excluded by the skip parameter passed to bfsRegionVisit).
 	for _, m := range seeds[fromID] {
 		if m.Row == r && m.Col == c {
 			continue
@@ -323,19 +302,4 @@ func countSolvedCells(s *solverState) int {
 		count += bits.OnesCount16(solvedNonMark)
 	}
 	return count
-}
-
-// makeRegionMapFromArray materializes a [][]int view over the first n rows
-// and cols of the Generator's regionOf array. Freshly allocated per call.
-// The solverState holds its own copy, so the caller may reuse this slice
-// across swaps (we do — we mutate rm[r][c] before re-init).
-func makeRegionMapFromArray(src *[nMax][nMax]int8, n int) [][]int {
-	out := make([][]int, n)
-	for r := range n {
-		out[r] = make([]int, n)
-		for c := range n {
-			out[r][c] = int(src[r][c])
-		}
-	}
-	return out
 }

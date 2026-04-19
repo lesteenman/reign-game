@@ -31,7 +31,7 @@ func TestMutateRejectsSeedMoves(t *testing.T) {
 			{Row: r, Col: 2},
 		}
 	}
-	rm := makeRegionMapFromArray(&g.regionOf, n)
+	rm := convertRegionsToSlices(&g.regionOf, n)
 
 	// Act — walk tryOneSwap; every candidate cell is a seed. The
 	// filtering should reject all and return false.
@@ -98,7 +98,7 @@ func TestMutateRejectsConnectivityBreakingSwap(t *testing.T) {
 		{{Row: 4, Col: 0}},
 		{{Row: 4, Col: 1}},
 	}
-	rm := makeRegionMapFromArray(&g.regionOf, n)
+	rm := convertRegionsToSlices(&g.regionOf, n)
 
 	// Act: attempt to move (3, 0) — a non-seed cell in region 0 that,
 	// if moved to region 1, would leave (4, 0) in region 0's "bottom

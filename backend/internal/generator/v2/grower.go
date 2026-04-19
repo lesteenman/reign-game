@@ -88,23 +88,21 @@ func (g *Generator) growRegions(seeds [][]Mark, dst *[nMax][nMax]int8) bool {
 	// For k >= 2, seeds within a group are not (generally) 4-adjacent, so
 	// the region would start disconnected. Bridge each pair of seeds with
 	// a Manhattan L-path: move along rows first, then along cols. Skip
-	// cells already claimed by another region (mutator will resolve those
-	// conflicts via swaps; they are extremely rare in practice because the
-	// greedy nearest-neighbor pairer picks the two closest marks, and
-	// those rarely need a cell that a different pair has already grabbed).
-	// If a bridge cell IS already claimed, the region starts disconnected;
-	// we accept that and let the mutator loop (R-065 step C) try to fix
-	// it. Return false here only if NO seed made it into the region.
+	// cells already claimed by another region — bridging silently through
+	// another region's cells would violate that region's seed invariant.
+	//
+	// If a bridge cell IS already claimed and the seeds therefore end up
+	// in different 4-components, fail fast and let the orchestrator sample
+	// again with a different RNG draw; mid-grow repair is harder than
+	// retrying from the sampler. Empirically these collisions are rare
+	// because the greedy nearest-neighbor pairer picks the two closest
+	// marks and those rarely need a cell another pair has grabbed.
 	if g.k >= 2 {
 		for gid, group := range seeds {
 			for i := 1; i < len(group); i++ {
 				bridgeCells(dst, &claimedRow, &regionSize, group[i-1], group[i], gid)
 			}
 		}
-		// If bridging collided with another region's territory, the
-		// current region may start disconnected. Fail out so the
-		// orchestrator samples again with a different RNG draw; trying to
-		// patch up mid-grow is harder than just retrying.
 		for gid, group := range seeds {
 			if !seedComponentsConnected(dst, group, gid, n) {
 				return false
@@ -248,32 +246,13 @@ func (g *Generator) growRegions(seeds [][]Mark, dst *[nMax][nMax]int8) bool {
 
 // seedComponentsConnected returns true iff every seed mark in `group` is
 // reachable from the first seed via 4-adjacent cells that all belong to
-// region gid. Runs a BFS confined to region-gid cells only.
+// region gid. Uses the shared bfsRegionVisit helper (neighbors.go).
 func seedComponentsConnected(dst *[nMax][nMax]int8, group []Mark, gid, n int) bool {
 	if len(group) <= 1 {
 		return true
 	}
 	var visited [nMax][nMax]bool
-	queue := []Mark{group[0]}
-	visited[group[0].Row][group[0].Col] = true
-	for len(queue) > 0 {
-		cur := queue[0]
-		queue = queue[1:]
-		for _, d := range fourNeighborOffsets {
-			nr, nc := cur.Row+d[0], cur.Col+d[1]
-			if nr < 0 || nr >= n || nc < 0 || nc >= n {
-				continue
-			}
-			if visited[nr][nc] {
-				continue
-			}
-			if int(dst[nr][nc]) != gid {
-				continue
-			}
-			visited[nr][nc] = true
-			queue = append(queue, Mark{Row: nr, Col: nc})
-		}
-	}
+	bfsRegionVisit(dst, gid, group[0].Row, group[0].Col, -1, -1, n, &visited)
 	for _, m := range group {
 		if !visited[m.Row][m.Col] {
 			return false
@@ -337,14 +316,4 @@ func bridgeCells(
 		claimedRow[r] |= 1 << uint(curC)
 		regionSize[gid]++
 	}
-}
-
-// fourNeighborOffsets lists the 4 orthogonal (N/S/E/W) offsets used for
-// connectivity checks. Package-scope so both grower and mutator share one
-// declaration.
-var fourNeighborOffsets = [4][2]int{
-	{-1, 0},
-	{1, 0},
-	{0, -1},
-	{0, 1},
 }
