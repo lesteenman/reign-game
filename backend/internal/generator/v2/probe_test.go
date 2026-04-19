@@ -4,13 +4,18 @@
 //
 // TestFeasibility runs the sampler at every (N in {4..8}, k in {1, 2}) for a
 // fixed 5-second wall-clock budget per case, counts distinct solutions
-// produced, and writes a summary table to
-// backend/internal/generator/v2/bench/n-feasibility.md. The task explicitly
-// requires the table to be committed as data.
+// produced, and emits a summary table.
 //
 // The test is skipped under `go test -short` so the regular fast test suite
-// is unaffected; the full test suite runs it (adding ~50s wall-clock) and
-// refreshes the committed table.
+// is unaffected. The full test suite runs it (adding ~50s wall-clock).
+//
+// Output handling (important for a clean working tree in CI and for other
+// contributors):
+//   - By default, the table is written to a per-test TempDir and logged.
+//     The committed bench/n-feasibility.md snapshot is NOT modified.
+//   - Set UPDATE_BENCH=1 to refresh the committed snapshot. This path is
+//     intended for the author running the probe on a known-stable machine;
+//     the snapshot includes samples/sec numbers that depend on the host CPU.
 
 package generator
 
@@ -86,15 +91,22 @@ func TestFeasibility(t *testing.T) {
 	md.WriteString(recommendation(rows))
 	md.WriteString("\n")
 
-	const outDir = "bench"
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		t.Fatalf("creating bench dir: %v", err)
+	// Emit to the committed snapshot only when explicitly requested; otherwise
+	// write to a temp dir so a regular `go test ./...` leaves a clean tree.
+	var outPath string
+	if os.Getenv("UPDATE_BENCH") == "1" {
+		const outDir = "bench"
+		if err := os.MkdirAll(outDir, 0o755); err != nil {
+			t.Fatalf("creating bench dir: %v", err)
+		}
+		outPath = filepath.Join(outDir, "n-feasibility.md")
+	} else {
+		outPath = filepath.Join(t.TempDir(), "n-feasibility.md")
 	}
-	outPath := filepath.Join(outDir, "n-feasibility.md")
 	if err := os.WriteFile(outPath, []byte(md.String()), 0o644); err != nil {
 		t.Fatalf("writing %s: %v", outPath, err)
 	}
-	t.Logf("wrote %s", outPath)
+	t.Logf("wrote %s (set UPDATE_BENCH=1 to refresh bench/n-feasibility.md)", outPath)
 
 	// Soft gate: the probe must have attempted every cell, and at least one
 	// (N, k=1) cell in [5..8] must be productive. We do NOT fail on k=2

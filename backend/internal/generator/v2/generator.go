@@ -150,9 +150,13 @@ type Generator struct {
 }
 
 // maxCombosPerRow bounds the number of valid k-combinations of columns for a
-// single row at N=16 with pairwise gap >= 2. For k in {1, 2} the upper bound is
-// C(16, 2) = 120; 256 leaves comfortable headroom for defensive padding.
-const maxCombosPerRow = 256
+// single row at N=nMax (16) with pairwise gap >= 2. For k in {1, 2} the
+// upper bound is C(16, 2) = 120 (the k=1 case is nMax=16, strictly smaller).
+// We size the pre-allocated scratch buffer to exactly this bound;
+// enumerateKCombos panics if over-emission is ever attempted so that any
+// future k=3 path (or off-by-one) fails loudly instead of silently
+// reallocating onto the heap and defeating NF3 (zero-alloc hot loop).
+const maxCombosPerRow = 120
 
 // New constructs a Generator. n must be in [1, 16] and marksPerUnit must be 1
 // or 2; otherwise a typed error is returned.

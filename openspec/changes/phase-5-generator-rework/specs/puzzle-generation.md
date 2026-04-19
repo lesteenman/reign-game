@@ -80,7 +80,7 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error)
 
 **Requirement.** The sampler generates a valid marker configuration satisfying row, column, and adjacency constraints. Each row holds exactly `k` marks; each column holds exactly `k` marks; no two marks are 8-neighbor adjacent.
 
-**Implementation constraints.** Row-by-row backtracking using `uint16` bitmasks. Enumeration is **k-combinations** per row with pairwise column gap >= 2. Forward-check: `rowsRemaining * k >= (K - colCount[c])` for every column `c`. Row visit order is randomized via the Generator's RNG to diversify output.
+**Implementation constraints.** Row-by-row backtracking using `uint16` bitmasks. Enumeration is **k-combinations** per row with pairwise column gap >= 2. Forward-check: `rowsRemaining * k >= (K - colCount[c])` for every column `c`. Rows are visited in **grid order** (0..n-1); diversity comes from per-row shuffling of the filtered k-combinations, driven by the Generator's RNG. This is a deliberate deviation from input-spec.md §4.1's "randomized row visit order" — shuffling the visit order breaks the prev-row adjacency pruning (because "previous row" then refers to a non-grid-adjacent row), which hangs sampling at high N + k=2. Grid-order visiting preserves the input-spec's diversity goal without the pruning regression. See design.md §4 for the full rationale.
 
 **Performance.** <10ms/op at (N=14, k=1) and (N=14, k=2). If the gate fails, the failure is reported and a SAT-based sampler is proposed as a mitigation; the gate is not silently relaxed.
 

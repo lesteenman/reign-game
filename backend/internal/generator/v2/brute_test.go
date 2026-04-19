@@ -2,6 +2,7 @@ package generator
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -87,16 +88,76 @@ func TestBruteSolve(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			// Arrange / Act
-			got := bruteSolveAll(tc.regionMap, tc.n, tc.k, tc.maxSolutions)
+			// Arrange — already set up by the fixture and tc fields.
+
+			// Act
+			got, err := bruteSolveAll(tc.regionMap, tc.n, tc.k, tc.maxSolutions)
 
 			// Assert
+			if err != nil {
+				t.Fatalf("bruteSolveAll: unexpected error: %v", err)
+			}
 			if len(got) != tc.wantCount {
 				t.Fatalf("bruteSolveAll: got %d solutions, want %d", len(got), tc.wantCount)
 			}
 			for _, sol := range got {
 				assertValidSolution(t, sol, tc.n, tc.k)
 				assertRegionCounts(t, sol, tc.regionMap, tc.n, tc.k)
+			}
+		})
+	}
+}
+
+func TestBruteSolveInvalidInput(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	validMap5 := make([][]int, 5)
+	for r := range validMap5 {
+		validMap5[r] = make([]int, 5)
+		for c := range validMap5[r] {
+			validMap5[r][c] = r
+		}
+	}
+	shortRow := [][]int{{0, 0, 0, 0, 0}, {1, 1, 1}, {2, 2, 2, 2, 2}, {3, 3, 3, 3, 3}, {4, 4, 4, 4, 4}}
+	badRegionID := [][]int{{0, 0, 0, 0, 0}, {1, 1, 1, 1, 1}, {2, 2, 2, 2, 2}, {3, 3, 3, 3, 3}, {4, 4, 4, 4, 99}}
+
+	cases := []struct {
+		name         string
+		regionMap    [][]int
+		n            int
+		k            int
+		maxSolutions int
+	}{
+		{name: "n below range", regionMap: validMap5, n: 0, k: 1, maxSolutions: 2},
+		{name: "n above nMax", regionMap: validMap5, n: 17, k: 1, maxSolutions: 2},
+		{name: "k=0", regionMap: validMap5, n: 5, k: 0, maxSolutions: 2},
+		{name: "k=3", regionMap: validMap5, n: 5, k: 3, maxSolutions: 2},
+		{name: "maxSolutions zero", regionMap: validMap5, n: 5, k: 1, maxSolutions: 0},
+		{name: "regionMap wrong row count", regionMap: validMap5[:4], n: 5, k: 1, maxSolutions: 2},
+		{name: "regionMap short row", regionMap: shortRow, n: 5, k: 1, maxSolutions: 2},
+		{name: "region id out of range", regionMap: badRegionID, n: 5, k: 1, maxSolutions: 2},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Arrange — set up via tc.
+
+			// Act
+			got, err := bruteSolveAll(tc.regionMap, tc.n, tc.k, tc.maxSolutions)
+
+			// Assert
+			if err == nil {
+				t.Fatalf("expected ErrBruteInvalidInput, got nil (solutions=%d)", len(got))
+			}
+			if !errors.Is(err, ErrBruteInvalidInput) {
+				t.Errorf("expected errors.Is(err, ErrBruteInvalidInput), got %v", err)
+			}
+			if got != nil {
+				t.Errorf("expected nil solutions on invalid input, got %d", len(got))
 			}
 		})
 	}
@@ -119,9 +180,12 @@ func TestBruteSolve_K2_Infeasible5x5(t *testing.T) {
 	}
 
 	// Act
-	got := bruteSolveAll(rowStripes, 5, 2, 2)
+	got, err := bruteSolveAll(rowStripes, 5, 2, 2)
 
 	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(got) != 0 {
 		t.Fatalf("expected 0 solutions for infeasible 5x5 k=2, got %d", len(got))
 	}
@@ -145,9 +209,12 @@ func TestBruteSolve_K2_FeasibleOnRowStripes8x8(t *testing.T) {
 	}
 
 	// Act
-	got := bruteSolveAll(rowStripes, 8, 2, 2)
+	got, err := bruteSolveAll(rowStripes, 8, 2, 2)
 
 	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(got) == 0 {
 		t.Fatal("expected at least 1 solution for feasible 8x8 k=2 row-stripes")
 	}
@@ -212,10 +279,13 @@ func TestBruteSolve_WorstCaseBudget(t *testing.T) {
 
 			// Act
 			start := time.Now()
-			got := bruteSolveAll(tc.regionMap, n, tc.k, 2)
+			got, err := bruteSolveAll(tc.regionMap, n, tc.k, 2)
 			elapsed := time.Since(start)
 
 			// Assert
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
 			if elapsed > 100*time.Millisecond {
 				t.Fatalf("brute solve (N=%d %s) took %v, want <100ms", n, tc.name, elapsed)
 			}

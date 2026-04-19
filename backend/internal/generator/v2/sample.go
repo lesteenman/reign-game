@@ -1,20 +1,34 @@
 package generator
 
-import "math/bits"
+import (
+	"fmt"
+	"math/bits"
+)
 
-// sampleSolution returns a valid N*k-mark placement satisfying row, column, and
-// 8-neighbor adjacency constraints. Returns (marks, true) on success; (nil,
-// false) only if the search space is exhausted (genuine unsatisfiability for
-// the current shuffling).
+// sampleSolution returns a valid N*k-mark placement satisfying row, column,
+// region (implicit — regions are generated later in R-065), and 8-neighbor
+// adjacency constraints. Returns (marks, true) on success; (nil, false) only
+// if the search space is exhausted (genuine unsatisfiability for this Generator's
+// (n, k) — e.g. k=2 with n<8 is known-infeasible per bench/n-feasibility.md).
 //
 // Approach: row-by-row backtracking in grid order using uint16 column
-// bitmasks. Diversity of output comes from (a) a pre-shuffle of the
-// column index permutation used to break ties during combo enumeration, and
-// (b) per-row shuffling of the filtered k-combinations before recursion. This
-// matches input-spec.md §4.1 generalized on k per locked decision #1.
+// bitmasks. Diversity comes from per-row shuffling of the filtered
+// k-combinations before recursion; the RNG state (from WithSeed or a
+// time-seeded default) makes distinct Generate calls produce distinct
+// solutions.
+//
+// Spec deviation from input-spec.md §4.1 (which calls for randomized row
+// *visit* order): visiting rows out of grid order breaks the prev-row
+// adjacency pruning in adjacentColumnsMask, because "previous row" then
+// refers to a row that may not be grid-adjacent. At N=13 k=2 this caused
+// multi-minute hangs during sampler smoke. Grid-order visiting plus combo
+// shuffling preserves the spec's diversity goal without the pruning
+// regression; see design.md §4 "Implementation note — grid-order visiting"
+// for the full rationale. PG-03 was updated to reflect this.
 //
 // No heap allocation inside the backtracker: all scratch storage lives on
-// the Generator and is reused across calls.
+// the Generator and is reused across calls. The returned slice is the one
+// allocation per Generate call (unavoidable per design §5).
 func (g *Generator) sampleSolution() ([]Mark, bool) {
 	n := g.n
 
@@ -59,7 +73,7 @@ func (g *Generator) sampleBacktrack(row int) bool {
 	}
 
 	combos := g.rowCombos[row][:0]
-	combos = enumerateKCombos(combos, n, g.k, forbid, g.colCount)
+	combos = enumerateKCombos(combos, n, g.k, forbid, &g.colCount)
 	if len(combos) == 0 {
 		return false
 	}
@@ -95,11 +109,12 @@ func (g *Generator) sampleBacktrack(row int) bool {
 }
 
 // forwardCheck returns true iff every column still has enough remaining rows
-// to reach its required k-count. rowsLeft is the number of rows not yet placed
-// AFTER the current placement.
-func (g *Generator) forwardCheck(rowsLeft int) bool {
+// to reach its required k-count. rowsAfter is the number of rows not yet
+// placed AFTER the current placement — matches forwardCheckBrute's argument
+// convention exactly.
+func (g *Generator) forwardCheck(rowsAfter int) bool {
 	need := uint8(g.k)
-	budget := uint8(rowsLeft)
+	budget := uint8(rowsAfter)
 	for c := 0; c < g.n; c++ {
 		if g.colCount[c] > need {
 			return false
@@ -124,12 +139,28 @@ func adjacentColumnsMask(rowMask uint16, n int) uint16 {
 // the forbidden columns, (b) has pairwise column gap >= 2 (no intra-row
 // adjacency), and (c) does not push any column over its k-budget.
 //
-// For k=1 it emits at most N single-bit masks; for k=2 it emits at most C(N,2)
-// two-bit masks with gap >= 2. Pure function, no allocation (appends to a
-// caller-owned slice).
-func enumerateKCombos(dst []uint16, n, k int, forbid uint16, colCount [nMax]uint8) []uint16 {
+// For k=1 it emits at most N single-bit masks; for k=2 it emits at most
+// C(n,2) minus gap-<2 pairs (upper bound maxCombosPerRow at n=16). Pure
+// function, no allocation (appends to a caller-owned slice). colCount is
+// passed by pointer to avoid copying [nMax]uint8 on every recursion step.
+//
+// Guard: if appending would exceed dst's capacity (i.e. the caller under-sized
+// rowCombos for the current (n, k)), panic. This surfaces the bug loudly
+// rather than silently reallocating onto the heap and defeating NF3.
+//
+// TODO(R-064): the deductive solver will want an identical k-combo enumerator
+// over an arbitrary `available` mask without the column-budget filter.
+// Extract a shared primitive into a bits util when that slice lands.
+func enumerateKCombos(dst []uint16, n, k int, forbid uint16, colCount *[nMax]uint8) []uint16 {
 	full := uint16(1)<<uint(n) - 1
 	available := full &^ forbid
+
+	appendGuarded := func(mask uint16) {
+		if len(dst) == cap(dst) {
+			panic(fmt.Sprintf("enumerateKCombos: dst capacity %d exceeded (n=%d, k=%d)", cap(dst), n, k))
+		}
+		dst = append(dst, mask)
+	}
 
 	if k == 1 {
 		m := available
@@ -139,7 +170,7 @@ func enumerateKCombos(dst []uint16, n, k int, forbid uint16, colCount [nMax]uint
 			if colCount[c] >= 1 {
 				continue
 			}
-			dst = append(dst, uint16(1)<<uint(c))
+			appendGuarded(uint16(1) << uint(c))
 		}
 		return dst
 	}
@@ -161,7 +192,7 @@ func enumerateKCombos(dst []uint16, n, k int, forbid uint16, colCount [nMax]uint
 			if colCount[c2] >= 2 {
 				continue
 			}
-			dst = append(dst, bit1|bit2)
+			appendGuarded(bit1 | bit2)
 		}
 	}
 	return dst

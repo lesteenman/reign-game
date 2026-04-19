@@ -1,6 +1,16 @@
 package generator
 
-import "math/bits"
+import (
+	"errors"
+	"fmt"
+	"math/bits"
+)
+
+// ErrBruteInvalidInput signals that bruteSolveAll was called with inputs that
+// violate the documented contract (n out of range, unsupported k, malformed
+// region map, or a region id outside [0, n)). Caller bugs — we fail loudly
+// here rather than silently returning garbage.
+var ErrBruteInvalidInput = errors.New("bruteSolveAll: invalid input")
 
 // bruteSolveAll enumerates up to maxSolutions valid mark placements on the
 // given region map. Each returned solution is a slice of n*k Marks.
@@ -18,9 +28,37 @@ import "math/bits"
 //   - Each region (regionMap[r][c] value) has exactly k marks.
 //   - No two marks are 8-neighbor adjacent.
 //   - k-marks inside a single row have pairwise column gap >= 2.
-func bruteSolveAll(regionMap [][]int, n, k, maxSolutions int) [][]Mark {
-	if maxSolutions <= 0 || n <= 0 || k <= 0 {
-		return nil
+//
+// Input contract: n in [1, nMax], k in {1, 2}, maxSolutions > 0, regionMap
+// shaped exactly [n][n] with region ids in [0, n). Violations return
+// ErrBruteInvalidInput.
+//
+// TODO(R-065): the per-call regOf initialization + per-recursion-level
+// bruteKCombos allocation dominate when the region-grower scores many
+// candidate maps. Pool state + share the combo enumerator with sample.go's
+// enumerateKCombos when the deductive solver lands in R-064.
+func bruteSolveAll(regionMap [][]int, n, k, maxSolutions int) ([][]Mark, error) {
+	if n < 1 || n > nMax {
+		return nil, fmt.Errorf("n=%d (must be in [1, %d]): %w", n, nMax, ErrBruteInvalidInput)
+	}
+	if k != 1 && k != 2 {
+		return nil, fmt.Errorf("k=%d (must be 1 or 2): %w", k, ErrBruteInvalidInput)
+	}
+	if maxSolutions <= 0 {
+		return nil, fmt.Errorf("maxSolutions=%d (must be > 0): %w", maxSolutions, ErrBruteInvalidInput)
+	}
+	if len(regionMap) != n {
+		return nil, fmt.Errorf("regionMap has %d rows, want %d: %w", len(regionMap), n, ErrBruteInvalidInput)
+	}
+	for r, row := range regionMap {
+		if len(row) != n {
+			return nil, fmt.Errorf("regionMap[%d] has %d cols, want %d: %w", r, len(row), n, ErrBruteInvalidInput)
+		}
+		for c, rid := range row {
+			if rid < 0 || rid >= n {
+				return nil, fmt.Errorf("regionMap[%d][%d]=%d out of [0, %d): %w", r, c, rid, n, ErrBruteInvalidInput)
+			}
+		}
 	}
 
 	var (
@@ -58,7 +96,7 @@ func bruteSolveAll(regionMap [][]int, n, k, maxSolutions int) [][]Mark {
 			return
 		}
 
-		rowsLeft := n - row - 1
+		rowsAfter := n - row - 1
 		full := uint16(1)<<uint(n) - 1
 
 		// Adjacency from the previous row (already fully placed).
@@ -109,7 +147,7 @@ func bruteSolveAll(regionMap [][]int, n, k, maxSolutions int) [][]Mark {
 				regCount[regOf[row][c]]++
 			}
 
-			if forwardCheckBrute(colCount[:], regCount[:], n, k, rowsLeft) {
+			if forwardCheckBrute(colCount[:], regCount[:], n, k, rowsAfter) {
 				recurse(row + 1)
 			}
 
@@ -129,7 +167,7 @@ func bruteSolveAll(regionMap [][]int, n, k, maxSolutions int) [][]Mark {
 		}
 	}
 	recurse(0)
-	return solutions
+	return solutions, nil
 }
 
 // bruteKCombos returns an iterator sequence of k-column bitmasks over
@@ -165,11 +203,13 @@ func bruteKCombos(available uint16, n, k int) []uint16 {
 	return out
 }
 
-func forwardCheckBrute(colCount, regCount []uint8, n, k, rowsLeft int) bool {
+// forwardCheckBrute returns true iff every column and region still has
+// enough remaining rows to reach its required k-count. rowsAfter is the
+// number of rows not yet placed AFTER the current placement — matches
+// (g *Generator).forwardCheck's argument convention exactly.
+func forwardCheckBrute(colCount, regCount []uint8, n, k, rowsAfter int) bool {
 	need := uint8(k)
-	budget := uint8(rowsLeft + 1) // rowsLeft is zero-indexed "rows after this"
-	// Each remaining row contributes k placements distributed over n columns
-	// and n regions, so for every column c: need - colCount[c] <= rowsLeft+1.
+	budget := uint8(rowsAfter)
 	for c := 0; c < n; c++ {
 		if colCount[c] > need {
 			return false
