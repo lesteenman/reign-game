@@ -140,4 +140,31 @@ A measure of how irregular a region's shape is. More complex shapes create harde
 
 ---
 
+## Generator (Phase 5+)
+
+Terms in this section are internal to the Phase 5 generator rework (`backend/internal/generator`). They name concepts inside the new algorithm pipeline and the difficulty classifier. Consult this section before writing or reviewing generator code — every term here has a single agreed-upon meaning.
+
+**Solution Sampler**
+The first stage of the generator pipeline. Produces a valid marker configuration (row/column counts satisfied, adjacency constraint honored) via row-by-row backtracking with `uint16` bitmasks and k-combination enumeration per row. Input: N and marksPerUnit (k). Output: a fully marked grid with exactly `N*k` markers. Does NOT produce regions — that is the Region Grower's job. Supersedes the old "sampler" terminology used in `input-spec.md` with a k-parameterized implementation.
+
+**Deductive Solver**
+The rule-based solver used during generation to prove a candidate puzzle is solvable by pure deduction. Applies tiered rules R1..R9 in a fixed-point loop (on any rule firing, restart from Tier 1) until Solved, Stalled, or Contradiction. Used both (a) inside the generator to classify difficulty via the Rule Trace it emits, and (b) in the orchestrator's accept/reject gate — a puzzle that cannot be solved by the Deductive Solver alone is discarded. Distinct from the Brute Solver; cross-checked against it in test builds.
+
+**Brute Solver**
+A pure-function backtracking solver (`bruteSolveAll(regionMap, n, k, maxSolutions)`) that exists independently of the Deductive Solver. Used exclusively to prove uniqueness — a candidate puzzle is accepted only if the Brute Solver returns exactly one solution. Running it with `maxSolutions=2` short-circuits as soon as a second solution is found. Its output is cross-checked against the Deductive Solver's solution in test builds; divergence is a hard failure because it indicates an unsound rule (locked decision #8).
+
+**Rule Trace**
+The ordered record of every deductive rule that fired during a Deductive Solver run on a candidate puzzle. Each trace event records the rule ID (R1..R9), the tier (1..4), and the cells or candidates it eliminated. The Classifier reads the Rule Trace to compute `MaxTier`, `TierCounts`, and `TraceLen`. Trace recording is **toggleable**: off during region-grower scoring (hot-loop allocation hygiene), on during the final classification pass.
+
+**Mutation Loop**
+The iterative region-shape refinement stage that runs when the Deductive Solver stalls on a grown Region Map. On each iteration the Mutator attempts a single-cell boundary swap between two 4-adjacent regions; the swap is accepted only if it strictly increases the Deductive Solver's solved-cell count AND preserves 4-connectivity of both regions AND keeps all Region Seeds in their regions. Capped at `K` iterations per attempt (default K=50, configurable via `WithMaxMutations`). Exceeding K discards the attempt and restarts from the Sampler.
+
+**Region Seed**
+A group of `k` marker positions (from the Sampler's solution) that the Region Grower uses as the starting cells of one region. Exactly `N` seeds exist per puzzle (one per region). For k=1 each seed is a single marker; for k=2 the Pairer groups the 2N markers into N seed-pairs via greedy nearest-neighbor Manhattan pairing. A region always contains all `k` of its seeds — this invariant is enforced by the Grower and defended by the Mutator.
+
+**Expert (difficulty tier)**
+The top tier of the generator's `Difficulty` classification, assigned when `MaxTier == 4` in the Rule Trace (i.e., the puzzle requires the Deductive Solver's Tier 4 rule R8 — the k-parameterized X-wing analogue — to solve). Persisted on `PuzzleRecord.Difficulty`. **Not** surfaced to players in v1 — the difficulty field is computed and stored but the player-facing difficulty selector is R-034 (Phase 9). Sits above Easy (MaxTier ≤ 1), Medium (MaxTier == 2), and Hard (MaxTier == 3). Distinct from the existing "Hard" entry in the Difficulty section above, which describes a grid-size tier (9x9) for the player UI, not a rule-trace-based classification.
+
+---
+
 <!-- Add new terms below as they emerge from design discussions -->
