@@ -884,8 +884,18 @@ func ruleRegionPairExclusion(s *solverState) bool {
 }
 
 // ruleRegionPairExclusionOriginal preserves the original (unsound) R9
-// implementation. Retained for historical reference and as a target for
-// a future soundness fix; not registered in defaultRuleset.
+// implementation. Retained as a live test fixture (see
+// TestRuleR9_RegionPairExclusion_Original_Unsound in rules_test.go, which
+// pins the demonstrated unsoundness) AND as the starting point for a
+// future soundness repair.
+//
+// TODO(post-R-068): either repair R9's precondition (likely: tighten to
+// require no adjacency between the K combined candidate cells across the
+// two regions) or delete this function plus the fixture test. Leaving it
+// as an unreferenced shadow would rot; leaving it as a tracked TODO is
+// honest documentation that Tier 4 classification is currently empty.
+//
+// Not registered in defaultRuleset.
 func ruleRegionPairExclusionOriginal(s *solverState) bool {
 	n := s.n
 	k := s.k

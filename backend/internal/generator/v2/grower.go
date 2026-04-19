@@ -167,8 +167,9 @@ func commitCell(gs *growState, n, cr, cc, chosen int) {
 	}
 }
 
-// copyRegionOf copies gs.regionOf (fixed-size) into the caller's dst,
-// zeroing out-of-bounds cells on the way.
+// copyRegionOf copies the full [nMax][nMax] fixed-size regionOf snapshot
+// into dst via a single value assignment. Out-of-bounds cells (>= n) are
+// assumed already zeroed by initGrowState — this helper does not re-zero.
 func copyRegionOf(dst, src *[nMax][nMax]int8) {
 	*dst = *src
 }

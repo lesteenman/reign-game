@@ -153,6 +153,16 @@ func (g *Generator) probeAssignment(gs *growState, cr, cc, gid int) int {
 	// shortcut initFromRegionMap by writing directly into scoringSolver's
 	// fields, but initFromRegionMap is the audited code path — cheap
 	// enough (one pass over n×n), and guarantees invariants.
+	//
+	// TODO(R-068 or dedicated perf slice): the `make([][]int, n)` +
+	// `n × make([]int, n)` inside convertRegionsToSlices allocates per
+	// probe. At N=12 / k=1 that's ~120-180 allocations/attempt (~20 KB
+	// GC pressure/attempt). A direct writer into scoringSolver.{regOf,
+	// regCellsByRow, colNeed, regNeed, rowNeed, cands, marks} would
+	// eliminate both the allocation and the redundant validation pass.
+	// Deferred because current end-to-end Generate is comfortably under
+	// the 2 s/op budget (85.5 ms at N=12 k=1) and the direct writer needs
+	// its own invariant audit to be safe.
 	rm := convertRegionsToSlices(&g.scoringGrow.regionOf, g.n)
 
 	g.scoringSolver.trace = nil

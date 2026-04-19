@@ -238,6 +238,26 @@ var ErrMaxAttemptsExhausted = errors.New("generator: max attempts exhausted")
 // for cheap combos that succeed on attempt 1.
 const cheapAttemptsBeforeEscalation = 2
 
+// shouldUseSolverGuided picks between the cheap grower (fast, >90% on
+// most (N, k)) and the R-066 solver-guided variant (expensive per attempt
+// but dramatically better on hard combos).
+//
+// The predicate short-circuits on known-hard combos so we don't burn the
+// cheap-first attempts on cases where cheap empirically succeeds <30%:
+//   - k=2 at any N: cheap fails near-100% (see R-065 Step 7 data).
+//   - N>=11 at k=1: cheap fails >70% (same data).
+//
+// Otherwise, the first cheapAttemptsBeforeEscalation attempts use cheap.
+func shouldUseSolverGuided(attempt, n, k int) bool {
+	if k == 2 {
+		return true
+	}
+	if n >= 11 {
+		return true
+	}
+	return attempt >= cheapAttemptsBeforeEscalation
+}
+
 // Generate produces one puzzle. Runs up to g.cfg.maxAttempts iterations of
 // the pipeline described in PG-11 / input-spec §11 Step 8:
 //
@@ -264,20 +284,8 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error) {
 			continue
 		}
 		seeds := pairSeeds(marks, g.n, g.k)
-		// Cheap grower for the first attempts (fast, >90% on most (N, k)).
-		// On continued failure, escalate to the R-066 solver-guided variant:
-		// expensive per-attempt but dramatically better success on hard
-		// combos (N>=10 k=1, all k=2).
-		//
-		// Short-circuit for cases where cheap is known to fail (N>=11 k=1 or
-		// any k=2): start with solver-guided immediately. Burning 2 cheap
-		// attempts that empirically succeed <30% is waste when guided is
-		// ~2x more expensive but ~5x more successful.
-		useSolverGuided := attempt >= cheapAttemptsBeforeEscalation ||
-			(g.k == 2) ||
-			(g.n >= 11)
 		var grew bool
-		if useSolverGuided {
+		if shouldUseSolverGuided(attempt, g.n, g.k) {
 			grew = g.growRegionsSolverGuided(seeds, &g.regionOf)
 		} else {
 			grew = g.growRegions(seeds, &g.regionOf)

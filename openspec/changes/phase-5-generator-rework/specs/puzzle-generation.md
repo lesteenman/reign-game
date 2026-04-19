@@ -127,11 +127,17 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error)
 **Verification.**
 
 - Per-rule unit test: a minimal hand-crafted state where exactly that rule fires and produces the expected change.
-- Per-rule necessity fixture: removing only that rule from the registry causes the fixture to fail. For outcome-subsumed rules (currently R6 and R8 — see "Subsumption" below), the necessity signal is trace-level: the rule's trace events are absent when removed. For all other rules the necessity signal is outcome-level (removed rule → state fails to make the rule's distinctive progress).
+- Per-rule necessity fixture: removing only that rule from the registry causes the fixture to fail. For outcome-subsumed rules (currently R6 and R8 — see "Subsumption" below), the necessity signal is trace-level: the rule's trace events are absent when removed. For all other rules the necessity signal is outcome-level (removed rule → state fails to make the rule's distinctive progress). R9 is currently disabled and has a regression-style test pinning its unsoundness.
 - Cross-check on a 50-puzzle corpus: deductive solution equals brute solution (on the Solved subset). Hard failure on divergence (locked decision #8). Corpus at R-064 uses D4 symmetries + hint variants of a known-unique 5x5 fixture; R-068 replaces this with a grower-generated corpus.
-- Generated-corpus necessity: on a 500-puzzle corpus (R-068), every *non-subsumed* rule fires at least once. Subsumed rules (R6, R8) may never fire — this is expected, not a bug.
+- Generated-corpus necessity: on a 500-puzzle corpus (R-068), every *non-subsumed, non-disabled* rule fires at least once. Subsumed rules (R6, R8) and disabled rules (R9) may never fire — this is expected, not a bug.
 
-**Subsumption (implementation finding, R-064).** R6's precondition is a strict superset of R3's row-axis precondition; R8's preconditions at k=2 imply R3 firings on both involved rows. Because the fixed-point loop restarts from Tier 1 on any change, R3 always beats R6 and R8 to the same end-state. R6 and R8 remain in the registry for spec clarity; difficulty classification Tier 3 is effectively driven by R7 and Tier 4 by R9. See `design.md` §4.2 for the full rationale and the future-work options (tighten preconditions, move to Tier 1, or delete).
+**Subsumption and disablement (implementation findings).**
+
+- **R6 / R8 subsumption (R-064).** R6's precondition is a strict superset of R3's row-axis precondition; R8's preconditions at k=2 imply R3 firings on both involved rows. Because the fixed-point loop restarts from Tier 1 on any change, R3 always beats R6 and R8 to the same end-state. Both rules are retained in the registry for spec clarity.
+- **R9 disabled (R-066).** R9's precondition as written in input-spec §4.2 is unsound at k=2 when the K combined candidate cells across the two regions include mutually column-adjacent cells. R-066 disables R9 in the registry; the original implementation is retained as `ruleRegionPairExclusionOriginal` for regression-test use.
+- **Tier 4 currently unreachable.** R8 is subsumed and R9 is disabled, so `MaxTier` never reaches 4. Tier 3 is driven by R7. Difficulty classification thus effectively caps at Hard (Tier 3). Expert (Tier 4) puzzles are not generated until R6/R8 preconditions are tightened or R9 is repaired.
+
+See `design.md` §4.2 for the full rationale and the future-work options.
 
 ---
 
