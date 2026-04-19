@@ -163,24 +163,36 @@ func TestPuzzleJSONRoundTrip(t *testing.T) {
 	}
 }
 
-func TestGenerateReturnsNotImplemented(t *testing.T) {
+func TestGenerateProducesValidPuzzle(t *testing.T) {
 	t.Parallel()
 
 	// Arrange
-	g, err := New(8, 1)
+	g, err := New(8, 1, WithSeed(42), WithMaxAttempts(50))
 	if err != nil {
 		t.Fatalf("unexpected New error: %v", err)
 	}
 
 	// Act
-	_, genErr := g.Generate(context.Background())
+	p, genErr := g.Generate(context.Background())
 
 	// Assert
-	if genErr == nil {
-		t.Fatal("expected Generate to return an error in this scaffold slice")
+	if genErr != nil {
+		t.Fatalf("unexpected Generate error: %v", genErr)
 	}
-	if !strings.Contains(genErr.Error(), "not implemented") {
-		t.Errorf("expected error message to contain \"not implemented\", got %q", genErr.Error())
+	if p.N != 8 {
+		t.Errorf("N = %d, want 8", p.N)
+	}
+	if p.MarksPerUnit != 1 {
+		t.Errorf("MarksPerUnit = %d, want 1", p.MarksPerUnit)
+	}
+	if len(p.Regions) != 8 {
+		t.Errorf("len(Regions) = %d, want 8", len(p.Regions))
+	}
+	if len(p.Solution) != 8 {
+		t.Errorf("len(Solution) = %d, want 8", len(p.Solution))
+	}
+	if p.Difficulty == DifficultyUnknown {
+		t.Error("Difficulty was DifficultyUnknown, expected a concrete tier")
 	}
 }
 
