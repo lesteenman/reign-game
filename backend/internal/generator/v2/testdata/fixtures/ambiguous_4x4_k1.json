@@ -1,6 +1,6 @@
 {
   "name": "ambiguous_4x4_k1",
-  "description": "4x4 region map with 2x2 square regions; multiple valid placements exist under Queens-variant rules (k=1). Brute solver should return >= 2 solutions (cap fires).",
+  "description": "4x4 region map with 2x2 square regions; multiple valid placements exist under the Reign constraints (k=1 mark per row/col/region, no 8-neighbor adjacency). Brute solver should return >= 2 solutions (cap fires).",
   "n": 4,
   "k": 1,
   "expected_solution_count_capped_at_2": 2,
