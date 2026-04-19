@@ -1,0 +1,12 @@
+{
+  "name": "unsatisfiable_3x3_k1",
+  "description": "3x3 column-stripe region map (k=1). Any valid row/col placement of 3 marks, one per column, forces two adjacent marks in consecutive columns. No valid placement exists; brute solver returns 0 solutions.",
+  "n": 3,
+  "k": 1,
+  "expected_solution_count": 0,
+  "region_map": [
+    [0, 1, 2],
+    [0, 1, 2],
+    [0, 1, 2]
+  ]
+}

@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand/v2"
+	"time"
 )
 
 // NMin is the interim package-level floor for the grid size N.
@@ -133,7 +135,24 @@ func WithDifficulty(d Difficulty) Option {
 // Generator is NOT safe for concurrent use — one Generator per goroutine.
 type Generator struct {
 	cfg *config
+	n   int
+	k   int
+	rng *rand.Rand
+
+	// Sampler scratch buffers. Pre-allocated in New so the inner loop is
+	// allocation-free after warm-up. See sample.go for the invariants.
+	rowMarks [nMax]uint16
+	colCount [nMax]uint8
+	solBuf   []Mark
+	// rowCombos[row] is the filtered & shuffled list of candidate column
+	// bitmasks considered for that row at the current backtracker depth.
+	rowCombos [nMax][maxCombosPerRow]uint16
 }
+
+// maxCombosPerRow bounds the number of valid k-combinations of columns for a
+// single row at N=16 with pairwise gap >= 2. For k in {1, 2} the upper bound is
+// C(16, 2) = 120; 256 leaves comfortable headroom for defensive padding.
+const maxCombosPerRow = 256
 
 // New constructs a Generator. n must be in [1, 16] and marksPerUnit must be 1
 // or 2; otherwise a typed error is returned.
@@ -154,7 +173,18 @@ func New(n, marksPerUnit int, opts ...Option) (*Generator, error) {
 		opt(cfg)
 	}
 
-	return &Generator{cfg: cfg}, nil
+	seed := cfg.seed
+	if !cfg.seedSet {
+		seed = time.Now().UnixNano()
+	}
+	g := &Generator{
+		cfg:    cfg,
+		n:      n,
+		k:      marksPerUnit,
+		rng:    rand.New(rand.NewPCG(uint64(seed), uint64(seed)^0x9E3779B97F4A7C15)),
+		solBuf: make([]Mark, 0, n*marksPerUnit),
+	}
+	return g, nil
 }
 
 // Generate produces one puzzle. The scaffold slice (R-062) returns
