@@ -23,33 +23,13 @@ awslocal sqs create-queue \
     "RedrivePolicy": "{\"deadLetterTargetArn\":\"arn:aws:sqs:us-east-1:000000000000:puzzle-generation-dlq\",\"maxReceiveCount\":\"3\"}"
   }'
 
-echo "Seeding CONFIG items..."
-awslocal dynamodb put-item \
-  --table-name puzzle-pool \
-  --item '{
-    "PK": {"S": "CONFIG"},
-    "SK": {"S": "5#standard"},
-    "pipeline": {"S": "iterative"},
-    "solver": {"S": "propagation"},
-    "regions": {"S": "bfs"},
-    "regionVariance": {"N": "0"},
-    "deducible": {"BOOL": true},
-    "concurrency": {"N": "1"},
-    "threshold": {"N": "3"},
-    "enabled": {"BOOL": true}
-  }'
-
+echo "Seeding CONFIG items (Phase 5 shape: deducible/threshold/enabled)..."
 awslocal dynamodb put-item \
   --table-name puzzle-pool \
   --item '{
     "PK": {"S": "CONFIG"},
     "SK": {"S": "7#standard"},
-    "pipeline": {"S": "iterative"},
-    "solver": {"S": "propagation"},
-    "regions": {"S": "bfs"},
-    "regionVariance": {"N": "0"},
     "deducible": {"BOOL": true},
-    "concurrency": {"N": "1"},
     "threshold": {"N": "3"},
     "enabled": {"BOOL": true}
   }'
@@ -59,12 +39,7 @@ awslocal dynamodb put-item \
   --item '{
     "PK": {"S": "CONFIG"},
     "SK": {"S": "9#standard"},
-    "pipeline": {"S": "iterative"},
-    "solver": {"S": "propagation"},
-    "regions": {"S": "bfs"},
-    "regionVariance": {"N": "0"},
     "deducible": {"BOOL": true},
-    "concurrency": {"N": "1"},
     "threshold": {"N": "3"},
     "enabled": {"BOOL": true}
   }'
@@ -74,12 +49,7 @@ awslocal dynamodb put-item \
   --item '{
     "PK": {"S": "CONFIG"},
     "SK": {"S": "7#double"},
-    "pipeline": {"S": "iterative"},
-    "solver": {"S": "propagation"},
-    "regions": {"S": "bfs"},
-    "regionVariance": {"N": "0"},
     "deducible": {"BOOL": true},
-    "concurrency": {"N": "1"},
     "threshold": {"N": "3"},
     "enabled": {"BOOL": false}
   }'
@@ -89,12 +59,7 @@ awslocal dynamodb put-item \
   --item '{
     "PK": {"S": "CONFIG"},
     "SK": {"S": "9#double"},
-    "pipeline": {"S": "iterative"},
-    "solver": {"S": "propagation"},
-    "regions": {"S": "bfs"},
-    "regionVariance": {"N": "0"},
     "deducible": {"BOOL": true},
-    "concurrency": {"N": "1"},
     "threshold": {"N": "3"},
     "enabled": {"BOOL": false}
   }'

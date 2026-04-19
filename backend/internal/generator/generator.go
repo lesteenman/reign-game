@@ -1,85 +1,343 @@
 package generator
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"math/rand/v2"
+	"time"
 )
 
-// generateSolution places gridSize*markersPerUnit markers on a gridSize×gridSize
-// grid such that each row and column has exactly markersPerUnit markers, and no
-// two markers are adjacent (horizontally, vertically, or diagonally).
-// Returns nil if no valid placement is found.
-func generateSolution(gridSize, markersPerUnit int) [][]bool {
-	// markerCols[row] holds the columns where markers are placed in that row.
-	markerCols := make([][]int, gridSize)
-	for i := range markerCols {
-		markerCols[i] = make([]int, 0, markersPerUnit)
-	}
-	usedCol := make([]int, gridSize)
+// NMin is the package-level floor for the grid size N.
+//
+// Empirically chosen from R-063's feasibility probe (bench/n-feasibility.md):
+//   - N=4 k=1 has exactly 2 solutions.
+//   - N=5 k=1 has exactly 14 solutions.
+//   - N=6 k=1 has exactly 90 solutions (brute-verified, not capped).
+//
+// 14 unique base solutions at N=5 is too narrow a pool for long-term content
+// variety (solutions × region maps grown over them). N=6 gives ~6× more.
+// The constant is informational: New does not enforce n >= NMin; downstream
+// orchestrators (R-065) respect it.
+const NMin = 6
 
-	if !placeSolutionRow(markerCols, usedCol, 0, gridSize, markersPerUnit) {
-		return nil
-	}
+// nMax is the bitmask-width ceiling. The solver uses uint16 masks, so n > 16
+// is unrepresentable.
+const nMax = 16
 
-	grid := make([][]bool, gridSize)
-	for r := 0; r < gridSize; r++ {
-		grid[r] = make([]bool, gridSize)
-		for _, c := range markerCols[r] {
-			grid[r][c] = true
-		}
-	}
-	return grid
+// defaultMaxAttempts is the fallback attempt cap when a caller does not pass
+// WithMaxAttempts. Tunable via the same option and, at the consumer layer,
+// via ConfigRecord.MaxAttempts / GenerationRequest.MaxAttempts.
+const defaultMaxAttempts = 20
+
+// defaultMaxMutations is the default swap-mutation budget per attempt.
+// Locked decision #9; adjustable via WithMaxMutations.
+const defaultMaxMutations = 50
+
+// Package-level typed errors. Consumers use errors.Is against these sentinels.
+var (
+	// ErrNOutOfRange is returned by New when n is outside [1, 16].
+	ErrNOutOfRange = errors.New("generator: n out of range (expected 1..16)")
+
+	// ErrKUnsupported is returned by New when marksPerUnit is not in {1, 2}.
+	ErrKUnsupported = errors.New("generator: marksPerUnit unsupported (expected 1 or 2)")
+)
+
+// Difficulty buckets derived from the rule trace (design.md §8). Zero is the
+// unset / invalid sentinel so an uninitialized value is never mistaken for a
+// valid tier.
+type Difficulty int
+
+const (
+	// DifficultyUnknown is the zero value and represents an unset tier.
+	DifficultyUnknown Difficulty = iota
+	// Easy puzzles require only Tier-1 rules.
+	Easy
+	// Medium puzzles require up to Tier-2 rules.
+	Medium
+	// Hard puzzles require up to Tier-3 rules.
+	Hard
+	// Expert puzzles require Tier-4 rules.
+	Expert
+)
+
+// Mark is a zero-indexed cell coordinate.
+type Mark struct {
+	Row int `json:"r"`
+	Col int `json:"c"`
 }
 
-// placeSolutionRow recursively places markersPerUnit markers per row in a
-// random order. It tries random column combinations for each row.
-func placeSolutionRow(markerCols [][]int, usedCol []int, row, gridSize, markersPerUnit int) bool {
-	if row == gridSize {
+// Metrics captures the classifier's view of a generated puzzle.
+type Metrics struct {
+	MaxTier    int   `json:"max_tier"`
+	TierCounts []int `json:"tier_counts"`
+	TraceLen   int   `json:"trace_len"`
+}
+
+// Puzzle is the generator's output shape. Storage types are built from it by
+// the worker (see backend/internal/worker for the translation boundary).
+type Puzzle struct {
+	N            int        `json:"n"`
+	MarksPerUnit int        `json:"marks_per_unit"`
+	Regions      [][]int    `json:"regions"`
+	Solution     []Mark     `json:"solution"`
+	Difficulty   Difficulty `json:"difficulty"`
+	Metrics      Metrics    `json:"metrics"`
+}
+
+// config holds the options applied to a Generator at construction. All fields
+// are unexported; callers set them via Option functions.
+type config struct {
+	seed         int64
+	seedSet      bool
+	maxAttempts  int
+	maxMutations int
+	difficulty   Difficulty
+}
+
+// Option configures a Generator at construction.
+type Option func(*config)
+
+// WithSeed seeds the generator's RNG for deterministic output. If unset, the
+// generator seeds itself from a non-deterministic source.
+func WithSeed(seed int64) Option {
+	return func(c *config) {
+		c.seed = seed
+		c.seedSet = true
+	}
+}
+
+// WithMaxAttempts sets the sample+grow attempt cap per Generate call. Values
+// <= 0 are ignored (the package default applies).
+func WithMaxAttempts(n int) Option {
+	return func(c *config) {
+		if n > 0 {
+			c.maxAttempts = n
+		}
+	}
+}
+
+// WithMaxMutations sets the swap-mutation budget per attempt. Values <= 0 are
+// ignored (the package default applies).
+func WithMaxMutations(n int) Option {
+	return func(c *config) {
+		if n > 0 {
+			c.maxMutations = n
+		}
+	}
+}
+
+// WithDifficulty enables the discard-and-retry difficulty filter. Puzzles that
+// classify outside the requested tier are rejected and Generate retries
+// (counted against WithMaxAttempts). DifficultyUnknown disables the filter.
+func WithDifficulty(d Difficulty) Option {
+	return func(c *config) {
+		c.difficulty = d
+	}
+}
+
+// Generator owns pre-allocated solver state, RNG, and trace buffers. A
+// Generator is NOT safe for concurrent use — one Generator per goroutine.
+type Generator struct {
+	cfg *config
+	n   int
+	k   int
+	rng *rand.Rand
+
+	// Sampler scratch buffers. Pre-allocated in New so the inner loop is
+	// allocation-free after warm-up. See sample.go for the invariants.
+	rowMarks [nMax]uint16
+	colCount [nMax]uint8
+	solBuf   []Mark
+	// rowCombos[row] is the filtered & shuffled list of candidate column
+	// bitmasks considered for that row at the current backtracker depth.
+	rowCombos [nMax][maxCombosPerRow]uint16
+
+	// Grower / mutator scratch. Reused across attempts via reset, not
+	// reallocated. regionOf is the authoritative cell-to-region assignment
+	// for the current attempt (-1 = unclaimed during growth; no -1 values
+	// after growRegions returns).
+	regionOf [nMax][nMax]int8
+	// solver holds the deductive solver state for the orchestrator's solve
+	// pass. Pre-allocated so Generate does not allocate an 8KB state per
+	// attempt.
+	solver solverState
+	// scoringSolver is the solver-guided grower's scratch state (R-066).
+	// Pre-allocated on the Generator so solver-guided probes use value-copy
+	// clone (*dst = *src) rather than reallocating. Trace recording is OFF
+	// on this state (set and stays nil).
+	scoringSolver solverState
+	// scoringGrow is the solver-guided grower's grow-state scratch (R-066).
+	// Holds the tentative completion while probing a candidate region
+	// assignment. Pre-allocated to keep probes alloc-free.
+	scoringGrow growState
+	// growFrontierBuf is the scratch frontier list reused by every grower
+	// invocation (cheap and solver-guided). Sized at New() to nMax*nMax so
+	// it never needs to grow. Callers use g.growFrontierBuf[:0] to reset.
+	growFrontierBuf []int
+	// traceBuf backs solver.trace during the final classification pass. The
+	// mutator's probe passes keep solver.trace == nil (NF3: zero alloc in
+	// the hot loop).
+	traceBuf ruleTrace
+}
+
+// maxCombosPerRow bounds the number of valid k-combinations of columns for a
+// single row at N=nMax (16) with pairwise gap >= 2. For k in {1, 2} the
+// upper bound is C(16, 2) = 120 (the k=1 case is nMax=16, strictly smaller).
+// We size the pre-allocated scratch buffer to exactly this bound;
+// enumerateKCombos panics if over-emission is ever attempted so that any
+// future k=3 path (or off-by-one) fails loudly instead of silently
+// reallocating onto the heap and defeating NF3 (zero-alloc hot loop).
+const maxCombosPerRow = 120
+
+// New constructs a Generator. n must be in [1, 16] and marksPerUnit must be 1
+// or 2; otherwise a typed error is returned.
+func New(n, marksPerUnit int, opts ...Option) (*Generator, error) {
+	if n < 1 || n > nMax {
+		return nil, fmt.Errorf("n=%d: %w", n, ErrNOutOfRange)
+	}
+	if marksPerUnit != 1 && marksPerUnit != 2 {
+		return nil, fmt.Errorf("marksPerUnit=%d: %w", marksPerUnit, ErrKUnsupported)
+	}
+
+	cfg := &config{
+		maxAttempts:  defaultMaxAttempts,
+		maxMutations: defaultMaxMutations,
+		difficulty:   DifficultyUnknown,
+	}
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
+	seed := cfg.seed
+	if !cfg.seedSet {
+		seed = time.Now().UnixNano()
+	}
+	g := &Generator{
+		cfg:             cfg,
+		n:               n,
+		k:               marksPerUnit,
+		rng:             rand.New(rand.NewPCG(uint64(seed), uint64(seed)^0x9E3779B97F4A7C15)),
+		solBuf:          make([]Mark, 0, n*marksPerUnit),
+		growFrontierBuf: make([]int, 0, nMax*nMax),
+		traceBuf:        make(ruleTrace, 0, defaultTraceCap),
+	}
+	return g, nil
+}
+
+// defaultTraceCap caps the rule-trace backing slice. Even Expert puzzles
+// rarely exceed a few dozen rule firings — 512 is ample headroom and lets
+// the append in (*solverState).record never reallocate.
+const defaultTraceCap = 512
+
+// ErrMaxAttemptsExhausted is returned by Generate when the configured
+// WithMaxAttempts cap is hit without producing a valid, unique,
+// deducible puzzle that matches the optional WithDifficulty filter.
+var ErrMaxAttemptsExhausted = errors.New("generator: max attempts exhausted")
+
+// cheapAttemptsBeforeEscalation is the number of cheap-grower attempts
+// per Generate call before the orchestrator escalates to the R-066
+// solver-guided variant. Cheap combos (most N at k=1) hit >90% in one
+// attempt; hard combos (N>=10 k=1, all k=2) usually need the guided
+// variant. Escalating after 2 failures avoids paying the guidance cost
+// for cheap combos that succeed on attempt 1.
+const cheapAttemptsBeforeEscalation = 2
+
+// shouldUseSolverGuided picks between the cheap grower (fast, >90% on
+// most (N, k)) and the R-066 solver-guided variant (expensive per attempt
+// but dramatically better on hard combos).
+//
+// The predicate short-circuits on known-hard combos so we don't burn the
+// cheap-first attempts on cases where cheap empirically succeeds <30%:
+//   - k=2 at any N: cheap fails near-100% (see R-065 Step 7 data).
+//   - N>=11 at k=1: cheap fails >70% (same data).
+//
+// Otherwise, the first cheapAttemptsBeforeEscalation attempts use cheap.
+func shouldUseSolverGuided(attempt, n, k int) bool {
+	if k == 2 {
 		return true
 	}
-
-	// Generate all valid column combinations for this row via recursive helper.
-	return placeSolutionCols(markerCols, usedCol, row, 0, 0, gridSize, markersPerUnit)
+	if n >= 11 {
+		return true
+	}
+	return attempt >= cheapAttemptsBeforeEscalation
 }
 
-// placeSolutionCols recursively selects markersPerUnit columns for a single row
-// during solution generation. Columns are tried in random order within each
-// recursion level. startCol is the minimum column index to try (ensuring
-// combinations, not permutations). placed counts markers placed so far in this row.
-func placeSolutionCols(markerCols [][]int, usedCol []int, row, startCol, placed, gridSize, markersPerUnit int) bool {
-	if placed == markersPerUnit {
-		return placeSolutionRow(markerCols, usedCol, row+1, gridSize, markersPerUnit)
+// Generate produces one puzzle. Runs up to g.cfg.maxAttempts iterations of
+// the pipeline described in PG-11 / input-spec §11 Step 8:
+//
+//	sample -> pair -> grow -> solve+mutate -> brute-uniqueness ->
+//	  classify -> (optional difficulty filter) -> convert
+//
+// Honors ctx cancellation between attempts; returns ctx.Err() unchanged so
+// callers can distinguish Canceled/DeadlineExceeded from domain errors.
+//
+// On total failure (budget exhausted) returns ErrMaxAttemptsExhausted.
+func (g *Generator) Generate(ctx context.Context) (Puzzle, error) {
+	maxAttempts := g.cfg.maxAttempts
+	if maxAttempts <= 0 {
+		maxAttempts = defaultMaxAttempts
 	}
 
-	remaining := markersPerUnit - placed
-	// Try columns in random order, but only those >= startCol.
-	candidates := make([]int, 0, gridSize-startCol)
-	for c := startCol; c <= gridSize-remaining; c++ {
-		candidates = append(candidates, c)
-	}
-	rand.Shuffle(len(candidates), func(i, j int) {
-		candidates[i], candidates[j] = candidates[j], candidates[i]
-	})
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return Puzzle{}, err
+		}
 
-	for _, col := range candidates {
-		if usedCol[col] >= markersPerUnit {
+		marks, ok := g.sampleSolution()
+		if !ok {
 			continue
 		}
-		if !adjacencySafe(markerCols, row, col) {
+		seeds := pairSeeds(marks, g.n, g.k)
+		var grew bool
+		if shouldUseSolverGuided(attempt, g.n, g.k) {
+			grew = g.growRegionsSolverGuided(seeds, &g.regionOf)
+		} else {
+			grew = g.growRegions(seeds, &g.regionOf)
+		}
+		if !grew {
+			continue
+		}
+		if outcome := g.solveAndMutate(seeds); outcome != mutationSolved {
+			continue
+		}
+		// Brute-uniqueness check. The solver in g.solver holds the
+		// deductive solution; we also want to confirm no alternative
+		// solution exists.
+		rm := convertRegionsToSlices(&g.regionOf, g.n)
+		sols, err := bruteSolveAll(rm, g.n, g.k, 2)
+		if err != nil || len(sols) != 1 {
 			continue
 		}
 
-		markerCols[row] = append(markerCols[row], col)
-		usedCol[col]++
+		// Trace-enabled classification pass. Reset the solver state with
+		// trace recording, re-solve, then classify.
+		g.solver.trace = g.traceBuf[:0]
+		if err := g.solver.initFromRegionMap(rm, g.n, g.k); err != nil {
+			continue
+		}
+		if solve(&g.solver) != OutcomeSolved {
+			// Extremely unlikely — the just-solved puzzle should be
+			// deducible. Skip on any mismatch.
+			continue
+		}
+		difficulty, metrics := classify(g.solver.trace)
+		g.traceBuf = g.solver.trace // cache back for reuse
 
-		// For the next column in this row, we need col+1 as minimum to
-		// maintain combination ordering. But since we shuffled, we need to
-		// pass col+1 to ensure no duplicates while allowing any order.
-		if placeSolutionCols(markerCols, usedCol, row, col+1, placed+1, gridSize, markersPerUnit) {
-			return true
+		if g.cfg.difficulty != DifficultyUnknown && difficulty != g.cfg.difficulty {
+			continue
 		}
 
-		markerCols[row] = markerCols[row][:len(markerCols[row])-1]
-		usedCol[col]--
+		solution := g.solver.appendSolutionMarks(make([]Mark, 0, g.n*g.k))
+		return Puzzle{
+			N:            g.n,
+			MarksPerUnit: g.k,
+			Regions:      convertRegionsToSlices(&g.regionOf, g.n),
+			Solution:     solution,
+			Difficulty:   difficulty,
+			Metrics:      metrics,
+		}, nil
 	}
-	return false
+
+	return Puzzle{}, ErrMaxAttemptsExhausted
 }
