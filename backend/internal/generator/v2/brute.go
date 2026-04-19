@@ -170,37 +170,15 @@ func bruteSolveAll(regionMap [][]int, n, k, maxSolutions int) ([][]Mark, error) 
 	return solutions, nil
 }
 
-// bruteKCombos returns an iterator sequence of k-column bitmasks over
-// [0, n) drawn from the `available` mask with pairwise column gap >= 2.
-// Implemented as a slice to keep code simple; the slice is small (<= 120) and
-// the brute solver is not on the release hot path.
+// bruteKCombos enumerates k-column bitmasks for a row in the brute solver.
+// Delegates to appendKCombos (the canonical shared enumerator) without a
+// per-column budget; the brute solver applies column and region budgets
+// separately in its recursive step. The returned slice is freshly allocated
+// (the brute solver is not on the release hot path — this keeps the code
+// simple).
 func bruteKCombos(available uint16, n, k int) []uint16 {
-	if k == 1 {
-		out := make([]uint16, 0, bits.OnesCount16(available))
-		m := available
-		for m != 0 {
-			c := bits.TrailingZeros16(m)
-			m &^= 1 << c
-			out = append(out, uint16(1)<<uint(c))
-		}
-		return out
-	}
-	// k == 2.
-	out := make([]uint16, 0, 128)
-	for c1 := 0; c1 < n-1; c1++ {
-		b1 := uint16(1) << uint(c1)
-		if available&b1 == 0 {
-			continue
-		}
-		for c2 := c1 + 2; c2 < n; c2++ {
-			b2 := uint16(1) << uint(c2)
-			if available&b2 == 0 {
-				continue
-			}
-			out = append(out, b1|b2)
-		}
-	}
-	return out
+	out := make([]uint16, 0, maxCombosPerRow)
+	return appendKCombos(out, n, k, available, 0, nil)
 }
 
 // forwardCheckBrute returns true iff every column and region still has
