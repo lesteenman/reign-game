@@ -218,6 +218,9 @@ func TestOptionsSetConfigFields(t *testing.T) {
 	if g.cfg.seed != seed {
 		t.Errorf("seed: expected %d, got %d", seed, g.cfg.seed)
 	}
+	if !g.cfg.seedSet {
+		t.Error("seedSet: expected true after WithSeed, got false")
+	}
 	if g.cfg.maxAttempts != maxAttempts {
 		t.Errorf("maxAttempts: expected %d, got %d", maxAttempts, g.cfg.maxAttempts)
 	}
