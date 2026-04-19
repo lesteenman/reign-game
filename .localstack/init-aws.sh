@@ -42,14 +42,8 @@ awslocal dynamodb put-item \
     "enabled": {"BOOL": true}
   }'
 
-awslocal dynamodb put-item \
-  --table-name puzzle-pool \
-  --item '{
-    "PK": {"S": "CONFIG"},
-    "SK": {"S": "7#double"},
-    "threshold": {"N": "3"},
-    "enabled": {"BOOL": false}
-  }'
+# 7x7 double is infeasible (N=7 k=2 has 0 solutions under 8-neighbor
+# adjacency + 2 marks/row — see bench/n-feasibility.md). Not seeded.
 
 awslocal dynamodb put-item \
   --table-name puzzle-pool \
@@ -57,7 +51,7 @@ awslocal dynamodb put-item \
     "PK": {"S": "CONFIG"},
     "SK": {"S": "9#double"},
     "threshold": {"N": "3"},
-    "enabled": {"BOOL": false}
+    "enabled": {"BOOL": true}
   }'
 
 echo "LocalStack init complete: puzzle-pool table, puzzle-generation queue, and CONFIG items created."
