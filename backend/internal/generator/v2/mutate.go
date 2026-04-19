@@ -53,11 +53,24 @@ func (g *Generator) solveAndMutate(seeds [][]Mark) mutationOutcome {
 		budget = defaultMaxMutations
 	}
 
+	// Two-pass acceptance per step:
+	//   (1) strict improvement — any swap that raises solved-cell count
+	//   (2) plateau acceptance — a same-score swap, accepted with 50%
+	//       probability (RNG-seeded, so determinism is preserved)
+	// R-066 found the pure strict-improvement mutator bails at the first
+	// non-improving swap and cannot escape local optima — budget 50 vs 500
+	// showed no difference. Plateau acceptance gives the walker a way off
+	// a ridge to a neighboring basin; 50% keeps the walk biased toward
+	// improvement when one exists nearby.
 	for step := 0; step < budget; step++ {
 		baseline := countSolvedCells(&g.solver)
-		accepted := g.tryOneSwap(seeds, baseline)
+		accepted := g.tryOneSwap(seeds, baseline, false)
 		if !accepted {
-			// No swap improves — give up.
+			// No strict improvement anywhere — try a plateau swap.
+			accepted = g.tryOneSwap(seeds, baseline, true)
+		}
+		if !accepted {
+			// No improving swap AND no accepted plateau swap — give up.
 			return mutationFailed
 		}
 		// tryOneSwap installs g.solver with the re-solved state already.
@@ -74,18 +87,24 @@ func (g *Generator) solveAndMutate(seeds [][]Mark) mutationOutcome {
 }
 
 // tryOneSwap scans boundary cells (cells on the border between two
-// regions) and tries reassigning each to the neighboring region. Accepts
-// the first swap that (a) preserves all region invariants and (b) strictly
-// increases the solver-solved cell count. On accept: updates g.regionOf
-// and rm in place and returns true with g.solver holding the post-swap
-// solve. On miss: restores g.solver to the pre-scan state (the caller
-// uses g.solver.solved() / .contradicts() after return).
+// regions) and tries reassigning each to the neighboring region. The
+// acceptance rule depends on allowPlateau:
+//   - allowPlateau=false (strict): accept iff solved-cell count strictly
+//     increases. This is the first-pass behavior.
+//   - allowPlateau=true (plateau): accept a strict improvement
+//     immediately, OR accept a same-score swap with 50% probability.
+//     This is the second-pass fallback when no strict improvement exists
+//     anywhere.
+//
+// On accept: updates g.regionOf in place and returns true with g.solver
+// holding the post-swap solve. On miss: restores g.solver to the pre-scan
+// state (the caller uses g.solver.solved() / .contradicts() after return).
 //
 // Scan prioritization: start from cells near a "stalled" cell (a cell
 // that is neither a confirmed mark nor eliminated), since those are
 // where the solver is stuck. Spec: "examine region boundaries within
 // Manhattan distance 2" of stalled cells.
-func (g *Generator) tryOneSwap(seeds [][]Mark, baseline int) bool {
+func (g *Generator) tryOneSwap(seeds [][]Mark, baseline int, allowPlateau bool) bool {
 	n := g.n
 
 	// Collect stalled cells (candidates that are NOT yet marked — i.e.
@@ -145,6 +164,12 @@ func (g *Generator) tryOneSwap(seeds [][]Mark, baseline int) bool {
 			_ = solve(&g.solver)
 			newCount := countSolvedCells(&g.solver)
 			if newCount > baseline {
+				return true
+			}
+			// Plateau acceptance: same score, coin-flip accept. Uses
+			// g.rng so the decision is seed-deterministic and the RNG
+			// call order stays consistent with other Generator stages.
+			if allowPlateau && newCount == baseline && g.rng.IntN(2) == 0 {
 				return true
 			}
 			g.regionOf[r][c] = int8(fromID)
