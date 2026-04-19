@@ -1,7 +1,6 @@
 package generator
 
 import (
-	"fmt"
 	"math/bits"
 )
 
@@ -72,8 +71,11 @@ func (g *Generator) sampleBacktrack(row int) bool {
 		forbid = adjacentColumnsMask(g.rowMarks[row-1], n)
 	}
 
+	full := uint16(1)<<uint(n) - 1
+	available := full &^ forbid
+
 	combos := g.rowCombos[row][:0]
-	combos = enumerateKCombos(combos, n, g.k, forbid, &g.colCount)
+	combos = appendKCombos(combos, n, g.k, available, uint8(g.k), &g.colCount)
 	if len(combos) == 0 {
 		return false
 	}
@@ -133,67 +135,4 @@ func adjacentColumnsMask(rowMask uint16, n int) uint16 {
 	full := uint16(1)<<uint(n) - 1
 	spread := rowMask | (rowMask << 1) | (rowMask >> 1)
 	return spread & full
-}
-
-// enumerateKCombos appends every k-column bitmask over [0, n) that (a) avoids
-// the forbidden columns, (b) has pairwise column gap >= 2 (no intra-row
-// adjacency), and (c) does not push any column over its k-budget.
-//
-// For k=1 it emits at most N single-bit masks; for k=2 it emits at most
-// C(n,2) minus gap-<2 pairs (upper bound maxCombosPerRow at n=16). Pure
-// function, no allocation (appends to a caller-owned slice). colCount is
-// passed by pointer to avoid copying [nMax]uint8 on every recursion step.
-//
-// Guard: if appending would exceed dst's capacity (i.e. the caller under-sized
-// rowCombos for the current (n, k)), panic. This surfaces the bug loudly
-// rather than silently reallocating onto the heap and defeating NF3.
-//
-// TODO(R-064): the deductive solver will want an identical k-combo enumerator
-// over an arbitrary `available` mask without the column-budget filter.
-// Extract a shared primitive into a bits util when that slice lands.
-func enumerateKCombos(dst []uint16, n, k int, forbid uint16, colCount *[nMax]uint8) []uint16 {
-	full := uint16(1)<<uint(n) - 1
-	available := full &^ forbid
-
-	appendGuarded := func(mask uint16) {
-		if len(dst) == cap(dst) {
-			panic(fmt.Sprintf("enumerateKCombos: dst capacity %d exceeded (n=%d, k=%d)", cap(dst), n, k))
-		}
-		dst = append(dst, mask)
-	}
-
-	if k == 1 {
-		m := available
-		for m != 0 {
-			c := bits.TrailingZeros16(m)
-			m &^= 1 << c
-			if colCount[c] >= 1 {
-				continue
-			}
-			appendGuarded(uint16(1) << uint(c))
-		}
-		return dst
-	}
-
-	// k == 2: enumerate ordered pairs (c1 < c2) with c2 - c1 >= 2.
-	for c1 := 0; c1 < n-1; c1++ {
-		bit1 := uint16(1) << uint(c1)
-		if available&bit1 == 0 {
-			continue
-		}
-		if colCount[c1] >= 2 {
-			continue
-		}
-		for c2 := c1 + 2; c2 < n; c2++ {
-			bit2 := uint16(1) << uint(c2)
-			if available&bit2 == 0 {
-				continue
-			}
-			if colCount[c2] >= 2 {
-				continue
-			}
-			appendGuarded(bit1 | bit2)
-		}
-	}
-	return dst
 }
