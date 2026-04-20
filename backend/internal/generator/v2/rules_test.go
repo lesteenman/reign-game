@@ -446,9 +446,41 @@ func TestRuleR8_KLineSubset(t *testing.T) {
 	}
 }
 
-// TestRuleR9_RegionPairExclusion: at k=2, two regions' combined cands in
-// one row span only k cells — no other region's marks on that row.
+// TestRuleR9_RegionPairExclusion: R9 is DISABLED as of R-066 due to an
+// unsound precondition in the original implementation (the rule fired
+// when two regions' combined row-cands == k, without verifying those
+// two regions MUST jointly supply all k of the row's marks). The
+// original test exercised the unsound elimination; it is retained but
+// rewritten to document the disabled state.
 func TestRuleR9_RegionPairExclusion(t *testing.T) {
+	t.Parallel()
+	// Arrange — minimal k=2 state.
+	regionMap := make([][]int, 9)
+	for r := range regionMap {
+		regionMap[r] = make([]int, 9)
+		for c := range regionMap[r] {
+			regionMap[r][c] = r
+		}
+	}
+	s := buildState(t, regionMap, 9, 2)
+
+	// Act
+	changed := ruleRegionPairExclusion(s)
+
+	// Assert — rule is disabled; must not fire.
+	if changed {
+		t.Fatal("R9 is disabled (R-066 soundness finding); expected no change")
+	}
+}
+
+// TestRuleR9_RegionPairExclusion_Original_Unsound retains the original
+// R9 fixture for historical reference — the fixture now proves the
+// original rule was UNSOUND: given row 0 cands = {col 0 (reg 0), col 5
+// (reg 1), col 7 (reg 2)} and k=2, the original rule eliminated col 7
+// but a valid solution exists with the row 0 marks at {col 0, col 7}
+// (region 0 contributes col 0, region 1 contributes its 2 marks
+// elsewhere, region 2 contributes col 7).
+func TestRuleR9_RegionPairExclusion_Original_Unsound(t *testing.T) {
 	t.Parallel()
 
 	// Arrange — 9x9 k=2.
@@ -526,15 +558,16 @@ func TestRuleR9_RegionPairExclusion(t *testing.T) {
 		t.Fatalf("setup: expected cands[0] = 0,5,7; got %09b", s.cands[0])
 	}
 
-	// Act
-	changed := ruleRegionPairExclusion(s)
+	// Act — call the ORIGINAL (unsound) implementation.
+	changed := ruleRegionPairExclusionOriginal(s)
 
-	// Assert
+	// Assert — demonstrates the original unsoundness. Col 7 is eliminated
+	// despite being a valid row-0 mark under at least one solution.
 	if !changed {
-		t.Fatal("expected R9 changed=true")
+		t.Fatal("expected original R9 to fire (and unsoundly eliminate col 7)")
 	}
 	if s.cands[0]&(uint16(1)<<7) != 0 {
-		t.Errorf("row 0: expected col 7 (region 2) eliminated, got cands=%09b", s.cands[0])
+		t.Errorf("unsound R9: expected col 7 eliminated, got cands=%09b", s.cands[0])
 	}
 }
 

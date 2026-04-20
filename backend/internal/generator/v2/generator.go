@@ -162,6 +162,15 @@ type Generator struct {
 	// pass. Pre-allocated so Generate does not allocate an 8KB state per
 	// attempt.
 	solver solverState
+	// scoringSolver is the solver-guided grower's scratch state (R-066).
+	// Pre-allocated on the Generator so solver-guided probes use value-copy
+	// clone (*dst = *src) rather than reallocating. Trace recording is OFF
+	// on this state (set and stays nil).
+	scoringSolver solverState
+	// scoringGrow is the solver-guided grower's grow-state scratch (R-066).
+	// Holds the tentative completion while probing a candidate region
+	// assignment. Pre-allocated to keep probes alloc-free.
+	scoringGrow growState
 	// traceBuf backs solver.trace during the final classification pass. The
 	// mutator's probe passes keep solver.trace == nil (NF3: zero alloc in
 	// the hot loop).
@@ -221,6 +230,34 @@ const defaultTraceCap = 512
 // deducible puzzle that matches the optional WithDifficulty filter.
 var ErrMaxAttemptsExhausted = errors.New("generator: max attempts exhausted")
 
+// cheapAttemptsBeforeEscalation is the number of cheap-grower attempts
+// per Generate call before the orchestrator escalates to the R-066
+// solver-guided variant. Cheap combos (most N at k=1) hit >90% in one
+// attempt; hard combos (N>=10 k=1, all k=2) usually need the guided
+// variant. Escalating after 2 failures avoids paying the guidance cost
+// for cheap combos that succeed on attempt 1.
+const cheapAttemptsBeforeEscalation = 2
+
+// shouldUseSolverGuided picks between the cheap grower (fast, >90% on
+// most (N, k)) and the R-066 solver-guided variant (expensive per attempt
+// but dramatically better on hard combos).
+//
+// The predicate short-circuits on known-hard combos so we don't burn the
+// cheap-first attempts on cases where cheap empirically succeeds <30%:
+//   - k=2 at any N: cheap fails near-100% (see R-065 Step 7 data).
+//   - N>=11 at k=1: cheap fails >70% (same data).
+//
+// Otherwise, the first cheapAttemptsBeforeEscalation attempts use cheap.
+func shouldUseSolverGuided(attempt, n, k int) bool {
+	if k == 2 {
+		return true
+	}
+	if n >= 11 {
+		return true
+	}
+	return attempt >= cheapAttemptsBeforeEscalation
+}
+
 // Generate produces one puzzle. Runs up to g.cfg.maxAttempts iterations of
 // the pipeline described in PG-11 / input-spec §11 Step 8:
 //
@@ -247,7 +284,13 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error) {
 			continue
 		}
 		seeds := pairSeeds(marks, g.n, g.k)
-		if !g.growRegions(seeds, &g.regionOf) {
+		var grew bool
+		if shouldUseSolverGuided(attempt, g.n, g.k) {
+			grew = g.growRegionsSolverGuided(seeds, &g.regionOf)
+		} else {
+			grew = g.growRegions(seeds, &g.regionOf)
+		}
+		if !grew {
 			continue
 		}
 		if outcome := g.solveAndMutate(seeds); outcome != mutationSolved {

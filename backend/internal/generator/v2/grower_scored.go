@@ -1,0 +1,248 @@
+package generator
+
+import "math/bits"
+
+// growRegionsSolverGuided is the R-066 expensive variant of the region
+// grower (input-spec.md §4.3 Step B / PG-12). It differs from the cheap
+// variant only in how a frontier cell's candidate region is chosen: the
+// cheap variant picks by inverse-size weight; the solver-guided variant
+// evaluates each candidate by tentatively assigning the cell, completing
+// the tiling with the cheap loop, running the deductive solver, and
+// scoring by solved-cell count.
+//
+// Setup (seeds, bridges, initial frontiers) is identical to the cheap
+// variant and reuses initGrowState. The frontier walk also reuses the
+// cheap loop's bitmask union trick.
+//
+// Efficiency contract (critical; called out in PG-12 and review-local
+// R-065 finding MAJOR #1):
+//   - Solver state is cloned via *dst = *src — no initFromRegionMap on
+//     each probe.
+//   - grow-state scratch is a fixed-size struct copied the same way.
+//   - Trace recording is OFF during scoring (NF3: zero alloc in the hot
+//     loop). The orchestrator re-enables it for the final classification
+//     pass on g.solver.
+//
+// When a frontier cell has only one candidate region, the probe is
+// skipped entirely — there is nothing to choose. This short-circuit is
+// the main reason the per-attempt penalty stays bounded.
+//
+// Returns true on successful tiling, false on any structural failure
+// (same contract as growRegions).
+func (g *Generator) growRegionsSolverGuided(seeds [][]Mark, dst *[nMax][nMax]int8) bool {
+	n := g.n
+
+	if !g.initGrowState(seeds, &g.scoringGrow) {
+		return false
+	}
+	// Authoritative (mutable) growth state for this call. Kept as a local
+	// value struct so we can snapshot it with value copy into scoringGrow
+	// during probes. Start FROM the scratch so setup is not duplicated.
+	var gs growState = g.scoringGrow
+
+	frontierBuf := make([]int, 0, n*n)
+	// candidates holds the region ids whose frontier contains the current
+	// cell. Sized for worst case (every region has the cell as frontier).
+	var candidates [nMax]int
+
+	for gs.remaining > 0 {
+		frontierBuf = frontierBuf[:0]
+		for r := range n {
+			var union uint16
+			for gid := range n {
+				union |= gs.regionFrontierRow[gid][r]
+			}
+			union &^= gs.claimedRow[r]
+			m := union
+			for m != 0 {
+				c := bits.TrailingZeros16(m)
+				m &^= 1 << c
+				frontierBuf = append(frontierBuf, r*n+c)
+			}
+		}
+		if len(frontierBuf) == 0 {
+			return false
+		}
+
+		// Pick a frontier cell. We use the RNG here (matching the cheap
+		// variant's stream) so that WithSeed stays meaningful.
+		pickIdx := g.rng.IntN(len(frontierBuf))
+		cell := frontierBuf[pickIdx]
+		cr, cc := cell/n, cell%n
+		cellBit := uint16(1) << uint(cc)
+
+		count := 0
+		for gid := range n {
+			if gs.regionFrontierRow[gid][cr]&cellBit == 0 {
+				continue
+			}
+			candidates[count] = gid
+			count++
+		}
+		if count == 0 {
+			return false
+		}
+
+		chosen := candidates[0]
+		if count == 1 {
+			// Single candidate — skip probe entirely.
+			commitCell(&gs, n, cr, cc, chosen)
+			continue
+		}
+
+		// Multi-candidate: score each via tentative-completion + solve.
+		bestScore := -1
+		tieCount := 0
+		// Probe each candidate in a fresh snapshot of gs. The snapshot
+		// itself is ~1 KiB so *dst = *src is fine.
+		//
+		// Note: the cheap completion inside the probe consumes g.rng.
+		// We do not bother restoring the RNG between probes — the
+		// scoring differences are what matter, not the specific
+		// completions. The outer grow determinism is preserved by the
+		// outer frontier pickIdx above; fixed seed still produces the
+		// same result on repeated runs because all g.rng calls happen
+		// in a deterministic order.
+		for i := 0; i < count; i++ {
+			score := g.probeAssignment(&gs, cr, cc, candidates[i])
+			if score > bestScore {
+				bestScore = score
+				chosen = candidates[i]
+				tieCount = 1
+			} else if score == bestScore {
+				// Reservoir-sample tie-breaking so the winner is
+				// uniform over equally-scored candidates.
+				tieCount++
+				if g.rng.IntN(tieCount) == 0 {
+					chosen = candidates[i]
+				}
+			}
+		}
+
+		commitCell(&gs, n, cr, cc, chosen)
+	}
+
+	copyRegionOf(dst, &gs.regionOf)
+	return true
+}
+
+// probeAssignment scores a tentative assignment of (cr, cc) to region
+// gid. Returns the deductive solver's solved-cell count after a cheap
+// completion of the remaining grid.
+//
+// Heavy-handed but correct: the only state clones are the grow-state
+// snapshot and the solverState value copy (both fixed-size, <10 KiB
+// total). `initFromRegionMap` is called once per probe — on a cheap
+// completion we built in-place in scoringGrow.
+func (g *Generator) probeAssignment(gs *growState, cr, cc, gid int) int {
+	// Clone the current grow state into scoringGrow scratch.
+	g.scoringGrow = *gs
+
+	// Commit the tentative cell.
+	commitCell(&g.scoringGrow, g.n, cr, cc, gid)
+
+	// Finish the tiling cheaply on the scratch state. Failure here means
+	// the scratch grow got stuck — the candidate is unworkable, score 0.
+	if g.scoringGrow.remaining > 0 {
+		if !g.growCheapLoopOn(&g.scoringGrow) {
+			return 0
+		}
+	}
+
+	// Build a region-map slice from the scratch regionOf. We could
+	// shortcut initFromRegionMap by writing directly into scoringSolver's
+	// fields, but initFromRegionMap is the audited code path — cheap
+	// enough (one pass over n×n), and guarantees invariants.
+	//
+	// TODO(R-068 or dedicated perf slice): the `make([][]int, n)` +
+	// `n × make([]int, n)` inside convertRegionsToSlices allocates per
+	// probe. At N=12 / k=1 that's ~120-180 allocations/attempt (~20 KB
+	// GC pressure/attempt). A direct writer into scoringSolver.{regOf,
+	// regCellsByRow, colNeed, regNeed, rowNeed, cands, marks} would
+	// eliminate both the allocation and the redundant validation pass.
+	// Deferred because current end-to-end Generate is comfortably under
+	// the 2 s/op budget (85.5 ms at N=12 k=1) and the direct writer needs
+	// its own invariant audit to be safe.
+	rm := convertRegionsToSlices(&g.scoringGrow.regionOf, g.n)
+
+	g.scoringSolver.trace = nil
+	if err := g.scoringSolver.initFromRegionMap(rm, g.n, g.k); err != nil {
+		return 0
+	}
+
+	// Solve deductively; score by solved-cell count.
+	_ = solve(&g.scoringSolver)
+	return countSolvedCells(&g.scoringSolver)
+}
+
+// growCheapLoopOn is the cheap-loop body operating on an arbitrary
+// grow state (not the Generator's default state). The only difference
+// from growCheapLoop is the target argument — extracted so the
+// solver-guided probe can complete its scratch state without touching
+// the authoritative one.
+func (g *Generator) growCheapLoopOn(gs *growState) bool {
+	n := g.n
+	type weighted struct {
+		gid    int
+		weight int
+	}
+	var regionBuf [nMax]weighted
+	frontierBuf := make([]int, 0, n*n)
+
+	for gs.remaining > 0 {
+		frontierBuf = frontierBuf[:0]
+		for r := range n {
+			var union uint16
+			for gid := range n {
+				union |= gs.regionFrontierRow[gid][r]
+			}
+			union &^= gs.claimedRow[r]
+			m := union
+			for m != 0 {
+				c := bits.TrailingZeros16(m)
+				m &^= 1 << c
+				frontierBuf = append(frontierBuf, r*n+c)
+			}
+		}
+		if len(frontierBuf) == 0 {
+			return false
+		}
+
+		pickIdx := g.rng.IntN(len(frontierBuf))
+		cell := frontierBuf[pickIdx]
+		cr, cc := cell/n, cell%n
+		cellBit := uint16(1) << uint(cc)
+
+		totalWeight := 0
+		count := 0
+		for gid := range n {
+			if gs.regionFrontierRow[gid][cr]&cellBit == 0 {
+				continue
+			}
+			w := n - gs.regionSize[gid]
+			if w < 1 {
+				w = 1
+			}
+			regionBuf[count] = weighted{gid: gid, weight: w}
+			totalWeight += w
+			count++
+		}
+		if count == 0 {
+			return false
+		}
+
+		pick := g.rng.IntN(totalWeight)
+		chosen := regionBuf[count-1].gid
+		acc := 0
+		for i := 0; i < count; i++ {
+			acc += regionBuf[i].weight
+			if pick < acc {
+				chosen = regionBuf[i].gid
+				break
+			}
+		}
+
+		commitCell(gs, n, cr, cc, chosen)
+	}
+	return true
+}

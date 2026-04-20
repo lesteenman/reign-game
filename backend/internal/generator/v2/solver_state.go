@@ -198,14 +198,17 @@ func (s *solverState) colCandidateMask(c int) uint16 {
 	return out
 }
 
-// regionCandidateColMask returns, for region g, the column-bitmask union of
-// all its remaining candidate cells (merged across rows).
-func (s *solverState) regionCandidateColMask(g int) uint16 {
-	var out uint16
+// regionCandidateCellCount returns the total number of remaining
+// candidate cells across all rows in region g. Sums per-row popcounts
+// rather than popcounting the ORed column union — critical at k>=2
+// where a region can legitimately have two row-distinct cells in the
+// same column (so the union would double-undercount them as one).
+func (s *solverState) regionCandidateCellCount(g int) int {
+	count := 0
 	for r := range s.n {
-		out |= s.regCellsByRow[g][r]
+		count += bits.OnesCount16(s.regCellsByRow[g][r])
 	}
-	return out
+	return count
 }
 
 // placeMark transitions cell (r, c) from "candidate" to "confirmed mark":
@@ -298,7 +301,7 @@ func (s *solverState) contradicts() bool {
 	}
 	for g := range s.n {
 		need := int(s.regNeed[g])
-		have := bits.OnesCount16(s.regionCandidateColMask(g))
+		have := s.regionCandidateCellCount(g)
 		if need > have {
 			return true
 		}
