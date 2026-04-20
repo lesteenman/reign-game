@@ -31,11 +31,9 @@ func TestMutateRejectsSeedMoves(t *testing.T) {
 			{Row: r, Col: 2},
 		}
 	}
-	rm := convertRegionsToSlices(&g.regionOf, n)
-
 	// Act — walk tryOneSwap; every candidate cell is a seed. The
 	// filtering should reject all and return false.
-	result := g.tryOneSwap(seeds, rm, 0)
+	result := g.tryOneSwap(seeds, 0)
 
 	// Assert — no swap accepted (since every cell is a seed cell).
 	if result {
@@ -98,8 +96,6 @@ func TestMutateRejectsConnectivityBreakingSwap(t *testing.T) {
 		{{Row: 4, Col: 0}},
 		{{Row: 4, Col: 1}},
 	}
-	rm := convertRegionsToSlices(&g.regionOf, n)
-
 	// Act: attempt to move (3, 0) — a non-seed cell in region 0 that,
 	// if moved to region 1, would leave (4, 0) in region 0's "bottom
 	// arc" disconnected from (0, 0) IF (2, 0) is also a peninsula point.
@@ -140,7 +136,6 @@ func TestMutateRejectsConnectivityBreakingSwap(t *testing.T) {
 	// For now, assert the test setup is valid. This test exists to
 	// sanity-check the invariant helper — the actual behavior check is
 	// in the next test.
-	_ = rm
 	_ = seeds
 	t.Log("sanity: region layout built without panic")
 }

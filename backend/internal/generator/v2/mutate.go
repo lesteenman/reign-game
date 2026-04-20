@@ -34,12 +34,8 @@ const (
 // Trace recording is DISABLED during probe solves (mutator is the hot
 // path). The caller runs one final trace-enabled solve for classification.
 func (g *Generator) solveAndMutate(seeds [][]Mark) mutationOutcome {
-	// Prepare region map in the solver-friendly shape: solver needs a
-	// [][]int slice. Build once, mutate in place across swaps.
-	rm := convertRegionsToSlices(&g.regionOf, g.n)
-
 	g.solver.trace = nil // no recording during probe solves
-	if err := g.solver.initFromRegionMap(rm, g.n, g.k); err != nil {
+	if err := g.solver.initFromRegionOf(&g.regionOf, g.n, g.k); err != nil {
 		return mutationFailed
 	}
 
@@ -59,7 +55,7 @@ func (g *Generator) solveAndMutate(seeds [][]Mark) mutationOutcome {
 
 	for step := 0; step < budget; step++ {
 		baseline := countSolvedCells(&g.solver)
-		accepted := g.tryOneSwap(seeds, rm, baseline)
+		accepted := g.tryOneSwap(seeds, baseline)
 		if !accepted {
 			// No swap improves — give up.
 			return mutationFailed
@@ -89,7 +85,7 @@ func (g *Generator) solveAndMutate(seeds [][]Mark) mutationOutcome {
 // that is neither a confirmed mark nor eliminated), since those are
 // where the solver is stuck. Spec: "examine region boundaries within
 // Manhattan distance 2" of stalled cells.
-func (g *Generator) tryOneSwap(seeds [][]Mark, rm [][]int, baseline int) bool {
+func (g *Generator) tryOneSwap(seeds [][]Mark, baseline int) bool {
 	n := g.n
 
 	// Collect stalled cells (candidates that are NOT yet marked — i.e.
@@ -140,12 +136,10 @@ func (g *Generator) tryOneSwap(seeds [][]Mark, rm [][]int, baseline int) bool {
 			}
 
 			g.regionOf[r][c] = int8(toID)
-			rm[r][c] = toID
 
 			g.solver.trace = nil
-			if err := g.solver.initFromRegionMap(rm, n, g.k); err != nil {
+			if err := g.solver.initFromRegionOf(&g.regionOf, n, g.k); err != nil {
 				g.regionOf[r][c] = int8(fromID)
-				rm[r][c] = fromID
 				continue
 			}
 			_ = solve(&g.solver)
@@ -154,7 +148,6 @@ func (g *Generator) tryOneSwap(seeds [][]Mark, rm [][]int, baseline int) bool {
 				return true
 			}
 			g.regionOf[r][c] = int8(fromID)
-			rm[r][c] = fromID
 		}
 		return false
 	}
@@ -189,7 +182,7 @@ func (g *Generator) tryOneSwap(seeds [][]Mark, rm [][]int, baseline int) bool {
 	// No improving swap found; restore solver to the pre-scan state so
 	// the caller's g.solver reads are trustworthy.
 	g.solver.trace = nil
-	if err := g.solver.initFromRegionMap(rm, n, g.k); err == nil {
+	if err := g.solver.initFromRegionOf(&g.regionOf, n, g.k); err == nil {
 		_ = solve(&g.solver)
 	}
 	return false

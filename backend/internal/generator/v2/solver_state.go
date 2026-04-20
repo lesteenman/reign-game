@@ -160,6 +160,71 @@ func (s *solverState) initFromRegionMap(regionMap [][]int, n, k int) error {
 	return nil
 }
 
+// initFromRegionOf is the hot-path sibling of initFromRegionMap: it
+// populates the solver state directly from an internal [nMax][nMax]int8
+// region array, skipping the [][]int slice allocation that
+// convertRegionsToSlices would otherwise produce.
+//
+// Semantics match initFromRegionMap exactly — callers may use either.
+// initFromRegionMap is the audited public API surface (accepts the shape
+// the brute solver and tests use); initFromRegionOf is reserved for
+// generator-internal scoring/swap probes where per-probe allocations
+// would dominate.
+//
+// Validation: n in [1, nMax], k in {1, 2}, region ids in [0, n). Cells
+// outside [0, n)x[0, n) are not inspected.
+func (s *solverState) initFromRegionOf(src *[nMax][nMax]int8, n, k int) error {
+	if n < 1 || n > nMax {
+		return fmt.Errorf("n=%d (must be in [1, %d]): %w", n, nMax, ErrSolverInvalidInput)
+	}
+	if k != 1 && k != 2 {
+		return fmt.Errorf("k=%d (must be 1 or 2): %w", k, ErrSolverInvalidInput)
+	}
+
+	s.n = n
+	s.k = k
+
+	full := uint16(1)<<uint(n) - 1
+
+	for r := range nMax {
+		s.cands[r] = 0
+		s.marks[r] = 0
+		s.rowNeed[r] = 0
+		s.colNeed[r] = 0
+		s.regNeed[r] = 0
+		for g := range nMax {
+			s.regCellsByRow[g][r] = 0
+			s.regOf[r][g] = 0
+		}
+	}
+
+	for r := range n {
+		s.cands[r] = full
+		s.rowNeed[r] = uint8(k)
+		for c := range n {
+			rid := int(src[r][c])
+			if rid < 0 || rid >= n {
+				return fmt.Errorf("src[%d][%d]=%d out of [0, %d): %w", r, c, rid, n, ErrSolverInvalidInput)
+			}
+			s.regOf[r][c] = uint8(rid)
+			s.regCellsByRow[rid][r] |= 1 << uint(c)
+		}
+	}
+
+	for c := range n {
+		s.colNeed[c] = uint8(k)
+	}
+	for g := range n {
+		s.regNeed[g] = uint8(k)
+	}
+
+	if s.trace != nil {
+		s.trace = s.trace[:0]
+	}
+
+	return nil
+}
+
 // reset zeroes the used portion of the state for re-use across Generate
 // calls. The state retains its backing arrays; only the effectively-used
 // slices ([:s.n]) need wiping.
