@@ -23,11 +23,16 @@ Layer 5: R-067 (consumer cleanup + drop-in replace)   swap old package for new e
     |   deletes old pipeline/solver/regions files
     |   updates request/record/config/handlers/worker/frontend/LocalStack
     |
+Layer 5a: R-067a (mutator upgrade)                    lift (N=12, k=1) Step 7 rate back over 80%
+Layer 5b: R-067b (region-size balance)                enforce min region size of 3
+    |
 Layer 6: R-068 (bench + distribution + soak + corpus) Steps 11 + 12
     |
 Layer 7: R-069 (cutover + KI-007 close)               runbook: drain queue, flush pool, re-seed
     |
 (Optional) R-06A: post-cutover cleanup if review-local turns up residue
+    |
+Layer 8: R-06B (e2e fixed-database harness)           full-game plays against seeded pool
 ```
 
 Hard dependency rule: R-067 cannot merge before R-065 gates pass, because R-067 deletes the old pipeline and if the new one has <80% success the pool stops replenishing.
@@ -42,9 +47,12 @@ Hard dependency rule: R-067 cannot merge before R-065 gates pass, because R-067 
 | R-065 | Region grower + mutator + orchestrator + classifier | 3 | Step 6, 7, 8, 9 | [ ]    |
 | R-066 | Solver-guided growth (conditional)             | 4     | Step 10          | [ ]    |
 | R-067 | Consumer cleanup + drop-in replacement         | 5     | (cross-cutting)  | [ ]    |
+| R-067a| Mutator upgrade (close N=12 k=1 gate)          | 5a    | (follow-up)      | [ ]    |
+| R-067b| Region-size balance (min size = 3)             | 5b    | (quality)        | [ ]    |
 | R-068 | Benchmarks + distribution + soak + corpus + optional generator CI re-check | 6 | Step 11, Step 12 | [ ]    |
 | R-069 | Cutover + KI-007 close                         | 7     | (operational)    | [ ]    |
 | R-06A | Post-cutover cleanup                           | 7     | (contingent)     | [ ]    |
+| R-06B | E2E fixed-database harness                     | 8     | (verification)   | [ ]    |
 
 ## Tasks
 
@@ -292,6 +300,85 @@ grep -rn "BuildPipeline\|GenerateConcurrent" backend/ frontend/
 
 ---
 
+### R-067a: Mutator upgrade (close N=12 k=1 gate)
+
+- **Roadmap:** R-067a
+- **Spec step:** (follow-up to Step 7)
+- **Agent:** backend-dev
+- **OpenSpec:** none (implementation follow-up); update `step7_test.go` comment on promotion.
+
+**Work**
+
+After the R-067-era mutator connectivity fix (PR #35), the (N=12, k=1) Step 7 rate dropped to 34% because many previously-accepted swaps produced orphaned cells. `step7_test.go` flipped that combo to `enforce=false`. This slice lifts the rate back over 80% and re-enforces the gate.
+
+Start with the cheapest mutator change that moves the rate and stop when it does. Design-grill (b) catalogued four tactics; pick in this order:
+
+1. Weighted plateau acceptance. Today the plateau phase accepts same-score swaps at p=0.5. Try a score-delta-aware rule: accept strict improvements always, equal-score with p=0.5, and small regressions (delta = -1) with p=0.1. Gives the walker a narrow escape from local optima without random wandering.
+2. Widened neighborhoods. Today the scan sweeps Manhattan <= 2 around stalled cells, then a global pass. Try Manhattan <= 3 first, or start directly on a global pass once the first sweep finds nothing.
+3. Pair-swaps. Swap two boundary cells at the same time, one in each direction, so the walker can cross a cut vertex in a single step. Connectivity check runs twice.
+4. Random restart. When the budget is near exhausted, rewind the last N accepted swaps and try a different branch. Expensive per attempt, so only reach for this if 1 to 3 combined don't clear the gate.
+
+Each tactic is reviewable on its own; if (1) hits the gate, stop there and note (2, 3, 4) as future levers.
+
+**Gate**
+
+- `TestStep7Gate` passes with `{n: 12, k: 1, enforce: true}`. Both committed combos back to LIVE.
+- `TestGenerateProducesConnectedRegions` still passes (the tighter swap guard from #35 is preserved).
+- `TestGenerateDeterministic` still passes (any new RNG consumption is done via `g.rng` so fixed seeds stay reproducible).
+- `BenchmarkGenerateOne/N=12/k=1` stays under the 2 s/op budget.
+
+**Files touched**
+
+- `backend/internal/generator/mutate.go`
+- `backend/internal/generator/mutate_test.go`
+- `backend/internal/generator/step7_test.go` (promote enforce flag + drop the TODO comment)
+
+**Dependencies:** R-067 + the connectivity fix (PR #35).
+
+**Commit after completion.**
+
+---
+
+### R-067b: Region-size balance (min size = 3)
+
+- **Roadmap:** R-067b
+- **Spec step:** (quality follow-up)
+- **Agent:** backend-dev
+- **OpenSpec:** update `locked-decisions.md` MinSize note; add a PG-0x invariant if the new rule is large enough to warrant it.
+
+**Work**
+
+The cheap grower's inverse-size weighting is weak. Post-R-066 pool samples show region sizes like `[1, 4, 5, 6, 6, 8, 8, 12, 31]` at N=9 k=1. One-cell regions violate the MinSize invariant noted in `locked-decisions.md` (MinSize = k + 1 = 2 at k=1).
+
+New rule: **every region must have at least 3 cells.** 3 at both k=1 and k=2. Unbounded maximum by design — the curation flow (out of scope for this phase, see "Planned Work" in GAME_DESIGN.md) rejects regions that are too large or ugly.
+
+Enforce during growth, not post-hoc:
+
+1. While any region has fewer than 3 cells, the frontier-pick step biases hard toward small regions. The cleanest rule: if a region has size < 3 and one of its frontier cells is in the candidate list, assign to the smallest such region. Only fall back to inverse-size weighting once every region has size >= 3.
+2. If no under-size region has a frontier cell in reach (rare; can happen when bridging traps a k=2 seed pair), fail the attempt and let the orchestrator resample. This matches the existing "fail fast on bridge collision" pattern.
+
+The solver-guided variant inherits the same priority rule — the probe still scores each candidate via the deductive solver, but only candidates that satisfy the min-size rule are probed.
+
+**Gate**
+
+- New `TestGrowRegionsMinSize` fails if any of 200 sampled grows produces a region with fewer than 3 cells.
+- `TestGenerateProducesConnectedRegions` still passes.
+- Step 7 rates logged for every combo. The min-size rule may cost a few percentage points; note the drop but do NOT relax the gate threshold. If a committed combo drops below its gate, open a follow-up rather than widen this slice.
+- `BenchmarkGenerateOne` stays under 2 s/op at the committed ceiling.
+
+**Files touched**
+
+- `backend/internal/generator/grower.go`
+- `backend/internal/generator/grower_scored.go`
+- `backend/internal/generator/grower_test.go`
+- `openspec/changes/phase-5-generator-rework/locked-decisions.md` (MinSize note)
+
+**Dependencies:** R-067.
+
+**Commit after completion.**
+
+---
+
 ### R-068: Benchmarks + distribution + soak + corpus + optional generator CI re-check
 
 - **Roadmap:** R-068
@@ -411,6 +498,51 @@ Cutover runbook steps (for local dev and for prod when it exists):
 
 ---
 
+### R-06B: E2E fixed-database harness
+
+- **Roadmap:** R-06B
+- **Spec step:** (verification — full-stack)
+- **Agent:** tester + backend-dev + frontend-dev
+- **OpenSpec:** none (test infra)
+
+**Work**
+
+Today's Playwright e2e suite uses `page.route` to mock the `/api/puzzles/next` response. That verifies the frontend but not the serve -> generator -> DynamoDB -> frontend flow. This slice adds a real-stack test harness that plays a complete game to solved state against a fixed puzzle database.
+
+Approach:
+
+- Fixture puzzles live in `frontend/e2e/fixtures/puzzles/*.json`, one file per test case. Each file carries a full `PuzzleRecord` (region map, solution, size, mode).
+- A new Task target `task e2e:seed` wipes the LocalStack puzzle-pool and writes the fixture rows directly via `awslocal dynamodb put-item`. Lives alongside `task dev:up`.
+- The Playwright config gets a second project `e2e-live` that depends on `task dev:up` + `task e2e:seed`. The existing mocked suite stays on `chromium`; the new suite runs on `e2e-live` only.
+- New test file `frontend/e2e/live-full-game.spec.ts` covers three flows:
+  1. Happy path: seed a known-unique 5x5 Standard puzzle, click Play, place the four correct marks, verify completion overlay appears and timer stops.
+  2. Double Queens: same for a seeded 9x9 Double fixture.
+  3. Conflict + backtrack: place a mark that violates an adjacency, verify the conflict state renders, undo, verify clear.
+- The harness asserts against the real `serveMetadata` response, not a mock.
+
+This runs after R-06A because R-067's consumer cleanup and R-069's cutover touch the same surface; stacking this on top avoids churn.
+
+**Gate**
+
+- `task e2e:seed` writes the fixtures and `task dev:status` confirms them via the admin pool endpoint.
+- All three live flows pass on local runs.
+- The existing mocked suite (`frontend/e2e/grid-interaction.spec.ts`) still runs as-is on the `chromium` project; this slice does not touch mocks.
+- A short README section in `frontend/e2e/README.md` explains which suite is which and when to run each.
+
+**Files touched**
+
+- `Taskfile.yml` (add `e2e:seed`)
+- `frontend/playwright.config.ts` (add `e2e-live` project)
+- `frontend/e2e/fixtures/puzzles/*.json` (new)
+- `frontend/e2e/live-full-game.spec.ts` (new)
+- `frontend/e2e/README.md` (new)
+
+**Dependencies:** R-06A (or R-069 if R-06A is skipped).
+
+**Commit after completion.**
+
+---
+
 ## Execution Summary
 
 | Layer | Slices | Agents | Parallel? |
@@ -421,9 +553,12 @@ Cutover runbook steps (for local dev and for prod when it exists):
 | 3 | R-065 | backend-dev | depends on R-064 |
 | 4 | R-066 (conditional) | backend-dev | depends on R-065 gate |
 | 5 | R-067 | backend-dev + frontend-dev + devops-engineer | backend+frontend+devops run in parallel within the PR |
-| 6 | R-068 | backend-dev + tester + devops-engineer | depends on R-067 |
+| 5a | R-067a | backend-dev | depends on R-067 + PR #35 |
+| 5b | R-067b | backend-dev | depends on R-067 |
+| 6 | R-068 | backend-dev + tester + devops-engineer | depends on R-067a and R-067b |
 | 7 | R-069 | devops-engineer | depends on R-068 |
 | 7+ | R-06A | TBD | contingent |
+| 8 | R-06B | tester + backend-dev + frontend-dev | depends on R-06A (or R-069 if A is skipped) |
 
 Every slice lands as its own PR. The `v2` subdirectory is a scaffolding convenience that disappears when R-067 swaps it into place — the `/opsx:apply` orchestrator should plan for R-067 as the most disruptive PR (largest delete-list, cross-package, frontend + LocalStack changes).
 
