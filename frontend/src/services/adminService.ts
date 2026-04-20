@@ -2,14 +2,10 @@ import { apiFetch, apiPut, apiPost } from './api';
 
 /** Configuration data for a puzzle pool combo. */
 export interface ConfigData {
-  pipeline: string;
-  solver: string;
-  regions: string;
-  regionVariance: number;
-  deducible: boolean;
-  concurrency: number;
   threshold: number;
   enabled: boolean;
+  /** Optional override for the generator's WithMaxAttempts. 0 means default. */
+  maxAttempts?: number;
 }
 
 /** Status of a single size/mode combo in the pool. */

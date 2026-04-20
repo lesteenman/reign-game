@@ -17,9 +17,12 @@ const PRESETS: Preset[] = [
   { label: '5\u00D75 Standard', size: 5, mode: 'standard' },
   { label: '7\u00D77 Standard', size: 7, mode: 'standard' },
   { label: '9\u00D79 Standard', size: 9, mode: 'standard' },
-  // Double Queens disabled: generation too slow with current algorithm.
-  // Re-enable after generator optimization.
-  // { label: '9\u00D79 Double Queens', size: 9, mode: 'double' },
+  // Double Queens re-enabled (KI-007 closed by Phase 5 generator rework).
+  // Only 9x9 is presetted: smaller N at k=2 is infeasible (R-063 data:
+  // N<8 k=2 has 0 solutions; N=8 k=2 has only 2). R-066's solver-guided
+  // grower + R-066c's mutator-plateau acceptance hit 100% generation
+  // success at (N=9, k=2).
+  { label: '9\u00D79 Double Queens', size: 9, mode: 'double' },
 ];
 
 interface PuzzleSelectorProps {

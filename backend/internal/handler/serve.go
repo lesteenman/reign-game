@@ -19,12 +19,12 @@ type PuzzleFetcher interface {
 
 // serveMetadata is the metadata object included in the serve response.
 type serveMetadata struct {
-	Pipeline             string  `json:"pipeline"`
-	Solver               string  `json:"solver"`
-	Regions              string  `json:"regions"`
-	RegionVariance       float64 `json:"regionVariance"`
-	GenerationDurationMs int64   `json:"generationDurationMs"`
-	CreatedAt            string  `json:"createdAt"`
+	Difficulty           int    `json:"difficulty"`
+	MaxTier              int    `json:"maxTier"`
+	TierCounts           []int  `json:"tierCounts"`
+	TraceLen             int    `json:"traceLen"`
+	GenerationDurationMs int64  `json:"generationDurationMs"`
+	CreatedAt            string `json:"createdAt"`
 }
 
 // serveResponse is the JSON response for the serve endpoint.
@@ -93,10 +93,10 @@ func ServeHandler(fetcher PuzzleFetcher) http.HandlerFunc {
 			Mode:      puzzle.Mode,
 			RegionMap: puzzle.RegionMap,
 			Metadata: serveMetadata{
-				Pipeline:             puzzle.Pipeline,
-				Solver:               puzzle.Solver,
-				Regions:              puzzle.Regions,
-				RegionVariance:       puzzle.RegionVariance,
+				Difficulty:           puzzle.Difficulty,
+				MaxTier:              puzzle.MaxTier,
+				TierCounts:           puzzle.TierCounts,
+				TraceLen:             puzzle.TraceLen,
 				GenerationDurationMs: puzzle.GenerationDurationMs,
 				CreatedAt:            puzzle.CreatedAt,
 			},

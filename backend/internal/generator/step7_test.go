@@ -32,16 +32,15 @@ func TestStep7Gate(t *testing.T) {
 	}
 	t.Parallel()
 
-	// Committed gate points. Gate enforcement is LIVE at (N=9, k=2);
-	// (N=12, k=1) remains reported-only.
-	//
-	// TODO(mutator-upgrade): (N=12, k=1) lands ~52% after R-066 — per-attempt
-	// success rate is grower-independent (cheap and solver-guided both ~5%)
-	// so the bottleneck is the strict-improvement mutator giving up at the
-	// first non-improving swap. Design-grill point (b) catalogued four
-	// mitigations: plateau acceptance, widened neighborhoods, pair-swaps,
-	// random restart. Needs its own slice; not R-066 scope. Promote this
-	// entry's enforce=false → true when that slice lands.
+	// Committed gate points. (N=9, k=2) is LIVE. (N=12, k=1) regressed
+	// to ~34% after the mutator-connectivity fix rejected swaps that
+	// previously produced broken puzzles with orphaned non-seed cells.
+	// That means the earlier 81% at N=12 k=1 overcounted — many of those
+	// "successful" puzzles were actually disconnected. Correctness > rate.
+	// Non-enforcing until a follow-up mutator slice lifts the rate back
+	// (plateau acceptance extensions, widened neighborhoods, solver-guided
+	// escalation threshold tuning, or a smarter connectivity-preserving
+	// swap generator).
 	gatedCombos := []struct {
 		n, k    int
 		enforce bool

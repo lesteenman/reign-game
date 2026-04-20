@@ -14,10 +14,10 @@ export interface Conflict {
 
 /** Generation metadata from the puzzle pool. */
 export interface PuzzleMetadata {
-  pipeline: string;
-  solver: string;
-  regions: string;
-  regionVariance: number;
+  difficulty: number;
+  maxTier: number;
+  tierCounts: number[];
+  traceLen: number;
   generationDurationMs: number;
   createdAt: string;
 }

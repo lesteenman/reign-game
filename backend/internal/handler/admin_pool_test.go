@@ -48,16 +48,8 @@ func TestAdminPoolHandler(t *testing.T) {
 		{
 			name: "mixed enabled and disabled combos",
 			configs: []repository.ConfigRecord{
-				{
-					Size: 5, Mode: "standard", Pipeline: "iterative",
-					Solver: "propagation", Regions: "bfs", RegionVariance: 0.0,
-					Deducible: true, Concurrency: 1, Threshold: 3, Enabled: true,
-				},
-				{
-					Size: 7, Mode: "standard", Pipeline: "iterative",
-					Solver: "propagation", Regions: "bfs", RegionVariance: 0.5,
-					Deducible: false, Concurrency: 2, Threshold: 5, Enabled: false,
-				},
+				{Size: 5, Mode: "standard", Threshold: 3, Enabled: true},
+				{Size: 7, Mode: "standard", Threshold: 5, Enabled: false},
 			},
 			readyCounts: map[string]int{"5#standard": 3},
 			wantStatus:  http.StatusOK,
@@ -180,14 +172,9 @@ func TestAdminPoolHandler(t *testing.T) {
 
 // Response types for JSON unmarshaling in tests.
 type configResponseJSON struct {
-	Pipeline       string  `json:"pipeline"`
-	Solver         string  `json:"solver"`
-	Regions        string  `json:"regions"`
-	RegionVariance float64 `json:"regionVariance"`
-	Deducible      bool    `json:"deducible"`
-	Concurrency    int     `json:"concurrency"`
-	Threshold      int     `json:"threshold"`
-	Enabled        bool    `json:"enabled"`
+	Threshold   int  `json:"threshold"`
+	Enabled     bool `json:"enabled"`
+	MaxAttempts int  `json:"maxAttempts,omitempty"`
 }
 
 type comboStatusJSON struct {

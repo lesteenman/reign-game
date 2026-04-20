@@ -32,8 +32,10 @@ func TestMutateRejectsSeedMoves(t *testing.T) {
 		}
 	}
 	// Act — walk tryOneSwap; every candidate cell is a seed. The
-	// filtering should reject all and return false.
-	result := g.tryOneSwap(seeds, 0)
+	// filtering should reject all and return false. Call with
+	// allowPlateau=true so we exercise the max-permissive acceptance
+	// rule too — even that must reject seed cells.
+	result := g.tryOneSwap(seeds, 0, true)
 
 	// Assert — no swap accepted (since every cell is a seed cell).
 	if result {

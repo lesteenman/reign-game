@@ -117,14 +117,9 @@ func ReplenishHandler(configs ConfigReader, counter PoolCounter, publisher Messa
 			needed := config.Threshold - count
 			for i := 0; i < needed; i++ {
 				req := &queue.GenerationRequest{
-					Size:           config.Size,
-					Mode:           config.Mode,
-					Pipeline:       config.Pipeline,
-					Solver:         config.Solver,
-					Regions:        config.Regions,
-					RegionVariance: config.RegionVariance,
-					Deducible:      config.Deducible,
-					Concurrency:    config.Concurrency,
+					Size:        config.Size,
+					Mode:        config.Mode,
+					MaxAttempts: config.MaxAttempts,
 				}
 				if err := publisher.PublishGenerationRequest(r.Context(), req); err != nil {
 					log.Printf("error publishing generation request for %dx%d %s: %v", config.Size, config.Size, config.Mode, err)

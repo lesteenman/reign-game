@@ -53,11 +53,24 @@ func (g *Generator) solveAndMutate(seeds [][]Mark) mutationOutcome {
 		budget = defaultMaxMutations
 	}
 
+	// Two-pass acceptance per step:
+	//   (1) strict improvement — any swap that raises solved-cell count
+	//   (2) plateau acceptance — a same-score swap, accepted with 50%
+	//       probability (RNG-seeded, so determinism is preserved)
+	// R-066 found the pure strict-improvement mutator bails at the first
+	// non-improving swap and cannot escape local optima — budget 50 vs 500
+	// showed no difference. Plateau acceptance gives the walker a way off
+	// a ridge to a neighboring basin; 50% keeps the walk biased toward
+	// improvement when one exists nearby.
 	for step := 0; step < budget; step++ {
 		baseline := countSolvedCells(&g.solver)
-		accepted := g.tryOneSwap(seeds, baseline)
+		accepted := g.tryOneSwap(seeds, baseline, false)
 		if !accepted {
-			// No swap improves — give up.
+			// No strict improvement anywhere — try a plateau swap.
+			accepted = g.tryOneSwap(seeds, baseline, true)
+		}
+		if !accepted {
+			// No improving swap AND no accepted plateau swap — give up.
 			return mutationFailed
 		}
 		// tryOneSwap installs g.solver with the re-solved state already.
@@ -74,18 +87,24 @@ func (g *Generator) solveAndMutate(seeds [][]Mark) mutationOutcome {
 }
 
 // tryOneSwap scans boundary cells (cells on the border between two
-// regions) and tries reassigning each to the neighboring region. Accepts
-// the first swap that (a) preserves all region invariants and (b) strictly
-// increases the solver-solved cell count. On accept: updates g.regionOf
-// and rm in place and returns true with g.solver holding the post-swap
-// solve. On miss: restores g.solver to the pre-scan state (the caller
-// uses g.solver.solved() / .contradicts() after return).
+// regions) and tries reassigning each to the neighboring region. The
+// acceptance rule depends on allowPlateau:
+//   - allowPlateau=false (strict): accept iff solved-cell count strictly
+//     increases. This is the first-pass behavior.
+//   - allowPlateau=true (plateau): accept a strict improvement
+//     immediately, OR accept a same-score swap with 50% probability.
+//     This is the second-pass fallback when no strict improvement exists
+//     anywhere.
+//
+// On accept: updates g.regionOf in place and returns true with g.solver
+// holding the post-swap solve. On miss: restores g.solver to the pre-scan
+// state (the caller uses g.solver.solved() / .contradicts() after return).
 //
 // Scan prioritization: start from cells near a "stalled" cell (a cell
 // that is neither a confirmed mark nor eliminated), since those are
 // where the solver is stuck. Spec: "examine region boundaries within
 // Manhattan distance 2" of stalled cells.
-func (g *Generator) tryOneSwap(seeds [][]Mark, baseline int) bool {
+func (g *Generator) tryOneSwap(seeds [][]Mark, baseline int, allowPlateau bool) bool {
 	n := g.n
 
 	// Collect stalled cells (candidates that are NOT yet marked — i.e.
@@ -147,6 +166,12 @@ func (g *Generator) tryOneSwap(seeds [][]Mark, baseline int) bool {
 			if newCount > baseline {
 				return true
 			}
+			// Plateau acceptance: same score, coin-flip accept. Uses
+			// g.rng so the decision is seed-deterministic and the RNG
+			// call order stays consistent with other Generator stages.
+			if allowPlateau && newCount == baseline && g.rng.IntN(2) == 0 {
+				return true
+			}
 			g.regionOf[r][c] = int8(fromID)
 		}
 		return false
@@ -196,8 +221,14 @@ func abs(x int) int {
 }
 
 // fromRegionConnectedWithoutCell returns true iff, with cell (r, c) removed
-// from region `fromID`, the rest of that region is still 4-connected AND
-// still contains all its seed marks.
+// from region `fromID`, every remaining cell of that region is still
+// reachable via 4-adjacent cells of the same region (and all seed marks
+// are among the reachable cells).
+//
+// A weaker version of this check that only verified seed reachability was
+// the source of R-067-era disconnected regions: at k=1 a region has a
+// single seed, so the seed trivially remains its own connected component
+// while non-seed tail cells get orphaned. We now count cells too.
 //
 // Tried before the caller commits a swap. Uses BFS confined to the
 // modified region.
@@ -225,11 +256,28 @@ func fromRegionConnectedWithoutCell(
 		return false
 	}
 
-	var visited [nMax][nMax]bool
-	bfsRegionVisit(regionOf, fromID, start.Row, start.Col, r, c, n, &visited)
+	// Count cells in fromID before the removal so we can compare against
+	// the BFS-reachable count after skipping (r, c).
+	totalCells := 0
+	for rr := range n {
+		for cc := range n {
+			if int(regionOf[rr][cc]) == fromID {
+				totalCells++
+			}
+		}
+	}
 
-	// Every seed must be visited (the removed cell (r, c) is already
-	// excluded by the skip parameter passed to bfsRegionVisit).
+	var visited [nMax][nMax]bool
+	reached := bfsRegionVisit(regionOf, fromID, start.Row, start.Col, r, c, n, &visited)
+
+	// The post-removal region must have (totalCells - 1) reachable cells.
+	// If BFS reaches fewer, some non-seed cells are now orphaned.
+	if reached != totalCells-1 {
+		return false
+	}
+
+	// Also confirm every seed is visited — defensive; the cell-count
+	// check implies it, but keep for symmetry with the previous contract.
 	for _, m := range seeds[fromID] {
 		if m.Row == r && m.Col == c {
 			continue

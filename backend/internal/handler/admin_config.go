@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"math"
 	"net/http"
 	"strconv"
 
@@ -31,65 +30,37 @@ type ConfigRepo interface {
 
 // configRequest is the JSON request body for config create/update.
 type configRequest struct {
-	Size           int     `json:"size"`
-	Mode           string  `json:"mode"`
-	Pipeline       string  `json:"pipeline"`
-	Solver         string  `json:"solver"`
-	Regions        string  `json:"regions"`
-	RegionVariance float64 `json:"regionVariance"`
-	Deducible      bool    `json:"deducible"`
-	Concurrency    int     `json:"concurrency"`
-	Threshold      int     `json:"threshold"`
-	Enabled        bool    `json:"enabled"`
+	Size        int    `json:"size"`
+	Mode        string `json:"mode"`
+	Threshold   int    `json:"threshold"`
+	Enabled     bool   `json:"enabled"`
+	MaxAttempts int    `json:"maxAttempts,omitempty"`
 }
 
 // validateConfigFields validates the config-specific fields of a configRequest.
 // Returns (0, "", "") on success, or (status, errCode, errMsg) on failure.
 func validateConfigFields(req *configRequest) (status int, errCode, errMsg string) {
-	if req.Pipeline != PipelineRegionFirst && req.Pipeline != PipelineIterative && req.Pipeline != PipelineConstraintAware {
-		return http.StatusBadRequest, "invalid_params", "pipeline must be 'region-first', 'iterative', or 'constraint-aware'"
-	}
-
-	if req.Solver != SolverBacktrack && req.Solver != SolverPropagation {
-		return http.StatusBadRequest, "invalid_params", "solver must be 'backtrack' or 'propagation'"
-	}
-
-	if req.Regions != RegionsBFS && req.Regions != RegionsWFC {
-		return http.StatusBadRequest, "invalid_params", "regions must be 'bfs' or 'wfc'"
-	}
-
-	if math.IsNaN(req.RegionVariance) || math.IsInf(req.RegionVariance, 0) {
-		return http.StatusBadRequest, "invalid_params", "regionVariance must be between 0.0 and 1.0"
-	}
-	if req.RegionVariance < 0.0 || req.RegionVariance > 1.0 {
-		return http.StatusBadRequest, "invalid_params", "regionVariance must be between 0.0 and 1.0"
-	}
-
-	if req.Concurrency < 1 || req.Concurrency > 8 {
-		return http.StatusBadRequest, "invalid_params", "concurrency must be between 1 and 8"
-	}
-
 	if req.Threshold < 1 || req.Threshold > maxConfigThreshold {
 		return http.StatusBadRequest, "invalid_params", fmt.Sprintf("threshold must be between 1 and %d", maxConfigThreshold)
 	}
-
+	if req.MaxAttempts < 0 {
+		return http.StatusBadRequest, "invalid_params", "maxAttempts must be >= 0"
+	}
 	return 0, "", ""
 }
 
 // buildConfigResponseMap builds a JSON-serializable map from a ConfigRecord.
 func buildConfigResponseMap(rec *repository.ConfigRecord) map[string]any {
-	return map[string]any{
-		"size":           rec.Size,
-		"mode":           rec.Mode,
-		"pipeline":       rec.Pipeline,
-		"solver":         rec.Solver,
-		"regions":        rec.Regions,
-		"regionVariance": rec.RegionVariance,
-		"deducible":      rec.Deducible,
-		"concurrency":    rec.Concurrency,
-		"threshold":      rec.Threshold,
-		"enabled":        rec.Enabled,
+	resp := map[string]any{
+		"size":      rec.Size,
+		"mode":      rec.Mode,
+		"threshold": rec.Threshold,
+		"enabled":   rec.Enabled,
 	}
+	if rec.MaxAttempts > 0 {
+		resp["maxAttempts"] = rec.MaxAttempts
+	}
+	return resp
 }
 
 // UpdateConfigHandler handles PUT /admin/config/{size}/{mode}.
@@ -144,16 +115,11 @@ func UpdateConfigHandler(repo ConfigRepo) http.HandlerFunc {
 
 		// Build and save config.
 		config := &repository.ConfigRecord{
-			Size:           size,
-			Mode:           mode,
-			Pipeline:       req.Pipeline,
-			Solver:         req.Solver,
-			Regions:        req.Regions,
-			RegionVariance: req.RegionVariance,
-			Deducible:      req.Deducible,
-			Concurrency:    req.Concurrency,
-			Threshold:      req.Threshold,
-			Enabled:        req.Enabled,
+			Size:        size,
+			Mode:        mode,
+			Threshold:   req.Threshold,
+			Enabled:     req.Enabled,
+			MaxAttempts: req.MaxAttempts,
 		}
 
 		if err := repo.PutConfig(r.Context(), config); err != nil {
@@ -198,16 +164,11 @@ func CreateConfigHandler(repo ConfigRepo) http.HandlerFunc {
 
 		// Build and create config.
 		config := &repository.ConfigRecord{
-			Size:           req.Size,
-			Mode:           req.Mode,
-			Pipeline:       req.Pipeline,
-			Solver:         req.Solver,
-			Regions:        req.Regions,
-			RegionVariance: req.RegionVariance,
-			Deducible:      req.Deducible,
-			Concurrency:    req.Concurrency,
-			Threshold:      req.Threshold,
-			Enabled:        req.Enabled,
+			Size:        req.Size,
+			Mode:        req.Mode,
+			Threshold:   req.Threshold,
+			Enabled:     req.Enabled,
+			MaxAttempts: req.MaxAttempts,
 		}
 
 		if err := repo.CreateConfig(r.Context(), config); err != nil {

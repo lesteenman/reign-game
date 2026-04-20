@@ -22,32 +22,22 @@ func (m *mockPuzzleStore) PutPuzzle(ctx context.Context, puzzle *repository.Puzz
 
 func TestHandleSQSEvent(t *testing.T) {
 	tests := []struct {
-		name       string
-		req        queue.GenerationRequest
-		putErr     error
-		wantErr    bool
-		wantSize   int
-		wantMode   string
-		wantPipe   string
-		wantSolver string
+		name     string
+		req      queue.GenerationRequest
+		putErr   error
+		wantErr  bool
+		wantSize int
+		wantMode string
 	}{
 		{
-			name: "generates and stores 5x5 standard puzzle",
+			name: "generates and stores 7x7 standard puzzle",
 			req: queue.GenerationRequest{
-				Size:           5,
-				Mode:           "standard",
-				Pipeline:       "iterative",
-				Solver:         "propagation",
-				Regions:        "bfs",
-				RegionVariance: 0.0,
-				Deducible:      true,
-				Concurrency:    1,
+				Size: 7,
+				Mode: "standard",
 			},
-			wantErr:    false,
-			wantSize:   5,
-			wantMode:   "standard",
-			wantPipe:   "iterative",
-			wantSolver: "propagation",
+			wantErr:  false,
+			wantSize: 7,
+			wantMode: "standard",
 		},
 		{
 			name:    "invalid JSON returns error",
@@ -62,7 +52,7 @@ func TestHandleSQSEvent(t *testing.T) {
 				// Arrange
 				var capturedRecord *repository.PuzzleRecord
 				store := &mockPuzzleStore{
-					putPuzzleFunc: func(ctx context.Context, puzzle *repository.PuzzleRecord) error {
+					putPuzzleFunc: func(_ context.Context, puzzle *repository.PuzzleRecord) error {
 						capturedRecord = puzzle
 						return nil
 					},
@@ -96,7 +86,7 @@ func TestHandleSQSEvent(t *testing.T) {
 			// Arrange
 			var capturedRecord *repository.PuzzleRecord
 			store := &mockPuzzleStore{
-				putPuzzleFunc: func(ctx context.Context, puzzle *repository.PuzzleRecord) error {
+				putPuzzleFunc: func(_ context.Context, puzzle *repository.PuzzleRecord) error {
 					capturedRecord = puzzle
 					return tt.putErr
 				},
@@ -141,17 +131,14 @@ func TestHandleSQSEvent(t *testing.T) {
 			if capturedRecord.Mode != tt.wantMode {
 				t.Errorf("Mode = %q, want %q", capturedRecord.Mode, tt.wantMode)
 			}
-			if capturedRecord.Pipeline != tt.wantPipe {
-				t.Errorf("Pipeline = %q, want %q", capturedRecord.Pipeline, tt.wantPipe)
-			}
-			if capturedRecord.Solver != tt.wantSolver {
-				t.Errorf("Solver = %q, want %q", capturedRecord.Solver, tt.wantSolver)
-			}
 			if capturedRecord.ID != "test-uuid-001" {
 				t.Errorf("ID = %q, want %q", capturedRecord.ID, "test-uuid-001")
 			}
 			if capturedRecord.Status != "ready" {
 				t.Errorf("Status = %q, want %q", capturedRecord.Status, "ready")
+			}
+			if capturedRecord.Verdict != "none" {
+				t.Errorf("Verdict = %q, want %q", capturedRecord.Verdict, "none")
 			}
 			if capturedRecord.RegionMap == nil {
 				t.Error("RegionMap should not be nil")
@@ -164,6 +151,16 @@ func TestHandleSQSEvent(t *testing.T) {
 			}
 			if capturedRecord.CreatedAt == "" {
 				t.Error("CreatedAt should not be empty")
+			}
+			// Classification data must be populated.
+			if capturedRecord.Difficulty == 0 {
+				t.Error("Difficulty = 0 (unknown), want a valid tier")
+			}
+			if capturedRecord.MaxTier == 0 {
+				t.Error("MaxTier = 0, want >= 1")
+			}
+			if len(capturedRecord.TierCounts) != 5 {
+				t.Errorf("TierCounts length = %d, want 5", len(capturedRecord.TierCounts))
 			}
 		})
 	}

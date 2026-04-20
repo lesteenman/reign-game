@@ -46,16 +46,17 @@ func TestPutPuzzle(t *testing.T) {
 		{
 			name: "writes puzzle correctly",
 			puzzle: PuzzleRecord{
-				GridSize:  7,
-				Mode:      "standard",
-				ID:        "test-uuid-123",
-				Status:    "ready",
-				Verdict:   "none",
-				RegionMap: [][]int{{0, 0, 1}, {0, 1, 1}, {2, 2, 1}},
-				Solution:  [][]bool{{true, false, false}, {false, false, true}, {false, true, false}},
-				Pipeline:  "iterative",
-				Solver:    "propagation",
-				Regions:   "bfs",
+				GridSize:   7,
+				Mode:       "standard",
+				ID:         "test-uuid-123",
+				Status:     "ready",
+				Verdict:    "none",
+				RegionMap:  [][]int{{0, 0, 1}, {0, 1, 1}, {2, 2, 1}},
+				Solution:   [][]bool{{true, false, false}, {false, false, true}, {false, true, false}},
+				Difficulty: 2,
+				MaxTier:    2,
+				TierCounts: []int{0, 3, 1, 0, 0},
+				TraceLen:   4,
 			},
 			putErr:    nil,
 			wantErr:   false,
@@ -145,12 +146,10 @@ func TestNextReady(t *testing.T) {
 					"verdict":              &types.AttributeValueMemberS{Value: "none"},
 					"regionMap":            &types.AttributeValueMemberL{Value: []types.AttributeValue{&types.AttributeValueMemberL{Value: []types.AttributeValue{&types.AttributeValueMemberN{Value: "0"}}}}},
 					"solution":             &types.AttributeValueMemberL{Value: []types.AttributeValue{&types.AttributeValueMemberL{Value: []types.AttributeValue{&types.AttributeValueMemberBOOL{Value: true}}}}},
-					"pipeline":             &types.AttributeValueMemberS{Value: "iterative"},
-					"solver":               &types.AttributeValueMemberS{Value: "propagation"},
-					"regions":              &types.AttributeValueMemberS{Value: "bfs"},
-					"regionVariance":       &types.AttributeValueMemberN{Value: "0"},
-					"deducible":            &types.AttributeValueMemberBOOL{Value: true},
-					"concurrency":          &types.AttributeValueMemberN{Value: "1"},
+					"difficulty":           &types.AttributeValueMemberN{Value: "2"},
+					"maxTier":              &types.AttributeValueMemberN{Value: "2"},
+					"tierCounts":           &types.AttributeValueMemberL{Value: []types.AttributeValue{&types.AttributeValueMemberN{Value: "0"}, &types.AttributeValueMemberN{Value: "3"}, &types.AttributeValueMemberN{Value: "1"}, &types.AttributeValueMemberN{Value: "0"}, &types.AttributeValueMemberN{Value: "0"}}},
+					"traceLen":             &types.AttributeValueMemberN{Value: "4"},
 					"generationDurationMs": &types.AttributeValueMemberN{Value: "4200"},
 					"createdAt":            &types.AttributeValueMemberS{Value: "2026-04-15T10:30:00Z"},
 					"servedAt":             &types.AttributeValueMemberS{Value: ""},
@@ -437,18 +436,12 @@ func TestCountReady(t *testing.T) {
 }
 
 // helper to build a DynamoDB item map for a config record.
-func buildConfigItem(sk, pipeline string, enabled bool) map[string]types.AttributeValue {
+func buildConfigItem(sk string, enabled bool) map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
-		"PK":             &types.AttributeValueMemberS{Value: "CONFIG"},
-		"SK":             &types.AttributeValueMemberS{Value: sk},
-		"pipeline":       &types.AttributeValueMemberS{Value: pipeline},
-		"solver":         &types.AttributeValueMemberS{Value: "propagation"},
-		"regions":        &types.AttributeValueMemberS{Value: "bfs"},
-		"regionVariance": &types.AttributeValueMemberN{Value: "0.3"},
-		"deducible":      &types.AttributeValueMemberBOOL{Value: true},
-		"concurrency":    &types.AttributeValueMemberN{Value: "4"},
-		"threshold":      &types.AttributeValueMemberN{Value: "10"},
-		"enabled":        &types.AttributeValueMemberBOOL{Value: enabled},
+		"PK":        &types.AttributeValueMemberS{Value: "CONFIG"},
+		"SK":        &types.AttributeValueMemberS{Value: sk},
+		"threshold": &types.AttributeValueMemberN{Value: "10"},
+		"enabled":   &types.AttributeValueMemberBOOL{Value: enabled},
 	}
 }
 
@@ -471,8 +464,8 @@ func TestGetAllConfigs(t *testing.T) {
 		{
 			name: "returns multiple configs with parsed Size and Mode",
 			queryItems: []map[string]types.AttributeValue{
-				buildConfigItem("5#standard", "iterative", true),
-				buildConfigItem("7#double", "random", false),
+				buildConfigItem("5#standard", true),
+				buildConfigItem("7#double", false),
 			},
 			wantErr:   false,
 			wantCount: 2,
@@ -532,23 +525,25 @@ func TestGetAllConfigs(t *testing.T) {
 
 func TestGetConfig(t *testing.T) {
 	tests := []struct {
-		name     string
-		size     int
-		mode     string
-		item     map[string]types.AttributeValue
-		getErr   error
-		wantNil  bool
-		wantErr  bool
-		wantPipe string
+		name          string
+		size          int
+		mode          string
+		item          map[string]types.AttributeValue
+		getErr        error
+		wantNil       bool
+		wantErr       bool
+		wantEnabled   bool
+		wantThreshold int
 	}{
 		{
-			name:     "returns config when found",
-			size:     5,
-			mode:     "standard",
-			item:     buildConfigItem("5#standard", "iterative", true),
-			wantNil:  false,
-			wantErr:  false,
-			wantPipe: "iterative",
+			name:          "returns config when found",
+			size:          5,
+			mode:          "standard",
+			item:          buildConfigItem("5#standard", true),
+			wantNil:       false,
+			wantErr:       false,
+			wantEnabled:   true,
+			wantThreshold: 10,
 		},
 		{
 			name:    "returns nil when not found",
@@ -608,8 +603,11 @@ func TestGetConfig(t *testing.T) {
 			if result.Mode != tt.mode {
 				t.Errorf("Mode = %q, want %q", result.Mode, tt.mode)
 			}
-			if result.Pipeline != tt.wantPipe {
-				t.Errorf("Pipeline = %q, want %q", result.Pipeline, tt.wantPipe)
+			if result.Enabled != tt.wantEnabled {
+				t.Errorf("Enabled = %v, want %v", result.Enabled, tt.wantEnabled)
+			}
+			if result.Threshold != tt.wantThreshold {
+				t.Errorf("Threshold = %d, want %d", result.Threshold, tt.wantThreshold)
 			}
 		})
 	}
@@ -627,16 +625,10 @@ func TestPutConfig(t *testing.T) {
 		{
 			name: "writes config correctly",
 			config: ConfigRecord{
-				Size:           5,
-				Mode:           "standard",
-				Pipeline:       "iterative",
-				Solver:         "propagation",
-				Regions:        "bfs",
-				RegionVariance: 0.3,
-				Deducible:      true,
-				Concurrency:    4,
-				Threshold:      10,
-				Enabled:        true,
+				Size:      5,
+				Mode:      "standard",
+				Threshold: 10,
+				Enabled:   true,
 			},
 			wantErr: false,
 			wantPK:  "CONFIG",
@@ -708,9 +700,10 @@ func TestCreateConfig(t *testing.T) {
 		{
 			name: "creates config successfully",
 			config: ConfigRecord{
-				Size:     5,
-				Mode:     "standard",
-				Pipeline: "iterative",
+				Size:      5,
+				Mode:      "standard",
+				Enabled:   true,
+				Threshold: 3,
 			},
 			wantErr:       false,
 			wantCondition: "attribute_not_exists(PK)",

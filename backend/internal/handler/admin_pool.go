@@ -16,14 +16,9 @@ type ConfigAndCountRepo interface {
 }
 
 type configResponse struct {
-	Pipeline       string  `json:"pipeline"`
-	Solver         string  `json:"solver"`
-	Regions        string  `json:"regions"`
-	RegionVariance float64 `json:"regionVariance"`
-	Deducible      bool    `json:"deducible"`
-	Concurrency    int     `json:"concurrency"`
-	Threshold      int     `json:"threshold"`
-	Enabled        bool    `json:"enabled"`
+	Threshold   int  `json:"threshold"`
+	Enabled     bool `json:"enabled"`
+	MaxAttempts int  `json:"maxAttempts,omitempty"`
 }
 
 type comboStatus struct {
@@ -66,14 +61,9 @@ func AdminPoolHandler(repo ConfigAndCountRepo) http.HandlerFunc {
 				Size: cfg.Size,
 				Mode: cfg.Mode,
 				Config: configResponse{
-					Pipeline:       cfg.Pipeline,
-					Solver:         cfg.Solver,
-					Regions:        cfg.Regions,
-					RegionVariance: cfg.RegionVariance,
-					Deducible:      cfg.Deducible,
-					Concurrency:    cfg.Concurrency,
-					Threshold:      cfg.Threshold,
-					Enabled:        cfg.Enabled,
+					Threshold:   cfg.Threshold,
+					Enabled:     cfg.Enabled,
+					MaxAttempts: cfg.MaxAttempts,
 				},
 				ReadyCount: readyCount,
 			})

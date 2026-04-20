@@ -13,9 +13,6 @@ import {
   triggerReplenish,
 } from '../services/adminService';
 
-const PIPELINE_OPTIONS = ['region-first', 'iterative', 'constraint-aware'];
-const SOLVER_OPTIONS = ['backtrack', 'propagation'];
-const REGIONS_OPTIONS = ['bfs', 'wfc'];
 const MODE_OPTIONS = ['standard', 'double'];
 
 const labelStyle: React.CSSProperties = {
@@ -67,12 +64,6 @@ function comboLabel(size: number, mode: string): string {
 /** Default config values for a new combo. */
 function defaultConfig(): ConfigData {
   return {
-    pipeline: 'region-first',
-    solver: 'backtrack',
-    regions: 'bfs',
-    regionVariance: 0.3,
-    deducible: true,
-    concurrency: 2,
     threshold: 3,
     enabled: true,
   };
@@ -161,107 +152,6 @@ function ConfigForm({
       )}
 
       <label style={labelStyle}>
-        Pipeline
-        <select
-          value={config.pipeline}
-          onChange={(e) =>
-            onConfigChange({ ...config, pipeline: e.target.value })
-          }
-          aria-label="Pipeline"
-          style={inputStyle}
-        >
-          {PIPELINE_OPTIONS.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label style={labelStyle}>
-        Solver
-        <select
-          value={config.solver}
-          onChange={(e) =>
-            onConfigChange({ ...config, solver: e.target.value })
-          }
-          aria-label="Solver"
-          style={inputStyle}
-        >
-          {SOLVER_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label style={labelStyle}>
-        Regions
-        <select
-          value={config.regions}
-          onChange={(e) =>
-            onConfigChange({ ...config, regions: e.target.value })
-          }
-          aria-label="Regions"
-          style={inputStyle}
-        >
-          {REGIONS_OPTIONS.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label style={labelStyle}>
-        Region Variance
-        <input
-          type="number"
-          step={0.1}
-          min={0}
-          max={1}
-          value={config.regionVariance}
-          onChange={(e) =>
-            onConfigChange({
-              ...config,
-              regionVariance: Number(e.target.value),
-            })
-          }
-          aria-label="Region variance"
-          style={{ ...inputStyle, width: '80px' }}
-        />
-      </label>
-
-      <label style={labelStyle}>
-        Deducible
-        <input
-          type="checkbox"
-          checked={config.deducible}
-          onChange={(e) =>
-            onConfigChange({ ...config, deducible: e.target.checked })
-          }
-          aria-label="Deducible"
-          style={{ width: '20px', height: '20px' }}
-        />
-      </label>
-
-      <label style={labelStyle}>
-        Concurrency
-        <input
-          type="number"
-          min={1}
-          max={8}
-          value={config.concurrency}
-          onChange={(e) =>
-            onConfigChange({ ...config, concurrency: Number(e.target.value) })
-          }
-          aria-label="Concurrency"
-          style={{ ...inputStyle, width: '80px' }}
-        />
-      </label>
-
-      <label style={labelStyle}>
         Threshold
         <input
           type="number"
@@ -285,6 +175,20 @@ function ConfigForm({
           }
           aria-label="Enabled"
           style={{ width: '20px', height: '20px' }}
+        />
+      </label>
+
+      <label style={labelStyle}>
+        Max attempts (0 = default)
+        <input
+          type="number"
+          min={0}
+          value={config.maxAttempts ?? 0}
+          onChange={(e) =>
+            onConfigChange({ ...config, maxAttempts: Number(e.target.value) })
+          }
+          aria-label="Max attempts"
+          style={{ ...inputStyle, width: '80px' }}
         />
       </label>
 
@@ -357,7 +261,7 @@ export function AdminPage() {
   const [newComboConfig, setCreateConfigState] = useState<ConfigData>(
     defaultConfig(),
   );
-  const [createSize, setCreateSize] = useState(5);
+  const [createSize, setCreateSize] = useState(7);
   const [createMode, setCreateMode] = useState('standard');
 
   const [saving, setSaving] = useState(false);
@@ -437,7 +341,7 @@ export function AdminPage() {
     setEditingCombo(null);
     setShowCreate(true);
     setCreateConfigState(defaultConfig());
-    setCreateSize(5);
+    setCreateSize(7);
     setCreateMode('standard');
   };
 
@@ -673,4 +577,3 @@ export function AdminPage() {
     </PageShell>
   );
 }
-
