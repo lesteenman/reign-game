@@ -30,9 +30,19 @@ const nMax = 16
 // via ConfigRecord.MaxAttempts / GenerationRequest.MaxAttempts.
 const defaultMaxAttempts = 20
 
-// defaultMaxMutations is the default swap-mutation budget per attempt.
-// Locked decision #9; adjustable via WithMaxMutations.
-const defaultMaxMutations = 50
+// defaultMaxMutations is the default swap-mutation budget per attempt at
+// k=1. The walker takes graded plateau and small-regression swaps, so it
+// needs room to oscillate past local optima before reaching Solved. 300
+// is the current empirical pick at k=1 where probe-solves are fastest.
+const defaultMaxMutations = 300
+
+// defaultMaxMutationsK2 is the per-attempt budget at k=2, where probe-
+// solves are several times slower than at k=1 and the walker's success
+// rate saturates early on reachable puzzles. Extra budget past ~100
+// does not lift the Step 7 rate at any tested N, and the end-to-end
+// N=12 k=2 wall time is dominated by probe-solve cost per attempt
+// rather than per-step budget (R-068 will reduce that further).
+const defaultMaxMutationsK2 = 100
 
 // Package-level typed errors. Consumers use errors.Is against these sentinels.
 var (
