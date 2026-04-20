@@ -221,8 +221,14 @@ func abs(x int) int {
 }
 
 // fromRegionConnectedWithoutCell returns true iff, with cell (r, c) removed
-// from region `fromID`, the rest of that region is still 4-connected AND
-// still contains all its seed marks.
+// from region `fromID`, every remaining cell of that region is still
+// reachable via 4-adjacent cells of the same region (and all seed marks
+// are among the reachable cells).
+//
+// A weaker version of this check that only verified seed reachability was
+// the source of R-067-era disconnected regions: at k=1 a region has a
+// single seed, so the seed trivially remains its own connected component
+// while non-seed tail cells get orphaned. We now count cells too.
 //
 // Tried before the caller commits a swap. Uses BFS confined to the
 // modified region.
@@ -250,11 +256,28 @@ func fromRegionConnectedWithoutCell(
 		return false
 	}
 
-	var visited [nMax][nMax]bool
-	bfsRegionVisit(regionOf, fromID, start.Row, start.Col, r, c, n, &visited)
+	// Count cells in fromID before the removal so we can compare against
+	// the BFS-reachable count after skipping (r, c).
+	totalCells := 0
+	for rr := range n {
+		for cc := range n {
+			if int(regionOf[rr][cc]) == fromID {
+				totalCells++
+			}
+		}
+	}
 
-	// Every seed must be visited (the removed cell (r, c) is already
-	// excluded by the skip parameter passed to bfsRegionVisit).
+	var visited [nMax][nMax]bool
+	reached := bfsRegionVisit(regionOf, fromID, start.Row, start.Col, r, c, n, &visited)
+
+	// The post-removal region must have (totalCells - 1) reachable cells.
+	// If BFS reaches fewer, some non-seed cells are now orphaned.
+	if reached != totalCells-1 {
+		return false
+	}
+
+	// Also confirm every seed is visited — defensive; the cell-count
+	// check implies it, but keep for symmetry with the previous contract.
 	for _, m := range seeds[fromID] {
 		if m.Row == r && m.Col == c {
 			continue
