@@ -72,6 +72,16 @@ The only hard gate we commit to externally is: Step 7 success rate ≥80% at N=1
 
 **Decision:** after deductive solve returns `Solved`, assert (in test builds) that the reached solution matches the brute-solver's single solution. A divergence means a deductive rule is unsound — treat as a hard failure, not a retry trigger. In release builds, skip the comparison on the hot path but run it in property tests and the soak target.
 
+## 9a. Region MinSize = 3 (R-067b)
+
+**Decision:** every region in a generated puzzle must have at least 3 cells, at both k=1 and k=2. The grower enforces this during growth — while any region is under 3 cells, the frontier-pick step is restricted to cells adjacent to under-size regions and the assignment always goes to the smallest under-size region (smallest among under-3 candidates in the cheap variant; probe-scored among under-3 candidates in the solver-guided variant). If no under-size region has an unclaimed neighbor, the grow fails and the orchestrator resamples.
+
+The maximum region size is **deliberately unbounded**. Culling overly large regions is a curation concern (see GAME_DESIGN.md "Planned Work") and lives outside the generator.
+
+The earlier internal note of `MinSize = k + 1` (implied by the seed count) is superseded. 3 cells at k=1 is a puzzle-quality floor, not a structural one.
+
+The rule is measurable: `TestGrowRegionsMinSize` samples 200 grows per committed (N, k) combo across both grower variants and fails on any under-3 region.
+
 ## 9. Honesty priors on the spec's guesses
 
 **Decision:** K=50 mutation cap, 80% Step 7 success rate, 200-sample unit test count — accept as starting points. If measurements say otherwise, report and adjust. No externally-promised perf numbers until Step 11's data is in.

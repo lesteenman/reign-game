@@ -25,6 +25,7 @@ Layer 5: R-067 (consumer cleanup + drop-in replace)   swap old package for new e
     |
 Layer 5a: R-067a (mutator upgrade)                    lift (N=12, k=1) Step 7 rate back over 80%
 Layer 5b: R-067b (region-size balance)                enforce min region size of 3
+Layer 5c: R-067c (relift N=12 k=1 after min-size)     restore the gate under the tighter regime
     |
 Layer 6: R-068 (bench + distribution + soak + corpus) Steps 11 + 12
     |
@@ -49,6 +50,7 @@ Hard dependency rule: R-067 cannot merge before R-065 gates pass, because R-067 
 | R-067 | Consumer cleanup + drop-in replacement         | 5     | (cross-cutting)  | [ ]    |
 | R-067a| Mutator upgrade (close N=12 k=1 gate)          | 5a    | (follow-up)      | [ ]    |
 | R-067b| Region-size balance (min size = 3)             | 5b    | (quality)        | [ ]    |
+| R-067c| Relift N=12 k=1 gate under min-size regime     | 5c    | (follow-up)      | [ ]    |
 | R-068 | Benchmarks + distribution + soak + corpus + optional generator CI re-check | 6 | Step 11, Step 12 | [ ]    |
 | R-069 | Cutover + KI-007 close                         | 7     | (operational)    | [ ]    |
 | R-06A | Post-cutover cleanup                           | 7     | (contingent)     | [ ]    |
@@ -374,6 +376,49 @@ The solver-guided variant inherits the same priority rule — the probe still sc
 - `openspec/changes/phase-5-generator-rework/locked-decisions.md` (MinSize note)
 
 **Dependencies:** R-067.
+
+**Commit after completion.**
+
+---
+
+### R-067c: Relift (N=12, k=1) Step 7 gate under the min-size regime
+
+- **Roadmap:** R-067c
+- **Spec step:** (quality follow-up to R-067b)
+- **Agent:** backend-dev
+- **OpenSpec:** no spec change; this is a mutator-tuning slice.
+
+**Work**
+
+R-067b's min-size rule (every region >= 3 cells) cut N=12 k=1 from 81% to 50% and forced the gate back to non-enforcing. Other combos moved a few points at most:
+
+| (N, k) | pre-R-067b | post-R-067b |
+|---|---|---|
+| 12, 1 | 81% | **50%** |
+| 12, 2 | 46% | 46% |
+| 11, 1 | 97% | 91% |
+| 11, 2 | 89% | 89% |
+
+Recover N=12 k=1 above 80% without touching the min-size rule. Required work, in order:
+
+1. Run `TestDiagPipelineStages` (`go test -tags=diag -run TestDiagPipelineStages -v`) at N=12 k=1 BEFORE tuning anything. Record which pipeline stage is failing more under the min-size regime (sample / grow / mutator-stall / brute-non-unique). This is the root-cause measurement — no numerical tuning until this is in hand.
+2. If the failure shifted to the mutator, re-profile `BenchmarkGenerateOne` with `-cpuprofile` and `pprof top` the walker under the new size regime. The tighter grower may be leaving the walker in different basin shapes.
+3. Based on (1) and (2), pick the cheapest change — budget, plateau weights, neighborhood radius, or restart strategy — that recovers >=80%. Do NOT batch-iterate on numbers; each change must be motivated by a diag measurement.
+
+**Gate**
+
+- N=12 k=1 Step 7 rate back above 80% on 100 attempts × WithMaxAttempts=10.
+- N=12 k=1 `enforce: true` again in `step7_test.go` with the R-067a-style comment rewrite (see lesson 19 from the R-067a retro — rewrite the rationale block, don't accumulate history).
+- No regression in any other combo below its pre-R-067c rate.
+- `BenchmarkGenerateOne` at N=12 k=1 stays under 2 s/op.
+
+**Files touched**
+
+- `backend/internal/generator/mutate.go` (likely).
+- `backend/internal/generator/generator.go` (possibly, if budget constants change).
+- `backend/internal/generator/step7_test.go` (enforce flag + comment rewrite).
+
+**Dependencies:** R-067b.
 
 **Commit after completion.**
 
