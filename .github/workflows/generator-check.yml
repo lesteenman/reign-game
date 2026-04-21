@@ -20,11 +20,17 @@ jobs:
   generator-cross-check:
     name: Soak + property corpus
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     continue-on-error: true
     defaults:
       run:
         working-directory: backend
+    env:
+      # CI runs the soak at 10% of the locally-default sample count so
+      # the job finishes within a PR-review-friendly budget. Full-depth
+      # 10k-sample runs happen on a dev box or in a scheduled job, per
+      # input-spec §7.1 ("not required for normal CI").
+      REIGN_SOAK_SCALE: "0.1"
     steps:
       - uses: actions/checkout@v6
 
@@ -34,4 +40,4 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: Soak + property tests
-        run: go test -tags=soak -timeout=25m ./internal/generator/...
+        run: go test -tags=soak -timeout=40m ./internal/generator/...
