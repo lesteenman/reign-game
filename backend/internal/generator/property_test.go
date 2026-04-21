@@ -7,8 +7,8 @@ import (
 )
 
 // propertyCorpusKnownDead lists ruleIDs the corpus is currently
-// unable to exercise. Tracked: R-068z (dead-rule investigation in
-// openspec/changes/phase-5-generator-rework/tasks.md).
+// unable to exercise. Tracked: R-06D (dead-rule investigation,
+// ROADMAP.md Phase 6b — deferred to the audit-loop phase).
 //
 // An entry here is NOT a blanket relaxation — it degrades a zero-
 // firing rule from an error to a warning so a real regression
