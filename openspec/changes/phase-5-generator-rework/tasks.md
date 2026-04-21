@@ -50,7 +50,7 @@ Hard dependency rule: R-067 cannot merge before R-065 gates pass, because R-067 
 | R-067 | Consumer cleanup + drop-in replacement         | 5     | (cross-cutting)  | [ ]    |
 | R-067a| Mutator upgrade (close N=12 k=1 gate)          | 5a    | (follow-up)      | [ ]    |
 | R-067b| Region-size balance (min size = 3)             | 5b    | (quality)        | [ ]    |
-| R-067c| Relift N=12 k=1 gate under min-size regime     | 5c    | (follow-up)      | [ ]    |
+| R-067c| Relift N=12 k=1 gate under min-size regime     | 5c    | (follow-up)      | [x]    |
 | R-068 | Benchmarks + distribution + soak + corpus + optional generator CI re-check | 6 | Step 11, Step 12 | [ ]    |
 | R-069 | Cutover + KI-007 close                         | 7     | (operational)    | [ ]    |
 | R-06A | Post-cutover cleanup                           | 7     | (contingent)     | [ ]    |
@@ -388,39 +388,42 @@ The solver-guided variant inherits the same priority rule — the probe still sc
 - **Agent:** backend-dev
 - **OpenSpec:** no spec change; this is a mutator-tuning slice.
 
-**Work**
+**Work done**
 
-R-067b's min-size rule (every region >= 3 cells) cut N=12 k=1 from 81% to 50% and forced the gate back to non-enforcing. Other combos moved a few points at most:
+Root-caused via `TestDiagPipelineStages` and a build-tagged exit-reason probe: at N=12 k=1 post-R-067b, 194/200 attempts exhausted the mutator budget (noSwap=0, budgetDone=194). The walker was spending too much budget on plateau-acceptance random walks that don't converge under the tighter boundary surface the min-size rule leaves behind. A pure budget increase (300 → 1000) scaled success rate sub-linearly and pushed wall time past the 2 s ceiling.
 
-| (N, k) | pre-R-067b | post-R-067b |
-|---|---|---|
-| 12, 1 | 81% | **50%** |
-| 12, 2 | 46% | 46% |
-| 11, 1 | 97% | 91% |
-| 11, 2 | 89% | 89% |
+Two surgical changes:
 
-Recover N=12 k=1 above 80% without touching the min-size rule. Required work, in order:
+1. `mutate.go` `tryOneSwap`: plateau acceptance cut from p=0.5 → p=0.1 (same-score) and p=0.1 → p=0.05 (one-cell regression). Greedier walker commits to improving swaps instead of diffusing.
+2. `mutate.go` `tryOneSwap`: the "region must not empty" swap guard was `>= 1`; raised to `>= regionMinSize` so the mutator honors the R-067b floor (previously the mutator could undo what the grower built, which the Step 7 gate was partly hiding).
 
-1. Run `TestDiagPipelineStages` (`go test -tags=diag -run TestDiagPipelineStages -v`) at N=12 k=1 BEFORE tuning anything. Record which pipeline stage is failing more under the min-size regime (sample / grow / mutator-stall / brute-non-unique). This is the root-cause measurement — no numerical tuning until this is in hand.
-2. If the failure shifted to the mutator, re-profile `BenchmarkGenerateOne` with `-cpuprofile` and `pprof top` the walker under the new size regime. The tighter grower may be leaving the walker in different basin shapes.
-3. Based on (1) and (2), pick the cheapest change — budget, plateau weights, neighborhood radius, or restart strategy — that recovers >=80%. Do NOT batch-iterate on numbers; each change must be motivated by a diag measurement.
+Step 7 rates on 100 × WithMaxAttempts=10:
 
-**Gate**
+| (N, k) | pre-R-067b | post-R-067b | R-067c |
+|---|---|---|---|
+| 12, 1 | 81% | 50% | **84%** |
+| 12, 2 | 46% | 46% | **83%** |
+| 11, 1 | 97% | 91% | 98% |
+| 11, 2 | 89% | 89% | 100% |
+| 10, 1 | 100% | 95% | 98% |
+| 10, 2 | 98% | 98% | 100% |
 
-- N=12 k=1 Step 7 rate back above 80% on 100 attempts × WithMaxAttempts=10.
-- N=12 k=1 `enforce: true` again in `step7_test.go` with the R-067a-style comment rewrite (see lesson 19 from the R-067a retro — rewrite the rationale block, don't accumulate history).
-- No regression in any other combo below its pre-R-067c rate.
-- `BenchmarkGenerateOne` at N=12 k=1 stays under 2 s/op.
+`BenchmarkGenerateOne` at N=12 k=1: 1.05 s/op (under 2 s ceiling). N=12 k=2 at 2.37 s/op, not introduced here; R-068 owns that reduction.
+
+**Outcome**
+
+- N=12 k=1 gate back to `enforce: true`. Step 7 comment rewritten (no history accumulation — retro lesson 19).
+- N=12 k=2 rose 37 pp as a bonus (the greedier walker helps there too), though it is not a committed gate.
+- No regression on any other combo.
 
 **Files touched**
 
-- `backend/internal/generator/mutate.go` (likely).
-- `backend/internal/generator/generator.go` (possibly, if budget constants change).
-- `backend/internal/generator/step7_test.go` (enforce flag + comment rewrite).
+- `backend/internal/generator/mutate.go` — plateau probabilities + min-size swap guard + docstring updates.
+- `backend/internal/generator/step7_test.go` — (N=12, k=1) `enforce: true`; history-narrating rationale block rewritten.
 
 **Dependencies:** R-067b.
 
-**Commit after completion.**
+**Status:** done.
 
 ---
 
