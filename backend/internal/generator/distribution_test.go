@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
 	"strconv"
 	"testing"
 	"time"
@@ -17,8 +16,9 @@ import (
 // clock budget and records the difficulty histogram + Expert yield.
 // Writes bench/difficulty-distribution.md when REIGN_BENCH_WRITE=1.
 //
-// Build-tagged. Default per-bucket budget is the spec's 1 hour; tune
-// down via REIGN_DIST_BUDGET_SEC=300 etc. for a quick run.
+// Build-tagged. Default budget is 1 hour per bucket — 4 hours total
+// wall-clock — so a full refresh needs `-timeout=8h`. Shrink via
+// REIGN_DIST_BUDGET_SEC for a faster pilot.
 //
 // Invocation:
 //
@@ -44,6 +44,8 @@ func TestDifficultyDistribution(t *testing.T) {
 	}
 	budget := time.Duration(budgetSec) * time.Second
 
+	// cases is already in (n, k) order; the write-to-md loop preserves
+	// that order, so no post-run sort is needed.
 	cases := []struct{ n, k int }{
 		{n: 12, k: 1},
 		{n: 12, k: 2},
@@ -52,14 +54,12 @@ func TestDifficultyDistribution(t *testing.T) {
 	}
 
 	type result struct {
-		n, k       int
-		elapsed    time.Duration
-		attempts   int
-		successes  int
-		byDiff     map[Difficulty]int
-		minLatency time.Duration
-		maxLatency time.Duration
-		totalDur   time.Duration
+		n, k      int
+		elapsed   time.Duration
+		attempts  int
+		successes int
+		byDiff    map[Difficulty]int
+		totalDur  time.Duration
 	}
 	results := make([]result, 0, len(cases))
 
@@ -70,10 +70,9 @@ func TestDifficultyDistribution(t *testing.T) {
 		}
 
 		r := result{
-			n:          c.n,
-			k:          c.k,
-			byDiff:     make(map[Difficulty]int),
-			minLatency: time.Duration(1<<62 - 1),
+			n:      c.n,
+			k:      c.k,
+			byDiff: make(map[Difficulty]int),
 		}
 		deadline := time.Now().Add(budget)
 		ctx := context.Background()
@@ -81,14 +80,7 @@ func TestDifficultyDistribution(t *testing.T) {
 			r.attempts++
 			t0 := time.Now()
 			p, err := g.Generate(ctx)
-			dur := time.Since(t0)
-			r.totalDur += dur
-			if dur < r.minLatency {
-				r.minLatency = dur
-			}
-			if dur > r.maxLatency {
-				r.maxLatency = dur
-			}
+			r.totalDur += time.Since(t0)
 			if err != nil {
 				if errors.Is(err, ErrMaxAttemptsExhausted) {
 					continue
@@ -102,7 +94,7 @@ func TestDifficultyDistribution(t *testing.T) {
 		results = append(results, r)
 		t.Logf("N=%d k=%d: %d/%d ok over %s (%s/puzzle)",
 			c.n, c.k, r.successes, r.attempts, r.elapsed,
-			time.Duration(int64(r.totalDur)/maxInt(int64(r.successes), 1)))
+			r.totalDur/time.Duration(max(r.successes, 1)))
 	}
 
 	out := "# Generate() difficulty distribution (R-068d)\n\n"
@@ -127,14 +119,6 @@ func TestDifficultyDistribution(t *testing.T) {
 	out += "- **Throughput (ok/min)** at N=12 drives Lambda concurrency sizing. Combine with `BenchmarkGenerateParallel` (baseline.txt) to project aggregate pool refill rate.\n"
 	out += "- Row-by-row quirks (a bucket starving in one tier) are usually a classifier issue rather than a generator issue; cross-check against the rule trace distribution from the property-corpus logs.\n"
 
-	// Stable ordering for diff friendliness.
-	sort.Slice(results, func(i, j int) bool {
-		if results[i].n != results[j].n {
-			return results[i].n < results[j].n
-		}
-		return results[i].k < results[j].k
-	})
-
 	if os.Getenv("REIGN_BENCH_WRITE") != "1" {
 		t.Log("REIGN_BENCH_WRITE not set; skipping bench/difficulty-distribution.md write")
 		return
@@ -143,11 +127,4 @@ func TestDifficultyDistribution(t *testing.T) {
 	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
-}
-
-func maxInt(a, b int64) int64 {
-	if a > b {
-		return a
-	}
-	return b
 }

@@ -17,17 +17,17 @@ Reads the three measurement artifacts committed by the R-068 slices and makes th
 
 **Trigger.** p99/median > 3× at any committed (N, k).
 
-**Evidence.** Every committed bucket is past the trigger, some by a lot:
+**Evidence** (see `bench/latency-distribution.md` for the full median/p99/max table):
 
-| (N, k) | median | p99 | ratio |
-|---|---|---|---|
-| 6, 1 | 994 µs | 9.17 ms | 9.2× |
-| 9, 1 | 57 ms | 450 ms | 7.8× |
-| 12, 1 | 1.49 s | 7.07 s | 4.8× |
-| 9, 2 | 2.73 ms | 200 ms | **73.3×** |
-| 12, 2 | 1.06 s | 6.47 s | 6.1× |
+| (N, k) | p99/median |
+|---|---|
+| 6, 1 | 9.2× |
+| 9, 1 | 7.8× |
+| 12, 1 | 4.8× |
+| 9, 2 | **73.3×** |
+| 12, 2 | 6.1× |
 
-`(9, 2)` is the pathological case — median is a few ms, tail is hundreds of ms. The same slow-attempt-blocks-fast-attempt shape appears at every N. At `(12, 1)` median-7× means 10 s of wait for a p99 call while 50 median calls would have already finished.
+`(9, 2)` is the pathological case — median a few ms, tail hundreds of ms. The same slow-attempt-blocks-fast-attempt shape appears at every N.
 
 **Recommendation — ship `WithRacing` as part of the consumer cutover.** A racing wrapper issues M concurrent `Generate` calls, returns the first to finish, and cancels the rest. M = 2–3 captures most of the tail-cut at minor Generator-memory cost.
 
@@ -56,17 +56,7 @@ In the meantime, the classifier produces a binary Medium/Hard split at N=12 k=1 
 
 ## 3. Pool refill capacity
 
-From `bench/baseline.txt`:
-
-- `BenchmarkGenerateParallel/N=12/k=1` at 12 cores: 466 ms/op aggregate for 3 iterations → **≈ 6.4 puzzles/sec ≈ 23 000 puzzles/hour**.
-- `BenchmarkGenerateParallel/N=12/k=2` at 12 cores: 653 ms/op aggregate → **≈ 4.6 puzzles/sec ≈ 16 500 puzzles/hour**.
-
-From `bench/difficulty-distribution.md` (single-threaded, 15-min buckets):
-
-- `(12, 1)`: 33.6 puzzles/min ≈ 2 000/hour per goroutine.
-- `(12, 2)`: 37.6 puzzles/min ≈ 2 250/hour per goroutine.
-
-Per-difficulty refill at 12 cores (yield × parallel throughput):
+Parallel throughput from `bench/baseline.txt` × per-difficulty yield from `bench/difficulty-distribution.md`, at 12 cores:
 
 | tier | N=12, k=1 | N=12, k=2 |
 |---|---|---|
@@ -74,6 +64,8 @@ Per-difficulty refill at 12 cores (yield × parallel throughput):
 | Medium | ~13 000/hr | ~80/hr (starved) |
 | Hard | ~10 000/hr | ~16 400/hr |
 | Expert | unreachable | unreachable |
+
+Source numbers: `BenchmarkGenerateParallel/N=12/k=1` ≈ 23 000 total-puzzles/hr, `/k=2` ≈ 16 500/hr; yields from the distribution table in §2.
 
 ## 4. N=14 note
 
