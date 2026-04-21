@@ -1,0 +1,47 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/eriksteenman/reign-game/backend/internal/generator
+cpu: Apple M3 Pro
+BenchmarkGenerateOne/N=6/k=1-12       	       3	   2884653 ns/op	    1712 B/op	      31 allocs/op
+BenchmarkGenerateOne/N=7/k=1-12       	       3	  10861889 ns/op	    2768 B/op	      47 allocs/op
+BenchmarkGenerateOne/N=8/k=1-12       	       3	  25057667 ns/op	    3104 B/op	      52 allocs/op
+BenchmarkGenerateOne/N=9/k=1-12       	       3	 116952528 ns/op	    3466 B/op	      49 allocs/op
+BenchmarkGenerateOne/N=10/k=1-12      	       3	 529253222 ns/op	    5109 B/op	      82 allocs/op
+BenchmarkGenerateOne/N=11/k=1-12      	       3	 583722306 ns/op	    5696 B/op	      80 allocs/op
+BenchmarkGenerateOne/N=12/k=1-12      	       3	1778268181 ns/op	    7168 B/op	     109 allocs/op
+BenchmarkGenerateOne/N=13/k=1-12      	       3	14077709361 ns/op	   26261 B/op	     501 allocs/op
+BenchmarkGenerateOne/N=14/k=1-12      	       3	13334692750 ns/op	   21056 B/op	     385 allocs/op
+BenchmarkGenerateOne/N=9/k=2-12       	       3	   7438472 ns/op	    3626 B/op	      38 allocs/op
+BenchmarkGenerateOne/N=10/k=2-12      	       3	  20065833 ns/op	    5749 B/op	      66 allocs/op
+BenchmarkGenerateOne/N=11/k=2-12      	       3	 493080806 ns/op	    8448 B/op	      93 allocs/op
+BenchmarkGenerateOne/N=12/k=2-12      	       3	2953740695 ns/op	   13600 B/op	     160 allocs/op
+BenchmarkGenerateOne/N=13/k=2-12      	       3	2482130667 ns/op	   10240 B/op	     107 allocs/op
+BenchmarkGenerateOne/N=14/k=2-12      	       3	15670475111 ns/op	   44874 B/op	     566 allocs/op
+BenchmarkGenerateParallel/N=12/k=1-12 	       3	 466566139 ns/op	   52176 B/op	     106 allocs/op
+BenchmarkGenerateParallel/N=12/k=2-12 	       3	 653352320 ns/op	   56421 B/op	     130 allocs/op
+BenchmarkRegionGrow/N=6/k=1-12        	       3	      5708 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrow/N=8/k=1-12        	       3	     10556 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrow/N=10/k=1-12       	       3	     20167 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrow/N=12/k=1-12       	       3	     34722 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrow/N=14/k=1-12       	       3	     55542 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrow/N=9/k=2-12        	       3	      9042 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrow/N=10/k=2-12       	       3	     11903 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrow/N=12/k=2-12       	       3	     10889 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrow/N=14/k=2-12       	       3	     34125 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrowSolverGuided/N=6/k=1-12         	       3	     66208 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrowSolverGuided/N=9/k=1-12         	       3	    448236 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrowSolverGuided/N=12/k=1-12        	       3	   1520083 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrowSolverGuided/N=9/k=2-12         	       3	    425750 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRegionGrowSolverGuided/N=12/k=2-12        	       3	   1992305 ns/op	       0 B/op	       0 allocs/op
+BenchmarkSolutionSample/N=6/k=1-12                 	       3	       653.0 ns/op	      96 B/op	       1 allocs/op
+BenchmarkSolutionSample/N=8/k=1-12                 	       3	      1000 ns/op	     128 B/op	       1 allocs/op
+BenchmarkSolutionSample/N=10/k=1-12                	       3	      1111 ns/op	     160 B/op	       1 allocs/op
+BenchmarkSolutionSample/N=12/k=1-12                	       3	      1500 ns/op	     192 B/op	       1 allocs/op
+BenchmarkSolutionSample/N=14/k=1-12                	       3	      1847 ns/op	     224 B/op	       1 allocs/op
+BenchmarkSolutionSample/N=9/k=2-12                 	       3	      2667 ns/op	     288 B/op	       1 allocs/op
+BenchmarkSolutionSample/N=10/k=2-12                	       3	      8153 ns/op	     320 B/op	       1 allocs/op
+BenchmarkSolutionSample/N=12/k=2-12                	       3	     37583 ns/op	     384 B/op	       1 allocs/op
+BenchmarkSolutionSample/N=14/k=2-12                	       3	     10250 ns/op	     448 B/op	       1 allocs/op
+BenchmarkSolverFixedPoint-12                       	       3	      2625 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/eriksteenman/reign-game/backend/internal/generator	231.149s

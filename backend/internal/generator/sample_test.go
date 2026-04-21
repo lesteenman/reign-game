@@ -150,31 +150,3 @@ func fingerprint(marks []Mark) string {
 	}
 	return string(out)
 }
-
-func BenchmarkSolutionSample(b *testing.B) {
-	cases := []struct {
-		n int
-		k int
-	}{
-		{n: 14, k: 1},
-		{n: 14, k: 2},
-	}
-	for _, tc := range cases {
-		b.Run(fmt.Sprintf("N=%d/k=%d", tc.n, tc.k), func(b *testing.B) {
-			g, err := New(tc.n, tc.k, WithSeed(1))
-			if err != nil {
-				b.Fatalf("New failed: %v", err)
-			}
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				marks, ok := g.sampleSolution()
-				if !ok {
-					b.Fatal("sampleSolution returned false")
-				}
-				if len(marks) != tc.n*tc.k {
-					b.Fatalf("expected %d marks, got %d", tc.n*tc.k, len(marks))
-				}
-			}
-		})
-	}
-}
