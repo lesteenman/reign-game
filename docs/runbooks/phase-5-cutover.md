@@ -7,6 +7,7 @@ End-to-end runbook for replacing the old generator with the Phase 5 rework. Cove
 - Phase 5 PRs (R-062 through R-068) merged to `epic/phase-5-generator-rework`, then to `main`.
 - `bench/step11-handoff.md` read and understood — Lambda concurrency sizing will come from its yield + throughput tables.
 - Stakeholders notified if any consumer is serving live traffic. (Dev only: no notification needed.)
+- Local tools: `aws` CLI and `jq` on your PATH. macOS typically needs `brew install jq`; Linux distros have it in their package managers.
 
 ## 1. Drain the generator queue
 

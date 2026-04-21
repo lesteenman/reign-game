@@ -12,6 +12,8 @@
 # adjacency (see backend/internal/generator/bench/n-feasibility.md and
 # the KI-007 close-out in ROADMAP.md).
 #
+# Requires: aws (CLI), jq.
+#
 # Usage:
 #   TABLE_NAME=puzzle-pool ./scripts/seed-configs.sh           # prod
 #   TABLE_NAME=puzzle-pool \
@@ -31,14 +33,18 @@ fi
 put_config() {
   local sk=$1
   echo "seed CONFIG $sk"
+  # Build the item JSON via jq so SK values pass through safely even
+  # if a future caller adds a field containing quotes or backslashes.
+  local item
+  item=$(jq -nc --arg sk "$sk" '{
+    PK:        {S: "CONFIG"},
+    SK:        {S: $sk},
+    threshold: {N: "3"},
+    enabled:   {BOOL: true}
+  }')
   aws "${aws_args[@]}" dynamodb put-item \
     --table-name "$TABLE_NAME" \
-    --item "{
-      \"PK\": {\"S\": \"CONFIG\"},
-      \"SK\": {\"S\": \"$sk\"},
-      \"threshold\": {\"N\": \"3\"},
-      \"enabled\": {\"BOOL\": true}
-    }"
+    --item "$item"
 }
 
 put_config "7#standard"
