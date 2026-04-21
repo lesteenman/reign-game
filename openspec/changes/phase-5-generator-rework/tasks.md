@@ -54,6 +54,7 @@ Hard dependency rule: R-067 cannot merge before R-065 gates pass, because R-067 
 | R-068 | Benchmarks + distribution + soak + corpus + optional generator CI re-check | 6 | Step 11, Step 12 | [ ]    |
 | R-069 | Cutover + KI-007 close                         | 7     | (operational)    | [ ]    |
 | R-06A | Post-cutover cleanup                           | 7     | (contingent)     | [ ]    |
+| R-068z| Dead-rule investigation (R6, R8, R9)           | 6z    | (quality)        | [ ]    |
 | R-06B | E2E fixed-database harness                     | 8     | (verification)   | [ ]    |
 
 ## Tasks
@@ -482,6 +483,58 @@ Prerequisite: **INV-GEN-1** must hold (all generation logic lives under `backend
 - `.github/workflows/generator-check.yml` (new) — optional generator CI re-check
 
 **Dependencies:** R-067.
+
+**Commit after completion.**
+
+---
+
+### R-068z: Dead-rule investigation (R6, R8, R9)
+
+- **Roadmap:** R-068z
+- **Spec step:** (quality follow-up to R-068b property corpus)
+- **Agent:** backend-dev
+- **OpenSpec:** no spec change; classifier / rule ordering investigation.
+
+**Work**
+
+R-068b's `TestPropertyCorpus` ran ~500 generated puzzles and found:
+
+| rule | tier | fired | notes |
+|---|---|---|---|
+| R1 | 1 | 2384 | |
+| R2 | 1 | 1988 | |
+| R3 | 1 | 3079 | |
+| R4 | 2 | 833 | |
+| R5 | 2 | 604 | |
+| R6 | 3 | **0** | R7 likely dominates Tier 3 |
+| R7 | 3 | 713 | |
+| R8 | 4 | **0** | Expert yield low; may not be reachable via generation |
+| R9 | 4 | **0** | Expert yield low; may not be reachable via generation |
+
+Per input-spec §7.2: *"A rule that never fires is either redundant or buggy."* The property test currently tolerates R6/R8/R9 via a `knownDead` whitelist in `property_test.go`. That is a stop-gap — the rules themselves need a decision.
+
+Work:
+
+1. **Hand-craft a minimal fixture per rule.** Build a `solverState` that is unsolvable without that rule. Exactly the pattern input-spec §7.2 calls "rule necessity (hand-crafted)."
+   - If a fixture exists → the rule is reachable but not surfaced by the generator. Either the classifier tier ordering needs tuning (R6 runs before R7), or the generator isn't producing puzzles that require it.
+   - If a fixture cannot be constructed → the rule is truly subsumed. Retire it from `rules.go`.
+2. **R-068d dependency.** Re-run `TestPropertyCorpus` after R-068d's longer distribution data is in. Expert yield may be high enough that R8/R9 do fire; if so, remove them from the knownDead map.
+3. **Document the outcome.** Update `specs/puzzle-generation.md` PG-06 / PG-07 if any rule is retired. Update the property test's knownDead map.
+
+**Gate**
+
+- Every rule in R1..R9 either (a) fires in `TestPropertyCorpus` or (b) has a committed minimal-fixture test demonstrating it fires on a hand-crafted state.
+- `propertyCorpusKnownDead` in `property_test.go` is empty (all rules exercised).
+- Retired rules deleted from `rules.go` with a commit that also updates PG-06 / PG-07.
+
+**Files touched**
+
+- `backend/internal/generator/rules.go` (possibly — if retiring)
+- `backend/internal/generator/rules_test.go` (hand-crafted necessity fixtures)
+- `backend/internal/generator/property_test.go` (drop knownDead entries)
+- `openspec/changes/phase-5-generator-rework/specs/puzzle-generation.md` (if scope-changing)
+
+**Dependencies:** R-068b, optionally R-068d.
 
 **Commit after completion.**
 
