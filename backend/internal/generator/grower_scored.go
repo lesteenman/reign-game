@@ -8,31 +8,31 @@ import "math/bits"
 // overly-large regions out-of-band (see GAME_DESIGN.md "Planned Work").
 const regionMinSize = 3
 
-// anyUndersized reports whether any region in gs still has fewer than
-// regionMinSize cells. While true the grow loop is constrained to add
-// cells only to under-size regions (see buildFrontier and the candidate
-// picks in growCheapLoopOn / growRegionsSolverGuided).
-func anyUndersized(gs *growState, n int) bool {
+// buildFrontier fills g.growFrontierBuf with cells eligible for assignment
+// this step and reports whether the min-size rule is currently active.
+//
+// When any region has fewer than regionMinSize cells, the frontier is
+// restricted to cells adjacent to at least one such region — the caller's
+// pick is then forced to grow an under-size region. Once every region has
+// reached regionMinSize the restriction drops and every unclaimed
+// frontier cell is eligible.
+//
+// Returns ok=false if the resulting buffer is empty. In the constrained
+// case that means bridging trapped every under-size region (rare) and the
+// caller should fail the attempt so the orchestrator can resample.
+//
+// The `constrained` flag is computed in the same region-size scan that
+// drives the frontier restriction, so callers do not need a separate
+// anyUndersized pass.
+func (g *Generator) buildFrontier(gs *growState) (ok, constrained bool) {
+	n := g.n
 	for gid := range n {
 		if gs.regionSize[gid] < regionMinSize {
-			return true
+			constrained = true
+			break
 		}
 	}
-	return false
-}
 
-// buildFrontier fills g.growFrontierBuf with cells eligible for assignment
-// this step. When any region is under-size, the frontier is restricted to
-// cells adjacent to at least one such region — the caller's pick is then
-// forced to grow an under-size region. Once every region has reached
-// regionMinSize, every unclaimed frontier cell is eligible.
-//
-// Returns false if the resulting buffer is empty. In the under-size case
-// that means no under-size region has an unclaimed neighbor (bridging
-// trapped it; rare) and the caller should fail the attempt so the
-// orchestrator can resample.
-func (g *Generator) buildFrontier(gs *growState, constrained bool) bool {
-	n := g.n
 	g.growFrontierBuf = g.growFrontierBuf[:0]
 	for r := range n {
 		var union uint16
@@ -50,15 +50,17 @@ func (g *Generator) buildFrontier(gs *growState, constrained bool) bool {
 			g.growFrontierBuf = append(g.growFrontierBuf, r*n+c)
 		}
 	}
-	return len(g.growFrontierBuf) > 0
+	return len(g.growFrontierBuf) > 0, constrained
 }
 
-// pickSmallestUndersized scans candidates for (cr, cc) and returns the
-// under-size region with the fewest cells. Ties are reservoir-sampled
-// via g.rng so no gid is systematically favored. Returns -1 if no
-// under-size region has this cell as frontier — the caller should fail
-// the attempt, since buildFrontier only emits cells that an under-size
-// region can take.
+// pickSmallestUndersized returns the under-size region with the fewest
+// cells that has (cr, cc) in its frontier. Size ties are reservoir-
+// sampled via g.rng so no gid is systematically favored.
+//
+// Returns -1 only as a defense against a precondition violation —
+// buildFrontier, in the constrained branch, only emits cells that at
+// least one under-size region can take. The caller keeps the -1 check
+// so a future refactor cannot silently break the invariant.
 func (g *Generator) pickSmallestUndersized(gs *growState, cr, cc int) int {
 	cellBit := uint16(1) << uint(cc)
 	chosen := -1
@@ -134,8 +136,8 @@ func (g *Generator) growRegionsSolverGuided(seeds [][]Mark, dst *[nMax][nMax]int
 	var candidates [nMax]int
 
 	for gs.remaining > 0 {
-		constrained := anyUndersized(&gs, n)
-		if !g.buildFrontier(&gs, constrained) {
+		ok, constrained := g.buildFrontier(&gs)
+		if !ok {
 			return false
 		}
 
@@ -146,10 +148,10 @@ func (g *Generator) growRegionsSolverGuided(seeds [][]Mark, dst *[nMax][nMax]int
 		cr, cc := cell/n, cell%n
 		cellBit := uint16(1) << uint(cc)
 
-		// Collect candidates, filtering to under-size regions when the
-		// min-size rule is active. In the constrained branch at least one
-		// under-size region must be in the list — buildFrontier only
-		// emitted cells adjacent to one.
+		// Under the min-size rule the candidate list is restricted to
+		// under-size regions. buildFrontier's invariant guarantees at
+		// least one such region is present, so count == 0 below is a
+		// true failure, not a "rule filtered everything out".
 		count := 0
 		for gid := range n {
 			if gs.regionFrontierRow[gid][cr]&cellBit == 0 {
@@ -264,8 +266,8 @@ func (g *Generator) growCheapLoopOn(gs *growState) bool {
 	// because the outer caller resets [:0] at each iteration top and does
 	// not re-read the buffer after calling into the inner scope.
 	for gs.remaining > 0 {
-		constrained := anyUndersized(gs, n)
-		if !g.buildFrontier(gs, constrained) {
+		ok, constrained := g.buildFrontier(gs)
+		if !ok {
 			return false
 		}
 
