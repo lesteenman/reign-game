@@ -172,6 +172,93 @@ func assertRegionsConnected(t *testing.T, sample int, rm *[nMax][nMax]int8, n in
 	}
 }
 
+// TestGrowRegionsMinSize: R-067b invariant. Every region in every
+// successful grow must have >= 3 cells, at both k=1 and k=2, for both
+// the cheap and solver-guided grower variants. Grows that return false
+// (under-size region cannot be satisfied) are skipped — the orchestrator
+// resamples in production, and this test does the same via the retry
+// budget.
+func TestGrowRegionsMinSize(t *testing.T) {
+	t.Parallel()
+
+	const minSize = 3
+
+	variants := []struct {
+		name string
+		grow func(g *Generator, seeds [][]Mark, dst *[nMax][nMax]int8) bool
+	}{
+		{name: "cheap", grow: func(g *Generator, seeds [][]Mark, dst *[nMax][nMax]int8) bool {
+			return g.growRegions(seeds, dst)
+		}},
+		{name: "solver-guided", grow: func(g *Generator, seeds [][]Mark, dst *[nMax][nMax]int8) bool {
+			return g.growRegionsSolverGuided(seeds, dst)
+		}},
+	}
+
+	cases := []struct {
+		n, k    int
+		samples int
+	}{
+		{n: 6, k: 1, samples: 200},
+		{n: 9, k: 1, samples: 200},
+		{n: 12, k: 1, samples: 200},
+		{n: 9, k: 2, samples: 200},
+		{n: 12, k: 2, samples: 200},
+	}
+
+	for _, v := range variants {
+		for _, tc := range cases {
+			v, tc := v, tc
+			t.Run(v.name+"/"+namef(tc.n, tc.k), func(t *testing.T) {
+				t.Parallel()
+
+				// Arrange
+				g, err := New(tc.n, tc.k, WithSeed(int64(3000*tc.n+10*tc.k+1)))
+				if err != nil {
+					t.Fatalf("New: %v", err)
+				}
+
+				grown := 0
+				attempts := 0
+				const maxAttemptsFactor = 6
+				for grown < tc.samples && attempts < tc.samples*maxAttemptsFactor {
+					attempts++
+					sol, ok := g.sampleSolution()
+					if !ok {
+						t.Fatalf("attempt %d: sampler failed", attempts)
+					}
+					seeds := pairSeeds(sol, tc.n, tc.k)
+
+					// Act
+					var rm [nMax][nMax]int8
+					if !v.grow(g, seeds, &rm) {
+						continue
+					}
+
+					// Assert — every region has at least minSize cells.
+					sizes := make([]int, tc.n)
+					for r := range tc.n {
+						for c := range tc.n {
+							sizes[rm[r][c]]++
+						}
+					}
+					for gid, sz := range sizes {
+						if sz < minSize {
+							t.Fatalf("sample %d (%s %s): region %d has %d cells (< min %d)",
+								grown, v.name, namef(tc.n, tc.k), gid, sz, minSize)
+						}
+					}
+					grown++
+				}
+				if grown < tc.samples {
+					t.Fatalf("only %d/%d %s grows succeeded in %d attempts (%.1f%%)",
+						grown, tc.samples, v.name, attempts, 100*float64(grown)/float64(attempts))
+				}
+			})
+		}
+	}
+}
+
 // TestGrowRegionsSolverGuidedInvariants: solver-guided variant (R-066)
 // must produce identical structural invariants as the cheap variant —
 // valid 4-connected partition, seeds in their own regions, exactly N

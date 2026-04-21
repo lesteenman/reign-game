@@ -2,6 +2,91 @@ package generator
 
 import "math/bits"
 
+// regionMinSize is the per-region floor for generated puzzles (R-067b).
+// Every region in a grown tile must have at least this many cells at both
+// k=1 and k=2. The ceiling is deliberately unbounded — curation rejects
+// overly-large regions out-of-band (see GAME_DESIGN.md "Planned Work").
+const regionMinSize = 3
+
+// anyUndersized reports whether any region in gs still has fewer than
+// regionMinSize cells. While true the grow loop is constrained to add
+// cells only to under-size regions (see buildFrontier and the candidate
+// picks in growCheapLoopOn / growRegionsSolverGuided).
+func anyUndersized(gs *growState, n int) bool {
+	for gid := range n {
+		if gs.regionSize[gid] < regionMinSize {
+			return true
+		}
+	}
+	return false
+}
+
+// buildFrontier fills g.growFrontierBuf with cells eligible for assignment
+// this step. When any region is under-size, the frontier is restricted to
+// cells adjacent to at least one such region — the caller's pick is then
+// forced to grow an under-size region. Once every region has reached
+// regionMinSize, every unclaimed frontier cell is eligible.
+//
+// Returns false if the resulting buffer is empty. In the under-size case
+// that means no under-size region has an unclaimed neighbor (bridging
+// trapped it; rare) and the caller should fail the attempt so the
+// orchestrator can resample.
+func (g *Generator) buildFrontier(gs *growState, constrained bool) bool {
+	n := g.n
+	g.growFrontierBuf = g.growFrontierBuf[:0]
+	for r := range n {
+		var union uint16
+		for gid := range n {
+			if constrained && gs.regionSize[gid] >= regionMinSize {
+				continue
+			}
+			union |= gs.regionFrontierRow[gid][r]
+		}
+		union &^= gs.claimedRow[r]
+		m := union
+		for m != 0 {
+			c := bits.TrailingZeros16(m)
+			m &^= 1 << c
+			g.growFrontierBuf = append(g.growFrontierBuf, r*n+c)
+		}
+	}
+	return len(g.growFrontierBuf) > 0
+}
+
+// pickSmallestUndersized scans candidates for (cr, cc) and returns the
+// under-size region with the fewest cells. Ties are reservoir-sampled
+// via g.rng so no gid is systematically favored. Returns -1 if no
+// under-size region has this cell as frontier — the caller should fail
+// the attempt, since buildFrontier only emits cells that an under-size
+// region can take.
+func (g *Generator) pickSmallestUndersized(gs *growState, cr, cc int) int {
+	cellBit := uint16(1) << uint(cc)
+	chosen := -1
+	smallest := g.n + 1
+	tieCount := 0
+	for gid := range g.n {
+		if gs.regionSize[gid] >= regionMinSize {
+			continue
+		}
+		if gs.regionFrontierRow[gid][cr]&cellBit == 0 {
+			continue
+		}
+		sz := gs.regionSize[gid]
+		switch {
+		case sz < smallest:
+			smallest = sz
+			chosen = gid
+			tieCount = 1
+		case sz == smallest:
+			tieCount++
+			if g.rng.IntN(tieCount) == 0 {
+				chosen = gid
+			}
+		}
+	}
+	return chosen
+}
+
 // growRegionsSolverGuided is the R-066 expensive variant of the region
 // grower (input-spec.md §4.3 Step B / PG-12). It differs from the cheap
 // variant only in how a frontier cell's candidate region is chosen: the
@@ -49,21 +134,8 @@ func (g *Generator) growRegionsSolverGuided(seeds [][]Mark, dst *[nMax][nMax]int
 	var candidates [nMax]int
 
 	for gs.remaining > 0 {
-		g.growFrontierBuf = g.growFrontierBuf[:0]
-		for r := range n {
-			var union uint16
-			for gid := range n {
-				union |= gs.regionFrontierRow[gid][r]
-			}
-			union &^= gs.claimedRow[r]
-			m := union
-			for m != 0 {
-				c := bits.TrailingZeros16(m)
-				m &^= 1 << c
-				g.growFrontierBuf = append(g.growFrontierBuf, r*n+c)
-			}
-		}
-		if len(g.growFrontierBuf) == 0 {
+		constrained := anyUndersized(&gs, n)
+		if !g.buildFrontier(&gs, constrained) {
 			return false
 		}
 
@@ -74,9 +146,16 @@ func (g *Generator) growRegionsSolverGuided(seeds [][]Mark, dst *[nMax][nMax]int
 		cr, cc := cell/n, cell%n
 		cellBit := uint16(1) << uint(cc)
 
+		// Collect candidates, filtering to under-size regions when the
+		// min-size rule is active. In the constrained branch at least one
+		// under-size region must be in the list — buildFrontier only
+		// emitted cells adjacent to one.
 		count := 0
 		for gid := range n {
 			if gs.regionFrontierRow[gid][cr]&cellBit == 0 {
+				continue
+			}
+			if constrained && gs.regionSize[gid] >= regionMinSize {
 				continue
 			}
 			candidates[count] = gid
@@ -185,21 +264,8 @@ func (g *Generator) growCheapLoopOn(gs *growState) bool {
 	// because the outer caller resets [:0] at each iteration top and does
 	// not re-read the buffer after calling into the inner scope.
 	for gs.remaining > 0 {
-		g.growFrontierBuf = g.growFrontierBuf[:0]
-		for r := range n {
-			var union uint16
-			for gid := range n {
-				union |= gs.regionFrontierRow[gid][r]
-			}
-			union &^= gs.claimedRow[r]
-			m := union
-			for m != 0 {
-				c := bits.TrailingZeros16(m)
-				m &^= 1 << c
-				g.growFrontierBuf = append(g.growFrontierBuf, r*n+c)
-			}
-		}
-		if len(g.growFrontierBuf) == 0 {
+		constrained := anyUndersized(gs, n)
+		if !g.buildFrontier(gs, constrained) {
 			return false
 		}
 
@@ -207,6 +273,15 @@ func (g *Generator) growCheapLoopOn(gs *growState) bool {
 		cell := g.growFrontierBuf[pickIdx]
 		cr, cc := cell/n, cell%n
 		cellBit := uint16(1) << uint(cc)
+
+		if constrained {
+			chosen := g.pickSmallestUndersized(gs, cr, cc)
+			if chosen < 0 {
+				return false
+			}
+			commitCell(gs, n, cr, cc, chosen)
+			continue
+		}
 
 		totalWeight := 0
 		count := 0
