@@ -103,6 +103,14 @@ Goal: Rate puzzles after playing them — upvote, downvote, or skip.
 - [ ] **R-063** — `PUT /puzzles/:id/verdict` endpoint: upvote/downvote/skip
 - [ ] **R-064** — Frontend: verdict buttons on puzzle completion/skip
 
+## Phase 6b: Generator quality deferrals
+
+Two follow-ups from Phase 5's measurement pass (R-068). Both need the audit-loop tooling (Phase 6 verdicts, Phase 7 replay, Phase 8 analysis) to resolve. They are explicitly out of Phase 5 scope — capture here so the next audit pass picks them up.
+
+- [ ] **R-06D** — **Dead-rule investigation (R6, R8, R9).** R-068b's property corpus found R6 (Tier 3), R8 (Tier 4), R9 (Tier 4) never fire across 500 generated puzzles. Per input-spec §7.2 a dormant rule is redundant or buggy. Hand-craft a minimal `solverState` fixture per rule. If a fixture exists the rule is reachable and the generator must be retuned to produce such puzzles — tie-in for the audit-loop's "what kinds of puzzles do we actually produce" analysis. If no fixture can be built, retire the rule from `rules.go` and drop the classifier's tier-max accordingly. Currently tracked in code via `propertyCorpusKnownDead` in `backend/internal/generator/property_test.go`. Outcome also determines whether `WithDifficulty(Expert)` is ever shippable (see `backend/internal/generator/bench/step11-handoff.md` §2).
+
+- [ ] **R-06E** — **Medium / Hard blind calibration test.** R-068d's distribution shows every generated puzzle is Medium or Hard by the classifier, with zero Easy and zero Expert. The classifier split at N=12 k=1 is ~55% Medium / ~45% Hard. Intuition says the split is plausible (the mutator explicitly seeks stalled states), but the label boundary is unverified: a "Medium" may play harder than a "Hard" or vice versa. Requires Phase 6 verdict capture for play-time and user-rated difficulty across a labeled corpus, then a blind-test statistical check on whether the two tiers are actually perceptibly different. If they aren't, either collapse the tiers or retune the classifier thresholds.
+
 ## Phase 7: Puzzle Replay
 
 Goal: Admin can browse played puzzles and replay them to review quality.

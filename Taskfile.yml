@@ -20,22 +20,34 @@ tasks:
       - golangci-lint run
 
   bench:backend:
-    desc: Run full generator benchmark suite (all pipelines, sizes, modes)
+    desc: Run the full generator benchmark suite (R-068a) — writes results to stdout
     dir: backend
     cmds:
-      - go test -bench=BenchmarkPipeline -benchtime=3x -timeout=600s ./internal/generator/ -run='^$'
+      - go test -bench=. -benchmem -benchtime=3x -timeout=30m -run='^$' ./internal/generator/
 
-  bench:backend:solvers:
-    desc: Run solver comparison benchmarks (Backtrack vs Propagation)
+  bench:backend:baseline:
+    desc: Re-run benches and overwrite bench/baseline.txt (R-068a baseline snapshot)
     dir: backend
     cmds:
-      - go test -bench=BenchmarkSolver -benchtime=3x -timeout=60s ./internal/generator/ -run='^$'
+      - go test -bench=. -benchmem -benchtime=3x -timeout=30m -run='^$' ./internal/generator/ | tee internal/generator/bench/baseline.txt
 
-  bench:backend:all:
-    desc: Run all benchmarks including solver comparison and legacy
+  bench:backend:latency:
+    desc: Refresh bench/latency-distribution.md (R-068a) — requires REIGN_BENCH_WRITE=1
     dir: backend
     cmds:
-      - go test -bench=. -benchtime=3x -timeout=600s ./internal/generator/ -run='^$'
+      - REIGN_BENCH_WRITE=1 go test -tags=latency -run TestLatencyDistribution -v -timeout=60m ./internal/generator/
+
+  bench:backend:distribution:
+    desc: Refresh bench/difficulty-distribution.md (R-068d) — 1h per bucket by default; override with REIGN_DIST_BUDGET_SEC
+    dir: backend
+    cmds:
+      - REIGN_BENCH_WRITE=1 go test -tags=distribution -run TestDifficultyDistribution -v -timeout=8h ./internal/generator/
+
+  bench:backend:soak:
+    desc: Long-running soak + property suite (R-068b) — invoked by generator-check.yml
+    dir: backend
+    cmds:
+      - go test -tags=soak -timeout=30m ./internal/generator/...
 
   dev:localstack:
     desc: Start LocalStack (DynamoDB + SQS)
