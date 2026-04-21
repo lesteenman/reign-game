@@ -52,7 +52,7 @@ Hard dependency rule: R-067 cannot merge before R-065 gates pass, because R-067 
 | R-067b| Region-size balance (min size = 3)             | 5b    | (quality)        | [ ]    |
 | R-067c| Relift N=12 k=1 gate under min-size regime     | 5c    | (follow-up)      | [x]    |
 | R-068 | Benchmarks + distribution + soak + corpus + optional generator CI re-check | 6 | Step 11, Step 12 | [ ]    |
-| R-069 | Cutover + KI-007 close                         | 7     | (operational)    | [ ]    |
+| R-069 | Cutover + KI-007 close                         | 7     | (operational)    | [x]    |
 | R-06A | Post-cutover cleanup                           | 7     | (contingent)     | [ ]    |
 | R-06B | E2E fixed-database harness                     | 8     | (verification)   | [ ]    |
 
@@ -496,29 +496,32 @@ Prerequisite: **INV-GEN-1** must hold (all generation logic lives under `backend
 
 **Work**
 
-Cutover runbook steps (for local dev and for prod when it exists):
+- `docs/runbooks/phase-5-cutover.md` — end-to-end cutover runbook covering the eight operational steps (drain, flush, deploy, re-seed, re-enable consumer, verify, KI close, project-structure refresh) with local-dev and prod-equivalent paths.
+- `scripts/flush-pool.sh` — portable over LocalStack and real AWS (via `AWS_ENDPOINT_URL`). Refuses to run without `CONFIRM=YES`. Preserves CONFIG rows.
+- `scripts/seed-configs.sh` — idempotent re-seed of the three CONFIG rows (7#standard, 9#standard, 9#double). Matches `.localstack/init-aws.sh`.
+- `PROJECT_STRUCTURE.md` — adds `scripts/` and `docs/runbooks/` entries at the repository-root level.
+- KI-007 close-out is already captured in ROADMAP.md (struck through with R-062..R-067 references); no additional change needed.
 
-1. **Drain the SQS queue.** In dev: `task dev:down:generator`. In prod: set consumer reserved concurrency to 0, wait for in-flight drain.
-2. **Flush the pool.** In dev: `awslocal dynamodb scan --table-name puzzle-pool --filter-expression "PK <> :cfg" --expression-attribute-values '{":cfg":{"S":"CONFIG"}}'` -> for each, `awslocal dynamodb delete-item`. In prod: one-off admin script `scripts/flush-pool.sh` (devops to write).
-3. **Deploy** new backend + frontend + LocalStack seed (R-067 artifacts).
-4. **Re-seed configs.** LocalStack handles itself via init. Prod: `scripts/seed-configs.sh`.
-5. **Start consumer** (prod: reset reserved concurrency). Trigger replenish. Verify new-shape `PuzzleRecord`s populate.
-6. **Enable Double combos.** Update LocalStack seed (already `enabled=true` post-R-067). In prod, PUT `/api/admin/config/{7|9}/double` with `enabled=true`. Verify first Double puzzle lands within Lambda budget.
-7. **Close KI-007.** Update ROADMAP.md: strike through KI-007, note it closed with R-069. Also close KI-015 and KI-016.
-8. **Update `PROJECT_STRUCTURE.md`** if any paths shifted (generator subtree should be the only change).
+**Deferred to R-06A** (frontend refactor scope, not operational cutover):
+
+- KI-015 (ConfigForm prop sprawl)
+- KI-016 (AdminPage MODE_OPTIONS typed-const tightening)
+
+Both were originally listed under R-069 in an earlier version of this slice but are cleanup rather than cutover work. They belong in R-06A.
 
 **Gate**
 
-- One Double Queens 9x9 puzzle present in the pool with `enabled=true` after replenish, generated within the 14-minute Lambda budget.
-- KI-007, KI-015, KI-016 closed in ROADMAP.md.
-- Step 11 handoff (`bench/step11-handoff.md`) referenced from ROADMAP for future v2 phase.
+- `./scripts/flush-pool.sh` and `./scripts/seed-configs.sh` exist, are executable, and pass `bash -n`.
+- Runbook covers all eight steps with both dev and prod paths.
+- KI-007 struck through in ROADMAP.md.
+- Step 11 handoff (`bench/step11-handoff.md`) is the referenced source for post-cutover concurrency / yield decisions.
 
 **Files touched**
 
-- `ROADMAP.md` (strike-throughs + new roadmap entries confirmed done)
-- `scripts/flush-pool.sh` (new, devops)
-- `scripts/seed-configs.sh` (new, devops)
-- `backend/internal/generator/bench/step11-handoff.md` (already created in R-068)
+- `scripts/flush-pool.sh` (new)
+- `scripts/seed-configs.sh` (new)
+- `docs/runbooks/phase-5-cutover.md` (new)
+- `PROJECT_STRUCTURE.md` (scripts/ + docs/runbooks/ entries)
 
 **Dependencies:** R-068.
 
@@ -526,18 +529,23 @@ Cutover runbook steps (for local dev and for prod when it exists):
 
 ---
 
-### R-06A: Post-cutover cleanup (contingent)
+### R-06A: Post-cutover cleanup
 
 - **Roadmap:** R-06A
-- **Agent:** whichever agent the finding points at
-- **OpenSpec:** none (contingent)
+- **Agent:** backend-dev + frontend-dev
+- **OpenSpec:** none (cleanup, no capability delta)
 
-**Work** — only exists if R-067 or R-068's review-local surfaces a cleanup that was deferred rather than fixed in the slice.
+**Work** — post-cutover cleanup driven by carry-over KIs plus any review-local residue from the Phase 5 PR chain. The generator itself is now the Phase 5 shape; this slice tightens the consumer surfaces and docs.
 
-- Any one of: consolidate duplicated config validation (KI-019 if Phase 5's cleanup reopens it), simplify admin API (KI-014 / KI-018 shear if they re-emerge), tighten `PROJECT_STRUCTURE.md`, adjust roadmap wording.
+- **KI-015 (frontend):** Split `AdminPage.tsx`'s `ConfigForm` into `EditConfigForm` + `CreateConfigForm` sharing a `ConfigFields` child (or introduce a discriminated `createMeta?` prop). Eliminates four defaulted no-op props in the edit path.
+- **KI-016 (frontend):** Tighten `MODE_OPTIONS` (last remaining options-as-string[] after R-067 removed pipeline/solver/regions options) into a typed `as const` union exported from `adminService.ts` so an invalid literal is a compile error.
+- **PROJECT_STRUCTURE.md refresh:** Backend/frontend trees drifted over Phase 5 (generator subtree especially — many new files not reflected). Full refresh pass.
+- Any other KI that surfaced from review-local residue during R-067/R-068 (currently none; revisit before starting the slice).
 
 **Gate**
 
+- KI-015 and KI-016 struck through in ROADMAP.md with R-06A as the close-out R-number.
+- `PROJECT_STRUCTURE.md` backend tree matches the actual `backend/internal/generator/` file list.
 - Zero outstanding review-local CRITICAL/HIGH from the Phase 5 PR chain.
 
 **Dependencies:** R-069.
