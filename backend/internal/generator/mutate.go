@@ -52,8 +52,11 @@ func (g *Generator) solveAndMutate(seeds [][]Mark) mutationOutcome {
 
 	// Two-pass acceptance per step:
 	//   (1) strict improvement — any swap that raises solved-cell count
-	//   (2) graded plateau — same-score with p=0.5 OR one-cell regression
-	//       with p=0.1. Both RNG-seeded so the walk is deterministic.
+	//   (2) graded plateau — same-score with p=0.1 OR one-cell regression
+	//       with p=0.05. The walker stays greedy because plateau-heavy
+	//       acceptance diffuses through the basin instead of climbing
+	//       toward solved, especially under the R-067b min-size rule
+	//       which trims the boundary swaps available per step.
 	for step := 0; step < budget; step++ {
 		baseline := countSolvedCells(&g.solver)
 		accepted := g.tryOneSwap(seeds, baseline, false)
@@ -97,11 +100,14 @@ func (g *Generator) budgetForCurrent() int {
 //   - allowPlateau=false (strict): accept iff solved-cell count strictly
 //     increases.
 //   - allowPlateau=true (weighted plateau): accept a strict improvement
-//     immediately, OR accept a same-score swap with p=0.5, OR accept a
-//     one-cell regression with p=0.1. The second bucket gives the walker
+//     immediately, OR accept a same-score swap with p=0.1, OR accept a
+//     one-cell regression with p=0.05. The second bucket gives the walker
 //     a way off a plateau; the third gives it a way over a low ridge into
 //     a neighboring basin. Deeper regressions stay rejected so the walk
-//     does not unravel past-earned progress.
+//     does not unravel past-earned progress. Under R-067b's min-size rule
+//     the boundary-swap surface is tighter, so the acceptance rates are
+//     kept low — a heavier plateau bucket diffuses the walker through
+//     the basin instead of climbing toward solved.
 //
 // On accept: updates g.regionOf in place and returns true with g.solver
 // holding the post-swap solve. On miss: restores g.solver to the pre-scan
@@ -157,7 +163,10 @@ func (g *Generator) tryOneSwap(seeds [][]Mark, baseline int, allowPlateau bool) 
 			if !fromRegionConnectedWithoutCell(&g.regionOf, fromID, r, c, seeds, n) {
 				continue
 			}
-			if countRegionCells(&g.regionOf, fromID, n) <= 1 {
+			// Honor the R-067b min-size rule. The grower refuses to leave
+			// any region under regionMinSize; the mutator must not undo
+			// that by draining cells below the floor.
+			if countRegionCells(&g.regionOf, fromID, n) <= regionMinSize {
 				continue
 			}
 
@@ -176,11 +185,11 @@ func (g *Generator) tryOneSwap(seeds [][]Mark, baseline int, allowPlateau bool) 
 			if allowPlateau {
 				switch newCount - baseline {
 				case 0:
-					if g.rng.IntN(2) == 0 {
+					if g.rng.IntN(10) == 0 {
 						return true
 					}
 				case -1:
-					if g.rng.IntN(10) == 0 {
+					if g.rng.IntN(20) == 0 {
 						return true
 					}
 				}
