@@ -15,6 +15,9 @@ reign-game/
 ├── infra/                 # Terraform infrastructure-as-code
 ├── design/                # UI/UX assets, wireframes, OpenSpec artifacts
 │   └── openspec/          # OpenSpec change artifacts (symlinked or moved from root)
+├── docs/
+│   └── runbooks/          # Operational runbooks (cutover, rollback, ...)
+├── scripts/               # Ops helpers (flush-pool, seed-configs)
 ├── .claude/               # Agent definitions, skills, settings
 │   ├── agents/            # Agent .md files
 │   └── skills/            # Skill directories with SKILL.md files
