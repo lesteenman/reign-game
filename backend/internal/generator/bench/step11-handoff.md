@@ -58,7 +58,7 @@ This is not a statistical artifact. The classifier routes a puzzle to Expert onl
 
 **Expert is unreachable via generation in the current state.** `WithRacing` does not help; retry-until-match cannot succeed. The consumer must not ship `WithDifficulty(Expert)` until the Tier-4 classifier path is fixed.
 
-**Recommendation — R-068z (dead-rule investigation) must land before difficulty-targeting is even evaluated.** That slice resolves whether R6/R8/R9 are dead-and-retireable (classifier's tier max should drop to 3) or reachable-but-rare (generator needs a targeted mode). Only after R-068z does "does the consumer need v2 difficulty-targeting?" become answerable.
+**Recommendation — R-06D (dead-rule investigation, ROADMAP.md Phase 6b) must land before difficulty-targeting is even evaluated.** That slice resolves whether R6/R8/R9 are dead-and-retireable (classifier's tier max should drop to 3) or reachable-but-rare (generator needs a targeted mode). Only after R-06D does "does the consumer need v2 difficulty-targeting?" become answerable.
 
 In the meantime, the classifier produces a binary Medium/Hard split at N=12 k=1 (55/45) and an effectively-Hard-only output at N=12 k=2. Coarser than the spec assumes, but not itself a bug — it is a consequence of the dead-rule finding.
 
@@ -81,7 +81,7 @@ Not in the committed Step 7 gate — informational only. `(14, 2)` averages 47 s
 
 ## 5. Known gaps / follow-ups
 
-- **R-068z (dead-rule investigation) is blocking the difficulty-targeting evaluation.** We can't make the v2 call until we know whether R6/R8/R9 are dead or dormant.
+- **R-06D (dead-rule investigation, ROADMAP.md Phase 6b) is blocking the difficulty-targeting evaluation.** We can't make the v2 call until we know whether R6/R8/R9 are dead or dormant. Paired with R-06E (Medium/Hard blind calibration) so both audit-loop-era quality questions land together.
 - **Soak cross-check is non-blocking.** `.github/workflows/generator-check.yml` (R-068c) runs `-tags=soak` on PRs touching the generator but doesn't gate merges. Tighten when the generator stabilizes.
 - **Hand-verified corpus is machine-generated.** `testdata/puzzles/**` (R-068b's `TestCorpusGenerate`) produces deterministic fixtures, but tier labels are the classifier's opinion. A human pass over a handful per tier is a separate quality gate before trusting the corpus as a regression baseline.
 - **Distribution budget is configurable but defaults to 1 hour per bucket.** This snapshot ran at 15 min per bucket (`REIGN_DIST_BUDGET_SEC=900`). A full 1-hour run before cutover would tighten the Expert-yield bound, though at 0% the conclusion does not change.
