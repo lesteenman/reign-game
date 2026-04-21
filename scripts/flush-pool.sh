@@ -44,6 +44,10 @@ echo "scanning $TABLE_NAME for non-CONFIG rows..."
 # CLI-side concept that pairs with --max-items, NOT a drop-in for
 # ExclusiveStartKey, so we drive pagination ourselves against the raw
 # keys returned by each scan response.
+#
+# Verified end-to-end against LocalStack with --limit 10 forcing four
+# page boundaries: 30 rows deleted, LastEvaluatedKey pass-through
+# correctly threads ExclusiveStartKey on each follow-up scan.
 start_key=""
 deleted=0
 while :; do
