@@ -7,10 +7,14 @@ import (
 )
 
 // propertyCorpusKnownDead lists ruleIDs the corpus is currently
-// unable to exercise, with a one-line note per entry. An entry here
-// is NOT a blanket relaxation — it is a deliberate follow-up. Either
-// demonstrate the rule firing on a hand-crafted fixture, or retire
-// the rule.
+// unable to exercise. Tracked: R-068z (dead-rule investigation in
+// openspec/changes/phase-5-generator-rework/tasks.md).
+//
+// An entry here is NOT a blanket relaxation — it degrades a zero-
+// firing rule from an error to a warning so a real regression
+// elsewhere still surfaces. Each entry's resolution is either a hand-
+// crafted fixture demonstrating the rule fires, or deletion of the
+// rule.
 //
 //   - R6 (Locked k-set in line, Tier 3): 500-puzzle corpus yields zero
 //     firings. R7 appears to dominate the Tier 3 space. Possibly
@@ -20,10 +24,6 @@ import (
 //     Expert puzzles, and the corpus' (N=12, k=2) bucket is too thin
 //     to guarantee one. Re-check after R-068d quantifies Expert yield.
 //   - R9 (Region pair exclusion, Tier 4): same story as R8.
-//
-// The investigation is a follow-up slice; entries in this map
-// degrade a zero-firing rule from an error to a warning so a real
-// regression elsewhere still surfaces.
 var propertyCorpusKnownDead = map[ruleID]string{
 	ruleR6: "R7 appears to dominate Tier 3 — confirm or retire",
 	ruleR8: "Tier 4; Expert yield too low in current corpus to exercise",
@@ -59,6 +59,11 @@ func TestPropertyCorpus(t *testing.T) {
 
 	var ruleFired [10]int // index by ruleID (1..9)
 
+	// Hoisted solver state — initFromRegionMap zeroes every field, so
+	// reuse across iterations is safe and avoids ~N_samples allocations.
+	var s solverState
+	trace := make(ruleTrace, 0, 256)
+
 	for _, b := range buckets {
 		g, err := New(b.n, b.k, WithSeed(int64(800*b.n+b.k)), WithMaxAttempts(20))
 		if err != nil {
@@ -73,39 +78,28 @@ func TestPropertyCorpus(t *testing.T) {
 				}
 				continue
 			}
+			label := fmtSample(b.n, b.k, i)
 
 			// Property 1: deductive == brute.
-			sols, err := bruteSolveAll(p.Regions, p.N, p.MarksPerUnit, 2)
-			if err != nil {
-				t.Fatalf("brute: %v", err)
-			}
-			if len(sols) != 1 {
-				t.Fatalf("N=%d k=%d sample %d: brute returned %d solutions",
-					b.n, b.k, i, len(sols))
-			}
-			if !marksEqualUnordered(sols[0], p.Solution) {
-				t.Fatalf("N=%d k=%d sample %d: deductive vs brute mismatch",
-					b.n, b.k, i)
-			}
+			assertDeductiveBruteAgree(t, label, &p)
 
 			// Property 2: collect rule firings. Re-solve with trace
 			// enabled (Generate records the trace internally but does
-			// not export it; we re-run the classifier pass on the
-			// package's own solver).
-			var s solverState
+			// not export it; we re-run on a trace-enabled state here).
 			if err := s.initFromRegionMap(p.Regions, p.N, p.MarksPerUnit); err != nil {
-				t.Fatalf("initFromRegionMap: %v", err)
+				t.Fatalf("%s: initFromRegionMap: %v", label, err)
 			}
-			s.trace = make(ruleTrace, 0, 256)
+			s.trace = trace[:0]
 			if outcome := solve(&s); outcome != OutcomeSolved {
-				t.Fatalf("N=%d k=%d sample %d: solver outcome=%v on generated puzzle",
-					b.n, b.k, i, outcome)
+				t.Fatalf("%s: solver outcome=%v on generated puzzle",
+					label, outcome)
 			}
 			for _, ev := range s.trace {
 				if ev.Rule >= 1 && ev.Rule <= 9 {
 					ruleFired[ev.Rule]++
 				}
 			}
+			trace = s.trace // cache back the possibly-grown backing slice
 			ok++
 		}
 		t.Logf("N=%d k=%d: %d/%d ok", b.n, b.k, ok, b.samples)

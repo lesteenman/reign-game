@@ -39,27 +39,13 @@ func TestCorpusRoundtrip(t *testing.T) {
 		if err := json.Unmarshal(data, &p); err != nil {
 			t.Fatalf("unmarshal %s: %v", path, err)
 		}
-
-		sols, err := bruteSolveAll(p.Regions, p.N, p.MarksPerUnit, 2)
-		if err != nil {
-			t.Fatalf("%s: brute: %v", path, err)
-		}
-		if len(sols) != 1 {
-			t.Fatalf("%s: brute returned %d solutions", path, len(sols))
-		}
-		if !marksEqualUnordered(sols[0], p.Solution) {
-			t.Fatalf("%s: solution mismatch", path)
-		}
-
-		var s solverState
-		if err := s.initFromRegionMap(p.Regions, p.N, p.MarksPerUnit); err != nil {
-			t.Fatalf("%s: initFromRegionMap: %v", path, err)
-		}
-		if solve(&s) != OutcomeSolved {
-			t.Fatalf("%s: deductive solver no longer solves", path)
-		}
+		assertRegionPartition(t, path, p.Regions, p.N)
+		assertDeductiveBruteAgree(t, path, &p)
 		checked++
 	}
+	// TODO: once R-068b's corpus-generator has been run and testdata/
+	// puzzles committed, flip this skip to t.Fatalf — silent no-op is a
+	// regression canary hazard if the committed corpus is ever deleted.
 	if checked == 0 {
 		t.Skip("no puzzles in testdata/puzzles — corpus not yet generated")
 	}

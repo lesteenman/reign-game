@@ -12,6 +12,25 @@ import (
 	"testing"
 )
 
+// difficultyTag returns a short filesystem-safe label for a
+// Difficulty value. Inlined here (rather than a standalone
+// stringer helper) because nothing outside the corpus generator
+// needs it.
+func difficultyTag(d Difficulty) string {
+	switch d {
+	case Easy:
+		return "easy"
+	case Medium:
+		return "medium"
+	case Hard:
+		return "hard"
+	case Expert:
+		return "expert"
+	default:
+		return "unknown"
+	}
+}
+
 // TestCorpusGenerate produces testdata/puzzles/*.json — ~10 puzzles per
 // (difficulty, N, k) at the committed grid. Build-tagged because it
 // overwrites files and takes several minutes.
