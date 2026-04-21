@@ -13,17 +13,20 @@ import (
 )
 
 // TestLatencyDistribution records per-call Generate() durations at each
-// committed (N, k) and writes median / P90 / P99 / max to
-// bench/latency-distribution.md.
+// committed (N, k) and prints median / P90 / P99 / max. When
+// REIGN_BENCH_WRITE=1 is set it also writes bench/latency-distribution.md
+// so the committed snapshot can be refreshed without turning every
+// contributor's local run into a working-tree diff.
 //
-// Build-tagged because it runs 200 samples per combo at N=12/14, which
-// pushes wall-clock past the default CI budget. Run explicitly:
+// Build-tagged because it runs 200+ samples per combo, which pushes
+// wall-clock past the default CI budget. Run explicitly:
 //
 //	go test -tags=latency -run TestLatencyDistribution -v \
 //	  -timeout=60m ./internal/generator/
 //
-// Output lives under bench/ so a review PR can include the committed
-// distribution alongside the bench baseline.
+// To refresh the committed snapshot:
+//
+//	REIGN_BENCH_WRITE=1 go test -tags=latency ... (as above)
 func TestLatencyDistribution(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping latency distribution under -short")
@@ -105,6 +108,10 @@ func TestLatencyDistribution(t *testing.T) {
 	}
 	out += "\n## Interpretation\n\nPer input-spec §11, p99/median > 3× at any committed (N, k) is the trigger for recommending `WithRacing` in Step 11's handoff. A row with ratio <= 3× is within the single-stream budget; >= 3× means the slow-tail attempts are blocking a P99-sensitive consumer (Lambda response, user-facing generate-on-demand). The handoff document (bench/step11-handoff.md) reads this table and makes the racing call.\n"
 
+	if os.Getenv("REIGN_BENCH_WRITE") != "1" {
+		t.Log("REIGN_BENCH_WRITE not set; skipping bench/latency-distribution.md write")
+		return
+	}
 	path := "bench/latency-distribution.md"
 	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)

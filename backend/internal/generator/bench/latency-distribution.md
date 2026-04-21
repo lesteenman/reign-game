@@ -12,4 +12,6 @@ Per-call `Generate()` timings at each committed (N, k). Captured by `TestLatency
 
 ## Interpretation
 
-Per input-spec §11, p99/median > 3× at any committed (N, k) is the trigger for recommending `WithRacing` in Step 11's handoff. A row with ratio <= 3× is within the single-stream budget; >= 3× means the slow-tail attempts are blocking a P99-sensitive consumer (Lambda response, user-facing generate-on-demand). The handoff document (bench/step11-handoff.md) reads this table and makes the racing call.
+Per input-spec §11, p99/median > 3× at any committed (N, k) is the trigger for recommending `WithRacing` in Step 11's handoff. A row with ratio <= 3× is within the single-stream budget; >= 3× means the slow-tail attempts are blocking a P99-sensitive consumer (Lambda response, user-facing generate-on-demand).
+
+Every committed bucket above sits past 3×. The explicit `WithRacing` recommendation lives in `bench/step11-handoff.md`, produced by R-068d alongside the 1-hour difficulty-distribution run at N=12/14.

@@ -2,6 +2,23 @@ package generator
 
 import "testing"
 
+// preSampleSeeds draws `count` seed sets from `g` ahead of the timed
+// loop so BenchmarkRegionGrow* measures only the grower, not the
+// sampler. Sampler failures are skipped and retried until the buffer
+// is full.
+func preSampleSeeds(b *testing.B, g *Generator, n, k, count int) [][][]Mark {
+	b.Helper()
+	seeds := make([][][]Mark, 0, count)
+	for len(seeds) < count {
+		sol, ok := g.sampleSolution()
+		if !ok {
+			continue
+		}
+		seeds = append(seeds, pairSeeds(sol, n, k))
+	}
+	return seeds
+}
+
 // BenchmarkRegionGrow measures the cheap grower (growRegions) alone, with
 // sampler+pair-seed work moved outside the timed loop. Seeds are pre-
 // sampled per b.N so the inner loop times only growRegions. Per PG-08 and
@@ -29,18 +46,9 @@ func BenchmarkRegionGrow(b *testing.B) {
 			if err != nil {
 				b.Fatalf("New: %v", err)
 			}
-			// Pre-sample b.N seed sets so the timed loop excludes sampler
-			// cost. The grower may fail on a given seed set (bridging
-			// collision); we pre-filter and refill if that happens so the
-			// benchmark measures only successful grows.
-			seeds := make([][][]Mark, 0, b.N)
-			for len(seeds) < b.N {
-				sol, ok := g.sampleSolution()
-				if !ok {
-					continue
-				}
-				seeds = append(seeds, pairSeeds(sol, c.n, c.k))
-			}
+			// Pre-sample seed sets so the timed loop measures only the
+			// grower. Sampler cost is covered by BenchmarkSolutionSample.
+			seeds := preSampleSeeds(b, g, c.n, c.k, b.N)
 
 			var dst [nMax][nMax]int8
 			b.ResetTimer()
