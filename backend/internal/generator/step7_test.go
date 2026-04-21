@@ -9,11 +9,8 @@ import (
 
 // TestStep7Gate measures the end-to-end Generate success rate across the
 // supported (N, k) grid. PG-11's committed gate points are (N=12, k=1)
-// and (N=9, k=2) at >=80%. (N=9, k=2) is LIVE. (N=12, k=1) was LIVE
-// after R-067a but the R-067b min-size rule (every region >= 3 cells)
-// cut the rate from 81% to 50%, so it is temporarily non-enforcing
-// until R-067c retunes the mutator against the tighter size distribution.
-// Other reported combos are non-blocking.
+// and (N=9, k=2) at >=80%, both LIVE. Other combos are reported for
+// visibility.
 //
 // This test is NOT run with -short.
 func TestStep7Gate(t *testing.T) {
@@ -22,17 +19,12 @@ func TestStep7Gate(t *testing.T) {
 	}
 	t.Parallel()
 
-	// Committed gate points. (N=9, k=2) LIVE via R-066's solver-guided
-	// grower plus k=2 soundness fixes. (N=12, k=1) non-enforcing pending
-	// R-067c — the R-067b min-size rule narrowed the set of reachable
-	// layouts the mutator can walk, and R-067a's budget settings need
-	// another pass against that regime.
 	gatedCombos := []struct {
 		n, k    int
 		enforce bool
 	}{
 		{n: 9, k: 2, enforce: true},
-		{n: 12, k: 1, enforce: false},
+		{n: 12, k: 1, enforce: true},
 	}
 
 	// These are reported for transparency.
