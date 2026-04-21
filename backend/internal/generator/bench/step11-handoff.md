@@ -15,9 +15,9 @@ Reads the three measurement artifacts committed by the R-068 slices and makes th
 
 ## 1. WithRacing recommendation
 
-**Trigger.** p99/median > 3× at any committed (N, k).
+**Trigger (per input-spec §11).** p99/median > 3× at any committed (N, k).
 
-**Evidence** (see `bench/latency-distribution.md` for the full median/p99/max table):
+**Measured** (see `bench/latency-distribution.md` for full median/p99/max):
 
 | (N, k) | p99/median |
 |---|---|
@@ -27,11 +27,19 @@ Reads the three measurement artifacts committed by the R-068 slices and makes th
 | 9, 2 | **73.3×** |
 | 12, 2 | 6.1× |
 
-`(9, 2)` is the pathological case — median a few ms, tail hundreds of ms. The same slow-attempt-blocks-fast-attempt shape appears at every N.
+Every bucket is past the trigger.
 
-**Recommendation — ship `WithRacing` as part of the consumer cutover.** A racing wrapper issues M concurrent `Generate` calls, returns the first to finish, and cancels the rest. M = 2–3 captures most of the tail-cut at minor Generator-memory cost.
+**Recommendation — do NOT ship `WithRacing`.** The spec's trigger is a latency-target rule; it assumes a synchronous caller waiting on a single `Generate()`. Reign does not have that caller.
 
-The wrapper itself is a follow-up slice post-R-068. The thread-safety contract in §9 (one Generator per goroutine) already supports it; implementation is one file.
+Reign generates puzzles asynchronously into a DynamoDB pool. The frontend reads pre-generated puzzles from the pool on demand — no user waits on `Generate()`. In a pool-refill architecture:
+
+- Tail latency is irrelevant. Nothing is blocked on any single call.
+- Racing wastes compute. At M=2 a racing wrapper makes two `Generate()` calls per delivered puzzle — the loser's work is discarded.
+- The only thing that matters is **aggregate throughput per dollar**, which scales by Lambda concurrency, not per-call latency reduction.
+
+**What to do instead — size Lambda concurrency to throughput need.** `BenchmarkGenerateParallel/N=12/k=1` reports ~23 000 puzzles/hour at 12 cores on the dev box; a single-vCPU Lambda sits at ~2 000/hour. Run N concurrent Lambdas until the pool refill rate covers the consumption target.
+
+If Reign ever adds a user-facing "generate one now" flow (e.g., custom-sized puzzle on request), revisit racing for that path specifically. The 7 s p99 at (12, 1) is too slow for a blocking UI. Pool reads are not that path.
 
 ## 2. v2 difficulty-targeting recommendation
 
