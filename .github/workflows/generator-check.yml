@@ -1,0 +1,37 @@
+name: Generator cross-check
+
+# Non-blocking informational job — does NOT appear in branch-protection
+# required-status-checks. Failures surface in the PR conversation but
+# do not block merge. Per tasks.md R-068 and design.md §16.2.
+#
+# Triggered only on PRs that touch the generator or this workflow
+# itself; typical frontend/docs PRs skip it entirely.
+
+on:
+  pull_request:
+    paths:
+      - 'backend/internal/generator/**'
+      - '.github/workflows/generator-check.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  generator-cross-check:
+    name: Soak + property corpus
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache-dependency-path: backend/go.sum
+
+      - name: Soak + property tests
+        run: go test -tags=soak -timeout=25m ./internal/generator/...
