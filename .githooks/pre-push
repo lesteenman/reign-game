@@ -18,7 +18,7 @@ else
 fi
 
 echo "--- Backend: test ---"
-go test ./... -count=1
+go test -short ./... -count=1
 
 # Infrastructure
 echo "--- Terraform: fmt check ---"

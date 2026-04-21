@@ -48,29 +48,19 @@ func (g *Generator) solveAndMutate(seeds [][]Mark) mutationOutcome {
 	}
 
 	// OutcomeStalled — attempt boundary swaps.
-	budget := g.cfg.maxMutations
-	if budget <= 0 {
-		budget = defaultMaxMutations
-	}
+	budget := g.budgetForCurrent()
 
 	// Two-pass acceptance per step:
 	//   (1) strict improvement — any swap that raises solved-cell count
-	//   (2) plateau acceptance — a same-score swap, accepted with 50%
-	//       probability (RNG-seeded, so determinism is preserved)
-	// R-066 found the pure strict-improvement mutator bails at the first
-	// non-improving swap and cannot escape local optima — budget 50 vs 500
-	// showed no difference. Plateau acceptance gives the walker a way off
-	// a ridge to a neighboring basin; 50% keeps the walk biased toward
-	// improvement when one exists nearby.
+	//   (2) graded plateau — same-score with p=0.5 OR one-cell regression
+	//       with p=0.1. Both RNG-seeded so the walk is deterministic.
 	for step := 0; step < budget; step++ {
 		baseline := countSolvedCells(&g.solver)
 		accepted := g.tryOneSwap(seeds, baseline, false)
 		if !accepted {
-			// No strict improvement anywhere — try a plateau swap.
 			accepted = g.tryOneSwap(seeds, baseline, true)
 		}
 		if !accepted {
-			// No improving swap AND no accepted plateau swap — give up.
 			return mutationFailed
 		}
 		// tryOneSwap installs g.solver with the re-solved state already.
@@ -82,19 +72,36 @@ func (g *Generator) solveAndMutate(seeds [][]Mark) mutationOutcome {
 		}
 	}
 
-	// Budget exhausted without reaching Solved.
 	return mutationFailed
+}
+
+// budgetForCurrent picks the mutation budget for this Generator's (n, k).
+// An explicit WithMaxMutations call wins outright. Otherwise k=2 uses the
+// smaller defaultMaxMutationsK2 because each probe-solve at k=2 is slower
+// and hard cases otherwise push end-to-end wall time past the 2 s ceiling.
+// k=1 uses the bigger defaultMaxMutations so the walker has room to
+// oscillate past local optima at N=12 k=1, where the Step 7 gate lives.
+func (g *Generator) budgetForCurrent() int {
+	if g.cfg.maxMutations > 0 {
+		return g.cfg.maxMutations
+	}
+	if g.k == 2 {
+		return defaultMaxMutationsK2
+	}
+	return defaultMaxMutations
 }
 
 // tryOneSwap scans boundary cells (cells on the border between two
 // regions) and tries reassigning each to the neighboring region. The
 // acceptance rule depends on allowPlateau:
 //   - allowPlateau=false (strict): accept iff solved-cell count strictly
-//     increases. This is the first-pass behavior.
-//   - allowPlateau=true (plateau): accept a strict improvement
-//     immediately, OR accept a same-score swap with 50% probability.
-//     This is the second-pass fallback when no strict improvement exists
-//     anywhere.
+//     increases.
+//   - allowPlateau=true (weighted plateau): accept a strict improvement
+//     immediately, OR accept a same-score swap with p=0.5, OR accept a
+//     one-cell regression with p=0.1. The second bucket gives the walker
+//     a way off a plateau; the third gives it a way over a low ridge into
+//     a neighboring basin. Deeper regressions stay rejected so the walk
+//     does not unravel past-earned progress.
 //
 // On accept: updates g.regionOf in place and returns true with g.solver
 // holding the post-swap solve. On miss: restores g.solver to the pre-scan
@@ -166,11 +173,17 @@ func (g *Generator) tryOneSwap(seeds [][]Mark, baseline int, allowPlateau bool) 
 			if newCount > baseline {
 				return true
 			}
-			// Plateau acceptance: same score, coin-flip accept. Uses
-			// g.rng so the decision is seed-deterministic and the RNG
-			// call order stays consistent with other Generator stages.
-			if allowPlateau && newCount == baseline && g.rng.IntN(2) == 0 {
-				return true
+			if allowPlateau {
+				switch newCount - baseline {
+				case 0:
+					if g.rng.IntN(2) == 0 {
+						return true
+					}
+				case -1:
+					if g.rng.IntN(10) == 0 {
+						return true
+					}
+				}
 			}
 			g.regionOf[r][c] = int8(fromID)
 		}

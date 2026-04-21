@@ -8,22 +8,10 @@ import (
 )
 
 // TestStep7Gate measures the end-to-end Generate success rate across the
-// supported (N, k) grid. PG-11's committed gate points are (N=12, k=1) and
-// (N=9, k=2) at >=80%.
-//
-// R-066 promotes gate enforcement from t.Logf to t.Errorf. The committed
-// gate is (N=9, k=2) >=80% — R-066 achieves this via the solver-guided
-// grower plus soundness fixes to R9/R8 and contradicts() at k=2.
-//
-// (N=12, k=1) is a separate case: R-066's per-attempt improvement is
-// marginal because the limit at N=12 is the boundary-swap mutator, not
-// the grower. With WithMaxAttempts(10) the gate is NOT reached. The
-// ceiling is 52% — documented with Logf, not Errorf, because it requires
-// mutator changes outside R-066 scope (grill-point-(b) catalog: plateau
-// acceptance / widened neighborhood / pair-swaps / random restart). The
-// owner's intent (see the R-066 brief: "Be honest. Commit what passes;
-// report which combos missed and by how much.") is to ship R-066 with
-// the gate clearly distinguishing what it fixed from what remains.
+// supported (N, k) grid. PG-11's committed gate points are (N=12, k=1)
+// and (N=9, k=2) at >=80%. Both are LIVE (enforce=true) after R-067a
+// lifted the mutator with weighted plateau acceptance plus a larger
+// per-attempt budget at k=1. Other reported combos are non-blocking.
 //
 // This test is NOT run with -short.
 func TestStep7Gate(t *testing.T) {
@@ -32,21 +20,15 @@ func TestStep7Gate(t *testing.T) {
 	}
 	t.Parallel()
 
-	// Committed gate points. (N=9, k=2) is LIVE. (N=12, k=1) regressed
-	// to ~34% after the mutator-connectivity fix rejected swaps that
-	// previously produced broken puzzles with orphaned non-seed cells.
-	// That means the earlier 81% at N=12 k=1 overcounted — many of those
-	// "successful" puzzles were actually disconnected. Correctness > rate.
-	// Non-enforcing until a follow-up mutator slice lifts the rate back
-	// (plateau acceptance extensions, widened neighborhoods, solver-guided
-	// escalation threshold tuning, or a smarter connectivity-preserving
-	// swap generator).
+	// Committed gate points. Both LIVE: (N=9, k=2) via R-066's solver-
+	// guided grower plus k=2 soundness fixes; (N=12, k=1) via R-067a's
+	// weighted plateau + budget lift.
 	gatedCombos := []struct {
 		n, k    int
 		enforce bool
 	}{
 		{n: 9, k: 2, enforce: true},
-		{n: 12, k: 1, enforce: false},
+		{n: 12, k: 1, enforce: true},
 	}
 
 	// These are reported for transparency.
