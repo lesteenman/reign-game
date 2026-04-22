@@ -150,7 +150,11 @@ describe('createConfig', () => {
 
   test('calls POST /api/admin/config with full config payload', async () => {
     // Arrange
-    const createPayload = { ...MOCK_CONFIG, size: 9, mode: 'standard' };
+    const createPayload = {
+      ...MOCK_CONFIG,
+      size: 9,
+      mode: 'standard' as const,
+    };
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       text: () => Promise.resolve(JSON.stringify(MOCK_CONFIG)),
@@ -172,7 +176,11 @@ describe('createConfig', () => {
 
   test('throws ApiError on 409 conflict', async () => {
     // Arrange
-    const createPayload = { ...MOCK_CONFIG, size: 5, mode: 'standard' };
+    const createPayload = {
+      ...MOCK_CONFIG,
+      size: 5,
+      mode: 'standard' as const,
+    };
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 409,
