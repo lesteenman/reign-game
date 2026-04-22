@@ -188,8 +188,49 @@ tasks:
     cmds:
       - mkdir -p ../logs
       - |
-        if lsof -ti:5181 -sTCP:LISTEN >/dev/null 2>&1; then
-          echo "backend already running on :5181 (PID $(lsof -ti:5181 -sTCP:LISTEN))"
+        bash <<'BASH'
+        set -e
+        # Preflight: refuse to start if an orphan cmd/api binary is
+        # around from an earlier session (see CLAUDE.md — the mvdan/sh
+        # shell sometimes reports "stopped" without actually killing).
+        # An orphan can happily poll SQS against a pre-rule binary and
+        # produce puzzles that violate R-067b. Rather than silently
+        # adding another instance, tell the human and bail.
+        #
+        # Expected process set when the stack is healthy:
+        #   backend (compiled binary listening on :5181)
+        #   generator wrapper (`go run`, PID in logs/generator.pid)
+        #   generator child (compiled binary, direct child of wrapper)
+        # Anything else running the api binary is an orphan.
+        backend_pid=$(lsof -ti:5181 -sTCP:LISTEN 2>/dev/null || true)
+        gen_wrapper_pid=""
+        gen_child_pid=""
+        if [ -f ../logs/generator.pid ]; then
+          gen_wrapper_pid=$(cat ../logs/generator.pid 2>/dev/null || true)
+          if [ -n "$gen_wrapper_pid" ]; then
+            gen_child_pid=$(pgrep -P "$gen_wrapper_pid" 2>/dev/null | head -1 || true)
+          fi
+        fi
+        orphans=""
+        for pid in $(pgrep -f 'go-build.*/api$' 2>/dev/null || true); do
+          if [ "$pid" = "$backend_pid" ] || [ "$pid" = "$gen_child_pid" ]; then
+            continue
+          fi
+          orphans="$orphans $pid"
+        done
+        if [ -n "$orphans" ]; then
+          echo "ERROR: orphan cmd/api process(es) detected — dev:down:* left them behind." >&2
+          for pid in $orphans; do
+            ps -p "$pid" -o pid,etime,command 2>/dev/null | tail -1 >&2
+          done
+          echo "" >&2
+          echo "These are likely running outdated code. Kill and retry:" >&2
+          echo "  kill -9$orphans && task dev:up:backend" >&2
+          exit 1
+        fi
+
+        if [ -n "$backend_pid" ]; then
+          echo "backend already running on :5181 (PID $backend_pid)"
           exit 0
         fi
         : > ../logs/backend.log
@@ -202,8 +243,9 @@ tasks:
           fi
           sleep 1
         done
-        echo "backend did not become ready in 60s — check logs/backend.log"
+        echo "backend did not become ready in 60s — check logs/backend.log" >&2
         exit 1
+        BASH
 
   dev:up:generator:
     desc: Start SQS generator worker in background (logs -> logs/generator.log)
@@ -229,8 +271,37 @@ tasks:
         set -e
         LOGDIR=../logs
         mkdir -p "$LOGDIR"
+        # Preflight: same orphan check as dev:up:backend, from the other
+        # side of the port/PID split. Avoids two generators racing on
+        # the same SQS queue, which let an R-067b-era worker serve
+        # puzzles with 1-cell regions for two days before we noticed.
+        backend_pid=$(lsof -ti:5181 -sTCP:LISTEN 2>/dev/null || true)
+        gen_wrapper_pid=""
+        gen_child_pid=""
         if [ -f "$LOGDIR/generator.pid" ] && kill -0 "$(cat "$LOGDIR/generator.pid")" 2>/dev/null; then
-          echo "generator already running (PID $(cat "$LOGDIR/generator.pid"))"
+          gen_wrapper_pid=$(cat "$LOGDIR/generator.pid")
+          gen_child_pid=$(pgrep -P "$gen_wrapper_pid" 2>/dev/null | head -1 || true)
+        fi
+        orphans=""
+        for pid in $(pgrep -f 'go-build.*/api$' 2>/dev/null || true); do
+          if [ "$pid" = "$backend_pid" ] || [ "$pid" = "$gen_child_pid" ]; then
+            continue
+          fi
+          orphans="$orphans $pid"
+        done
+        if [ -n "$orphans" ]; then
+          echo "ERROR: orphan cmd/api process(es) detected — dev:down:* left them behind." >&2
+          for pid in $orphans; do
+            ps -p "$pid" -o pid,etime,command 2>/dev/null | tail -1 >&2
+          done
+          echo "" >&2
+          echo "These are likely running outdated code. Kill and retry:" >&2
+          echo "  kill -9$orphans && task dev:up:generator" >&2
+          exit 1
+        fi
+
+        if [ -n "$gen_wrapper_pid" ]; then
+          echo "generator already running (PID $gen_wrapper_pid)"
           exit 0
         fi
         rm -f "$LOGDIR/generator.pid"
@@ -296,41 +367,68 @@ tasks:
         echo "  stop:      task dev:down"
 
   dev:down:backend:
-    desc: Stop the backend (kills whatever is on :5181)
+    desc: Stop the backend (kills whatever is on :5181). Verifies the port is free before returning success.
     cmds:
       - |
+        bash <<'BASH'
+        set -e
         pids=$(lsof -ti:5181 2>/dev/null || true)
-        if [ -n "$pids" ]; then
-          kill $pids 2>/dev/null || true
-          for i in 1 2 3 4 5; do
-            if ! lsof -ti:5181 >/dev/null 2>&1; then break; fi
-            sleep 1
-          done
-          kill -9 $(lsof -ti:5181 2>/dev/null) 2>/dev/null || true
-          echo "backend stopped (was $pids)"
-        else
+        if [ -z "$pids" ]; then
           echo "backend not running"
+          exit 0
         fi
+        kill $pids 2>/dev/null || true
+        for i in 1 2 3 4 5; do
+          if ! lsof -ti:5181 >/dev/null 2>&1; then break; fi
+          sleep 1
+        done
+        # Escalate to SIGKILL if anything still owns the port.
+        remaining=$(lsof -ti:5181 2>/dev/null || true)
+        if [ -n "$remaining" ]; then
+          kill -9 $remaining 2>/dev/null || true
+          sleep 1
+        fi
+        # Final verification — refuse to claim "stopped" if the port is
+        # still in use. Earlier versions of this task printed success
+        # while leaving orphans alive; the dev:up preflight then either
+        # rejected them or silently added another one alongside.
+        if lsof -ti:5181 >/dev/null 2>&1; then
+          echo "ERROR: backend still on :5181 after SIGKILL (PID $(lsof -ti:5181))" >&2
+          exit 1
+        fi
+        echo "backend stopped (was $pids)"
+        BASH
 
   dev:down:frontend:
-    desc: Stop the frontend (kills whatever is on :5180)
+    desc: Stop the frontend (kills whatever is on :5180). Verifies the port is free before returning success.
     cmds:
       - |
+        bash <<'BASH'
+        set -e
         pids=$(lsof -ti:5180 2>/dev/null || true)
-        if [ -n "$pids" ]; then
-          kill $pids 2>/dev/null || true
-          for i in 1 2 3 4 5; do
-            if ! lsof -ti:5180 >/dev/null 2>&1; then break; fi
-            sleep 1
-          done
-          kill -9 $(lsof -ti:5180 2>/dev/null) 2>/dev/null || true
-          echo "frontend stopped (was $pids)"
-        else
+        if [ -z "$pids" ]; then
           echo "frontend not running"
+          exit 0
         fi
+        kill $pids 2>/dev/null || true
+        for i in 1 2 3 4 5; do
+          if ! lsof -ti:5180 >/dev/null 2>&1; then break; fi
+          sleep 1
+        done
+        remaining=$(lsof -ti:5180 2>/dev/null || true)
+        if [ -n "$remaining" ]; then
+          kill -9 $remaining 2>/dev/null || true
+          sleep 1
+        fi
+        if lsof -ti:5180 >/dev/null 2>&1; then
+          echo "ERROR: frontend still on :5180 after SIGKILL (PID $(lsof -ti:5180))" >&2
+          exit 1
+        fi
+        echo "frontend stopped (was $pids)"
+        BASH
 
   dev:down:generator:
-    desc: Stop the generator worker
+    desc: Stop the generator worker. Verifies the PID is gone before returning success.
     cmds:
       - |
         bash <<'BASH'
@@ -353,6 +451,12 @@ tasks:
         done
         pkill -9 -P "$pid" 2>/dev/null || true
         kill -9 "$pid" 2>/dev/null || true
+        sleep 1
+        # Refuse to claim "stopped" if the process is still alive.
+        if kill -0 "$pid" 2>/dev/null; then
+          echo "ERROR: generator PID $pid still alive after SIGKILL" >&2
+          exit 1
+        fi
         rm -f logs/generator.pid
         echo "generator stopped (was PID $pid)"
         BASH

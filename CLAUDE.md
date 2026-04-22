@@ -149,6 +149,16 @@ See **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** for the full project tree a
 - No global mutable state — pass dependencies via struct fields
 - DynamoDB single-table design where practical
 
+### Backend logging
+
+Stdlib `log` only — no `slog`, no third-party loggers. Small project, small surface.
+
+- **Format.** Every log line starts with `<subsystem>: <what>`. Subsystem is the handler name, package role, or service (`admin pool`, `config modes`, `serve handler`, `generator`). Keeps grep-by-feature trivial.
+- **Levels are implicit.** `log.Printf` for warn/error. `log.Fatal*` is reserved for "can't continue at all" — startup failures, missing required config. Never for request-path errors.
+- **Warnings get an explicit `WARN:` prefix** so grep can find them. Example: `"WARN: generator: safety-net fired 2 times on puzzle X (seed=Y)"`.
+- **Pure packages stay silent.** `backend/internal/generator/` has zero `log.` calls. If the pure layer needs to surface a signal, it goes through return values or struct fields (e.g. `Metrics.SafetyNetTrips`) and a caller (worker, handler) logs. Keeps the generator testable and side-effect-free.
+- **Per-message lines** (e.g. `"generator: produced puzzle X …"`) use key=value pairs separated by commas so they parse cleanly: `key1=val1, key2=val2`.
+
 ### Frontend (React + TypeScript)
 - Functional components only, no class components
 - Custom hooks for reusable logic (useGame, useTimer, usePuzzle)
