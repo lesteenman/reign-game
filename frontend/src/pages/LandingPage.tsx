@@ -74,9 +74,12 @@ export function LandingPage() {
       .then((list) => {
         if (!cancelled) setModes(list);
       })
-      .catch(() => {
+      .catch((err) => {
         // Network or backend failure — fall through to the empty-state
         // UI. The offline banner separately covers connectivity loss.
+        // Logged at warn level so dev-tools surfaces the root cause
+        // instead of a silent "no puzzles" message hiding a 500.
+        console.warn('LandingPage: fetchEnabledModes failed', err);
         if (!cancelled) setModes([]);
       });
     return () => {

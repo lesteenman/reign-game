@@ -40,6 +40,11 @@ type ConfigModesResponse struct {
 func ConfigModesHandler(repo ConfigModesRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+		// Short cache lets a CDN absorb repeat hits from the landing
+		// page without making the payload stale beyond a minute.
+		// CONFIG rows only change on admin edits, so a 60 s TTL is
+		// well within freshness expectations.
+		w.Header().Set("Cache-Control", "public, max-age=60")
 
 		configs, err := repo.GetAllConfigs(r.Context())
 		if err != nil {

@@ -1,21 +1,12 @@
 import { apiFetch, apiPut, apiPost } from './api';
+import type { Mode } from '../engine/types';
 
-/**
- * Canonical mode identifiers. Exported as a typed tuple so callers get
- * compile-time errors on invalid literals instead of relying on `string`
- * equality. Backend has matching constants in `handler/config_dto.go`
- * (ModeStandard, ModeDouble); this list is the frontend's single source
- * of truth.
- */
-export const MODES = ['standard', 'double'] as const;
-
-/** One of the two supported puzzle modes. */
-export type Mode = (typeof MODES)[number];
-
-/** Type guard for narrowing an unknown string to a Mode. */
-export function isMode(value: unknown): value is Mode {
-  return typeof value === 'string' && (MODES as readonly string[]).includes(value);
-}
+// Mode / MODES / isMode are the domain primitives. They live in
+// `engine/types.ts` so both the admin surface and the game-play surface
+// (puzzleService, GamePage) can share them. Re-exported here for
+// callers who already reach into adminService for config types.
+export { MODES, isMode } from '../engine/types';
+export type { Mode };
 
 /**
  * ConfigBody is the payload subset of a CONFIG row — the fields shared
