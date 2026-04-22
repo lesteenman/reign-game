@@ -501,6 +501,14 @@ function GameBoard({
           }}
         >
           difficulty {puzzle.metadata.difficulty} / {formatDuration(puzzle.metadata.generationDurationMs)}
+          {puzzle.metadata.seed && (
+            <>
+              {' / '}
+              <span data-testid="puzzle-seed" title="Generator seed — paste into `task reproduce -- --seed=<this> --n=<size> --k=<k>` to regenerate.">
+                seed {puzzle.metadata.seed}
+              </span>
+            </>
+          )}
         </div>
       )}
 
