@@ -167,4 +167,16 @@ The top tier of the generator's `Difficulty` classification, assigned when `MaxT
 
 ---
 
+## Testing
+
+Terminology for how tests in this project are categorized. The category describes what the test exercises, not which tool runs it — a Playwright test can be either category depending on whether the backend is real or mocked.
+
+**End-to-end test (e2e)**
+A test that exercises the full stack running locally: the React frontend, the Go backend, and LocalStack (DynamoDB + SQS). Preference is for normal user flows — click buttons, read the DOM. Direct database peeks or API inspection are allowed when useful (verify `status=served` after a play, seed fixture rows via `task e2e:seed`), but should not replace the user-flow assertion. The canonical e2e suite is the Playwright `e2e` project under `frontend/playwright/e2e/`; fixtures live in `frontend/playwright/e2e/fixtures/puzzles/*.json`. E2E tests point at a second backend instance on `:5182` backed by a separate DynamoDB table (`puzzle-pool-e2e`) so the dev pool is never touched by a test run.
+
+**Integration test**
+A test that exercises one side of the system — frontend OR backend — with multiple units running together and other services mocked. Examples: a Vitest file that renders `AdminPage.tsx` with a mock fetch and a real `adminService` is a frontend integration test. A Go test that wires `ReplenishHandler` + `repository.PuzzleRepository` + a fake `queue.Publisher` is a backend integration test. Playwright tests that use `page.route` to mock `/api/*` responses are frontend integration tests, not e2e — they do not cross the HTTP boundary. The canonical frontend Playwright integration suite is the `integration` project under `frontend/playwright/integration/`.
+
+---
+
 <!-- Add new terms below as they emerge from design discussions -->

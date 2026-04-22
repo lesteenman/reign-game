@@ -529,71 +529,92 @@ Both were originally listed under R-069 in an earlier version of this slice but 
 
 ---
 
-### R-06A: Post-cutover cleanup
+### R-06A: Post-cutover cleanup + dynamic mode buttons
 
 - **Roadmap:** R-06A
 - **Agent:** backend-dev + frontend-dev
-- **OpenSpec:** none (cleanup, no capability delta)
+- **OpenSpec:** `design-grill-r06a-r06b.md` for decision record
 
-**Work** — post-cutover cleanup driven by carry-over KIs plus any review-local residue from the Phase 5 PR chain. The generator itself is now the Phase 5 shape; this slice tightens the consumer surfaces and docs.
+**Work** — scope grew during design-grill (2026-04-22) from pure frontend cleanup to a full-stack slice driving the landing page from actual enabled combos.
 
-- **KI-015 (frontend):** Split `AdminPage.tsx`'s `ConfigForm` into `EditConfigForm` + `CreateConfigForm` sharing a `ConfigFields` child (or introduce a discriminated `createMeta?` prop). Eliminates four defaulted no-op props in the edit path.
-- **KI-016 (frontend):** Tighten `MODE_OPTIONS` (last remaining options-as-string[] after R-067 removed pipeline/solver/regions options) into a typed `as const` union exported from `adminService.ts` so an invalid literal is a compile error.
-- **PROJECT_STRUCTURE.md refresh:** Backend/frontend trees drifted over Phase 5 (generator subtree especially — many new files not reflected). Full refresh pass.
-- Any other KI that surfaced from review-local residue during R-067/R-068 (currently none; revisit before starting the slice).
+**Backend:**
+
+- **New public endpoint `GET /api/config/modes`** returning `[{size, mode}]` for every `enabled=true` CONFIG row. No thresholds, no ready counts. Keeps free-user traffic off `/api/admin/*`.
+- **KI-013 / KI-015 type split.** `repository.ConfigRecord` is the domain shape. The handler layer owns explicit DTOs — `ConfigView` for reads, `ConfigCreateRequest` for POST, `ConfigUpdateRequest` for PUT — with mapping functions at the boundary. Drops the hand-rolled `buildConfigResponseMap` and the four-way config redeclaration.
+
+**Frontend:**
+
+- **Dynamic mode buttons.** `PuzzleSelector` reads `/api/config/modes` on mount and renders one button per enabled combo. Fallback UI when the endpoint returns zero combos: "no puzzles available, try again."
+- **KI-015 component split.** `ConfigForm` splits into `EditConfigForm` + `CreateConfigForm` sharing a `ConfigFields` child. Each consumes its matching DTO.
+- **KI-016.** `MODE_OPTIONS` becomes a typed `as const` union exported from `adminService.ts` so invalid literals are compile errors.
+
+**Docs:**
+
+- **`GLOSSARY.md`** new "Testing" section with `End-to-end test` and `Integration test` entries. Records the project-wide terminology R-06B will use.
+- **`PROJECT_STRUCTURE.md` full refresh.** Backend generator subtree is wildly stale (claims `generator.go`, `solver.go`, `difficulty.go`, `region.go` — none match reality). Frontend + infra sections also visited in the same sweep.
+- **`ROADMAP.md`.** Strike through KI-013, KI-015, KI-016 with R-06A as the close-out.
 
 **Gate**
 
-- KI-015 and KI-016 struck through in ROADMAP.md with R-06A as the close-out R-number.
+- `GET /api/config/modes` served by the backend with tests covering enabled-only filtering and the empty-set response.
+- Landing page renders dynamic buttons from the endpoint; mocked-backend Playwright suite still passes on the new behavior.
+- KI-013, KI-015, KI-016 struck through in ROADMAP.md.
 - `PROJECT_STRUCTURE.md` backend tree matches the actual `backend/internal/generator/` file list.
-- Zero outstanding review-local CRITICAL/HIGH from the Phase 5 PR chain.
+- `GLOSSARY.md` Testing section exists and both terms are defined.
+- Zero outstanding review-local CRITICAL/HIGH.
 
 **Dependencies:** R-069.
 
-**Commit after completion.** Skip entirely if nothing needs it.
+**Commit after completion.**
 
 ---
 
-### R-06B: E2E fixed-database harness
+### R-06B: E2E infrastructure + minimum viable coverage
 
 - **Roadmap:** R-06B
 - **Spec step:** (verification — full-stack)
 - **Agent:** tester + backend-dev + frontend-dev
-- **OpenSpec:** none (test infra)
+- **OpenSpec:** `design-grill-r06a-r06b.md`
 
 **Work**
 
-Today's Playwright e2e suite uses `page.route` to mock the `/api/puzzles/next` response. That verifies the frontend but not the serve -> generator -> DynamoDB -> frontend flow. This slice adds a real-stack test harness that plays a complete game to solved state against a fixed puzzle database.
+Today's Playwright suite lives under `frontend/e2e/` but uses `page.route` to mock the backend. Under the R-06A glossary, that's actually an **integration test**. This slice sets up the real e2e infrastructure and ships two validating tests. Broader coverage goes to ROADMAP.md Phase 10+ as "R-06B follow-up."
 
-Approach:
+**Infrastructure:**
 
-- Fixture puzzles live in `frontend/e2e/fixtures/puzzles/*.json`, one file per test case. Each file carries a full `PuzzleRecord` (region map, solution, size, mode).
-- A new Task target `task e2e:seed` wipes the LocalStack puzzle-pool and writes the fixture rows directly via `awslocal dynamodb put-item`. Lives alongside `task dev:up`.
-- The Playwright config gets a second project `e2e-live` that depends on `task dev:up` + `task e2e:seed`. The existing mocked suite stays on `chromium`; the new suite runs on `e2e-live` only.
-- New test file `frontend/e2e/live-full-game.spec.ts` covers three flows:
-  1. Happy path: seed a known-unique 5x5 Standard puzzle, click Play, place the four correct marks, verify completion overlay appears and timer stops.
-  2. Double Queens: same for a seeded 9x9 Double fixture.
-  3. Conflict + backtrack: place a mark that violates an adjacency, verify the conflict state renders, undo, verify clear.
-- The harness asserts against the real `serveMetadata` response, not a mock.
+- **LocalStack isolation.** `init-aws.sh` creates `puzzle-pool-e2e` alongside `puzzle-pool`. Same schema, same CONFIG seeds. Dev pool is never touched.
+- **Second backend.** New `task e2e:up` starts a backend instance on `:5182` with `PUZZLE_TABLE_NAME=puzzle-pool-e2e`. Matching `task e2e:down` + `task e2e:status`.
+- **Fixture generator.** New `backend/cmd/genfixtures/main.go` generates deterministic puzzle fixtures via `generator.Generate(WithSeed(...))` and writes JSON to `frontend/playwright/e2e/fixtures/puzzles/`. Re-running produces byte-identical output.
+- **Seed task.** `task e2e:seed` writes the committed fixture rows to `puzzle-pool-e2e` via `aws dynamodb put-item`. Idempotent.
+- **Playwright rename.** `frontend/e2e/` → `frontend/playwright/` with `integration/` and `e2e/` subfolders. Existing `grid-interaction.spec.ts` moves to `integration/`. `playwright.config.ts` defines two projects (`integration`, `e2e`) with matching `testMatch` paths.
+- **README.** `frontend/playwright/README.md` documents which suite is which and the Task-dependency flow for `e2e`.
 
-This runs after R-06A because R-067's consumer cleanup and R-069's cutover touch the same surface; stacking this on top avoids churn.
+**Minimum test set (ships in this slice):**
+
+1. **`play-to-completion.spec.ts`** — seed a Standard 5×5 puzzle, click Play, place marks, exercise undo mid-play, complete. Validates the full pipeline + undo in one flow.
+2. **`dynamic-modes.spec.ts`** — seed CONFIG rows where `9#double` is `enabled=false`, confirm the button doesn't render. Validates R-06A's new `/api/config/modes` endpoint wiring.
 
 **Gate**
 
-- `task e2e:seed` writes the fixtures and `task dev:status` confirms them via the admin pool endpoint.
-- All three live flows pass on local runs.
-- The existing mocked suite (`frontend/e2e/grid-interaction.spec.ts`) still runs as-is on the `chromium` project; this slice does not touch mocks.
-- A short README section in `frontend/e2e/README.md` explains which suite is which and when to run each.
+- `task e2e:up` + `task e2e:seed` + `npm run test:playwright --project=e2e` passes locally against committed fixtures.
+- `npm run test:playwright --project=integration` still passes (migrated spec unchanged except for imports).
+- `frontend/playwright/README.md` exists and explains the two projects.
+- Remaining coverage (Double 9×9 play-through, serve-lifecycle, pool-empty UI, generation-path tests) documented in ROADMAP.md Phase 10+ under "R-06B follow-up — full e2e coverage."
 
 **Files touched**
 
-- `Taskfile.yml` (add `e2e:seed`)
-- `frontend/playwright.config.ts` (add `e2e-live` project)
-- `frontend/e2e/fixtures/puzzles/*.json` (new)
-- `frontend/e2e/live-full-game.spec.ts` (new)
-- `frontend/e2e/README.md` (new)
+- `.localstack/init-aws.sh` (add `puzzle-pool-e2e`)
+- `Taskfile.yml` (`e2e:up`, `e2e:down`, `e2e:status`, `e2e:seed`)
+- `backend/cmd/genfixtures/main.go` (new)
+- `frontend/playwright.config.ts` (two projects)
+- `frontend/playwright/integration/grid-interaction.spec.ts` (moved)
+- `frontend/playwright/e2e/play-to-completion.spec.ts` (new)
+- `frontend/playwright/e2e/dynamic-modes.spec.ts` (new)
+- `frontend/playwright/e2e/fixtures/puzzles/*.json` (new, generated)
+- `frontend/playwright/README.md` (new)
+- `ROADMAP.md` (add R-06B follow-up bullet)
 
-**Dependencies:** R-06A (or R-069 if R-06A is skipped).
+**Dependencies:** R-06A.
 
 **Commit after completion.**
 

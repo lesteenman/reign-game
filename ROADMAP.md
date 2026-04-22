@@ -157,6 +157,7 @@ Candidate items — not yet committed or ordered:
 - [ ] **R-07H** — Frontend: curation UI — visual solver, "pick best of N" comparison mode
 - [ ] **R-07I** — Frontend: offline practice from curated pool (IndexedDB caching)
 - [ ] **R-07J** — Offline detection: graceful degradation
+- [ ] **R-080** — **R-06B follow-up — full e2e coverage.** R-06B shipped the e2e infrastructure plus two validating tests (Standard 5×5 play-through with undo + dynamic-modes wiring). Expand coverage to: Double 9×9 play-through, serve-then-mark-served lifecycle (seed two puzzles, confirm different ones served and both marked `served` after), pool-empty UI state, generation-path tests once the generator is exercised through `task e2e:up` rather than pre-seeded fixtures. Each new flow adds one spec file under `frontend/playwright/e2e/`.
 
 ---
 
