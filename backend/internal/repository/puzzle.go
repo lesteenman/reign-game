@@ -76,6 +76,11 @@ type PuzzleRecord struct {
 	CreatedAt string `dynamodbav:"createdAt"`
 	// ServedAt is the ISO 8601 timestamp when the puzzle was served (empty until served).
 	ServedAt string `dynamodbav:"servedAt"`
+	// Seed is the RNG seed the generator ran with. Lets cmd/reproduce
+	// regenerate the exact same puzzle deterministically (R-06C). Zero
+	// is the "unrecorded — generated pre-R-06C" sentinel; new puzzles
+	// always carry a non-zero seed.
+	Seed int64 `dynamodbav:"seed,omitempty"`
 }
 
 // PuzzleRepository provides data access methods for puzzles in DynamoDB.
