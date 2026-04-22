@@ -1,0 +1,65 @@
+package handler
+
+import (
+	"context"
+	"encoding/json"
+	"log"
+	"net/http"
+
+	"github.com/eriksteenman/reign-game/backend/internal/repository"
+)
+
+// ConfigModesRepo is the minimal repo surface ConfigModesHandler needs.
+// Intentionally narrower than ConfigAndCountRepo (the admin pool handler's
+// interface) — the public modes endpoint does not read ready counts or
+// admin-only fields and should not accept a wider dependency.
+type ConfigModesRepo interface {
+	GetAllConfigs(ctx context.Context) ([]repository.ConfigRecord, error)
+}
+
+// ModeEntry is one {size, mode} pair in the public modes listing.
+type ModeEntry struct {
+	Size int    `json:"size"`
+	Mode string `json:"mode"`
+}
+
+// ConfigModesResponse is the JSON shape of GET /api/config/modes.
+// Modes is always a non-nil slice so the frontend distinguishes
+// "fetch failed" from "no enabled combos" by the array's presence.
+type ConfigModesResponse struct {
+	Modes []ModeEntry `json:"modes"`
+}
+
+// ConfigModesHandler serves GET /api/config/modes. Lists every
+// (size, mode) combo with enabled=true — the subset of CONFIG data a
+// free-user landing page needs to render its mode buttons. Thresholds,
+// ready counts, and other admin data are NOT exposed here. This
+// endpoint is public by design; it carries no information that has
+// not already been publicly observable via /api/puzzles/next lookups
+// by size+mode.
+func ConfigModesHandler(repo ConfigModesRepo) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		configs, err := repo.GetAllConfigs(r.Context())
+		if err != nil {
+			log.Printf("config modes: failed to get configs: %v", err)
+			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve configured modes.")
+			return
+		}
+
+		// Always non-nil so encoding yields `"modes":[]` not `"modes":null`.
+		modes := make([]ModeEntry, 0, len(configs))
+		for _, cfg := range configs {
+			if !cfg.Enabled {
+				continue
+			}
+			modes = append(modes, ModeEntry{Size: cfg.Size, Mode: cfg.Mode})
+		}
+
+		resp := ConfigModesResponse{Modes: modes}
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			log.Printf("config modes: failed to write response: %v", err)
+		}
+	}
+}

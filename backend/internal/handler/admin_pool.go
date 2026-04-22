@@ -15,21 +15,19 @@ type ConfigAndCountRepo interface {
 	CountReady(ctx context.Context, size int, mode string) (int, error)
 }
 
-type configResponse struct {
-	Threshold   int  `json:"threshold"`
-	Enabled     bool `json:"enabled"`
-	MaxAttempts int  `json:"maxAttempts,omitempty"`
-}
-
-type comboStatus struct {
-	Size       int            `json:"size"`
-	Mode       string         `json:"mode"`
-	Config     configResponse `json:"config"`
-	ReadyCount int            `json:"readyCount"`
+// ComboStatus is the per-combo entry in the pool status response.
+// Config nests a ConfigBody (shared with the flat ConfigView DTO) so
+// there is one canonical shape for the threshold/enabled/maxAttempts
+// fields across every CONFIG-bearing API surface.
+type ComboStatus struct {
+	Size       int        `json:"size"`
+	Mode       string     `json:"mode"`
+	Config     ConfigBody `json:"config"`
+	ReadyCount int        `json:"readyCount"`
 }
 
 type adminPoolResponse struct {
-	Combos []comboStatus `json:"combos"`
+	Combos []ComboStatus `json:"combos"`
 }
 
 // AdminPoolHandler creates an HTTP handler for GET /admin/pool.
@@ -45,7 +43,7 @@ func AdminPoolHandler(repo ConfigAndCountRepo) http.HandlerFunc {
 			return
 		}
 
-		combos := make([]comboStatus, 0, len(configs))
+		combos := make([]ComboStatus, 0, len(configs))
 		for _, cfg := range configs {
 			readyCount := 0
 			if cfg.Enabled {
@@ -57,14 +55,10 @@ func AdminPoolHandler(repo ConfigAndCountRepo) http.HandlerFunc {
 				}
 			}
 
-			combos = append(combos, comboStatus{
-				Size: cfg.Size,
-				Mode: cfg.Mode,
-				Config: configResponse{
-					Threshold:   cfg.Threshold,
-					Enabled:     cfg.Enabled,
-					MaxAttempts: cfg.MaxAttempts,
-				},
+			combos = append(combos, ComboStatus{
+				Size:       cfg.Size,
+				Mode:       cfg.Mode,
+				Config:     configBodyFrom(&cfg),
 				ReadyCount: readyCount,
 			})
 		}
