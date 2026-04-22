@@ -5,6 +5,13 @@ import { ThemeProvider } from './theme/ThemeContext';
 import { LandingPage } from './pages/LandingPage';
 import { FALLBACK_PUZZLE } from './App';
 
+// Stub the modes fetch so LandingPage's mount effect doesn't hit a
+// real backend. A non-empty list keeps the Play button present.
+const mockFetchEnabledModes = vi.fn();
+vi.mock('./services/landingService', () => ({
+  fetchEnabledModes: (...args: unknown[]) => mockFetchEnabledModes(...args),
+}));
+
 const originalFetch = globalThis.fetch;
 
 beforeEach(() => {
@@ -12,6 +19,9 @@ beforeEach(() => {
     ok: true,
     json: () => Promise.resolve(FALLBACK_PUZZLE),
   });
+  mockFetchEnabledModes.mockResolvedValue([
+    { size: 5, mode: 'standard' },
+  ]);
 });
 
 afterEach(() => {
