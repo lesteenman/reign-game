@@ -50,17 +50,12 @@ func TestGenerateRespectsMinSize(t *testing.T) {
 					}
 					t.Fatalf("N=%d k=%d sample %d: %v", c.n, c.k, i, err)
 				}
-				sizes := make([]int, c.n)
-				for r := range p.Regions {
-					for _, gid := range p.Regions[r] {
-						sizes[gid]++
-					}
-				}
-				for gid, sz := range sizes {
-					if sz < regionMinSize {
-						t.Fatalf("N=%d k=%d sample %d: region %d has %d cells (< min %d)\nregions=%v",
-							c.n, c.k, i, gid, sz, regionMinSize, p.Regions)
-					}
+				// Use the same helper the production safety net uses so
+				// the test tracks the real gate, not a parallel
+				// re-implementation.
+				if !regionsSatisfyMinSize(p.Regions, c.n) {
+					t.Fatalf("N=%d k=%d sample %d: region map violates min-size\nregions=%v",
+						c.n, c.k, i, p.Regions)
 				}
 			}
 		})

@@ -21,11 +21,13 @@ import (
 )
 
 // newSeed picks a fresh int64 seed for one generation attempt. Uses
-// crypto/rand for an unbiased 63-bit unsigned draw, cast to the
-// non-negative int64 range so the seed fits JSON's safe-integer window
-// when shipped over the wire. Unbiased is not a security requirement
-// here — it's only about avoiding seed collisions when the pool is
-// being stocked at high concurrency.
+// crypto/rand for an unbiased 63-bit draw. The sign-bit mask is for
+// readability — all seeds end up non-negative, which is nicer to copy
+// out of logs and paste into `task reproduce`. JS safe-integer
+// precision is handled separately by encoding the seed as a JSON
+// string in the /api/puzzles/next response, not by the mask. Unbiased
+// is not a security requirement here — only collision avoidance at
+// pool-stocking concurrency.
 func newSeed() (int64, error) {
 	var buf [8]byte
 	if _, err := rand.Read(buf[:]); err != nil {

@@ -9,8 +9,15 @@
 //	go run ./cmd/reproduce --seed=1234567890 --n=9 --k=1
 //	task reproduce -- --seed=1234567890 --n=9 --k=1
 //
-// Exits 0 on success with all invariants holding, non-zero if an
-// invariant fails so a CI caller can gate on it.
+// Exit codes:
+//
+//	0  success — all invariants hold.
+//	1  runtime failure — Generate errored or exhausted attempts.
+//	2  usage — required flag missing.
+//	3  invariant violation — a region is below the min-size floor.
+//
+// A CI caller that wants to gate only on invariant failures (not
+// runtime) checks specifically for exit 3.
 package main
 
 import (
