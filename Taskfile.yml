@@ -49,6 +49,12 @@ tasks:
     cmds:
       - go test -tags=soak -timeout=30m ./internal/generator/...
 
+  reproduce:
+    desc: "Regenerate a puzzle from seed+N+k. Usage: task reproduce -- --seed=X --n=9 --k=1"
+    dir: backend
+    cmds:
+      - go run ./cmd/reproduce {{.CLI_ARGS}}
+
   dev:localstack:
     desc: Start LocalStack (DynamoDB + SQS)
     cmds:

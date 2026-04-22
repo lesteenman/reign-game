@@ -320,6 +320,18 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error) {
 			continue
 		}
 
+		// R-067b safety net (R-06C). The grower and the mutator each
+		// enforce the min-size rule individually, but R-06C surfaced a
+		// served puzzle whose final region map had a 1-cell region —
+		// the rule leaks somewhere in the pipeline. Until the root
+		// cause is fixed, reject any attempt whose final map violates
+		// the floor so bad puzzles never reach the pool. A retry on
+		// the same seed is exactly what the orchestrator's attempt
+		// loop is for.
+		if !regionsSatisfyMinSize(rm, g.n) {
+			continue
+		}
+
 		// Trace-enabled classification pass. Reset the solver state with
 		// trace recording, re-solve, then classify.
 		g.solver.trace = g.traceBuf[:0]
@@ -350,4 +362,23 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error) {
 	}
 
 	return Puzzle{}, ErrMaxAttemptsExhausted
+}
+
+// regionsSatisfyMinSize returns true iff every region in the given
+// region map has at least regionMinSize cells. Caller supplies a
+// normalized [n][n] map whose region ids cover [0, n) so this function
+// can index its bucket slice by id directly.
+func regionsSatisfyMinSize(rm [][]int, n int) bool {
+	sizes := make([]int, n)
+	for r := range rm {
+		for _, gid := range rm[r] {
+			sizes[gid]++
+		}
+	}
+	for _, sz := range sizes {
+		if sz < regionMinSize {
+			return false
+		}
+	}
+	return true
 }

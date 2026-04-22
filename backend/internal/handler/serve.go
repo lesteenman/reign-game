@@ -18,6 +18,9 @@ type PuzzleFetcher interface {
 }
 
 // serveMetadata is the metadata object included in the serve response.
+// Seed is encoded as a JSON string so JavaScript clients don't lose
+// precision on int64 values beyond the 2^53 safe-integer boundary.
+// Seed is omitted for pre-R-06C puzzles that don't have one on record.
 type serveMetadata struct {
 	Difficulty           int    `json:"difficulty"`
 	MaxTier              int    `json:"maxTier"`
@@ -25,6 +28,7 @@ type serveMetadata struct {
 	TraceLen             int    `json:"traceLen"`
 	GenerationDurationMs int64  `json:"generationDurationMs"`
 	CreatedAt            string `json:"createdAt"`
+	Seed                 string `json:"seed,omitempty"`
 }
 
 // serveResponse is the JSON response for the serve endpoint.
@@ -87,19 +91,26 @@ func ServeHandler(fetcher PuzzleFetcher) http.HandlerFunc {
 			return
 		}
 
+		metadata := serveMetadata{
+			Difficulty:           puzzle.Difficulty,
+			MaxTier:              puzzle.MaxTier,
+			TierCounts:           puzzle.TierCounts,
+			TraceLen:             puzzle.TraceLen,
+			GenerationDurationMs: puzzle.GenerationDurationMs,
+			CreatedAt:            puzzle.CreatedAt,
+		}
+		// Only ship seed for puzzles that have one recorded — pre-R-06C
+		// rows have Seed=0 and there's no way to regenerate them, so
+		// emitting "0" would mislead anyone trying to reproduce.
+		if puzzle.Seed != 0 {
+			metadata.Seed = strconv.FormatInt(puzzle.Seed, 10)
+		}
 		resp := serveResponse{
 			PuzzleID:  puzzle.ID,
 			GridSize:  puzzle.GridSize,
 			Mode:      puzzle.Mode,
 			RegionMap: puzzle.RegionMap,
-			Metadata: serveMetadata{
-				Difficulty:           puzzle.Difficulty,
-				MaxTier:              puzzle.MaxTier,
-				TierCounts:           puzzle.TierCounts,
-				TraceLen:             puzzle.TraceLen,
-				GenerationDurationMs: puzzle.GenerationDurationMs,
-				CreatedAt:            puzzle.CreatedAt,
-			},
+			Metadata:  metadata,
 		}
 
 		w.WriteHeader(http.StatusOK)

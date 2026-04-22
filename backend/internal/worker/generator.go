@@ -3,6 +3,8 @@ package worker
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -17,6 +19,24 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
+
+// newSeed picks a fresh int64 seed for one generation attempt. Uses
+// crypto/rand for an unbiased 63-bit draw. The sign-bit mask is for
+// readability — all seeds end up non-negative, which is nicer to copy
+// out of logs and paste into `task reproduce`. JS safe-integer
+// precision is handled separately by encoding the seed as a JSON
+// string in the /api/puzzles/next response, not by the mask. Unbiased
+// is not a security requirement here — only collision avoidance at
+// pool-stocking concurrency.
+func newSeed() (int64, error) {
+	var buf [8]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return 0, fmt.Errorf("crypto/rand read: %w", err)
+	}
+	u := binary.BigEndian.Uint64(buf[:])
+	// Mask the sign bit so the result is a non-negative int64.
+	return int64(u &^ (1 << 63)), nil
+}
 
 // generationTimeout is the maximum time allowed for puzzle generation in
 // the SQS consumer. Set to 14 minutes to leave 1 minute for SQS overhead
@@ -73,8 +93,14 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 	}
 
 	// Build generator options from request. MaxAttempts is a pass-through
-	// override; zero means "use generator package default".
-	var opts []generator.Option
+	// override; zero means "use generator package default". An explicit
+	// seed lets cmd/reproduce regenerate the same puzzle deterministically
+	// (R-06C).
+	seed, err := newSeed()
+	if err != nil {
+		return fmt.Errorf("picking seed: %w", err)
+	}
+	opts := []generator.Option{generator.WithSeed(seed)}
 	if req.MaxAttempts > 0 {
 		opts = append(opts, generator.WithMaxAttempts(req.MaxAttempts))
 	}
@@ -125,14 +151,15 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		TraceLen:             pz.Metrics.TraceLen,
 		GenerationDurationMs: durationMs,
 		CreatedAt:            time.Now().UTC().Format(time.RFC3339),
+		Seed:                 seed,
 	}
 
 	if err := w.store.PutPuzzle(ctx, rec); err != nil {
 		return fmt.Errorf("storing generated puzzle: %w", err)
 	}
 
-	log.Printf("generated puzzle %s (size=%d, mode=%s, difficulty=%d, duration=%dms)",
-		puzzleID, req.Size, req.Mode, pz.Difficulty, durationMs)
+	log.Printf("generated puzzle %s (size=%d, mode=%s, difficulty=%d, seed=%d, duration=%dms)",
+		puzzleID, req.Size, req.Mode, pz.Difficulty, seed, durationMs)
 
 	return nil
 }

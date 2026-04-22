@@ -20,6 +20,12 @@ export interface PuzzleMetadata {
   traceLen: number;
   generationDurationMs: number;
   createdAt: string;
+  /**
+   * Seed the generator ran with. Encoded as a string to survive int64
+   * values past the 2^53 JS-safe-integer boundary. Absent for pre-R-06C
+   * puzzles that don't have one on record.
+   */
+  seed?: string;
 }
 
 /**
