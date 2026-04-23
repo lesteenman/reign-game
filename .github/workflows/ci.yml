@@ -26,7 +26,12 @@ jobs:
         run: go build ./...
 
       - name: Test
-        run: go test ./... -v
+        # -short matches the pre-push hook (.githooks/pre-push). The long
+        # generator tests (TestStep7Gate, TestPropertyCorpus,
+        # TestGenerateRespectsMinSize) are `testing.Short()`-guarded and
+        # run via .github/workflows/generator-check.yml with -tags=soak
+        # and a 40-min timeout, not here. See CLAUDE.md lesson 20.
+        run: go test -short ./... -v
 
       - name: Lint
         uses: golangci/golangci-lint-action@v6
