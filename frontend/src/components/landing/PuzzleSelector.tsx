@@ -107,7 +107,7 @@ export function PuzzleSelector({ modes, onSelect }: PuzzleSelectorProps) {
       }}
     >
       <div
-        data-testid="preset-buttons"
+        data-testid="puzzle-presets"
         style={{
           display: 'grid',
           gridTemplateColumns: modes.length === 1 ? '1fr' : '1fr 1fr',

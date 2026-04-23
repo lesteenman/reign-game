@@ -53,8 +53,8 @@ Hard dependency rule: R-067 cannot merge before R-065 gates pass, because R-067 
 | R-067c| Relift N=12 k=1 gate under min-size regime     | 5c    | (follow-up)      | [x]    |
 | R-068 | Benchmarks + distribution + soak + corpus + optional generator CI re-check | 6 | Step 11, Step 12 | [ ]    |
 | R-069 | Cutover + KI-007 close                         | 7     | (operational)    | [x]    |
-| R-06A | Post-cutover cleanup                           | 7     | (contingent)     | [ ]    |
-| R-06B | E2E fixed-database harness                     | 8     | (verification)   | [ ]    |
+| R-06A | Post-cutover cleanup                           | 7     | (contingent)     | [x]    |
+| R-06B | E2E fixed-database harness                     | 8     | (verification)   | [x]    |
 
 ## Tasks
 

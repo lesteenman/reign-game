@@ -188,15 +188,17 @@ tasks:
         # and bail.
         #
         # Expected process set when the stack is healthy:
-        #   backend (compiled binary listening on :5181)
+        #   dev backend      (compiled binary listening on :5181)
+        #   e2e backend      (compiled binary listening on :5182 when e2e:up ran)
         #   generator wrapper (`go run`, PID in logs/generator.pid)
-        #   generator child (compiled binary, child of wrapper)
+        #   generator child  (compiled binary, child of wrapper)
         # Anything else running the api binary is an orphan.
         #
         # The pgrep pattern matches both the Go toolchain's go-build
         # cache and JetBrains GoLand's ___go_build_* builds so an IDE-
         # launched dev instance is detected too.
         backend_pid=$(lsof -ti:5181 -sTCP:LISTEN 2>/dev/null || true)
+        e2e_backend_pid=$(lsof -ti:5182 -sTCP:LISTEN 2>/dev/null || true)
         gen_wrapper_pid=""
         gen_child_pid=""
         if [ -f logs/generator.pid ]; then
@@ -209,7 +211,7 @@ tasks:
         fi
         orphans=""
         for pid in $(pgrep -f '(go-build|___go_build).*/api$' 2>/dev/null || true); do
-          if [ "$pid" = "$backend_pid" ] || [ "$pid" = "$gen_child_pid" ]; then
+          if [ "$pid" = "$backend_pid" ] || [ "$pid" = "$e2e_backend_pid" ] || [ "$pid" = "$gen_child_pid" ]; then
             continue
           fi
           orphans="$orphans $pid"
@@ -537,3 +539,189 @@ tasks:
           echo "localstack: stopped"
         fi
         BASH
+
+  # ---------------------------------------------------------------------------
+  # E2E lifecycle (R-06B). A second backend on :5182 reads puzzle-pool-e2e
+  # so Playwright's e2e project can play against a fixed fixture set without
+  # touching the dev pool. No generator worker — fixtures are pre-seeded.
+  # ---------------------------------------------------------------------------
+
+  e2e:up:backend:
+    desc: Start e2e backend on :5182 reading puzzle-pool-e2e
+    deps:
+      - dev:up:localstack
+      - _dev:preflight:orphans
+    dir: backend
+    env:
+      PORT: "5182"
+      DYNAMODB_ENDPOINT: http://localhost:4566
+      SQS_ENDPOINT: http://localhost:4566
+      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
+      AWS_REGION: us-east-1
+      PUZZLE_TABLE_NAME: puzzle-pool-e2e
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    cmds:
+      - mkdir -p ../logs
+      - |
+        bash <<'BASH'
+        set -e
+        e2e_backend_pid=$(lsof -ti:5182 -sTCP:LISTEN 2>/dev/null || true)
+        if [ -n "$e2e_backend_pid" ]; then
+          echo "e2e backend already running on :5182 (PID $e2e_backend_pid)"
+          exit 0
+        fi
+        : > ../logs/e2e-backend.log
+        nohup go run ./cmd/api >> ../logs/e2e-backend.log 2>&1 </dev/null &
+        echo "e2e backend starting, logs: logs/e2e-backend.log"
+        for i in $(seq 1 60); do
+          if curl -sf http://localhost:5182/api/health >/dev/null 2>&1; then
+            echo "e2e backend ready on :5182 (PID $(lsof -ti:5182 -sTCP:LISTEN))"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "e2e backend did not become ready in 60s — check logs/e2e-backend.log" >&2
+        exit 1
+        BASH
+
+  e2e:down:backend:
+    desc: Stop the e2e backend. Verifies the port is free before returning success.
+    cmds:
+      - task: _dev:down:port
+        vars: { NAME: "e2e backend", PORT: 5182 }
+
+  e2e:up:frontend:
+    desc: Start a second Vite on :5183 that proxies /api/* to the e2e backend at :5182
+    dir: frontend
+    env:
+      REIGN_API_TARGET: http://localhost:5182
+    cmds:
+      - mkdir -p ../logs
+      - |
+        bash <<'BASH'
+        set -e
+        if lsof -ti:5183 -sTCP:LISTEN >/dev/null 2>&1; then
+          echo "e2e frontend already running on :5183 (PID $(lsof -ti:5183 -sTCP:LISTEN))"
+          exit 0
+        fi
+        : > ../logs/e2e-frontend.log
+        nohup npm run dev -- --port 5183 --host 0.0.0.0 >> ../logs/e2e-frontend.log 2>&1 </dev/null &
+        echo "e2e frontend starting, logs: logs/e2e-frontend.log"
+        for i in $(seq 1 60); do
+          if lsof -ti:5183 -sTCP:LISTEN >/dev/null 2>&1; then
+            echo "e2e frontend ready on :5183"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "e2e frontend did not start in 60s — check logs/e2e-frontend.log" >&2
+        exit 1
+        BASH
+
+  e2e:down:frontend:
+    desc: Stop the e2e frontend. Verifies the port is free before returning success.
+    cmds:
+      - task: _dev:down:port
+        vars: { NAME: "e2e frontend", PORT: 5183 }
+
+  e2e:seed:
+    desc: Load committed fixture puzzles into puzzle-pool-e2e. Idempotent — wipes non-CONFIG rows and re-inserts.
+    deps:
+      - dev:up:localstack
+    cmds:
+      - |
+        bash <<'BASH'
+        set -e
+        fixture_dir=frontend/playwright/e2e/fixtures/puzzles
+        if [ ! -d "$fixture_dir" ]; then
+          echo "ERROR: fixture dir $fixture_dir does not exist." >&2
+          echo "Run `go run ./backend/cmd/genfixtures` to generate fixtures." >&2
+          exit 1
+        fi
+        # Puzzle fixtures are the *.json files that DON'T end in
+        # .solution.json — those are sibling arrays of solution
+        # positions consumed by the Playwright specs, not DynamoDB
+        # items.
+        shopt -s nullglob
+        puzzle_files=()
+        for f in "$fixture_dir"/*.json; do
+          case "$f" in
+            *.solution.json) continue ;;
+            *) puzzle_files+=("$f") ;;
+          esac
+        done
+        if [ ${#puzzle_files[@]} -eq 0 ]; then
+          echo "ERROR: no puzzle fixture files in $fixture_dir." >&2
+          exit 1
+        fi
+
+        echo "flushing puzzle-pool-e2e..."
+        TABLE_NAME=puzzle-pool-e2e AWS_ENDPOINT_URL=http://localhost:4566 \
+          AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-1 \
+          CONFIRM=YES ./scripts/flush-pool.sh
+
+        echo "seeding ${#puzzle_files[@]} fixture(s) into puzzle-pool-e2e..."
+        for f in "${puzzle_files[@]}"; do
+          docker compose exec -T localstack awslocal dynamodb put-item \
+            --table-name puzzle-pool-e2e \
+            --item "file:///dev/stdin" < "$f" >/dev/null 2>&1 || {
+              echo "  FAIL: $f" >&2
+              exit 1
+            }
+          echo "  seeded $(basename "$f")"
+        done
+        echo "e2e fixtures ready."
+        BASH
+
+  e2e:up:
+    desc: Start the full e2e stack (LocalStack + e2e backend + e2e frontend + fixtures)
+    cmds:
+      - task: e2e:up:backend
+      - task: e2e:up:frontend
+      - task: e2e:seed
+      - |
+        # Warm the backend's first-DynamoDB-call path. Cold-start the
+        # LocalStack DynamoDB client can take 5+ seconds (KI-022),
+        # which trips the Playwright 5 s default on the first test.
+        # /api/config/modes is read-only so the warmup doesn't mutate
+        # fixture state.
+        echo "warming e2e backend..."
+        curl -sf http://localhost:5182/api/config/modes >/dev/null
+      - |
+        echo ""
+        echo "E2E stack up:"
+        echo "  e2e frontend: http://localhost:5183/ (proxies /api/* to :5182)"
+        echo "  e2e backend:  http://localhost:5182/ (health: /api/health)"
+        echo "  fixtures:     frontend/playwright/e2e/fixtures/puzzles/*.json"
+        echo "  run tests:    npm --prefix frontend run test:e2e"
+        echo "  stop:         task e2e:down"
+
+  e2e:down:
+    desc: Stop the e2e backend + frontend. LocalStack stays up (shared with dev).
+    cmds:
+      - task: e2e:down:frontend
+      - task: e2e:down:backend
+
+  e2e:status:
+    desc: Show e2e backend status + fixture count
+    cmds:
+      - |
+        bash <<'BASH'
+        pid=$(lsof -ti:5182 -sTCP:LISTEN 2>/dev/null || true)
+        if [ -n "$pid" ]; then
+          echo "e2e backend: running (PID $pid, port 5182)"
+        else
+          echo "e2e backend: stopped"
+        fi
+        if [ -d frontend/playwright/e2e/fixtures/puzzles ]; then
+          count=$(ls -1 frontend/playwright/e2e/fixtures/puzzles/*.json 2>/dev/null | wc -l | tr -d ' ')
+          echo "fixtures on disk: $count JSON file(s)"
+        fi
+        BASH
+
+  e2e:genfixtures:
+    desc: Regenerate committed fixture puzzles (deterministic from fixed seeds)
+    dir: backend
+    cmds:
+      - go run ./cmd/genfixtures
