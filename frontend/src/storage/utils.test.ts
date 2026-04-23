@@ -19,10 +19,10 @@ const PUZZLE_WITH_METADATA: PuzzleData = {
   ...BASE_PUZZLE,
   puzzleId: 'test-002',
   metadata: {
-    pipeline: 'iterative',
-    solver: 'propagation',
-    regions: 'bfs',
-    regionVariance: 0.0,
+    difficulty: 2,
+    maxTier: 2,
+    tierCounts: [0, 3, 1, 0, 0],
+    traceLen: 4,
     generationDurationMs: 4200,
     createdAt: '2026-04-15T10:30:00Z',
   },
@@ -38,10 +38,10 @@ describe('createFreshGameState', () => {
 
     // Assert
     expect(state.puzzle.metadata).toEqual({
-      pipeline: 'iterative',
-      solver: 'propagation',
-      regions: 'bfs',
-      regionVariance: 0.0,
+      difficulty: 2,
+      maxTier: 2,
+      tierCounts: [0, 3, 1, 0, 0],
+      traceLen: 4,
       generationDurationMs: 4200,
       createdAt: '2026-04-15T10:30:00Z',
     });

@@ -8,7 +8,8 @@ import { fetchNextPuzzle, updatePuzzleStatus, NoPuzzlesAvailableError } from '..
 import { createFreshGameState } from '../storage/utils';
 import { PageShell } from '../components/common/PageShell';
 import { PrimaryButton, SecondaryButton } from '../components/common/Button';
-import type { PuzzleData, CellState } from '../engine/types';
+import type { Mode, PuzzleData, CellState } from '../engine/types';
+import { isMode } from '../engine/types';
 import type { GameState, GameHistory, CompletionRecord } from '../storage/types';
 import { EMPTY_HISTORY } from '../storage/types';
 
@@ -61,7 +62,7 @@ export function GamePage() {
     if (isNew) {
       const size = Number(searchParams.get('size')) || 5;
       const modeParam = searchParams.get('mode');
-      const mode: 'standard' | 'double' = modeParam === 'double' ? 'double' : 'standard';
+      const mode: Mode = isMode(modeParam) ? modeParam : 'standard';
 
       void fetchNextPuzzle(size, mode).then(async (puzzle) => {
         if (cancelled) return;
@@ -344,9 +345,8 @@ function GameBoard({
         time: finalTime,
         completedAt: Date.now(),
       });
-      // Report puzzle as solved to the backend
-      const modeValue = puzzle.mode === 'double' ? 'double' : 'standard';
-      void updatePuzzleStatus(puzzle.puzzleId, puzzle.gridSize, modeValue, 'solved');
+      // puzzle.mode is already typed as Mode — no narrowing needed.
+      void updatePuzzleStatus(puzzle.puzzleId, puzzle.gridSize, puzzle.mode, 'solved');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSolved]);
@@ -500,7 +500,15 @@ function GameBoard({
             width: '100%',
           }}
         >
-          {puzzle.metadata.pipeline} / {puzzle.metadata.solver} / {formatDuration(puzzle.metadata.generationDurationMs)}
+          difficulty {puzzle.metadata.difficulty} / {formatDuration(puzzle.metadata.generationDurationMs)}
+          {puzzle.metadata.seed && (
+            <>
+              {' / '}
+              <span data-testid="puzzle-seed" title="Generator seed — paste into `task reproduce -- --seed=<this> --n=<size> --k=<k>` to regenerate.">
+                seed {puzzle.metadata.seed}
+              </span>
+            </>
+          )}
         </div>
       )}
 

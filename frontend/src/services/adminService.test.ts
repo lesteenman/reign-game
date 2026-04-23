@@ -6,12 +6,6 @@ const MOCK_POOL_STATUS = {
       size: 5,
       mode: 'standard',
       config: {
-        pipeline: 'region-first',
-        solver: 'backtrack',
-        regions: 'bfs',
-        regionVariance: 0.3,
-        deducible: true,
-        concurrency: 2,
         threshold: 3,
         enabled: true,
       },
@@ -21,12 +15,6 @@ const MOCK_POOL_STATUS = {
       size: 7,
       mode: 'double',
       config: {
-        pipeline: 'iterative',
-        solver: 'propagation',
-        regions: 'wfc',
-        regionVariance: 0.5,
-        deducible: false,
-        concurrency: 4,
         threshold: 5,
         enabled: false,
       },
@@ -36,12 +24,6 @@ const MOCK_POOL_STATUS = {
 };
 
 const MOCK_CONFIG = {
-  pipeline: 'region-first',
-  solver: 'backtrack',
-  regions: 'bfs',
-  regionVariance: 0.3,
-  deducible: true,
-  concurrency: 2,
   threshold: 3,
   enabled: true,
 };
@@ -168,7 +150,11 @@ describe('createConfig', () => {
 
   test('calls POST /api/admin/config with full config payload', async () => {
     // Arrange
-    const createPayload = { ...MOCK_CONFIG, size: 9, mode: 'standard' };
+    const createPayload = {
+      ...MOCK_CONFIG,
+      size: 9,
+      mode: 'standard' as const,
+    };
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       text: () => Promise.resolve(JSON.stringify(MOCK_CONFIG)),
@@ -190,7 +176,11 @@ describe('createConfig', () => {
 
   test('throws ApiError on 409 conflict', async () => {
     // Arrange
-    const createPayload = { ...MOCK_CONFIG, size: 5, mode: 'standard' };
+    const createPayload = {
+      ...MOCK_CONFIG,
+      size: 5,
+      mode: 'standard' as const,
+    };
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 409,

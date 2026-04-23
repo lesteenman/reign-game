@@ -15,6 +15,9 @@ reign-game/
 ├── infra/                 # Terraform infrastructure-as-code
 ├── design/                # UI/UX assets, wireframes, OpenSpec artifacts
 │   └── openspec/          # OpenSpec change artifacts (symlinked or moved from root)
+├── docs/
+│   └── runbooks/          # Operational runbooks (cutover, rollback, ...)
+├── scripts/               # Ops helpers (flush-pool, seed-configs)
 ├── .claude/               # Agent definitions, skills, settings
 │   ├── agents/            # Agent .md files
 │   └── skills/            # Skill directories with SKILL.md files
@@ -34,36 +37,67 @@ reign-game/
 ```
 backend/
 ├── cmd/
-│   └── api/
-│       └── main.go              # Lambda entry point
+│   ├── api/
+│   │   └── main.go              # Lambda entry + local dev entry (GENERATOR_MODE=sqs flips to consumer)
+│   ├── genfixtures/
+│   │   └── main.go              # Deterministic Playwright fixture generator (R-06B)
+│   └── reproduce/
+│       └── main.go              # Regenerate a puzzle from (seed, size, mode) for debugging (R-06C)
 ├── internal/
-│   ├── handler/                 # API Gateway Lambda handlers
-│   │   ├── puzzle.go            # GET /api/puzzles/:id, GET /api/daily
-│   │   ├── completion.go        # POST /api/completions
-│   │   ├── leaderboard.go       # GET /api/leaderboard/:puzzleId
-│   │   └── health.go            # GET /api/health
-│   ├── model/                   # Domain types
-│   │   ├── puzzle.go            # Puzzle, Region, Grid
-│   │   ├── completion.go        # Completion record
-│   │   └── user.go              # User, DeviceIdentity (Phase 2)
-│   ├── service/                 # Business logic
-│   │   ├── puzzle.go            # Puzzle retrieval, daily scheduling
-│   │   ├── leaderboard.go       # Percentile + rank computation
-│   │   └── completion.go        # Record + validate completions
+│   ├── handler/                 # Chi-mux HTTP handlers, /api/* routes
+│   │   ├── admin_config.go      # PUT /api/admin/config/{size}/{mode}, POST /api/admin/config
+│   │   ├── admin_pool.go        # GET /api/admin/pool
+│   │   ├── config_dto.go        # ConfigBody + ConfigView + request DTOs (R-06A)
+│   │   ├── config_modes.go      # GET /api/config/modes (public, R-06A)
+│   │   ├── generate.go          # GET /api/puzzles/generate (legacy, slow)
+│   │   ├── health.go            # GET /api/health
+│   │   ├── params.go            # Shared handler helpers
+│   │   ├── replenish.go         # POST /api/admin/replenish
+│   │   ├── serve.go             # GET /api/puzzles/next
+│   │   └── status.go            # PUT /api/puzzles/{id}/status
+│   ├── model/                   # Legacy domain types (Phase 5 kept puzzle.go only)
+│   │   └── puzzle.go
 │   ├── repository/              # DynamoDB data access
-│   │   ├── puzzle.go
-│   │   ├── completion.go
-│   │   └── leaderboard.go
-│   ├── generator/               # Puzzle generation (open source)
-│   │   ├── generator.go         # Main generation loop
-│   │   ├── solver.go            # Constraint solver + uniqueness check
-│   │   ├── difficulty.go        # Difficulty rating algorithm
-│   │   └── region.go            # Region shape generation
-│   └── middleware/              # Shared middleware (auth, logging, cors)
+│   │   └── puzzle.go            # ConfigRecord + PuzzleRecord + CRUD (ErrPuzzleNotFound)
+│   ├── queue/                   # SQS publisher
+│   │   └── publisher.go
+│   ├── worker/                  # SQS consumer — generates puzzles into the pool
+│   │   └── generator.go         # Seed capture + SafetyNetTrips WARN logging (R-06C/D)
+│   └── generator/               # Phase 5 rework — sampler + solver + grower + mutator + classifier
+│       ├── doc.go
+│       ├── generator.go         # Top-level Generate orchestrator + min-size safety net (R-06C)
+│       ├── sample.go            # Solution Sampler (row-by-row bitmask)
+│       ├── kcombos.go           # k-combination enumerator
+│       ├── pair.go              # Seed pairing (k=2)
+│       ├── grower.go            # Cheap region grower
+│       ├── grower_scored.go     # Solver-guided grower (R-066)
+│       ├── neighbors.go         # 4-neighbor helpers + BFS
+│       ├── mutate.go            # Boundary-swap mutator + R-067c acceptance tuning
+│       ├── solver.go            # Deductive solve loop
+│       ├── solver_state.go      # solverState + ruleID + ruleTrace
+│       ├── rules.go             # R1..R9 deductive rules
+│       ├── classify.go          # Tier / difficulty classification
+│       ├── brute.go             # bruteSolveAll — uniqueness cross-check
+│       ├── output.go            # regionOf → [][]int conversion
+│       ├── bench/               # Committed measurement artifacts
+│       │   ├── baseline.txt     # go test -bench output (R-068a)
+│       │   ├── latency-distribution.md  # p50/p99 per (N, k) (R-068a)
+│       │   ├── difficulty-distribution.md  # tier histogram per (N, k) (R-068d)
+│       │   ├── step11-handoff.md         # Step 11 decisions (R-068d)
+│       │   ├── n-feasibility.md
+│       │   └── n-feasibility-deep.md
+│       └── testdata/            # Corpus + brute fixtures
 ├── go.mod
 ├── go.sum
-└── README.md                    # Open source README for generator
+└── Taskfile.yml                 # task build:backend / test:backend / lint:backend
 ```
+
+The generator package ships several non-`_test.go` helper files not broken
+out in the tree (`solver_cross_test.go`, `property_test.go`,
+`distribution_test.go`, `latency_distribution_test.go`, `step7_test.go`,
+`soak_test.go`, `mutate_connectivity_test.go`, `generator_bench_test.go`,
+`diag_test.go`, plus per-rule unit tests). All live next to their
+subjects; `go test ./internal/generator/...` runs them.
 
 ## Frontend
 
@@ -71,52 +105,53 @@ backend/
 frontend/
 ├── public/
 │   ├── manifest.json            # PWA manifest
-│   ├── sw.js                    # Service worker (Workbox generated)
-│   └── icons/                   # App icons (various sizes)
+│   └── icons/                   # App icons
 ├── src/
+│   ├── App.tsx / App.test.tsx
+│   ├── main.tsx
 │   ├── components/
-│   │   ├── grid/                # Grid rendering, cell interaction
-│   │   │   ├── Grid.tsx
-│   │   │   ├── Cell.tsx
-│   │   │   ├── Queen.tsx
-│   │   │   └── RegionOverlay.tsx
-│   │   ├── game/                # Game flow components
-│   │   │   ├── Timer.tsx
-│   │   │   ├── DifficultySelector.tsx
-│   │   │   ├── ModeToggle.tsx
-│   │   │   └── CompletionScreen.tsx
-│   │   ├── leaderboard/         # Leaderboard display
-│   │   │   ├── LeaderboardView.tsx
-│   │   │   └── RankBadge.tsx
-│   │   └── common/              # Shared UI components
-│   │       ├── Layout.tsx
-│   │       ├── Navigation.tsx
-│   │       └── OfflineBanner.tsx
+│   │   ├── common/              # Button, PageShell
+│   │   ├── grid/                # Cell, Grid, Marker, ExclusionMark, RegionBorderOverlay
+│   │   └── landing/
+│   │       └── PuzzleSelector.tsx  # Dynamic mode buttons (R-06A)
 │   ├── pages/
-│   │   ├── HomePage.tsx         # Landing / mode selection
-│   │   ├── PracticePage.tsx     # Practice puzzle play
-│   │   ├── DailyPage.tsx        # Daily challenge
-│   │   ├── LeaderboardPage.tsx  # Daily leaderboard results
-│   │   └── StatsPage.tsx        # Personal stats
-│   ├── services/                # API client layer
-│   │   ├── api.ts               # Base API client
-│   │   ├── puzzleService.ts     # Puzzle endpoints
-│   │   └── completionService.ts # Completion + leaderboard endpoints
-│   ├── hooks/                   # Custom React hooks
-│   │   ├── useGame.ts           # Game state management
-│   │   ├── useTimer.ts          # Timer logic
-│   │   ├── usePuzzle.ts         # Puzzle loading + caching
-│   │   └── useOffline.ts        # Offline detection
-│   ├── engine/                  # Client-side puzzle logic
-│   │   ├── validator.ts         # Solution validation (runs locally)
-│   │   ├── constraints.ts       # Row/column/region/adjacency checks
-│   │   └── types.ts             # Puzzle type definitions
-│   ├── styles/                  # Global styles, Tailwind config
-│   ├── App.tsx
-│   └── main.tsx
+│   │   ├── AdminPage.tsx        # Pool management UI
+│   │   ├── GamePage.tsx         # Active-puzzle view
+│   │   └── LandingPage.tsx      # Entry point / resume / new puzzle
+│   ├── services/
+│   │   ├── api.ts               # Base apiFetch / apiPut / apiPost wrappers
+│   │   ├── adminService.ts      # MODES, ConfigView, CRUD calls (R-06A)
+│   │   ├── landingService.ts    # fetchEnabledModes (R-06A)
+│   │   └── puzzleService.ts     # /api/puzzles/next
+│   ├── hooks/
+│   │   ├── useGame.ts
+│   │   ├── useGameStorage.ts
+│   │   └── useTimer.ts
+│   ├── engine/                  # Client-side solution validation
+│   │   ├── constraints.ts
+│   │   ├── types.ts
+│   │   └── validator.ts
+│   ├── storage/                 # IndexedDB game state
+│   │   ├── db.ts
+│   │   ├── types.ts
+│   │   └── utils.ts
+│   ├── theme/
+│   ├── test-setup.ts
+│   ├── test-utils.tsx
+│   ├── index.css
+│   └── vite-env.d.ts
+├── playwright/                  # Playwright suites (R-06B)
+│   ├── README.md                # How to run integration vs e2e suites
+│   ├── integration/             # Mocked-backend specs — run against dev Vite on :5180
+│   │   └── grid-interaction.spec.ts
+│   └── e2e/                     # Real-backend specs — run against :5183 → :5182 → puzzle-pool-e2e
+│       ├── play-to-completion.spec.ts
+│       ├── dynamic-modes.spec.ts
+│       └── fixtures/
+│           └── puzzles/         # Deterministic fixtures generated by `task e2e:genfixtures`
 ├── index.html
 ├── vite.config.ts
-├── tailwind.config.ts
+├── playwright.config.ts
 ├── tsconfig.json
 ├── vitest.config.ts
 ├── package.json
@@ -165,17 +200,20 @@ design/
 | GET | /api/puzzles/generate | No | On-demand puzzle generation (legacy, slow for large grids) |
 | GET | /api/puzzles/next | No | Serve next ready puzzle from pool by size + mode |
 | PUT | /api/puzzles/{id}/status | No | Update puzzle status (solved/skipped) |
-| GET | /api/admin/pool | No | All combos with merged config + ready counts |
-| PUT | /api/admin/config/{size}/{mode} | No | Update config for an existing combo |
-| POST | /api/admin/config | No | Create a new combo config |
-| POST | /api/admin/replenish | No | Replenish pools (optional ?size=X&mode=Y filter) |
+| GET | /api/config/modes | No | Public list of enabled (size, mode) combos for the landing page (R-06A) |
+| GET | /api/admin/pool | KI-009 | All combos with merged config + ready counts |
+| PUT | /api/admin/config/{size}/{mode} | KI-009 | Update config for an existing combo |
+| POST | /api/admin/config | KI-009 | Create a new combo config |
+| POST | /api/admin/replenish | KI-009 | Replenish pools (optional ?size=X&mode=Y filter) |
+
+*KI-009 marks endpoints due for auth-gating. They are currently unauthenticated but `/api/config/modes` is public by design so the landing page never has to call them.*
 
 ### Future (not yet implemented)
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| PUT | /api/puzzles/{id}/verdict | No | Upvote/downvote/skip puzzle (Phase 5) |
-| GET | /api/puzzles/{id} | No | Load puzzle by ID for replay (Phase 6) |
+| PUT | /api/puzzles/{id}/verdict | No | Upvote/downvote/skip puzzle (Phase 6, R-081) |
+| GET | /api/puzzles/{id} | No | Load puzzle by ID for replay (Phase 7, R-085) |
 | GET | /api/daily | No | Get today's daily puzzles (Phase 9+) |
 | POST | /api/completions | Device ID | Submit puzzle completion (Phase 9+) |
 | GET | /api/leaderboard/{puzzleId} | No | Leaderboard for a daily puzzle (Phase 9+) |

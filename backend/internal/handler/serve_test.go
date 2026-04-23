@@ -34,10 +34,10 @@ func TestServeHandler(t *testing.T) {
 		Status:               "ready",
 		RegionMap:            [][]int{{0, 0, 1}, {0, 1, 1}, {2, 2, 1}},
 		Solution:             [][]bool{{true, false, false}, {false, false, true}, {false, true, false}},
-		Pipeline:             "iterative",
-		Solver:               "propagation",
-		Regions:              "bfs",
-		RegionVariance:       0.0,
+		Difficulty:           2,
+		MaxTier:              2,
+		TierCounts:           []int{0, 3, 1, 0, 0},
+		TraceLen:             4,
 		GenerationDurationMs: 4200,
 		CreatedAt:            "2026-04-15T10:30:00Z",
 	}
@@ -185,14 +185,14 @@ func TestServeHandler(t *testing.T) {
 			if !ok {
 				t.Fatal("metadata should be an object")
 			}
-			if metadata["pipeline"] != "iterative" {
-				t.Errorf("metadata.pipeline = %v, want %q", metadata["pipeline"], "iterative")
+			if int(metadata["difficulty"].(float64)) != 2 {
+				t.Errorf("metadata.difficulty = %v, want 2", metadata["difficulty"])
 			}
-			if metadata["solver"] != "propagation" {
-				t.Errorf("metadata.solver = %v, want %q", metadata["solver"], "propagation")
+			if int(metadata["maxTier"].(float64)) != 2 {
+				t.Errorf("metadata.maxTier = %v, want 2", metadata["maxTier"])
 			}
-			if metadata["regions"] != "bfs" {
-				t.Errorf("metadata.regions = %v, want %q", metadata["regions"], "bfs")
+			if int(metadata["traceLen"].(float64)) != 4 {
+				t.Errorf("metadata.traceLen = %v, want 4", metadata["traceLen"])
 			}
 			if int(metadata["generationDurationMs"].(float64)) != 4200 {
 				t.Errorf("metadata.generationDurationMs = %v, want 4200", metadata["generationDurationMs"])

@@ -20,22 +20,40 @@ tasks:
       - golangci-lint run
 
   bench:backend:
-    desc: Run full generator benchmark suite (all pipelines, sizes, modes)
+    desc: Run the full generator benchmark suite (R-068a) — writes results to stdout
     dir: backend
     cmds:
-      - go test -bench=BenchmarkPipeline -benchtime=3x -timeout=600s ./internal/generator/ -run='^$'
+      - go test -bench=. -benchmem -benchtime=3x -timeout=30m -run='^$' ./internal/generator/
 
-  bench:backend:solvers:
-    desc: Run solver comparison benchmarks (Backtrack vs Propagation)
+  bench:backend:baseline:
+    desc: Re-run benches and overwrite bench/baseline.txt (R-068a baseline snapshot)
     dir: backend
     cmds:
-      - go test -bench=BenchmarkSolver -benchtime=3x -timeout=60s ./internal/generator/ -run='^$'
+      - go test -bench=. -benchmem -benchtime=3x -timeout=30m -run='^$' ./internal/generator/ | tee internal/generator/bench/baseline.txt
 
-  bench:backend:all:
-    desc: Run all benchmarks including solver comparison and legacy
+  bench:backend:latency:
+    desc: Refresh bench/latency-distribution.md (R-068a) — requires REIGN_BENCH_WRITE=1
     dir: backend
     cmds:
-      - go test -bench=. -benchtime=3x -timeout=600s ./internal/generator/ -run='^$'
+      - REIGN_BENCH_WRITE=1 go test -tags=latency -run TestLatencyDistribution -v -timeout=60m ./internal/generator/
+
+  bench:backend:distribution:
+    desc: Refresh bench/difficulty-distribution.md (R-068d) — 1h per bucket by default; override with REIGN_DIST_BUDGET_SEC
+    dir: backend
+    cmds:
+      - REIGN_BENCH_WRITE=1 go test -tags=distribution -run TestDifficultyDistribution -v -timeout=8h ./internal/generator/
+
+  bench:backend:soak:
+    desc: Long-running soak + property suite (R-068b) — invoked by generator-check.yml
+    dir: backend
+    cmds:
+      - go test -tags=soak -timeout=30m ./internal/generator/...
+
+  reproduce:
+    desc: "Regenerate a puzzle from seed+N+k. Usage: task reproduce -- --seed=X --n=9 --k=1"
+    dir: backend
+    cmds:
+      - go run ./cmd/reproduce {{.CLI_ARGS}}
 
   dev:localstack:
     desc: Start LocalStack (DynamoDB + SQS)
@@ -154,10 +172,67 @@ tasks:
         echo "LocalStack init did not finish in 60s — check: docker compose logs localstack"
         exit 1
 
+  _dev:preflight:orphans:
+    desc: Internal — fail if an orphan cmd/api binary is running
+    internal: true
+    cmds:
+      - |
+        bash <<'BASH'
+        set -e
+        # Refuse to start the stack if an orphan cmd/api binary is
+        # around from an earlier session (see CLAUDE.md — the mvdan/sh
+        # shell has historically reported "stopped" without actually
+        # killing; see KI-021). An orphan can happily poll SQS against
+        # a pre-rule binary and produce puzzles that violate R-067b.
+        # Rather than silently adding another instance, tell the human
+        # and bail.
+        #
+        # Expected process set when the stack is healthy:
+        #   dev backend      (compiled binary listening on :5181)
+        #   e2e backend      (compiled binary listening on :5182 when e2e:up ran)
+        #   generator wrapper (`go run`, PID in logs/generator.pid)
+        #   generator child  (compiled binary, child of wrapper)
+        # Anything else running the api binary is an orphan.
+        #
+        # The pgrep pattern matches both the Go toolchain's go-build
+        # cache and JetBrains GoLand's ___go_build_* builds so an IDE-
+        # launched dev instance is detected too.
+        backend_pid=$(lsof -ti:5181 -sTCP:LISTEN 2>/dev/null || true)
+        e2e_backend_pid=$(lsof -ti:5182 -sTCP:LISTEN 2>/dev/null || true)
+        gen_wrapper_pid=""
+        gen_child_pid=""
+        if [ -f logs/generator.pid ]; then
+          gen_wrapper_pid=$(cat logs/generator.pid 2>/dev/null || true)
+          if [ -n "$gen_wrapper_pid" ]; then
+            # -f with a narrower pattern so non-api children of `go run`
+            # (linker, go tool helpers) are ignored.
+            gen_child_pid=$(pgrep -P "$gen_wrapper_pid" -f '/api$' 2>/dev/null | head -1 || true)
+          fi
+        fi
+        orphans=""
+        for pid in $(pgrep -f '(go-build|___go_build).*/api$' 2>/dev/null || true); do
+          if [ "$pid" = "$backend_pid" ] || [ "$pid" = "$e2e_backend_pid" ] || [ "$pid" = "$gen_child_pid" ]; then
+            continue
+          fi
+          orphans="$orphans $pid"
+        done
+        if [ -n "$orphans" ]; then
+          echo "ERROR: orphan cmd/api process(es) detected — dev:down:* left them behind." >&2
+          for pid in $orphans; do
+            ps -p "$pid" -o pid,etime,command 2>/dev/null | tail -1 >&2
+          done
+          echo "" >&2
+          echo "These are likely running outdated code. Kill and retry:" >&2
+          echo "  kill -9$orphans && task dev:up" >&2
+          exit 1
+        fi
+        BASH
+
   dev:up:backend:
     desc: Start backend in background (logs -> logs/backend.log)
     deps:
       - dev:up:localstack
+      - _dev:preflight:orphans
     dir: backend
     env:
       DYNAMODB_ENDPOINT: http://localhost:4566
@@ -170,8 +245,11 @@ tasks:
     cmds:
       - mkdir -p ../logs
       - |
-        if lsof -ti:5181 -sTCP:LISTEN >/dev/null 2>&1; then
-          echo "backend already running on :5181 (PID $(lsof -ti:5181 -sTCP:LISTEN))"
+        bash <<'BASH'
+        set -e
+        backend_pid=$(lsof -ti:5181 -sTCP:LISTEN 2>/dev/null || true)
+        if [ -n "$backend_pid" ]; then
+          echo "backend already running on :5181 (PID $backend_pid)"
           exit 0
         fi
         : > ../logs/backend.log
@@ -184,13 +262,15 @@ tasks:
           fi
           sleep 1
         done
-        echo "backend did not become ready in 60s — check logs/backend.log"
+        echo "backend did not become ready in 60s — check logs/backend.log" >&2
         exit 1
+        BASH
 
   dev:up:generator:
     desc: Start SQS generator worker in background (logs -> logs/generator.log)
     deps:
       - dev:up:localstack
+      - _dev:preflight:orphans
     dir: backend
     env:
       GENERATOR_MODE: sqs
@@ -277,42 +357,63 @@ tasks:
         echo "  status:    task dev:status"
         echo "  stop:      task dev:down"
 
-  dev:down:backend:
-    desc: Stop the backend (kills whatever is on :5181)
+  _dev:down:port:
+    desc: Internal — kill whatever listens on PORT. SIGTERM → 5s wait → SIGKILL → verify.
+    internal: true
+    vars:
+      # Caller passes NAME (for logs) and PORT (the TCP port).
+      NAME: '{{.NAME | default ""}}'
+      PORT: '{{.PORT | default ""}}'
     cmds:
       - |
-        pids=$(lsof -ti:5181 2>/dev/null || true)
-        if [ -n "$pids" ]; then
-          kill $pids 2>/dev/null || true
-          for i in 1 2 3 4 5; do
-            if ! lsof -ti:5181 >/dev/null 2>&1; then break; fi
-            sleep 1
-          done
-          kill -9 $(lsof -ti:5181 2>/dev/null) 2>/dev/null || true
-          echo "backend stopped (was $pids)"
-        else
-          echo "backend not running"
+        bash <<'BASH'
+        set -e
+        name='{{.NAME}}'
+        port='{{.PORT}}'
+        if [ -z "$name" ] || [ -z "$port" ]; then
+          echo "internal error: _dev:down:port requires NAME and PORT vars" >&2
+          exit 1
         fi
+        pids=$(lsof -ti:"$port" 2>/dev/null || true)
+        if [ -z "$pids" ]; then
+          echo "$name not running"
+          exit 0
+        fi
+        kill $pids 2>/dev/null || true
+        for i in 1 2 3 4 5; do
+          if ! lsof -ti:"$port" >/dev/null 2>&1; then break; fi
+          sleep 1
+        done
+        remaining=$(lsof -ti:"$port" 2>/dev/null || true)
+        if [ -n "$remaining" ]; then
+          kill -9 $remaining 2>/dev/null || true
+          sleep 1
+        fi
+        # Refuse to claim "stopped" if the port is still in use.
+        # Earlier versions printed success while leaving orphans alive;
+        # the dev:up preflight then either rejected them or silently
+        # added another one alongside (see KI-021).
+        if lsof -ti:"$port" >/dev/null 2>&1; then
+          echo "ERROR: $name still on :$port after SIGKILL (PID $(lsof -ti:"$port"))" >&2
+          exit 1
+        fi
+        echo "$name stopped (was $pids)"
+        BASH
+
+  dev:down:backend:
+    desc: Stop the backend (kills whatever is on :5181). Verifies the port is free before returning success.
+    cmds:
+      - task: _dev:down:port
+        vars: { NAME: backend, PORT: 5181 }
 
   dev:down:frontend:
-    desc: Stop the frontend (kills whatever is on :5180)
+    desc: Stop the frontend (kills whatever is on :5180). Verifies the port is free before returning success.
     cmds:
-      - |
-        pids=$(lsof -ti:5180 2>/dev/null || true)
-        if [ -n "$pids" ]; then
-          kill $pids 2>/dev/null || true
-          for i in 1 2 3 4 5; do
-            if ! lsof -ti:5180 >/dev/null 2>&1; then break; fi
-            sleep 1
-          done
-          kill -9 $(lsof -ti:5180 2>/dev/null) 2>/dev/null || true
-          echo "frontend stopped (was $pids)"
-        else
-          echo "frontend not running"
-        fi
+      - task: _dev:down:port
+        vars: { NAME: frontend, PORT: 5180 }
 
   dev:down:generator:
-    desc: Stop the generator worker
+    desc: Stop the generator worker. Verifies the PID is gone before returning success.
     cmds:
       - |
         bash <<'BASH'
@@ -335,6 +436,12 @@ tasks:
         done
         pkill -9 -P "$pid" 2>/dev/null || true
         kill -9 "$pid" 2>/dev/null || true
+        sleep 1
+        # Refuse to claim "stopped" if the process is still alive.
+        if kill -0 "$pid" 2>/dev/null; then
+          echo "ERROR: generator PID $pid still alive after SIGKILL" >&2
+          exit 1
+        fi
         rm -f logs/generator.pid
         echo "generator stopped (was PID $pid)"
         BASH
@@ -432,3 +539,189 @@ tasks:
           echo "localstack: stopped"
         fi
         BASH
+
+  # ---------------------------------------------------------------------------
+  # E2E lifecycle (R-06B). A second backend on :5182 reads puzzle-pool-e2e
+  # so Playwright's e2e project can play against a fixed fixture set without
+  # touching the dev pool. No generator worker — fixtures are pre-seeded.
+  # ---------------------------------------------------------------------------
+
+  e2e:up:backend:
+    desc: Start e2e backend on :5182 reading puzzle-pool-e2e
+    deps:
+      - dev:up:localstack
+      - _dev:preflight:orphans
+    dir: backend
+    env:
+      PORT: "5182"
+      DYNAMODB_ENDPOINT: http://localhost:4566
+      SQS_ENDPOINT: http://localhost:4566
+      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
+      AWS_REGION: us-east-1
+      PUZZLE_TABLE_NAME: puzzle-pool-e2e
+      AWS_ACCESS_KEY_ID: test
+      AWS_SECRET_ACCESS_KEY: test
+    cmds:
+      - mkdir -p ../logs
+      - |
+        bash <<'BASH'
+        set -e
+        e2e_backend_pid=$(lsof -ti:5182 -sTCP:LISTEN 2>/dev/null || true)
+        if [ -n "$e2e_backend_pid" ]; then
+          echo "e2e backend already running on :5182 (PID $e2e_backend_pid)"
+          exit 0
+        fi
+        : > ../logs/e2e-backend.log
+        nohup go run ./cmd/api >> ../logs/e2e-backend.log 2>&1 </dev/null &
+        echo "e2e backend starting, logs: logs/e2e-backend.log"
+        for i in $(seq 1 60); do
+          if curl -sf http://localhost:5182/api/health >/dev/null 2>&1; then
+            echo "e2e backend ready on :5182 (PID $(lsof -ti:5182 -sTCP:LISTEN))"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "e2e backend did not become ready in 60s — check logs/e2e-backend.log" >&2
+        exit 1
+        BASH
+
+  e2e:down:backend:
+    desc: Stop the e2e backend. Verifies the port is free before returning success.
+    cmds:
+      - task: _dev:down:port
+        vars: { NAME: "e2e backend", PORT: 5182 }
+
+  e2e:up:frontend:
+    desc: Start a second Vite on :5183 that proxies /api/* to the e2e backend at :5182
+    dir: frontend
+    env:
+      REIGN_API_TARGET: http://localhost:5182
+    cmds:
+      - mkdir -p ../logs
+      - |
+        bash <<'BASH'
+        set -e
+        if lsof -ti:5183 -sTCP:LISTEN >/dev/null 2>&1; then
+          echo "e2e frontend already running on :5183 (PID $(lsof -ti:5183 -sTCP:LISTEN))"
+          exit 0
+        fi
+        : > ../logs/e2e-frontend.log
+        nohup npm run dev -- --port 5183 --host 0.0.0.0 >> ../logs/e2e-frontend.log 2>&1 </dev/null &
+        echo "e2e frontend starting, logs: logs/e2e-frontend.log"
+        for i in $(seq 1 60); do
+          if lsof -ti:5183 -sTCP:LISTEN >/dev/null 2>&1; then
+            echo "e2e frontend ready on :5183"
+            exit 0
+          fi
+          sleep 1
+        done
+        echo "e2e frontend did not start in 60s — check logs/e2e-frontend.log" >&2
+        exit 1
+        BASH
+
+  e2e:down:frontend:
+    desc: Stop the e2e frontend. Verifies the port is free before returning success.
+    cmds:
+      - task: _dev:down:port
+        vars: { NAME: "e2e frontend", PORT: 5183 }
+
+  e2e:seed:
+    desc: Load committed fixture puzzles into puzzle-pool-e2e. Idempotent — wipes non-CONFIG rows and re-inserts.
+    deps:
+      - dev:up:localstack
+    cmds:
+      - |
+        bash <<'BASH'
+        set -e
+        fixture_dir=frontend/playwright/e2e/fixtures/puzzles
+        if [ ! -d "$fixture_dir" ]; then
+          echo "ERROR: fixture dir $fixture_dir does not exist." >&2
+          echo "Run `go run ./backend/cmd/genfixtures` to generate fixtures." >&2
+          exit 1
+        fi
+        # Puzzle fixtures are the *.json files that DON'T end in
+        # .solution.json — those are sibling arrays of solution
+        # positions consumed by the Playwright specs, not DynamoDB
+        # items.
+        shopt -s nullglob
+        puzzle_files=()
+        for f in "$fixture_dir"/*.json; do
+          case "$f" in
+            *.solution.json) continue ;;
+            *) puzzle_files+=("$f") ;;
+          esac
+        done
+        if [ ${#puzzle_files[@]} -eq 0 ]; then
+          echo "ERROR: no puzzle fixture files in $fixture_dir." >&2
+          exit 1
+        fi
+
+        echo "flushing puzzle-pool-e2e..."
+        TABLE_NAME=puzzle-pool-e2e AWS_ENDPOINT_URL=http://localhost:4566 \
+          AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-1 \
+          CONFIRM=YES ./scripts/flush-pool.sh
+
+        echo "seeding ${#puzzle_files[@]} fixture(s) into puzzle-pool-e2e..."
+        for f in "${puzzle_files[@]}"; do
+          docker compose exec -T localstack awslocal dynamodb put-item \
+            --table-name puzzle-pool-e2e \
+            --item "file:///dev/stdin" < "$f" >/dev/null 2>&1 || {
+              echo "  FAIL: $f" >&2
+              exit 1
+            }
+          echo "  seeded $(basename "$f")"
+        done
+        echo "e2e fixtures ready."
+        BASH
+
+  e2e:up:
+    desc: Start the full e2e stack (LocalStack + e2e backend + e2e frontend + fixtures)
+    cmds:
+      - task: e2e:up:backend
+      - task: e2e:up:frontend
+      - task: e2e:seed
+      - |
+        # Warm the backend's first-DynamoDB-call path. Cold-start the
+        # LocalStack DynamoDB client can take 5+ seconds (KI-022),
+        # which trips the Playwright 5 s default on the first test.
+        # /api/config/modes is read-only so the warmup doesn't mutate
+        # fixture state.
+        echo "warming e2e backend..."
+        curl -sf http://localhost:5182/api/config/modes >/dev/null
+      - |
+        echo ""
+        echo "E2E stack up:"
+        echo "  e2e frontend: http://localhost:5183/ (proxies /api/* to :5182)"
+        echo "  e2e backend:  http://localhost:5182/ (health: /api/health)"
+        echo "  fixtures:     frontend/playwright/e2e/fixtures/puzzles/*.json"
+        echo "  run tests:    npm --prefix frontend run test:e2e"
+        echo "  stop:         task e2e:down"
+
+  e2e:down:
+    desc: Stop the e2e backend + frontend. LocalStack stays up (shared with dev).
+    cmds:
+      - task: e2e:down:frontend
+      - task: e2e:down:backend
+
+  e2e:status:
+    desc: Show e2e backend status + fixture count
+    cmds:
+      - |
+        bash <<'BASH'
+        pid=$(lsof -ti:5182 -sTCP:LISTEN 2>/dev/null || true)
+        if [ -n "$pid" ]; then
+          echo "e2e backend: running (PID $pid, port 5182)"
+        else
+          echo "e2e backend: stopped"
+        fi
+        if [ -d frontend/playwright/e2e/fixtures/puzzles ]; then
+          count=$(ls -1 frontend/playwright/e2e/fixtures/puzzles/*.json 2>/dev/null | wc -l | tr -d ' ')
+          echo "fixtures on disk: $count JSON file(s)"
+        fi
+        BASH
+
+  e2e:genfixtures:
+    desc: Regenerate committed fixture puzzles (deterministic from fixed seeds)
+    dir: backend
+    cmds:
+      - go run ./cmd/genfixtures

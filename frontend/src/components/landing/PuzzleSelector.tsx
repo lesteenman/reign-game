@@ -1,28 +1,27 @@
 import { useState, useCallback, type CSSProperties } from 'react';
+import type { Mode } from '../../services/adminService';
+import type { ModeEntry } from '../../services/landingService';
 
-/** Selection from the puzzle selector: size and mode only. */
+/** Selection from the puzzle selector: size and mode. */
 export interface PuzzleSelection {
   size: number;
-  mode: 'standard' | 'double';
+  mode: Mode;
 }
 
-/** Preset puzzle configuration. */
-interface Preset {
-  label: string;
-  size: number;
-  mode: 'standard' | 'double';
+/** Label for a combo, e.g. "5\u00d75 Standard" / "9\u00d79 Double Queens". */
+function presetLabel(entry: ModeEntry): string {
+  const modeLabel = entry.mode === 'double' ? 'Double Queens' : 'Standard';
+  return `${entry.size}\u00D7${entry.size} ${modeLabel}`;
 }
-
-const PRESETS: Preset[] = [
-  { label: '5\u00D75 Standard', size: 5, mode: 'standard' },
-  { label: '7\u00D77 Standard', size: 7, mode: 'standard' },
-  { label: '9\u00D79 Standard', size: 9, mode: 'standard' },
-  // Double Queens disabled: generation too slow with current algorithm.
-  // Re-enable after generator optimization.
-  // { label: '9\u00D79 Double Queens', size: 9, mode: 'double' },
-];
 
 interface PuzzleSelectorProps {
+  /**
+   * The enabled combos to render as buttons. Sourced from the public
+   * GET /api/config/modes endpoint by the parent page. An empty array
+   * is treated as "pool not configured" — the component renders a
+   * friendly fallback message and no Play button.
+   */
+  modes: ModeEntry[];
   onSelect: (selection: PuzzleSelection) => void;
 }
 
@@ -49,20 +48,51 @@ const presetButtonSelected: CSSProperties = {
   boxShadow: '0 3px 0 var(--color-accent-shadow)',
 };
 
-/** Puzzle size/mode selector with standard presets. */
-export function PuzzleSelector({ onSelect }: PuzzleSelectorProps) {
-  const [selectedPresetIndex, setSelectedPresetIndex] = useState(0);
+/**
+ * Puzzle size/mode selector driven by the enabled-combo list from the
+ * backend. Renders one button per combo; first combo is selected by
+ * default; the Play button emits the current selection.
+ */
+export function PuzzleSelector({ modes, onSelect }: PuzzleSelectorProps) {
+  const [selectedIndex, setSelectedIndex] = useState(0);
 
   const handlePresetClick = useCallback((index: number) => {
-    setSelectedPresetIndex(index);
+    setSelectedIndex(index);
   }, []);
 
   const handlePlay = useCallback(() => {
-    const preset = PRESETS[selectedPresetIndex];
-    const size = preset?.size ?? 5;
-    const mode = preset?.mode ?? 'standard';
-    onSelect({ size, mode });
-  }, [selectedPresetIndex, onSelect]);
+    const entry = modes[selectedIndex];
+    if (!entry) return;
+    onSelect({ size: entry.size, mode: entry.mode });
+  }, [modes, selectedIndex, onSelect]);
+
+  if (modes.length === 0) {
+    return (
+      <div
+        data-testid="puzzle-selector-empty"
+        role="status"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '24px',
+          fontWeight: 600,
+          textAlign: 'center',
+          maxWidth: '400px',
+        }}
+      >
+        <p style={{ margin: 0 }}>No puzzles available right now.</p>
+        <p style={{ margin: 0, fontWeight: 400, color: 'var(--color-muted)' }}>
+          Try again in a moment.
+        </p>
+      </div>
+    );
+  }
+
+  // Clamp selectedIndex so a shorter list after re-mount still picks a
+  // valid entry. `modes.length >= 1` past the empty-state branch above.
+  const safeIndex = Math.min(selectedIndex, modes.length - 1);
 
   return (
     <div
@@ -76,35 +106,31 @@ export function PuzzleSelector({ onSelect }: PuzzleSelectorProps) {
         maxWidth: '400px',
       }}
     >
-      {/* Preset buttons */}
       <div
-        data-testid="preset-buttons"
+        data-testid="puzzle-presets"
         style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 1fr',
+          gridTemplateColumns: modes.length === 1 ? '1fr' : '1fr 1fr',
           gap: '8px',
           width: '100%',
         }}
       >
-        {PRESETS.map((preset, index) => (
+        {modes.map((entry, index) => (
           <button
-            key={preset.label}
+            key={`${entry.size}-${entry.mode}`}
             type="button"
             data-testid={`preset-${index}`}
             onClick={() => handlePresetClick(index)}
             style={
-              selectedPresetIndex === index
-                ? presetButtonSelected
-                : presetButtonBase
+              safeIndex === index ? presetButtonSelected : presetButtonBase
             }
-            aria-pressed={selectedPresetIndex === index}
+            aria-pressed={safeIndex === index}
           >
-            {preset.label}
+            {presetLabel(entry)}
           </button>
         ))}
       </div>
 
-      {/* Play button */}
       <button
         type="button"
         data-testid="play-button"
@@ -129,6 +155,3 @@ export function PuzzleSelector({ onSelect }: PuzzleSelectorProps) {
     </div>
   );
 }
-
-export { PRESETS };
-export type { Preset };

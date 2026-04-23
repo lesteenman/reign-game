@@ -1,120 +1,245 @@
 package generator
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
+	"reflect"
+	"strings"
 	"testing"
-	"time"
 )
 
-func TestGenerate(t *testing.T) {
-	// Note: 9x9+ tests are omitted because the brute-force solver is too slow.
-	// The constraint propagation solver (GN-03) will handle larger grids.
-	tests := []struct {
-		name       string
-		gridSize   int
-		iterations int
-		timeout    time.Duration
+func TestNewValidatesN(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	cases := []struct {
+		name    string
+		n       int
+		wantErr bool
 	}{
-		{
-			name:       "5x5 puzzle",
-			gridSize:   5,
-			iterations: 5,
-			timeout:    30 * time.Second,
-		},
-		{
-			name:       "7x7 puzzle (slow - brute force solver)",
-			gridSize:   7,
-			iterations: 1,
-			timeout:    120 * time.Second,
-		},
+		{name: "zero rejected", n: 0, wantErr: true},
+		{name: "negative rejected", n: -1, wantErr: true},
+		{name: "seventeen rejected", n: 17, wantErr: true},
+		{name: "five accepted (below NMin but above hard floor)", n: 5, wantErr: false},
+		{name: "fourteen accepted", n: 14, wantErr: false},
+		{name: "sixteen accepted (upper bound)", n: 16, wantErr: false},
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if tt.gridSize > 5 && testing.Short() {
-				t.Skipf("skipping %dx%d in short mode (brute-force solver is slow for larger grids)", tt.gridSize, tt.gridSize)
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Act
+			g, err := New(tc.n, 1)
+
+			// Assert
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for n=%d, got nil (generator=%v)", tc.n, g)
+				}
+				if !errors.Is(err, ErrNOutOfRange) {
+					t.Errorf("expected ErrNOutOfRange for n=%d, got %v", tc.n, err)
+				}
+				return
 			}
-			for i := 0; i < tt.iterations; i++ {
-				t.Run("iteration", func(t *testing.T) {
-					// Arrange
-					gridSize := tt.gridSize
-
-					// Act
-					solver := NewBacktrackSolver()
-					regions := NewBFSRegionGenerator()
-					pipeline := NewIterativeRefinementPipeline(solver, regions)
-					opts := GenerateOpts{Timeout: tt.timeout}
-					puzzle, err := pipeline.Generate(gridSize, 1, opts)
-
-					// Assert
-					if err != nil {
-						t.Fatalf("Generate returned error: %v", err)
-					}
-
-					if puzzle.GridSize != gridSize {
-						t.Errorf("GridSize = %d, want %d", puzzle.GridSize, gridSize)
-					}
-
-					if puzzle.Mode != "" {
-						t.Errorf("Mode = %q, want empty string", puzzle.Mode)
-					}
-
-					if puzzle.ID != "" {
-						t.Errorf("ID = %q, want empty string", puzzle.ID)
-					}
-
-					if err := ValidateRegionMap(puzzle.RegionMap, gridSize); err != nil {
-						t.Fatalf("ValidateRegionMap failed: %v", err)
-					}
-
-					markerCount := 0
-					for _, row := range puzzle.Solution {
-						for _, cell := range row {
-							if cell {
-								markerCount++
-							}
-						}
-					}
-					if markerCount != gridSize {
-						t.Errorf("solution has %d markers, want %d", markerCount, gridSize)
-					}
-
-					solCount := CountSolutions(puzzle.RegionMap, gridSize, 1)
-					if solCount != 1 {
-						t.Errorf("CountSolutions = %d, want 1", solCount)
-					}
-
-					regionMarkers := make(map[int]int)
-					for r, row := range puzzle.Solution {
-						for c, cell := range row {
-							if cell {
-								rid := puzzle.RegionMap[r][c]
-								regionMarkers[rid]++
-							}
-						}
-					}
-					for rid := 0; rid < gridSize; rid++ {
-						if regionMarkers[rid] != 1 {
-							t.Errorf("region %d has %d markers, want 1", rid, regionMarkers[rid])
-						}
-					}
-				})
+			if err != nil {
+				t.Fatalf("unexpected error for n=%d: %v", tc.n, err)
+			}
+			if g == nil {
+				t.Fatal("expected non-nil generator")
 			}
 		})
 	}
 }
 
-func TestGenerateTimeout(t *testing.T) {
+func TestNewValidatesMarksPerUnit(t *testing.T) {
+	t.Parallel()
+
 	// Arrange
-	solver := NewBacktrackSolver()
-	regions := NewBFSRegionGenerator()
-	pipeline := NewIterativeRefinementPipeline(solver, regions)
-	opts := GenerateOpts{Timeout: 1 * time.Nanosecond}
+	cases := []struct {
+		name         string
+		marksPerUnit int
+		wantErr      bool
+	}{
+		{name: "zero rejected", marksPerUnit: 0, wantErr: true},
+		{name: "three rejected", marksPerUnit: 3, wantErr: true},
+		{name: "negative rejected", marksPerUnit: -1, wantErr: true},
+		{name: "one accepted (standard)", marksPerUnit: 1, wantErr: false},
+		{name: "two accepted (double)", marksPerUnit: 2, wantErr: false},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			// Act
+			g, err := New(8, tc.marksPerUnit)
+
+			// Assert
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("expected error for marksPerUnit=%d, got nil (generator=%v)", tc.marksPerUnit, g)
+				}
+				if !errors.Is(err, ErrKUnsupported) {
+					t.Errorf("expected ErrKUnsupported for marksPerUnit=%d, got %v", tc.marksPerUnit, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error for marksPerUnit=%d: %v", tc.marksPerUnit, err)
+			}
+			if g == nil {
+				t.Fatal("expected non-nil generator")
+			}
+		})
+	}
+}
+
+func TestPuzzleJSONRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	original := Puzzle{
+		N:            5,
+		MarksPerUnit: 1,
+		Regions: [][]int{
+			{0, 0, 1, 1, 1},
+			{0, 0, 1, 2, 2},
+			{3, 0, 1, 2, 2},
+			{3, 3, 4, 2, 2},
+			{3, 3, 4, 4, 4},
+		},
+		Solution: []Mark{
+			{Row: 0, Col: 0},
+			{Row: 1, Col: 2},
+			{Row: 2, Col: 4},
+			{Row: 3, Col: 1},
+			{Row: 4, Col: 3},
+		},
+		Difficulty: Hard,
+		Metrics: Metrics{
+			MaxTier:    3,
+			TierCounts: []int{0, 5, 3, 2, 0},
+			TraceLen:   10,
+		},
+	}
 
 	// Act
-	_, err := pipeline.Generate(5, 1, opts)
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	var decoded Puzzle
+	if err := json.Unmarshal(data, &decoded); err != nil {
+		t.Fatalf("unmarshal failed: %v", err)
+	}
 
 	// Assert
-	if err == nil {
-		t.Fatal("expected timeout error, got nil")
+	if !reflect.DeepEqual(original, decoded) {
+		t.Errorf("round-trip mismatch:\n original = %+v\n decoded  = %+v", original, decoded)
+	}
+
+	emitted := string(data)
+	requiredTags := []string{
+		`"n"`,
+		`"marks_per_unit"`,
+		`"regions"`,
+		`"solution"`,
+		`"difficulty"`,
+		`"metrics"`,
+		`"max_tier"`,
+		`"tier_counts"`,
+		`"trace_len"`,
+		`"r"`,
+		`"c"`,
+	}
+	for _, tag := range requiredTags {
+		if !strings.Contains(emitted, tag) {
+			t.Errorf("emitted JSON missing tag %s: %s", tag, emitted)
+		}
+	}
+}
+
+func TestGenerateProducesValidPuzzle(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	g, err := New(8, 1, WithSeed(42), WithMaxAttempts(50))
+	if err != nil {
+		t.Fatalf("unexpected New error: %v", err)
+	}
+
+	// Act
+	p, genErr := g.Generate(context.Background())
+
+	// Assert
+	if genErr != nil {
+		t.Fatalf("unexpected Generate error: %v", genErr)
+	}
+	if p.N != 8 {
+		t.Errorf("N = %d, want 8", p.N)
+	}
+	if p.MarksPerUnit != 1 {
+		t.Errorf("MarksPerUnit = %d, want 1", p.MarksPerUnit)
+	}
+	if len(p.Regions) != 8 {
+		t.Errorf("len(Regions) = %d, want 8", len(p.Regions))
+	}
+	if len(p.Solution) != 8 {
+		t.Errorf("len(Solution) = %d, want 8", len(p.Solution))
+	}
+	if p.Difficulty == DifficultyUnknown {
+		t.Error("Difficulty was DifficultyUnknown, expected a concrete tier")
+	}
+}
+
+func TestNMinConstant(t *testing.T) {
+	t.Parallel()
+
+	// Arrange / Act / Assert
+	if NMin != 6 {
+		t.Errorf("expected NMin == 6, got %d", NMin)
+	}
+}
+
+func TestOptionsSetConfigFields(t *testing.T) {
+	t.Parallel()
+
+	// Arrange
+	const (
+		seed         int64 = 424242
+		maxAttempts  int   = 7
+		maxMutations int   = 99
+	)
+
+	// Act
+	g, err := New(8, 2,
+		WithSeed(seed),
+		WithMaxAttempts(maxAttempts),
+		WithMaxMutations(maxMutations),
+		WithDifficulty(Expert),
+	)
+	if err != nil {
+		t.Fatalf("unexpected New error: %v", err)
+	}
+
+	// Assert
+	if g.cfg.seed != seed {
+		t.Errorf("seed: expected %d, got %d", seed, g.cfg.seed)
+	}
+	if !g.cfg.seedSet {
+		t.Error("seedSet: expected true after WithSeed, got false")
+	}
+	if g.cfg.maxAttempts != maxAttempts {
+		t.Errorf("maxAttempts: expected %d, got %d", maxAttempts, g.cfg.maxAttempts)
+	}
+	if g.cfg.maxMutations != maxMutations {
+		t.Errorf("maxMutations: expected %d, got %d", maxMutations, g.cfg.maxMutations)
+	}
+	if g.cfg.difficulty != Expert {
+		t.Errorf("difficulty: expected %v, got %v", Expert, g.cfg.difficulty)
 	}
 }

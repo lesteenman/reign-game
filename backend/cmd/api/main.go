@@ -50,6 +50,10 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 			r.Get("/puzzles/next", handler.ServeHandler(repo))
 			r.Put("/puzzles/{id}/status", handler.StatusHandler(repo))
 
+			// Public modes listing for the landing page. Narrower than
+			// /admin/pool — no thresholds, ready counts, or maxAttempts.
+			r.Get("/config/modes", handler.ConfigModesHandler(repo))
+
 			r.Get("/admin/pool", handler.AdminPoolHandler(repo))
 			r.Put("/admin/config/{size}/{mode}", handler.UpdateConfigHandler(repo))
 			r.Post("/admin/config", handler.CreateConfigHandler(repo))

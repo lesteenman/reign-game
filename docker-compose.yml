@@ -7,6 +7,11 @@ services:
       - SERVICES=dynamodb,sqs
       - DEFAULT_REGION=us-east-1
       - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_TOKEN}
+      # Persist DynamoDB/SQS state across container restarts. Without
+      # this, LocalStack runs purely in-memory and every `task dev:down`
+      # or `docker compose restart` wipes the puzzle pool. Pro feature
+      # enabled by LOCALSTACK_AUTH_TOKEN.
+      - PERSISTENCE=1
     volumes:
       - ./.localstack:/etc/localstack/init/ready.d
       - localstack-data:/var/lib/localstack

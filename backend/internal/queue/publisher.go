@@ -19,14 +19,9 @@ type SQSAPI interface {
 // GenerationRequest represents an SQS message for puzzle generation.
 // Fields match the SQS message schema from the design document.
 type GenerationRequest struct {
-	Size           int     `json:"size"`
-	Mode           string  `json:"mode"`
-	Pipeline       string  `json:"pipeline"`
-	Solver         string  `json:"solver"`
-	Regions        string  `json:"regions"`
-	RegionVariance float64 `json:"regionVariance"`
-	Deducible      bool    `json:"deducible"`
-	Concurrency    int     `json:"concurrency"`
+	Size        int    `json:"size"`
+	Mode        string `json:"mode"`
+	MaxAttempts int    `json:"maxAttempts,omitempty"`
 }
 
 // Publisher sends puzzle generation requests to an SQS queue.

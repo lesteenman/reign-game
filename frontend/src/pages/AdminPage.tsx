@@ -3,20 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { PageShell } from '../components/common/PageShell';
 import type {
   ComboStatus,
-  ConfigData,
-  CreateConfigRequest,
+  ConfigBody,
+  ConfigCreateRequest,
+  Mode,
 } from '../services/adminService';
 import {
+  MODES,
   fetchPoolStatus,
   updateConfig,
   createConfig as createConfigApi,
   triggerReplenish,
 } from '../services/adminService';
-
-const PIPELINE_OPTIONS = ['region-first', 'iterative', 'constraint-aware'];
-const SOLVER_OPTIONS = ['backtrack', 'propagation'];
-const REGIONS_OPTIONS = ['bfs', 'wfc'];
-const MODE_OPTIONS = ['standard', 'double'];
 
 const labelStyle: React.CSSProperties = {
   display: 'flex',
@@ -58,51 +55,111 @@ const accentButtonStyle: React.CSSProperties = {
   color: '#fff',
 };
 
+const cancelButtonStyle: React.CSSProperties = {
+  padding: '8px 16px',
+  border: '2px solid var(--color-border)',
+  borderRadius: '8px',
+  backgroundColor: 'var(--color-surface)',
+  color: 'var(--color-ink)',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  fontSize: '0.875rem',
+  fontWeight: 600,
+  minHeight: '44px',
+};
+
+const saveButtonStyle: React.CSSProperties = {
+  padding: '8px 16px',
+  border: '2px solid var(--color-border)',
+  borderRadius: '8px',
+  backgroundColor: 'var(--color-accent)',
+  color: '#fff',
+  cursor: 'pointer',
+  fontFamily: 'inherit',
+  fontSize: '0.875rem',
+  fontWeight: 600,
+  minHeight: '44px',
+};
+
 /** Format a combo label like "5x5 Standard" or "7x7 Double Queens". */
-function comboLabel(size: number, mode: string): string {
+function comboLabel(size: number, mode: Mode): string {
   const modeLabel = mode === 'double' ? 'Double Queens' : 'Standard';
   return `${size}x${size} ${modeLabel}`;
 }
 
 /** Default config values for a new combo. */
-function defaultConfig(): ConfigData {
+function defaultConfig(): ConfigBody {
   return {
-    pipeline: 'region-first',
-    solver: 'backtrack',
-    regions: 'bfs',
-    regionVariance: 0.3,
-    deducible: true,
-    concurrency: 2,
     threshold: 3,
     enabled: true,
   };
 }
 
-interface ConfigFormProps {
-  config: ConfigData;
-  isCreate: boolean;
-  createSize: number;
-  createMode: string;
-  onConfigChange: (config: ConfigData) => void;
-  onCreateSizeChange: (size: number) => void;
-  onCreateModeChange: (mode: string) => void;
-  onSave: () => void;
-  onCancel: () => void;
-  saving: boolean;
+/**
+ * ConfigFields renders the three config-body inputs — threshold, enabled,
+ * maxAttempts — shared by the edit and create forms. Identity fields
+ * (size, mode) live in CreateConfigForm only.
+ */
+interface ConfigFieldsProps {
+  config: ConfigBody;
+  onChange: (config: ConfigBody) => void;
 }
 
-function ConfigForm({
-  config,
-  isCreate,
-  createSize,
-  createMode,
-  onConfigChange,
-  onCreateSizeChange,
-  onCreateModeChange,
-  onSave,
-  onCancel,
-  saving,
-}: ConfigFormProps) {
+function ConfigFields({ config, onChange }: ConfigFieldsProps) {
+  return (
+    <>
+      <label style={labelStyle}>
+        Threshold
+        <input
+          type="number"
+          min={1}
+          value={config.threshold}
+          onChange={(e) =>
+            onChange({ ...config, threshold: Number(e.target.value) })
+          }
+          aria-label="Threshold"
+          style={{ ...inputStyle, width: '80px' }}
+        />
+      </label>
+
+      <label style={labelStyle}>
+        Enabled
+        <input
+          type="checkbox"
+          checked={config.enabled}
+          onChange={(e) => onChange({ ...config, enabled: e.target.checked })}
+          aria-label="Enabled"
+          style={{ width: '20px', height: '20px' }}
+        />
+      </label>
+
+      <label style={labelStyle}>
+        Max attempts (0 = default)
+        <input
+          type="number"
+          min={0}
+          value={config.maxAttempts ?? 0}
+          onChange={(e) =>
+            onChange({ ...config, maxAttempts: Number(e.target.value) })
+          }
+          aria-label="Max attempts"
+          style={{ ...inputStyle, width: '80px' }}
+        />
+      </label>
+    </>
+  );
+}
+
+/** Form chrome — header + cancel/save buttons — shared by edit and create. */
+interface FormShellProps {
+  title: string;
+  saving: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+  children: React.ReactNode;
+}
+
+function FormShell({ title, saving, onCancel, onSave, children }: FormShellProps) {
   return (
     <div
       data-testid="config-form"
@@ -125,168 +182,10 @@ function ConfigForm({
           color: 'var(--color-ink)',
         }}
       >
-        {isCreate ? 'Add New Combo' : 'Edit Config'}
+        {title}
       </h3>
 
-      {isCreate && (
-        <>
-          <label style={labelStyle}>
-            Size
-            <input
-              type="number"
-              min={3}
-              max={15}
-              value={createSize}
-              onChange={(e) => onCreateSizeChange(Number(e.target.value))}
-              aria-label="Grid size"
-              style={{ ...inputStyle, width: '80px' }}
-            />
-          </label>
-          <label style={labelStyle}>
-            Mode
-            <select
-              value={createMode}
-              onChange={(e) => onCreateModeChange(e.target.value)}
-              aria-label="Game mode"
-              style={inputStyle}
-            >
-              {MODE_OPTIONS.map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </label>
-        </>
-      )}
-
-      <label style={labelStyle}>
-        Pipeline
-        <select
-          value={config.pipeline}
-          onChange={(e) =>
-            onConfigChange({ ...config, pipeline: e.target.value })
-          }
-          aria-label="Pipeline"
-          style={inputStyle}
-        >
-          {PIPELINE_OPTIONS.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label style={labelStyle}>
-        Solver
-        <select
-          value={config.solver}
-          onChange={(e) =>
-            onConfigChange({ ...config, solver: e.target.value })
-          }
-          aria-label="Solver"
-          style={inputStyle}
-        >
-          {SOLVER_OPTIONS.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label style={labelStyle}>
-        Regions
-        <select
-          value={config.regions}
-          onChange={(e) =>
-            onConfigChange({ ...config, regions: e.target.value })
-          }
-          aria-label="Regions"
-          style={inputStyle}
-        >
-          {REGIONS_OPTIONS.map((r) => (
-            <option key={r} value={r}>
-              {r}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label style={labelStyle}>
-        Region Variance
-        <input
-          type="number"
-          step={0.1}
-          min={0}
-          max={1}
-          value={config.regionVariance}
-          onChange={(e) =>
-            onConfigChange({
-              ...config,
-              regionVariance: Number(e.target.value),
-            })
-          }
-          aria-label="Region variance"
-          style={{ ...inputStyle, width: '80px' }}
-        />
-      </label>
-
-      <label style={labelStyle}>
-        Deducible
-        <input
-          type="checkbox"
-          checked={config.deducible}
-          onChange={(e) =>
-            onConfigChange({ ...config, deducible: e.target.checked })
-          }
-          aria-label="Deducible"
-          style={{ width: '20px', height: '20px' }}
-        />
-      </label>
-
-      <label style={labelStyle}>
-        Concurrency
-        <input
-          type="number"
-          min={1}
-          max={8}
-          value={config.concurrency}
-          onChange={(e) =>
-            onConfigChange({ ...config, concurrency: Number(e.target.value) })
-          }
-          aria-label="Concurrency"
-          style={{ ...inputStyle, width: '80px' }}
-        />
-      </label>
-
-      <label style={labelStyle}>
-        Threshold
-        <input
-          type="number"
-          min={1}
-          value={config.threshold}
-          onChange={(e) =>
-            onConfigChange({ ...config, threshold: Number(e.target.value) })
-          }
-          aria-label="Threshold"
-          style={{ ...inputStyle, width: '80px' }}
-        />
-      </label>
-
-      <label style={labelStyle}>
-        Enabled
-        <input
-          type="checkbox"
-          checked={config.enabled}
-          onChange={(e) =>
-            onConfigChange({ ...config, enabled: e.target.checked })
-          }
-          aria-label="Enabled"
-          style={{ width: '20px', height: '20px' }}
-        />
-      </label>
+      {children}
 
       <div
         style={{
@@ -300,18 +199,7 @@ function ConfigForm({
           type="button"
           onClick={onCancel}
           disabled={saving}
-          style={{
-            padding: '8px 16px',
-            border: '2px solid var(--color-border)',
-            borderRadius: '8px',
-            backgroundColor: 'var(--color-surface)',
-            color: 'var(--color-ink)',
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-            fontSize: '0.875rem',
-            fontWeight: 600,
-            minHeight: '44px',
-          }}
+          style={cancelButtonStyle}
         >
           Cancel
         </button>
@@ -320,23 +208,105 @@ function ConfigForm({
           onClick={onSave}
           disabled={saving}
           data-testid="save-config"
-          style={{
-            padding: '8px 16px',
-            border: '2px solid var(--color-border)',
-            borderRadius: '8px',
-            backgroundColor: 'var(--color-accent)',
-            color: '#fff',
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-            fontSize: '0.875rem',
-            fontWeight: 600,
-            minHeight: '44px',
-          }}
+          style={saveButtonStyle}
         >
           {saving ? 'Saving...' : 'Save'}
         </button>
       </div>
     </div>
+  );
+}
+
+/** Edit the config of an existing combo. Size and mode are fixed. */
+interface EditConfigFormProps {
+  config: ConfigBody;
+  onConfigChange: (config: ConfigBody) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  saving: boolean;
+}
+
+function EditConfigForm({
+  config,
+  onConfigChange,
+  onSave,
+  onCancel,
+  saving,
+}: EditConfigFormProps) {
+  return (
+    <FormShell
+      title="Edit Config"
+      saving={saving}
+      onCancel={onCancel}
+      onSave={onSave}
+    >
+      <ConfigFields config={config} onChange={onConfigChange} />
+    </FormShell>
+  );
+}
+
+/** Create a new combo. Size and mode are user-chosen up front. */
+interface CreateConfigFormProps {
+  size: number;
+  mode: Mode;
+  config: ConfigBody;
+  onSizeChange: (size: number) => void;
+  onModeChange: (mode: Mode) => void;
+  onConfigChange: (config: ConfigBody) => void;
+  onSave: () => void;
+  onCancel: () => void;
+  saving: boolean;
+}
+
+function CreateConfigForm({
+  size,
+  mode,
+  config,
+  onSizeChange,
+  onModeChange,
+  onConfigChange,
+  onSave,
+  onCancel,
+  saving,
+}: CreateConfigFormProps) {
+  return (
+    <FormShell
+      title="Add New Combo"
+      saving={saving}
+      onCancel={onCancel}
+      onSave={onSave}
+    >
+      <label style={labelStyle}>
+        Size
+        <input
+          type="number"
+          min={3}
+          max={15}
+          value={size}
+          onChange={(e) => onSizeChange(Number(e.target.value))}
+          aria-label="Grid size"
+          style={{ ...inputStyle, width: '80px' }}
+        />
+      </label>
+      <label style={labelStyle}>
+        Mode
+        <select
+          value={mode}
+          // The select renders MODES-sourced options, so e.target.value
+          // is always a Mode. Narrowing cast rather than a runtime check.
+          onChange={(e) => onModeChange(e.target.value as Mode)}
+          aria-label="Game mode"
+          style={inputStyle}
+        >
+          {MODES.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+      </label>
+      <ConfigFields config={config} onChange={onConfigChange} />
+    </FormShell>
   );
 }
 
@@ -350,15 +320,15 @@ export function AdminPage() {
 
   // Edit state
   const [editingCombo, setEditingCombo] = useState<ComboStatus | null>(null);
-  const [editConfig, setEditConfig] = useState<ConfigData>(defaultConfig());
+  const [editConfig, setEditConfig] = useState<ConfigBody>(defaultConfig());
 
   // Create state
   const [showCreate, setShowCreate] = useState(false);
-  const [newComboConfig, setCreateConfigState] = useState<ConfigData>(
+  const [newComboConfig, setNewComboConfig] = useState<ConfigBody>(
     defaultConfig(),
   );
-  const [createSize, setCreateSize] = useState(5);
-  const [createMode, setCreateMode] = useState('standard');
+  const [createSize, setCreateSize] = useState(7);
+  const [createMode, setCreateMode] = useState<Mode>('standard');
 
   const [saving, setSaving] = useState(false);
 
@@ -368,9 +338,7 @@ export function AdminPage() {
       const data = await fetchPoolStatus();
       setCombos(data.combos);
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Failed to load pool status',
-      );
+      setError(err instanceof Error ? err.message : 'Failed to load pool status');
     } finally {
       setLoading(false);
     }
@@ -389,22 +357,18 @@ export function AdminPage() {
       );
       await loadPool();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Replenish failed',
-      );
+      setError(err instanceof Error ? err.message : 'Replenish failed');
     }
   };
 
-  const handleReplenishCombo = async (size: number, mode: string) => {
+  const handleReplenishCombo = async (size: number, mode: Mode) => {
     try {
       setStatusMessage(null);
       await triggerReplenish(size, mode);
       setStatusMessage(`Replenish triggered for ${comboLabel(size, mode)}`);
       await loadPool();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Replenish failed',
-      );
+      setError(err instanceof Error ? err.message : 'Replenish failed');
     }
   };
 
@@ -425,9 +389,7 @@ export function AdminPage() {
       setEditingCombo(null);
       await loadPool();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Save failed',
-      );
+      setError(err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -436,29 +398,25 @@ export function AdminPage() {
   const handleShowCreate = () => {
     setEditingCombo(null);
     setShowCreate(true);
-    setCreateConfigState(defaultConfig());
-    setCreateSize(5);
+    setNewComboConfig(defaultConfig());
+    setCreateSize(7);
     setCreateMode('standard');
   };
 
   const handleSaveCreate = async () => {
     setSaving(true);
     try {
-      const payload: CreateConfigRequest = {
+      const payload: ConfigCreateRequest = {
         ...newComboConfig,
         size: createSize,
         mode: createMode,
       };
       await createConfigApi(payload);
-      setStatusMessage(
-        `Created config for ${comboLabel(createSize, createMode)}`,
-      );
+      setStatusMessage(`Created config for ${comboLabel(createSize, createMode)}`);
       setShowCreate(false);
       await loadPool();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : 'Create failed',
-      );
+      setError(err instanceof Error ? err.message : 'Create failed');
     } finally {
       setSaving(false);
     }
@@ -537,7 +495,15 @@ export function AdminPage() {
         )}
 
         {loading && (
-          <div data-testid="loading" role="status" style={{ textAlign: 'center', padding: '24px', color: 'var(--color-muted)' }}>
+          <div
+            data-testid="loading"
+            role="status"
+            style={{
+              textAlign: 'center',
+              padding: '24px',
+              color: 'var(--color-muted)',
+            }}
+          >
             Loading pool status...
           </div>
         )}
@@ -553,7 +519,13 @@ export function AdminPage() {
             }}
           >
             {combos.length === 0 ? (
-              <div style={{ padding: '16px', textAlign: 'center', color: 'var(--color-muted)' }}>
+              <div
+                style={{
+                  padding: '16px',
+                  textAlign: 'center',
+                  color: 'var(--color-muted)',
+                }}
+              >
                 No combos configured.
               </div>
             ) : (
@@ -610,7 +582,11 @@ export function AdminPage() {
                       handleReplenishCombo(combo.size, combo.mode)
                     }
                     aria-label={`Replenish ${comboLabel(combo.size, combo.mode)}`}
-                    style={{ ...buttonStyle, fontSize: '0.75rem', padding: '6px 10px' }}
+                    style={{
+                      ...buttonStyle,
+                      fontSize: '0.75rem',
+                      padding: '6px 10px',
+                    }}
                   >
                     Replenish
                   </button>
@@ -619,7 +595,11 @@ export function AdminPage() {
                     onClick={() => handleEdit(combo)}
                     aria-label={`Edit ${comboLabel(combo.size, combo.mode)}`}
                     data-testid={`edit-${combo.size}-${combo.mode}`}
-                    style={{ ...buttonStyle, fontSize: '0.75rem', padding: '6px 10px' }}
+                    style={{
+                      ...buttonStyle,
+                      fontSize: '0.75rem',
+                      padding: '6px 10px',
+                    }}
                   >
                     Edit
                   </button>
@@ -630,14 +610,9 @@ export function AdminPage() {
         )}
 
         {editingCombo && (
-          <ConfigForm
+          <EditConfigForm
             config={editConfig}
-            isCreate={false}
-            createSize={0}
-            createMode=""
             onConfigChange={setEditConfig}
-            onCreateSizeChange={() => {}}
-            onCreateModeChange={() => {}}
             onSave={handleSaveEdit}
             onCancel={() => setEditingCombo(null)}
             saving={saving}
@@ -656,14 +631,13 @@ export function AdminPage() {
         )}
 
         {showCreate && (
-          <ConfigForm
+          <CreateConfigForm
+            size={createSize}
+            mode={createMode}
             config={newComboConfig}
-            isCreate={true}
-            createSize={createSize}
-            createMode={createMode}
-            onConfigChange={setCreateConfigState}
-            onCreateSizeChange={setCreateSize}
-            onCreateModeChange={setCreateMode}
+            onSizeChange={setCreateSize}
+            onModeChange={setCreateMode}
+            onConfigChange={setNewComboConfig}
             onSave={handleSaveCreate}
             onCancel={() => setShowCreate(false)}
             saving={saving}
@@ -673,4 +647,3 @@ export function AdminPage() {
     </PageShell>
   );
 }
-

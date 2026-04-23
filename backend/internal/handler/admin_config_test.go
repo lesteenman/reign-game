@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,12 +37,6 @@ func (m *mockConfigRepo) CreateConfig(ctx context.Context, config *repository.Co
 // validConfigBody returns a valid config JSON body for tests.
 func validConfigBody() string {
 	return `{
-		"pipeline": "iterative",
-		"solver": "propagation",
-		"regions": "bfs",
-		"regionVariance": 0.5,
-		"deducible": true,
-		"concurrency": 2,
 		"threshold": 10,
 		"enabled": true
 	}`
@@ -54,12 +47,6 @@ func validCreateBody() string {
 	return `{
 		"size": 7,
 		"mode": "standard",
-		"pipeline": "iterative",
-		"solver": "propagation",
-		"regions": "bfs",
-		"regionVariance": 0.5,
-		"deducible": true,
-		"concurrency": 2,
 		"threshold": 10,
 		"enabled": true
 	}`
@@ -67,16 +54,10 @@ func validCreateBody() string {
 
 func TestUpdateConfigHandler(t *testing.T) {
 	existingConfig := &repository.ConfigRecord{
-		Size:           7,
-		Mode:           "standard",
-		Pipeline:       "iterative",
-		Solver:         "propagation",
-		Regions:        "bfs",
-		RegionVariance: 0.3,
-		Deducible:      true,
-		Concurrency:    1,
-		Threshold:      5,
-		Enabled:        true,
+		Size:      7,
+		Mode:      "standard",
+		Threshold: 5,
+		Enabled:   true,
 	}
 
 	tests := []struct {
@@ -95,6 +76,19 @@ func TestUpdateConfigHandler(t *testing.T) {
 			size: "7",
 			mode: "standard",
 			body: validConfigBody(),
+			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
+				return existingConfig, nil
+			},
+			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
+				return nil
+			},
+			wantStatus: http.StatusOK,
+		},
+		{
+			name: "update with maxAttempts returns 200",
+			size: "7",
+			mode: "standard",
+			body: `{"threshold":10,"enabled":true,"maxAttempts":30}`,
 			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
 				return existingConfig, nil
 			},
@@ -147,84 +141,10 @@ func TestUpdateConfigHandler(t *testing.T) {
 			wantError:  "invalid_params",
 		},
 		{
-			name: "invalid pipeline returns 400",
-			size: "7",
-			mode: "standard",
-			body: `{"pipeline":"random","solver":"backtrack","regions":"bfs","regionVariance":0.5,"concurrency":2,"threshold":10}`,
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return existingConfig, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
-			wantStatus: http.StatusBadRequest,
-			wantError:  "invalid_params",
-		},
-		{
-			name: "regionVariance out of range returns 400",
-			size: "7",
-			mode: "standard",
-			body: `{"pipeline":"iterative","solver":"backtrack","regions":"bfs","regionVariance":1.5,"concurrency":2,"threshold":10}`,
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return existingConfig, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
-			wantStatus: http.StatusBadRequest,
-			wantError:  "invalid_params",
-		},
-		{
-			name: "regionVariance NaN returns 400",
-			size: "7",
-			mode: "standard",
-			body: func() string {
-				type req struct {
-					Pipeline       string  `json:"pipeline"`
-					Solver         string  `json:"solver"`
-					Regions        string  `json:"regions"`
-					RegionVariance float64 `json:"regionVariance"`
-					Concurrency    int     `json:"concurrency"`
-					Threshold      int     `json:"threshold"`
-				}
-				b, _ := json.Marshal(req{
-					Pipeline:       "iterative",
-					Solver:         "backtrack",
-					Regions:        "bfs",
-					RegionVariance: math.NaN(),
-					Concurrency:    2,
-					Threshold:      10,
-				})
-				return string(b)
-			}(),
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return existingConfig, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
-			wantStatus: http.StatusBadRequest,
-			wantError:  "invalid_params",
-		},
-		{
-			name: "concurrency out of range returns 400",
-			size: "7",
-			mode: "standard",
-			body: `{"pipeline":"iterative","solver":"backtrack","regions":"bfs","regionVariance":0.5,"concurrency":10,"threshold":10}`,
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return existingConfig, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
-			wantStatus: http.StatusBadRequest,
-			wantError:  "invalid_params",
-		},
-		{
 			name: "threshold less than 1 returns 400",
 			size: "7",
 			mode: "standard",
-			body: `{"pipeline":"iterative","solver":"backtrack","regions":"bfs","regionVariance":0.5,"concurrency":2,"threshold":0}`,
+			body: `{"threshold":0,"enabled":true}`,
 			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
 				return existingConfig, nil
 			},
@@ -238,7 +158,21 @@ func TestUpdateConfigHandler(t *testing.T) {
 			name: "threshold above cap returns 400",
 			size: "7",
 			mode: "standard",
-			body: `{"pipeline":"iterative","solver":"backtrack","regions":"bfs","regionVariance":0.5,"concurrency":2,"threshold":51}`,
+			body: `{"threshold":51,"enabled":true}`,
+			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
+				return existingConfig, nil
+			},
+			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
+				return nil
+			},
+			wantStatus: http.StatusBadRequest,
+			wantError:  "invalid_params",
+		},
+		{
+			name: "negative maxAttempts returns 400",
+			size: "7",
+			mode: "standard",
+			body: `{"threshold":10,"enabled":true,"maxAttempts":-1}`,
 			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
 				return existingConfig, nil
 			},
@@ -328,14 +262,14 @@ func TestUpdateConfigHandler(t *testing.T) {
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 				t.Fatalf("failed to parse response: %v", err)
 			}
-			if resp["pipeline"] != "iterative" {
-				t.Errorf("pipeline = %v, want %q", resp["pipeline"], "iterative")
-			}
 			if resp["size"] != float64(7) {
 				t.Errorf("size = %v, want %v", resp["size"], 7)
 			}
 			if resp["mode"] != "standard" {
 				t.Errorf("mode = %v, want %q", resp["mode"], "standard")
+			}
+			if resp["threshold"] != float64(10) {
+				t.Errorf("threshold = %v, want 10", resp["threshold"])
 			}
 		})
 	}
@@ -370,16 +304,7 @@ func TestCreateConfigHandler(t *testing.T) {
 		},
 		{
 			name: "invalid fields returns 400",
-			body: `{
-				"size": 7,
-				"mode": "standard",
-				"pipeline": "invalid",
-				"solver": "backtrack",
-				"regions": "bfs",
-				"regionVariance": 0.5,
-				"concurrency": 2,
-				"threshold": 10
-			}`,
+			body: `{"size":7,"mode":"standard","threshold":0,"enabled":true}`,
 			createConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
 				return nil
 			},
@@ -449,14 +374,14 @@ func TestCreateConfigHandler(t *testing.T) {
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 				t.Fatalf("failed to parse response: %v", err)
 			}
-			if resp["pipeline"] != "iterative" {
-				t.Errorf("pipeline = %v, want %q", resp["pipeline"], "iterative")
-			}
 			if resp["size"] != float64(7) {
 				t.Errorf("size = %v, want %v", resp["size"], 7)
 			}
 			if resp["mode"] != "standard" {
 				t.Errorf("mode = %v, want %q", resp["mode"], "standard")
+			}
+			if resp["threshold"] != float64(10) {
+				t.Errorf("threshold = %v, want 10", resp["threshold"])
 			}
 		})
 	}

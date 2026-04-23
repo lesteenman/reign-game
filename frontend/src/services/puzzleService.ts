@@ -1,4 +1,4 @@
-import type { PuzzleData } from '../engine/types';
+import type { Mode, PuzzleData } from '../engine/types';
 import { apiFetch, ApiError, apiPut } from './api';
 
 /** Error thrown when the puzzle pool has no puzzles for the requested size/mode. */
@@ -12,7 +12,7 @@ export class NoPuzzlesAvailableError extends Error {
 /** Fetch the next puzzle from the pool for a given size and mode. */
 export async function fetchNextPuzzle(
   size: number,
-  mode: string,
+  mode: Mode,
 ): Promise<PuzzleData> {
   try {
     return await apiFetch<PuzzleData>('/api/puzzles/next', {
@@ -31,7 +31,7 @@ export async function fetchNextPuzzle(
 export async function updatePuzzleStatus(
   puzzleId: string,
   size: number,
-  mode: string,
+  mode: Mode,
   status: 'solved' | 'skipped',
 ): Promise<void> {
   await apiPut<Record<string, never>>(

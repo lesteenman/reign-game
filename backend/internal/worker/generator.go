@@ -3,6 +3,8 @@ package worker
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -14,10 +16,27 @@ import (
 
 	"github.com/eriksteenman/reign-game/backend/internal/generator"
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
-	"github.com/eriksteenman/reign-game/backend/internal/model"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
+
+// newSeed picks a fresh int64 seed for one generation attempt. Uses
+// crypto/rand for an unbiased 63-bit draw. The sign-bit mask is for
+// readability — all seeds end up non-negative, which is nicer to copy
+// out of logs and paste into `task reproduce`. JS safe-integer
+// precision is handled separately by encoding the seed as a JSON
+// string in the /api/puzzles/next response, not by the mask. Unbiased
+// is not a security requirement here — only collision avoidance at
+// pool-stocking concurrency.
+func newSeed() (int64, error) {
+	var buf [8]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return 0, fmt.Errorf("crypto/rand read: %w", err)
+	}
+	u := binary.BigEndian.Uint64(buf[:])
+	// Mask the sign bit so the result is a non-negative int64.
+	return int64(u &^ (1 << 63)), nil
+}
 
 // generationTimeout is the maximum time allowed for puzzle generation in
 // the SQS consumer. Set to 14 minutes to leave 1 minute for SQS overhead
@@ -54,7 +73,7 @@ func NewGeneratorWorker(store PuzzleStore, newUUID UUIDGenerator) *GeneratorWork
 }
 
 // HandleSQSEvent processes an SQS event containing puzzle generation requests.
-// Each message is deserialized, a pipeline is constructed, and the generated
+// Each message is deserialized, a generator is constructed, and the generated
 // puzzle is stored in DynamoDB. Returns an error if any message fails (SQS
 // will retry).
 func (w *GeneratorWorker) HandleSQSEvent(ctx context.Context, event events.SQSEvent) error {
@@ -73,56 +92,34 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		return fmt.Errorf("deserializing generation request: %w", err)
 	}
 
-	// Build pipeline from request parameters.
-	params := handler.GenerateParams{
-		Size:           req.Size,
-		Mode:           req.Mode,
-		Pipeline:       req.Pipeline,
-		Solver:         req.Solver,
-		Regions:        req.Regions,
-		RegionVariance: req.RegionVariance,
-		Deducible:      req.Deducible,
-		Concurrency:    req.Concurrency,
+	// Build generator options from request. MaxAttempts is a pass-through
+	// override; zero means "use generator package default". An explicit
+	// seed lets cmd/reproduce regenerate the same puzzle deterministically
+	// (R-06C).
+	seed, err := newSeed()
+	if err != nil {
+		return fmt.Errorf("picking seed: %w", err)
+	}
+	opts := []generator.Option{generator.WithSeed(seed)}
+	if req.MaxAttempts > 0 {
+		opts = append(opts, generator.WithMaxAttempts(req.MaxAttempts))
 	}
 
-	// Determine markersPerUnit and minSize based on mode.
-	params.MarkersPerUnit = 1
-	params.MinSize = 3
-	if params.Mode == handler.ModeDouble {
-		params.MarkersPerUnit = 2
-		params.MinSize = 4
+	g, err := generator.New(req.Size, handler.MarksPerUnitFromMode(req.Mode), opts...)
+	if err != nil {
+		return fmt.Errorf("constructing generator (size=%d, mode=%s): %w", req.Size, req.Mode, err)
 	}
 
-	pipeline := handler.BuildPipeline(&params)
-
-	// Create a timeout context for generation.
+	// Create a timeout context for generation. Honors both the upstream
+	// SQS/Lambda context and our per-puzzle budget.
 	genCtx, cancel := context.WithTimeout(ctx, generationTimeout)
 	defer cancel()
 
-	opts := generator.GenerateOpts{
-		Timeout:   generationTimeout,
-		Ctx:       genCtx,
-		Deducible: true,
-		RegionOpts: generator.RegionOpts{
-			Variance: req.RegionVariance,
-			MinSize:  params.MinSize,
-		},
-	}
-
 	startTime := time.Now()
-
-	var puzzle *model.Puzzle
-	var err error
-	if req.Concurrency > 1 {
-		opts.Concurrency = req.Concurrency
-		puzzle, err = generator.GenerateConcurrent(pipeline, req.Size, params.MarkersPerUnit, opts)
-	} else {
-		puzzle, err = pipeline.Generate(req.Size, params.MarkersPerUnit, opts)
-	}
+	pz, err := g.Generate(genCtx)
 	if err != nil {
 		return fmt.Errorf("generating puzzle (size=%d, mode=%s): %w", req.Size, req.Mode, err)
 	}
-
 	durationMs := time.Since(startTime).Milliseconds()
 
 	// Generate a UUID for the puzzle.
@@ -131,31 +128,48 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		return fmt.Errorf("generating puzzle ID: %w", err)
 	}
 
-	// Store the generated puzzle.
-	puzzleRecord := &repository.PuzzleRecord{
+	// Translate generator.Puzzle → repository.PuzzleRecord.
+	solution := make([][]bool, pz.N)
+	for i := range solution {
+		solution[i] = make([]bool, pz.N)
+	}
+	for _, m := range pz.Solution {
+		solution[m.Row][m.Col] = true
+	}
+
+	rec := &repository.PuzzleRecord{
 		GridSize:             req.Size,
 		Mode:                 req.Mode,
 		ID:                   puzzleID,
 		Status:               "ready",
 		Verdict:              "none",
-		RegionMap:            puzzle.RegionMap,
-		Solution:             puzzle.Solution,
-		Pipeline:             req.Pipeline,
-		Solver:               req.Solver,
-		Regions:              req.Regions,
-		RegionVariance:       req.RegionVariance,
-		Deducible:            req.Deducible,
-		Concurrency:          req.Concurrency,
+		RegionMap:            pz.Regions,
+		Solution:             solution,
+		Difficulty:           int(pz.Difficulty),
+		MaxTier:              pz.Metrics.MaxTier,
+		TierCounts:           pz.Metrics.TierCounts,
+		TraceLen:             pz.Metrics.TraceLen,
 		GenerationDurationMs: durationMs,
 		CreatedAt:            time.Now().UTC().Format(time.RFC3339),
+		Seed:                 seed,
 	}
 
-	if err := w.store.PutPuzzle(ctx, puzzleRecord); err != nil {
+	if err := w.store.PutPuzzle(ctx, rec); err != nil {
 		return fmt.Errorf("storing generated puzzle: %w", err)
 	}
 
-	log.Printf("generated puzzle %s (size=%d, mode=%s, duration=%dms)",
-		puzzleID, req.Size, req.Mode, durationMs)
+	log.Printf("generator: produced puzzle %s (size=%d, mode=%s, difficulty=%d, seed=%d, trips=%d, duration=%dms)",
+		puzzleID, req.Size, req.Mode, pz.Difficulty, seed, pz.Metrics.SafetyNetTrips, durationMs)
+
+	if pz.Metrics.SafetyNetTrips > 0 {
+		// A guard fire is a real rule leak in the grower or mutator —
+		// the safety net rescued the attempt, but the underlying code
+		// needs investigating. task reproduce --seed=X --n=N --k=K
+		// replays the exact same sequence so the leak can be diagnosed.
+		log.Printf("WARN: generator: safety-net fired %d time(s) on puzzle %s (size=%d, mode=%s, seed=%d) — reproduce with `task reproduce -- --seed=%d --n=%d --k=%d`",
+			pz.Metrics.SafetyNetTrips, puzzleID, req.Size, req.Mode, seed,
+			seed, req.Size, handler.MarksPerUnitFromMode(req.Mode))
+	}
 
 	return nil
 }

@@ -28,28 +28,17 @@ func TestPublishGenerationRequest(t *testing.T) {
 		{
 			name: "sends correct JSON message",
 			req: GenerationRequest{
-				Size:           7,
-				Mode:           "standard",
-				Pipeline:       "iterative",
-				Solver:         "propagation",
-				Regions:        "bfs",
-				RegionVariance: 0.0,
-				Deducible:      true,
-				Concurrency:    1,
+				Size: 7,
+				Mode: "standard",
 			},
 			wantErr: false,
 		},
 		{
 			name: "sends double mode request",
 			req: GenerationRequest{
-				Size:           9,
-				Mode:           "double",
-				Pipeline:       "iterative",
-				Solver:         "propagation",
-				Regions:        "bfs",
-				RegionVariance: 0.5,
-				Deducible:      true,
-				Concurrency:    2,
+				Size:        9,
+				Mode:        "double",
+				MaxAttempts: 30,
 			},
 			wantErr: false,
 		},
@@ -107,23 +96,8 @@ func TestPublishGenerationRequest(t *testing.T) {
 			if parsed.Mode != tt.req.Mode {
 				t.Errorf("mode = %q, want %q", parsed.Mode, tt.req.Mode)
 			}
-			if parsed.Pipeline != tt.req.Pipeline {
-				t.Errorf("pipeline = %q, want %q", parsed.Pipeline, tt.req.Pipeline)
-			}
-			if parsed.Solver != tt.req.Solver {
-				t.Errorf("solver = %q, want %q", parsed.Solver, tt.req.Solver)
-			}
-			if parsed.Regions != tt.req.Regions {
-				t.Errorf("regions = %q, want %q", parsed.Regions, tt.req.Regions)
-			}
-			if parsed.RegionVariance != tt.req.RegionVariance {
-				t.Errorf("regionVariance = %f, want %f", parsed.RegionVariance, tt.req.RegionVariance)
-			}
-			if parsed.Deducible != tt.req.Deducible {
-				t.Errorf("deducible = %v, want %v", parsed.Deducible, tt.req.Deducible)
-			}
-			if parsed.Concurrency != tt.req.Concurrency {
-				t.Errorf("concurrency = %d, want %d", parsed.Concurrency, tt.req.Concurrency)
+			if parsed.MaxAttempts != tt.req.MaxAttempts {
+				t.Errorf("maxAttempts = %d, want %d", parsed.MaxAttempts, tt.req.MaxAttempts)
 			}
 		})
 	}

@@ -14,6 +14,13 @@ vi.mock('../hooks/useGameStorage', () => ({
   }),
 }));
 
+// Mock the enabled-modes fetch so the page's mount effect doesn't hit
+// a real backend. Returns the pre-Phase-5 preset list by default.
+const mockFetchEnabledModes = vi.fn();
+vi.mock('../services/landingService', () => ({
+  fetchEnabledModes: (...args: unknown[]) => mockFetchEnabledModes(...args),
+}));
+
 // Track navigation
 let navigatedTo: string | undefined;
 vi.mock('react-router-dom', async () => {
@@ -27,6 +34,12 @@ vi.mock('react-router-dom', async () => {
 beforeEach(() => {
   navigatedTo = undefined;
   mockLoadState.mockResolvedValue(null); // fresh state by default
+  mockFetchEnabledModes.mockResolvedValue([
+    { size: 5, mode: 'standard' },
+    { size: 7, mode: 'standard' },
+    { size: 9, mode: 'standard' },
+    { size: 9, mode: 'double' },
+  ]);
 });
 
 afterEach(() => {

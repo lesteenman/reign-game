@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -18,13 +19,17 @@ type PuzzleFetcher interface {
 }
 
 // serveMetadata is the metadata object included in the serve response.
+// Seed is encoded as a JSON string so JavaScript clients don't lose
+// precision on int64 values beyond the 2^53 safe-integer boundary.
+// Seed is omitted for pre-R-06C puzzles that don't have one on record.
 type serveMetadata struct {
-	Pipeline             string  `json:"pipeline"`
-	Solver               string  `json:"solver"`
-	Regions              string  `json:"regions"`
-	RegionVariance       float64 `json:"regionVariance"`
-	GenerationDurationMs int64   `json:"generationDurationMs"`
-	CreatedAt            string  `json:"createdAt"`
+	Difficulty           int    `json:"difficulty"`
+	MaxTier              int    `json:"maxTier"`
+	TierCounts           []int  `json:"tierCounts"`
+	TraceLen             int    `json:"traceLen"`
+	GenerationDurationMs int64  `json:"generationDurationMs"`
+	CreatedAt            string `json:"createdAt"`
+	Seed                 string `json:"seed,omitempty"`
 }
 
 // serveResponse is the JSON response for the serve endpoint.
@@ -79,27 +84,40 @@ func ServeHandler(fetcher PuzzleFetcher) http.HandlerFunc {
 			return
 		}
 
-		// Mark as served.
+		// Mark as served. ErrPuzzleNotFound here is the NextReady→MarkServed
+		// race (another replica consumed the row between the two calls);
+		// surface it as "no puzzles available" so the client retries.
 		pk := fmt.Sprintf("%d#%s", size, mode)
 		if err := fetcher.MarkServed(r.Context(), pk, puzzle.ID); err != nil {
+			if errors.Is(err, repository.ErrPuzzleNotFound) {
+				writeError(w, http.StatusNotFound, "no_puzzles_available", "No puzzles available for this size and mode. Try again shortly.")
+				return
+			}
 			log.Printf("error marking puzzle %s as served: %v", puzzle.ID, err)
 			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to serve puzzle")
 			return
 		}
 
+		metadata := serveMetadata{
+			Difficulty:           puzzle.Difficulty,
+			MaxTier:              puzzle.MaxTier,
+			TierCounts:           puzzle.TierCounts,
+			TraceLen:             puzzle.TraceLen,
+			GenerationDurationMs: puzzle.GenerationDurationMs,
+			CreatedAt:            puzzle.CreatedAt,
+		}
+		// Only ship seed for puzzles that have one recorded — pre-R-06C
+		// rows have Seed=0 and there's no way to regenerate them, so
+		// emitting "0" would mislead anyone trying to reproduce.
+		if puzzle.Seed != 0 {
+			metadata.Seed = strconv.FormatInt(puzzle.Seed, 10)
+		}
 		resp := serveResponse{
 			PuzzleID:  puzzle.ID,
 			GridSize:  puzzle.GridSize,
 			Mode:      puzzle.Mode,
 			RegionMap: puzzle.RegionMap,
-			Metadata: serveMetadata{
-				Pipeline:             puzzle.Pipeline,
-				Solver:               puzzle.Solver,
-				Regions:              puzzle.Regions,
-				RegionVariance:       puzzle.RegionVariance,
-				GenerationDurationMs: puzzle.GenerationDurationMs,
-				CreatedAt:            puzzle.CreatedAt,
-			},
+			Metadata:  metadata,
 		}
 
 		w.WriteHeader(http.StatusOK)

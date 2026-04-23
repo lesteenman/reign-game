@@ -11,10 +11,10 @@ const MOCK_PUZZLE_WITH_METADATA: PuzzleData = {
   ...FALLBACK_PUZZLE,
   puzzleId: 'pool-001',
   metadata: {
-    pipeline: 'iterative',
-    solver: 'propagation',
-    regions: 'bfs',
-    regionVariance: 0.0,
+    difficulty: 2,
+    maxTier: 2,
+    tierCounts: [0, 3, 1, 0, 0],
+    traceLen: 4,
     generationDurationMs: 4200,
     createdAt: '2026-04-15T10:30:00Z',
   },
@@ -289,8 +289,7 @@ describe('GamePage metadata display (FE-05)', () => {
     // Assert
     const metadata = screen.getByTestId('puzzle-metadata');
     expect(metadata).toBeInTheDocument();
-    expect(metadata).toHaveTextContent('iterative');
-    expect(metadata).toHaveTextContent('propagation');
+    expect(metadata).toHaveTextContent('difficulty 2');
     expect(metadata).toHaveTextContent('4.2s');
   });
 

@@ -5,6 +5,8 @@ import { PageShell } from '../components/common/PageShell';
 import { PrimaryButton, SecondaryButton } from '../components/common/Button';
 import { PuzzleSelector } from '../components/landing/PuzzleSelector';
 import type { PuzzleSelection } from '../components/landing/PuzzleSelector';
+import { fetchEnabledModes } from '../services/landingService';
+import type { ModeEntry } from '../services/landingService';
 
 type PageState =
   | { status: 'loading' }
@@ -45,6 +47,10 @@ export function LandingPage() {
   const navigate = useNavigate();
   const { loadState } = useGameStorage();
   const [state, setState] = useState<PageState>({ status: 'loading' });
+  // null while the modes fetch is in flight; empty-array once a fetch
+  // resolves with no enabled combos or the fetch fails. Either way the
+  // PuzzleSelector handles the empty case with a friendly message.
+  const [modes, setModes] = useState<ModeEntry[] | null>(null);
   const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, getServerOnlineSnapshot);
 
   useEffect(() => {
@@ -61,6 +67,25 @@ export function LandingPage() {
     });
     return () => { cancelled = true; };
   }, [loadState]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchEnabledModes()
+      .then((list) => {
+        if (!cancelled) setModes(list);
+      })
+      .catch((err) => {
+        // Network or backend failure — fall through to the empty-state
+        // UI. The offline banner separately covers connectivity loss.
+        // Logged at warn level so dev-tools surfaces the root cause
+        // instead of a silent "no puzzles" message hiding a 500.
+        console.warn('LandingPage: fetchEnabledModes failed', err);
+        if (!cancelled) setModes([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleNewPuzzle = useCallback((selection: PuzzleSelection) => {
     if (!navigator.onLine) {
@@ -108,7 +133,7 @@ export function LandingPage() {
       )}
 
       {state.status === 'fresh' && (
-        <PuzzleSelector onSelect={handleNewPuzzle} />
+        <PuzzleSelector modes={modes ?? []} onSelect={handleNewPuzzle} />
       )}
 
       {state.status === 'has-progress' && (
@@ -121,7 +146,7 @@ export function LandingPage() {
       {state.status === 'has-progress-selecting' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
           <SecondaryButton onClick={handleResume}>Resume</SecondaryButton>
-          <PuzzleSelector onSelect={handleNewPuzzle} />
+          <PuzzleSelector modes={modes ?? []} onSelect={handleNewPuzzle} />
         </div>
       )}
 
@@ -139,7 +164,7 @@ export function LandingPage() {
           <p style={{ color: 'var(--color-destructive)', fontWeight: 600 }}>
             {state.message}
           </p>
-          <PuzzleSelector onSelect={handleNewPuzzle} />
+          <PuzzleSelector modes={modes ?? []} onSelect={handleNewPuzzle} />
         </div>
       )}
     </PageShell>

@@ -25,17 +25,17 @@ type DynamoDBAPI interface {
 // ConfigRecord represents a generation config stored in the puzzle-pool DynamoDB table.
 // Config items share the table with puzzles, using PK="CONFIG" and SK="{size}#{mode}".
 type ConfigRecord struct {
-	Size           int     `dynamodbav:"-"`
-	Mode           string  `dynamodbav:"-"`
-	Pipeline       string  `dynamodbav:"pipeline"`
-	Solver         string  `dynamodbav:"solver"`
-	Regions        string  `dynamodbav:"regions"`
-	RegionVariance float64 `dynamodbav:"regionVariance"`
-	Deducible      bool    `dynamodbav:"deducible"`
-	Concurrency    int     `dynamodbav:"concurrency"`
-	Threshold      int     `dynamodbav:"threshold"`
-	Enabled        bool    `dynamodbav:"enabled"`
+	Size        int    `dynamodbav:"-"`
+	Mode        string `dynamodbav:"-"`
+	Threshold   int    `dynamodbav:"threshold"`
+	Enabled     bool   `dynamodbav:"enabled"`
+	MaxAttempts int    `dynamodbav:"maxAttempts,omitempty"`
 }
+
+// ErrPuzzleNotFound is returned by status-mutating calls (MarkServed,
+// UpdateStatus) when the target puzzle row does not exist. Callers map
+// this to a 404 instead of letting DynamoDB silently upsert a new row.
+var ErrPuzzleNotFound = errors.New("puzzle not found")
 
 // ConfigAlreadyExistsError is returned when CreateConfig is called for a config
 // that already exists in the table.
@@ -66,24 +66,26 @@ type PuzzleRecord struct {
 	RegionMap [][]int `dynamodbav:"regionMap"`
 	// Solution is a 2D boolean array indicating correct marker placements.
 	Solution [][]bool `dynamodbav:"solution"`
-	// Pipeline is the generation pipeline strategy used (e.g., "iterative").
-	Pipeline string `dynamodbav:"pipeline"`
-	// Solver is the solver strategy used (e.g., "propagation").
-	Solver string `dynamodbav:"solver"`
-	// Regions is the region generation strategy used (e.g., "bfs").
-	Regions string `dynamodbav:"regions"`
-	// RegionVariance controls region shape irregularity (0.0 to 1.0).
-	RegionVariance float64 `dynamodbav:"regionVariance"`
-	// Deducible indicates whether the puzzle is solvable without guessing.
-	Deducible bool `dynamodbav:"deducible"`
-	// Concurrency is the number of goroutines used during generation.
-	Concurrency int `dynamodbav:"concurrency"`
+	// Difficulty is the generator-assigned tier (0 unknown, 1 Easy, 2 Medium,
+	// 3 Hard, 4 Expert).
+	Difficulty int `dynamodbav:"difficulty"`
+	// MaxTier is the highest rule tier that fired during the deductive solve.
+	MaxTier int `dynamodbav:"maxTier"`
+	// TierCounts is the per-tier rule firing count (length 5; index 0 unused).
+	TierCounts []int `dynamodbav:"tierCounts"`
+	// TraceLen is the total number of rule firings in the deductive trace.
+	TraceLen int `dynamodbav:"traceLen"`
 	// GenerationDurationMs is the wall-clock generation time in milliseconds.
 	GenerationDurationMs int64 `dynamodbav:"generationDurationMs"`
 	// CreatedAt is the ISO 8601 timestamp when the puzzle was generated.
 	CreatedAt string `dynamodbav:"createdAt"`
 	// ServedAt is the ISO 8601 timestamp when the puzzle was served (empty until served).
 	ServedAt string `dynamodbav:"servedAt"`
+	// Seed is the RNG seed the generator ran with. Lets cmd/reproduce
+	// regenerate the exact same puzzle deterministically (R-06C). Zero
+	// is the "unrecorded — generated pre-R-06C" sentinel; new puzzles
+	// always carry a non-zero seed.
+	Seed int64 `dynamodbav:"seed,omitempty"`
 }
 
 // PuzzleRepository provides data access methods for puzzles in DynamoDB.
@@ -185,7 +187,10 @@ func (r *PuzzleRepository) NextReady(ctx context.Context, size int, mode string)
 }
 
 // MarkServed updates a puzzle's status to "served" and sets the servedAt
-// timestamp to the current time in ISO 8601 format.
+// timestamp to the current time in ISO 8601 format. The attribute_exists
+// guard ensures the update fails with ErrPuzzleNotFound rather than
+// silently upserting an orphan row when the PK/SK pair is attacker-
+// supplied or stale.
 func (r *PuzzleRepository) MarkServed(ctx context.Context, pk, sk string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 
@@ -195,7 +200,8 @@ func (r *PuzzleRepository) MarkServed(ctx context.Context, pk, sk string) error 
 			"PK": &types.AttributeValueMemberS{Value: pk},
 			"SK": &types.AttributeValueMemberS{Value: sk},
 		},
-		UpdateExpression: aws.String("SET #status = :status, servedAt = :servedAt"),
+		UpdateExpression:    aws.String("SET #status = :status, servedAt = :servedAt"),
+		ConditionExpression: aws.String("attribute_exists(PK)"),
 		ExpressionAttributeNames: map[string]string{
 			"#status": "status",
 		},
@@ -205,13 +211,18 @@ func (r *PuzzleRepository) MarkServed(ctx context.Context, pk, sk string) error 
 		},
 	})
 	if err != nil {
+		var ccfe *types.ConditionalCheckFailedException
+		if errors.As(err, &ccfe) {
+			return ErrPuzzleNotFound
+		}
 		return fmt.Errorf("marking puzzle %s/%s as served: %w", pk, sk, err)
 	}
 
 	return nil
 }
 
-// UpdateStatus updates a puzzle's status to the given value.
+// UpdateStatus updates a puzzle's status to the given value. See
+// MarkServed for the attribute_exists rationale.
 func (r *PuzzleRepository) UpdateStatus(ctx context.Context, pk, sk, status string) error {
 	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: aws.String(r.tableName),
@@ -219,7 +230,8 @@ func (r *PuzzleRepository) UpdateStatus(ctx context.Context, pk, sk, status stri
 			"PK": &types.AttributeValueMemberS{Value: pk},
 			"SK": &types.AttributeValueMemberS{Value: sk},
 		},
-		UpdateExpression: aws.String("SET #status = :status"),
+		UpdateExpression:    aws.String("SET #status = :status"),
+		ConditionExpression: aws.String("attribute_exists(PK)"),
 		ExpressionAttributeNames: map[string]string{
 			"#status": "status",
 		},
@@ -228,6 +240,10 @@ func (r *PuzzleRepository) UpdateStatus(ctx context.Context, pk, sk, status stri
 		},
 	})
 	if err != nil {
+		var ccfe *types.ConditionalCheckFailedException
+		if errors.As(err, &ccfe) {
+			return ErrPuzzleNotFound
+		}
 		return fmt.Errorf("updating puzzle %s/%s status to %s: %w", pk, sk, status, err)
 	}
 

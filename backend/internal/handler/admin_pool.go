@@ -15,26 +15,19 @@ type ConfigAndCountRepo interface {
 	CountReady(ctx context.Context, size int, mode string) (int, error)
 }
 
-type configResponse struct {
-	Pipeline       string  `json:"pipeline"`
-	Solver         string  `json:"solver"`
-	Regions        string  `json:"regions"`
-	RegionVariance float64 `json:"regionVariance"`
-	Deducible      bool    `json:"deducible"`
-	Concurrency    int     `json:"concurrency"`
-	Threshold      int     `json:"threshold"`
-	Enabled        bool    `json:"enabled"`
-}
-
-type comboStatus struct {
-	Size       int            `json:"size"`
-	Mode       string         `json:"mode"`
-	Config     configResponse `json:"config"`
-	ReadyCount int            `json:"readyCount"`
+// ComboStatus is the per-combo entry in the pool status response.
+// Config nests a ConfigBody (shared with the flat ConfigView DTO) so
+// there is one canonical shape for the threshold/enabled/maxAttempts
+// fields across every CONFIG-bearing API surface.
+type ComboStatus struct {
+	Size       int        `json:"size"`
+	Mode       string     `json:"mode"`
+	Config     ConfigBody `json:"config"`
+	ReadyCount int        `json:"readyCount"`
 }
 
 type adminPoolResponse struct {
-	Combos []comboStatus `json:"combos"`
+	Combos []ComboStatus `json:"combos"`
 }
 
 // AdminPoolHandler creates an HTTP handler for GET /admin/pool.
@@ -50,7 +43,7 @@ func AdminPoolHandler(repo ConfigAndCountRepo) http.HandlerFunc {
 			return
 		}
 
-		combos := make([]comboStatus, 0, len(configs))
+		combos := make([]ComboStatus, 0, len(configs))
 		for _, cfg := range configs {
 			readyCount := 0
 			if cfg.Enabled {
@@ -62,19 +55,10 @@ func AdminPoolHandler(repo ConfigAndCountRepo) http.HandlerFunc {
 				}
 			}
 
-			combos = append(combos, comboStatus{
-				Size: cfg.Size,
-				Mode: cfg.Mode,
-				Config: configResponse{
-					Pipeline:       cfg.Pipeline,
-					Solver:         cfg.Solver,
-					Regions:        cfg.Regions,
-					RegionVariance: cfg.RegionVariance,
-					Deducible:      cfg.Deducible,
-					Concurrency:    cfg.Concurrency,
-					Threshold:      cfg.Threshold,
-					Enabled:        cfg.Enabled,
-				},
+			combos = append(combos, ComboStatus{
+				Size:       cfg.Size,
+				Mode:       cfg.Mode,
+				Config:     configBodyFrom(&cfg),
 				ReadyCount: readyCount,
 			})
 		}
