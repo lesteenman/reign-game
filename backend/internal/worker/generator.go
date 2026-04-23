@@ -158,8 +158,18 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		return fmt.Errorf("storing generated puzzle: %w", err)
 	}
 
-	log.Printf("generated puzzle %s (size=%d, mode=%s, difficulty=%d, seed=%d, duration=%dms)",
-		puzzleID, req.Size, req.Mode, pz.Difficulty, seed, durationMs)
+	log.Printf("generator: produced puzzle %s (size=%d, mode=%s, difficulty=%d, seed=%d, trips=%d, duration=%dms)",
+		puzzleID, req.Size, req.Mode, pz.Difficulty, seed, pz.Metrics.SafetyNetTrips, durationMs)
+
+	if pz.Metrics.SafetyNetTrips > 0 {
+		// A guard fire is a real rule leak in the grower or mutator —
+		// the safety net rescued the attempt, but the underlying code
+		// needs investigating. task reproduce --seed=X --n=N --k=K
+		// replays the exact same sequence so the leak can be diagnosed.
+		log.Printf("WARN: generator: safety-net fired %d time(s) on puzzle %s (size=%d, mode=%s, seed=%d) — reproduce with `task reproduce -- --seed=%d --n=%d --k=%d`",
+			pz.Metrics.SafetyNetTrips, puzzleID, req.Size, req.Mode, seed,
+			seed, req.Size, handler.MarksPerUnitFromMode(req.Mode))
+	}
 
 	return nil
 }

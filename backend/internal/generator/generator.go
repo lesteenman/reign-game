@@ -77,11 +77,19 @@ type Mark struct {
 	Col int `json:"c"`
 }
 
-// Metrics captures the classifier's view of a generated puzzle.
+// Metrics captures the classifier's view of a generated puzzle and
+// any diagnostic counters the caller should surface (e.g. log).
 type Metrics struct {
 	MaxTier    int   `json:"max_tier"`
 	TierCounts []int `json:"tier_counts"`
 	TraceLen   int   `json:"trace_len"`
+	// SafetyNetTrips counts how many attempts were rejected by the
+	// regionsSatisfyMinSize guard before the successful attempt. Zero
+	// is the expected case; non-zero means the grower or mutator
+	// produced an under-size region that the guard caught.
+	// The worker logs a WARN when this is > 0 so the generator package
+	// stays silent (no log calls in the pure layer).
+	SafetyNetTrips int `json:"safety_net_trips,omitempty"`
 }
 
 // Puzzle is the generator's output shape. Storage types are built from it by
@@ -289,6 +297,11 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error) {
 		maxAttempts = defaultMaxAttempts
 	}
 
+	// safetyNetTrips counts guard-rejected attempts across this Generate
+	// call. Copied into Metrics on return so the caller (worker) can
+	// surface a WARN when > 0.
+	safetyNetTrips := 0
+
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if err := ctx.Err(); err != nil {
 			return Puzzle{}, err
@@ -320,15 +333,15 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error) {
 			continue
 		}
 
-		// R-067b safety net (R-06C). The grower and the mutator each
-		// enforce the min-size rule individually, but R-06C surfaced a
-		// served puzzle whose final region map had a 1-cell region —
-		// the rule leaks somewhere in the pipeline. Until the root
-		// cause is fixed, reject any attempt whose final map violates
-		// the floor so bad puzzles never reach the pool. A retry on
-		// the same seed is exactly what the orchestrator's attempt
-		// loop is for.
+		// R-067b safety net (R-06C). Kept as belt-and-suspenders.
+		// KI-021 (R-06D) traced the original under-size region report
+		// to an orphan pre-R-067b worker, not a real rule leak, but
+		// the guard stays because it's cheap and catches regressions.
+		// The counter is surfaced via Metrics.SafetyNetTrips and the
+		// worker emits a WARN line when > 0 (the generator package
+		// intentionally does no logging of its own).
 		if !regionsSatisfyMinSize(rm, g.n) {
+			safetyNetTrips++
 			continue
 		}
 
@@ -351,6 +364,7 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error) {
 		}
 
 		solution := g.solver.appendSolutionMarks(make([]Mark, 0, g.n*g.k))
+		metrics.SafetyNetTrips = safetyNetTrips
 		return Puzzle{
 			N:            g.n,
 			MarksPerUnit: g.k,
