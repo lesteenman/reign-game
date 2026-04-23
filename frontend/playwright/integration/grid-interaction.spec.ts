@@ -16,7 +16,18 @@ const MOCK_PUZZLE = {
 test.describe("Grid Interaction", () => {
   test.beforeEach(async ({ page }) => {
     // Intercept puzzle API calls and return mock data so tests
-    // don't depend on a running backend.
+    // don't depend on a running backend. LandingPage reads
+    // /api/config/modes on mount (R-06A) so that one needs a mock
+    // too or the Play button never renders.
+    await page.route("**/api/config/modes*", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          modes: [{ size: 5, mode: "standard" }],
+        }),
+      }),
+    );
     await page.route("**/api/puzzles/next*", (route) =>
       route.fulfill({
         status: 200,
