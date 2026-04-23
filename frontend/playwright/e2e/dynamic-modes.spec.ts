@@ -26,11 +26,7 @@ test.describe("e2e: dynamic mode buttons", () => {
     // briefly; KI-023 tracks the UX improvement). Timeout is
     // generous because the backend's first DynamoDB call can be
     // slow on a cold LocalStack (KI-022).
-    //
-    // Selector scopes to button elements because the preset container
-    // shares the `preset-` testid prefix; unscoped, it'd match 3
-    // elements (container + 2 buttons).
-    const presetButtons = page.locator("button[data-testid^='preset-']");
+    const presetButtons = page.locator("[data-testid^='preset-']");
     await expect(presetButtons).toHaveCount(2, { timeout: 15_000 });
 
     // Assert — the two enabled combos are present; the disabled one

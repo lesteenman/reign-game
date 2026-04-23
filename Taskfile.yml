@@ -639,9 +639,20 @@ tasks:
           echo "Run `go run ./backend/cmd/genfixtures` to generate fixtures." >&2
           exit 1
         fi
-        count=$(ls -1 "$fixture_dir"/*.json 2>/dev/null | wc -l | tr -d ' ')
-        if [ "$count" = "0" ]; then
-          echo "ERROR: no *.json files in $fixture_dir." >&2
+        # Puzzle fixtures are the *.json files that DON'T end in
+        # .solution.json — those are sibling arrays of solution
+        # positions consumed by the Playwright specs, not DynamoDB
+        # items.
+        shopt -s nullglob
+        puzzle_files=()
+        for f in "$fixture_dir"/*.json; do
+          case "$f" in
+            *.solution.json) continue ;;
+            *) puzzle_files+=("$f") ;;
+          esac
+        done
+        if [ ${#puzzle_files[@]} -eq 0 ]; then
+          echo "ERROR: no puzzle fixture files in $fixture_dir." >&2
           exit 1
         fi
 
@@ -650,11 +661,8 @@ tasks:
           AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-1 \
           CONFIRM=YES ./scripts/flush-pool.sh
 
-        echo "seeding $count fixture(s) into puzzle-pool-e2e..."
-        for f in "$fixture_dir"/*.json; do
-          # Each fixture is a plain DynamoDB Item; put-item reads it as a
-          # file. Marshalling lives in genfixtures — this loop just ships
-          # the JSON through to the table.
+        echo "seeding ${#puzzle_files[@]} fixture(s) into puzzle-pool-e2e..."
+        for f in "${puzzle_files[@]}"; do
           docker compose exec -T localstack awslocal dynamodb put-item \
             --table-name puzzle-pool-e2e \
             --item "file:///dev/stdin" < "$f" >/dev/null 2>&1 || {
@@ -676,12 +684,10 @@ tasks:
         # Warm the backend's first-DynamoDB-call path. Cold-start the
         # LocalStack DynamoDB client can take 5+ seconds (KI-022),
         # which trips the Playwright 5 s default on the first test.
-        # Pre-hitting /api/config/modes primes the connection pool.
+        # /api/config/modes is read-only so the warmup doesn't mutate
+        # fixture state.
         echo "warming e2e backend..."
         curl -sf http://localhost:5182/api/config/modes >/dev/null
-        curl -sf "http://localhost:5182/api/puzzles/next?size=7&mode=standard" >/dev/null || true
-        # That second call marked a fixture served, so re-seed to reset.
-        task e2e:seed >/dev/null 2>&1
       - |
         echo ""
         echo "E2E stack up:"

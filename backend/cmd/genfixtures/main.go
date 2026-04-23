@@ -124,11 +124,29 @@ func writeFixture(dir string, f fixture) error {
 	if len(idSuffix) > 6 {
 		idSuffix = idSuffix[len(idSuffix)-6:]
 	}
-	name := fmt.Sprintf("%d_%s_seed%d_%s.json", f.Size, f.Mode, f.Seed, idSuffix)
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", path, err)
+	base := fmt.Sprintf("%d_%s_seed%d_%s", f.Size, f.Mode, f.Seed, idSuffix)
+	if err := os.WriteFile(filepath.Join(dir, base+".json"), data, 0o644); err != nil {
+		return fmt.Errorf("write %s.json: %w", base, err)
 	}
+
+	// Sibling "*.solution.json": `[[row, col], ...]` — one entry per
+	// marked cell. Playwright specs import this instead of hardcoding
+	// the positions, so regenerating the fixture also updates the test
+	// input in lockstep.
+	solPath := filepath.Join(dir, base+".solution.json")
+	solPairs := make([][2]int, 0, len(p.Solution))
+	for _, m := range p.Solution {
+		solPairs = append(solPairs, [2]int{m.Row, m.Col})
+	}
+	solData, err := json.MarshalIndent(solPairs, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal solution: %w", err)
+	}
+	solData = append(solData, '\n')
+	if err := os.WriteFile(solPath, solData, 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", solPath, err)
+	}
+
 	return nil
 }
 

@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import { test, expect } from "@playwright/test";
 
 /**
@@ -11,21 +14,15 @@ import { test, expect } from "@playwright/test";
  * every row/column/region has exactly one marked cell with no
  * adjacency conflicts.
  *
- * Solution positions are hard-coded from the committed fixture:
- *   frontend/playwright/e2e/fixtures/puzzles/7_standard_seed1.json
- * Regenerate with `task e2e:genfixtures` if the generator output
- * changes; update the SOLUTION constant below accordingly.
+ * The solution positions live alongside the puzzle fixture as a
+ * sibling `*.solution.json` file. `task e2e:genfixtures` regenerates
+ * both puzzle and solution in lockstep, so the test input is always
+ * in sync with the fixture.
  */
 
-const SOLUTION: Array<[number, number]> = [
-  [0, 2],
-  [1, 5],
-  [2, 1],
-  [3, 6],
-  [4, 4],
-  [5, 0],
-  [6, 3],
-];
+const here = dirname(fileURLToPath(import.meta.url));
+const solutionPath = resolve(here, "fixtures/puzzles/7_standard_seed1_000001.solution.json");
+const SOLUTION = JSON.parse(readFileSync(solutionPath, "utf8")) as Array<[number, number]>;
 
 /** Two pointer taps place a marker: empty → excluded → marked. */
 async function placeMarker(page: import("@playwright/test").Page, row: number, col: number) {
