@@ -32,6 +32,11 @@ type ConfigRecord struct {
 	MaxAttempts int    `dynamodbav:"maxAttempts,omitempty"`
 }
 
+// ErrPuzzleNotFound is returned by status-mutating calls (MarkServed,
+// UpdateStatus) when the target puzzle row does not exist. Callers map
+// this to a 404 instead of letting DynamoDB silently upsert a new row.
+var ErrPuzzleNotFound = errors.New("puzzle not found")
+
 // ConfigAlreadyExistsError is returned when CreateConfig is called for a config
 // that already exists in the table.
 type ConfigAlreadyExistsError struct {
@@ -182,7 +187,10 @@ func (r *PuzzleRepository) NextReady(ctx context.Context, size int, mode string)
 }
 
 // MarkServed updates a puzzle's status to "served" and sets the servedAt
-// timestamp to the current time in ISO 8601 format.
+// timestamp to the current time in ISO 8601 format. The attribute_exists
+// guard ensures the update fails with ErrPuzzleNotFound rather than
+// silently upserting an orphan row when the PK/SK pair is attacker-
+// supplied or stale.
 func (r *PuzzleRepository) MarkServed(ctx context.Context, pk, sk string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 
@@ -192,7 +200,8 @@ func (r *PuzzleRepository) MarkServed(ctx context.Context, pk, sk string) error 
 			"PK": &types.AttributeValueMemberS{Value: pk},
 			"SK": &types.AttributeValueMemberS{Value: sk},
 		},
-		UpdateExpression: aws.String("SET #status = :status, servedAt = :servedAt"),
+		UpdateExpression:    aws.String("SET #status = :status, servedAt = :servedAt"),
+		ConditionExpression: aws.String("attribute_exists(PK)"),
 		ExpressionAttributeNames: map[string]string{
 			"#status": "status",
 		},
@@ -202,13 +211,18 @@ func (r *PuzzleRepository) MarkServed(ctx context.Context, pk, sk string) error 
 		},
 	})
 	if err != nil {
+		var ccfe *types.ConditionalCheckFailedException
+		if errors.As(err, &ccfe) {
+			return ErrPuzzleNotFound
+		}
 		return fmt.Errorf("marking puzzle %s/%s as served: %w", pk, sk, err)
 	}
 
 	return nil
 }
 
-// UpdateStatus updates a puzzle's status to the given value.
+// UpdateStatus updates a puzzle's status to the given value. See
+// MarkServed for the attribute_exists rationale.
 func (r *PuzzleRepository) UpdateStatus(ctx context.Context, pk, sk, status string) error {
 	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: aws.String(r.tableName),
@@ -216,7 +230,8 @@ func (r *PuzzleRepository) UpdateStatus(ctx context.Context, pk, sk, status stri
 			"PK": &types.AttributeValueMemberS{Value: pk},
 			"SK": &types.AttributeValueMemberS{Value: sk},
 		},
-		UpdateExpression: aws.String("SET #status = :status"),
+		UpdateExpression:    aws.String("SET #status = :status"),
+		ConditionExpression: aws.String("attribute_exists(PK)"),
 		ExpressionAttributeNames: map[string]string{
 			"#status": "status",
 		},
@@ -225,6 +240,10 @@ func (r *PuzzleRepository) UpdateStatus(ctx context.Context, pk, sk, status stri
 		},
 	})
 	if err != nil {
+		var ccfe *types.ConditionalCheckFailedException
+		if errors.As(err, &ccfe) {
+			return ErrPuzzleNotFound
+		}
 		return fmt.Errorf("updating puzzle %s/%s status to %s: %w", pk, sk, status, err)
 	}
 

@@ -223,11 +223,12 @@ func TestNextReady(t *testing.T) {
 
 func TestMarkServed(t *testing.T) {
 	tests := []struct {
-		name      string
-		pk        string
-		sk        string
-		updateErr error
-		wantErr   bool
+		name        string
+		pk          string
+		sk          string
+		updateErr   error
+		wantErr     bool
+		wantNotFoun bool
 	}{
 		{
 			name:    "updates status and servedAt",
@@ -241,6 +242,14 @@ func TestMarkServed(t *testing.T) {
 			sk:        "puzzle-uuid-1",
 			updateErr: errors.New("dynamodb update error"),
 			wantErr:   true,
+		},
+		{
+			name:        "maps ConditionalCheckFailed to ErrPuzzleNotFound",
+			pk:          "7#standard",
+			sk:          "puzzle-uuid-missing",
+			updateErr:   &types.ConditionalCheckFailedException{Message: strPtr("row not found")},
+			wantErr:     true,
+			wantNotFoun: true,
 		},
 	}
 
@@ -263,6 +272,9 @@ func TestMarkServed(t *testing.T) {
 			if tt.wantErr {
 				if err == nil {
 					t.Fatal("expected error, got nil")
+				}
+				if tt.wantNotFoun && !errors.Is(err, ErrPuzzleNotFound) {
+					t.Fatalf("error = %v, want ErrPuzzleNotFound", err)
 				}
 				return
 			}
@@ -292,18 +304,22 @@ func TestMarkServed(t *testing.T) {
 			if servedAtVal == "" {
 				t.Error("servedAt value should not be empty")
 			}
+			if capturedInput.ConditionExpression == nil || *capturedInput.ConditionExpression != "attribute_exists(PK)" {
+				t.Errorf("ConditionExpression = %v, want attribute_exists(PK)", capturedInput.ConditionExpression)
+			}
 		})
 	}
 }
 
 func TestUpdateStatus(t *testing.T) {
 	tests := []struct {
-		name      string
-		pk        string
-		sk        string
-		status    string
-		updateErr error
-		wantErr   bool
+		name        string
+		pk          string
+		sk          string
+		status      string
+		updateErr   error
+		wantErr     bool
+		wantNotFoun bool
 	}{
 		{
 			name:    "updates status to solved",
@@ -327,6 +343,15 @@ func TestUpdateStatus(t *testing.T) {
 			updateErr: errors.New("dynamodb update error"),
 			wantErr:   true,
 		},
+		{
+			name:        "maps ConditionalCheckFailed to ErrPuzzleNotFound",
+			pk:          "7#standard",
+			sk:          "puzzle-uuid-missing",
+			status:      "solved",
+			updateErr:   &types.ConditionalCheckFailedException{Message: strPtr("row not found")},
+			wantErr:     true,
+			wantNotFoun: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -349,6 +374,9 @@ func TestUpdateStatus(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected error, got nil")
 				}
+				if tt.wantNotFoun && !errors.Is(err, ErrPuzzleNotFound) {
+					t.Fatalf("error = %v, want ErrPuzzleNotFound", err)
+				}
 				return
 			}
 			if err != nil {
@@ -360,6 +388,9 @@ func TestUpdateStatus(t *testing.T) {
 			statusVal := capturedInput.ExpressionAttributeValues[":status"].(*types.AttributeValueMemberS).Value
 			if statusVal != tt.status {
 				t.Errorf("status value = %q, want %q", statusVal, tt.status)
+			}
+			if capturedInput.ConditionExpression == nil || *capturedInput.ConditionExpression != "attribute_exists(PK)" {
+				t.Errorf("ConditionExpression = %v, want attribute_exists(PK)", capturedInput.ConditionExpression)
 			}
 		})
 	}

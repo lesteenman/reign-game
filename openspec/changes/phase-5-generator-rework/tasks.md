@@ -40,21 +40,29 @@ Hard dependency rule: R-067 cannot merge before R-065 gates pass, because R-067 
 
 ## Status
 
+All Phase 5 slices shipped. File paths below still reference the `v2/`
+subdirectory that the scaffold (R-062) originally used; R-067 merged that
+code up one level into `backend/internal/generator/` (so any task entry
+naming `generator/v2/...` now lives at `generator/...`). Slice entries are
+left as-written to preserve the decision record.
+
 | ID    | Slice                                          | Layer | Spec steps       | Status |
 |-------|------------------------------------------------|-------|------------------|--------|
-| R-062 | Generator package scaffold                     | 0     | Step 1           | [ ]    |
-| R-063 | Sampler + brute solver + N-feasibility probe   | 1     | Step 2, Step 3   | [ ]    |
-| R-064 | Deductive solver (Tiers 1-4)                   | 2     | Step 4, Step 5   | [ ]    |
-| R-065 | Region grower + mutator + orchestrator + classifier | 3 | Step 6, 7, 8, 9 | [ ]    |
-| R-066 | Solver-guided growth (conditional)             | 4     | Step 10          | [ ]    |
-| R-067 | Consumer cleanup + drop-in replacement         | 5     | (cross-cutting)  | [ ]    |
-| R-067a| Mutator upgrade (close N=12 k=1 gate)          | 5a    | (follow-up)      | [ ]    |
-| R-067b| Region-size balance (min size = 3)             | 5b    | (quality)        | [ ]    |
+| R-062 | Generator package scaffold                     | 0     | Step 1           | [x]    |
+| R-063 | Sampler + brute solver + N-feasibility probe   | 1     | Step 2, Step 3   | [x]    |
+| R-064 | Deductive solver (Tiers 1-4)                   | 2     | Step 4, Step 5   | [x]    |
+| R-065 | Region grower + mutator + orchestrator + classifier | 3 | Step 6, 7, 8, 9 | [x]    |
+| R-066 | Solver-guided growth (conditional)             | 4     | Step 10          | [x]    |
+| R-067 | Consumer cleanup + drop-in replacement         | 5     | (cross-cutting)  | [x]    |
+| R-067a| Mutator upgrade (close N=12 k=1 gate)          | 5a    | (follow-up)      | [x]    |
+| R-067b| Region-size balance (min size = 3)             | 5b    | (quality)        | [x]    |
 | R-067c| Relift N=12 k=1 gate under min-size regime     | 5c    | (follow-up)      | [x]    |
-| R-068 | Benchmarks + distribution + soak + corpus + optional generator CI re-check | 6 | Step 11, Step 12 | [ ]    |
+| R-068 | Benchmarks + distribution + soak + corpus + optional generator CI re-check | 6 | Step 11, Step 12 | [x]    |
 | R-069 | Cutover + KI-007 close                         | 7     | (operational)    | [x]    |
-| R-06A | Post-cutover cleanup                           | 7     | (contingent)     | [x]    |
+| R-06A | Post-cutover cleanup + dynamic modes           | 7     | (contingent)     | [x]    |
 | R-06B | E2E fixed-database harness                     | 8     | (verification)   | [x]    |
+| R-06C | Seed capture + `cmd/reproduce` + safety net    | 8     | (operational)    | [x]    |
+| R-06D | Safety-net logging + dev-stack lifecycle       | 8     | (operational)    | [x]    |
 
 ## Tasks
 

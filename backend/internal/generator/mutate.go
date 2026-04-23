@@ -1,6 +1,9 @@
 package generator
 
-import "math/bits"
+import (
+	"fmt"
+	"math/bits"
+)
 
 // mutationOutcome is the three-way result of a single grow+solve+mutate run.
 // The orchestrator uses it to decide whether to accept the attempt, retry
@@ -236,11 +239,16 @@ func (g *Generator) tryOneSwap(seeds [][]Mark, baseline int, allowPlateau bool) 
 	}
 
 	// No improving swap found; restore solver to the pre-scan state so
-	// the caller's g.solver reads are trustworthy.
+	// the caller's g.solver reads are trustworthy. The region map here is
+	// the same one that initialized cleanly at solveAndMutate entry (every
+	// aborted swap restores g.regionOf[r][c]), so initFromRegionOf must
+	// succeed. A failure here is an invariant violation, not a runtime
+	// error — the caller would otherwise read stale trace/cands state.
 	g.solver.trace = nil
-	if err := g.solver.initFromRegionOf(&g.regionOf, n, g.k); err == nil {
-		_ = solve(&g.solver)
+	if err := g.solver.initFromRegionOf(&g.regionOf, n, g.k); err != nil {
+		panic(fmt.Sprintf("generator: restore-init failed on a region map that previously initialized cleanly: %v", err))
 	}
+	_ = solve(&g.solver)
 	return false
 }
 

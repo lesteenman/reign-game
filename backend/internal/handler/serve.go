@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -83,9 +84,15 @@ func ServeHandler(fetcher PuzzleFetcher) http.HandlerFunc {
 			return
 		}
 
-		// Mark as served.
+		// Mark as served. ErrPuzzleNotFound here is the NextReady→MarkServed
+		// race (another replica consumed the row between the two calls);
+		// surface it as "no puzzles available" so the client retries.
 		pk := fmt.Sprintf("%d#%s", size, mode)
 		if err := fetcher.MarkServed(r.Context(), pk, puzzle.ID); err != nil {
+			if errors.Is(err, repository.ErrPuzzleNotFound) {
+				writeError(w, http.StatusNotFound, "no_puzzles_available", "No puzzles available for this size and mode. Try again shortly.")
+				return
+			}
 			log.Printf("error marking puzzle %s as served: %v", puzzle.ID, err)
 			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to serve puzzle")
 			return

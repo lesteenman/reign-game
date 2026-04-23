@@ -3,11 +3,15 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/go-chi/chi/v5"
+
+	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
 // StatusUpdater updates puzzle status in the repository.
@@ -34,10 +38,21 @@ func StatusHandler(updater StatusUpdater) http.HandlerFunc {
 			return
 		}
 
-		// Validate size query param.
+		// Validate size query param. Parsed as int and range-checked so
+		// it can't be used to address arbitrary partitions (e.g. CONFIG)
+		// via the PK builder.
 		sizeStr := r.URL.Query().Get("size")
 		if sizeStr == "" {
 			writeError(w, http.StatusBadRequest, "invalid_params", "size query parameter is required")
+			return
+		}
+		size, err := strconv.Atoi(sizeStr)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid_params", "size must be an integer")
+			return
+		}
+		if status, code, msg := validateSize(size); status != 0 {
+			writeError(w, status, code, msg)
 			return
 		}
 
@@ -47,8 +62,8 @@ func StatusHandler(updater StatusUpdater) http.HandlerFunc {
 			writeError(w, http.StatusBadRequest, "invalid_params", "mode query parameter is required")
 			return
 		}
-		if mode != ModeStandard && mode != ModeDouble {
-			writeError(w, http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'")
+		if status, code, msg := validateMode(mode); status != 0 {
+			writeError(w, status, code, msg)
 			return
 		}
 
@@ -65,9 +80,12 @@ func StatusHandler(updater StatusUpdater) http.HandlerFunc {
 			return
 		}
 
-		// Construct partition key and update.
-		pk := fmt.Sprintf("%s#%s", sizeStr, mode)
+		pk := fmt.Sprintf("%d#%s", size, mode)
 		if err := updater.UpdateStatus(r.Context(), pk, puzzleID, req.Status); err != nil {
+			if errors.Is(err, repository.ErrPuzzleNotFound) {
+				writeError(w, http.StatusNotFound, "not_found", "puzzle not found")
+				return
+			}
 			log.Printf("error updating puzzle %s status to %s: %v", puzzleID, req.Status, err)
 			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update puzzle status")
 			return
