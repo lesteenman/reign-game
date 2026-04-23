@@ -5,7 +5,7 @@ user_invocable: true
 
 # Local Code Review & Fix
 
-Review the current working changes (or branch diff from main) for issues across four categories, then fix what's actionable.
+Review the current working changes (or branch diff from main) for issues across five categories, then fix what's actionable.
 
 ## Phase 1: Identify Changes
 
@@ -23,9 +23,9 @@ Then collect the full set of changes on the branch, not just the current session
 
 If `git diff main...HEAD` is empty AND the working tree is clean, tell the user there's nothing to review.
 
-## Phase 2: Launch Four Review Agents in Parallel
+## Phase 2: Launch Five Review Agents in Parallel
 
-Use the Agent tool to launch all four agents concurrently in a single message. Pass each agent the full diff so it has the complete context.
+Use the Agent tool to launch all five agents concurrently in a single message. Pass each agent the full diff so it has the complete context.
 
 ### Agent 1: Security Review
 
@@ -71,9 +71,36 @@ Review the same changes for efficiency:
 4. **Memory**: unbounded data structures, missing cleanup, event listener leaks
 5. **Overly broad operations**: reading entire files when only a portion is needed
 
-## Phase 3: Fix Issues
+### Agent 5: Doc Drift Review
 
-Wait for all four agents to complete. Aggregate their findings into a structured report:
+The top-level docs (`ROADMAP.md`, `PROJECT_STRUCTURE.md`, `CLAUDE.md`, `GLOSSARY.md`, runbooks under `docs/runbooks/`, and the active OpenSpec change's `tasks.md` + `proposal.md` + `specs/`) need to move with the code. Drift is invisible per-slice but crippling at epic close.
+
+Read the diff plus the top-level docs, then flag:
+
+1. **Renamed / moved paths referenced by the old path.** If the diff renames, moves, or deletes a file or directory, grep every `.md` in the repo root + `docs/` + `openspec/` for the old path. Example from Phase 5: `backend/internal/generator/v2/` was merged up to `backend/internal/generator/`, but the spec, proposal, and a test comment still cited the `v2/` subdir weeks later.
+2. **Pre-declared IDs that collide with shipped IDs.** If the diff ships a task ID, slice ID, or KI number, grep `ROADMAP.md` for the same ID in a *later* phase block — pre-declared future IDs are often forgotten and create silent collisions. Phase 5 shipped R-062..R-06D; ROADMAP Phase 6/7/8 still had R-063..R-068 pre-declared until epic-close.
+3. **tasks.md status column lies.** For any slice whose artifacts exist on disk, the `tasks.md` Status column should be `[x]`. Walk each row and compare against the filesystem. Stale `[ ]` rows are a common finding.
+4. **PROJECT_STRUCTURE.md omits new files/directories.** Every `cmd/*` directory, every top-level new file, every test-infrastructure layout change should appear in the tree listing. If the diff adds `backend/cmd/reproduce/` but `PROJECT_STRUCTURE.md` doesn't list it, flag.
+5. **KI "Related" column or runbook references broken IDs.** Cross-refs to slice IDs that no longer exist (typos or renumberings) mislead future readers.
+6. **Future-looking phrasing after the thing happened.** Text like "R-06B will introduce" or "the new generator will replace the old" that survived into a post-cutover world. Flag and rewrite past-tense.
+
+Flag each as MAJOR (doc states something demonstrably false) or MINOR (stale but not misleading). Doc drift rarely rises to CRITICAL.
+
+## Phase 3: Triage
+
+Before presenting findings to the user, **verify each CRITICAL and MAJOR by opening the cited file at the cited line.** Agents occasionally hallucinate findings — a claim that a test "asserts nothing" or a handler "leaks raw errors" must be checked against the actual code. A false positive wastes a triage turn with the user and erodes trust in the whole review.
+
+For each CRITICAL / MAJOR:
+
+1. Read the cited file + line range.
+2. Confirm the claim holds. If not, mark as a false positive in the report with one sentence of evidence ("M1: all 500 paths already call `writeError(..., sanitized-message)`; raw error is only logged, not returned.") and drop it from the consolidated list.
+3. If the finding holds but the severity is wrong, re-grade it (e.g. a CRITICAL that's actually dependent on an unshipped code path may be MAJOR or MINOR).
+
+Do not triage MINORs — the volume is too high and the cost of a false-positive MINOR is near zero.
+
+## Phase 4: Fix Issues
+
+Wait for all five agents to complete. Aggregate their verified findings into a structured report:
 
 ```
 ## Review Summary
@@ -88,6 +115,9 @@ Wait for all four agents to complete. Aggregate their findings into a structured
 - [SEVERITY] file:line -- description
 
 ### Reuse Opportunities (X findings)
+- [SEVERITY] file:line -- description
+
+### Doc Drift (X findings)
 - [SEVERITY] file:line -- description
 ```
 

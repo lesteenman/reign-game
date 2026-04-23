@@ -48,6 +48,11 @@ export default defineConfig({
       // deterministic; the suite is small enough that it isn't slow.
       fullyParallel: false,
       workers: 1,
+      // No retries. A retry consumes fixture 2/2 (the StrictMode spare);
+      // a second retry hits the same no-puzzles-available path the
+      // project-level config is designed to avoid. Failures here need
+      // a real look, not a rerun.
+      retries: 0,
     },
   ],
   webServer: {

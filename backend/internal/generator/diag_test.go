@@ -14,7 +14,7 @@ import (
 // Build-tag gated so it never runs in default CI (200+ attempts × 3 cells
 // × two passes is measurable wall-clock). Invoke explicitly when tuning:
 //
-//	go test -tags=diag -run TestDiagPipelineStages -v ./internal/generator/v2/...
+//	go test -tags=diag -run TestDiagPipelineStages -v ./internal/generator/...
 func TestDiagPipelineStages(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping diag under -short")

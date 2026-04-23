@@ -4,7 +4,7 @@ End-to-end runbook for replacing the old generator with the Phase 5 rework. Cove
 
 ## Before you start
 
-- Phase 5 PRs (R-062 through R-068) merged to `epic/phase-5-generator-rework`, then to `main`.
+- Phase 5 slice PRs (R-062 through R-06D) merged to `epic/phase-5-generator-rework`, then promoted to `main` via a single epic PR.
 - `bench/step11-handoff.md` read and understood — Lambda concurrency sizing will come from its yield + throughput tables.
 - Stakeholders notified if any consumer is serving live traffic. (Dev only: no notification needed.)
 - Local tools: `aws` CLI and `jq` on your PATH. macOS typically needs `brew install jq`; Linux distros have it in their package managers.
@@ -93,7 +93,7 @@ Before declaring cutover complete:
 
 1. `curl http://localhost:5181/api/admin/pool` (or prod equivalent): every enabled combo has `readyCount > 0`.
 2. At least one Double 9x9 row in the pool with `status=READY`. This is the KI-007 acceptance criterion — the old generator couldn't produce this in the Lambda budget; the new one finishes in milliseconds.
-3. `GET /api/puzzles/next?size=9&mode=double` returns a puzzle whose `Regions` is `[[0,0,...],...]` (new shape) and whose `Solution` is `[{r,c},...]` (list of marks).
+3. `GET /api/puzzles/next?size=9&mode=double` returns a puzzle whose `metadata` block is populated with the Phase 5 fields (`difficulty`, `maxTier`, `tierCounts`, `traceLen`, `generationDurationMs`, `seed`). The old generator produced the same JSON shape but left those fields empty or at zero, so presence-and-non-zero is the meaningful check.
 
 ## 7. Close the KIs
 

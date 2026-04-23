@@ -94,36 +94,45 @@ Goal: Let players step backwards and forwards through their move history on a pu
 
 Goal: Rework the puzzle generator based on new designs (to be detailed via design-flow). Expected motivations: faster generation (especially Double Queens — see KI-007), higher-quality region shapes, more reliable deducibility guarantees. Scope and task breakdown come from the design session.
 
-- [ ] **R-061** — Design-flow: capture the new generator design, decide algorithm(s), and split into implementation tasks (R-062, R-069, R-06A+ as needed)
+- [x] **R-061** — Design-flow: capture the new generator design, decide algorithm(s), and split into implementation tasks
+
+Phase 5 implementation slices R-062..R-06D are tracked in
+`openspec/changes/phase-5-generator-rework/tasks.md`. All shipped: generator
+scaffold (R-062), sampler (R-063), deductive solver (R-064), region grower
+cheap + solver-guided (R-065 / R-066), mutator + consumer cleanup (R-067),
+measurement + soak + distribution (R-068), cutover (R-069), post-cutover
+dynamic modes (R-06A), e2e harness (R-06B), seed capture (R-06C), logging +
+dev-stack lifecycle (R-06D). Two quality deferrals carry over into Phase 6b
+below.
 
 ## Phase 6: Verdict System
 
 Goal: Rate puzzles after playing them — upvote, downvote, or skip.
 
-- [ ] **R-063** — `PUT /puzzles/:id/verdict` endpoint: upvote/downvote/skip
-- [ ] **R-064** — Frontend: verdict buttons on puzzle completion/skip
+- [ ] **R-081** — `PUT /puzzles/:id/verdict` endpoint: upvote/downvote/skip
+- [ ] **R-082** — Frontend: verdict buttons on puzzle completion/skip
 
 ## Phase 6b: Generator quality deferrals
 
 Two follow-ups from Phase 5's measurement pass (R-068). Both need the audit-loop tooling (Phase 6 verdicts, Phase 7 replay, Phase 8 analysis) to resolve. They are explicitly out of Phase 5 scope — capture here so the next audit pass picks them up.
 
-- [ ] **R-06D** — **Dead-rule investigation (R6, R8, R9).** R-068b's property corpus found R6 (Tier 3), R8 (Tier 4), R9 (Tier 4) never fire across 500 generated puzzles. Per input-spec §7.2 a dormant rule is redundant or buggy. Hand-craft a minimal `solverState` fixture per rule. If a fixture exists the rule is reachable and the generator must be retuned to produce such puzzles — tie-in for the audit-loop's "what kinds of puzzles do we actually produce" analysis. If no fixture can be built, retire the rule from `rules.go` and drop the classifier's tier-max accordingly. Currently tracked in code via `propertyCorpusKnownDead` in `backend/internal/generator/property_test.go`. Outcome also determines whether `WithDifficulty(Expert)` is ever shippable (see `backend/internal/generator/bench/step11-handoff.md` §2).
+- [ ] **R-083** — **Dead-rule investigation (R6, R8, R9).** R-068b's property corpus found R6 (Tier 3), R8 (Tier 4), R9 (Tier 4) never fire across 500 generated puzzles. Per input-spec §7.2 a dormant rule is redundant or buggy. Hand-craft a minimal `solverState` fixture per rule. If a fixture exists the rule is reachable and the generator must be retuned to produce such puzzles — tie-in for the audit-loop's "what kinds of puzzles do we actually produce" analysis. If no fixture can be built, retire the rule from `rules.go` and drop the classifier's tier-max accordingly. Currently tracked in code via `propertyCorpusKnownDead` in `backend/internal/generator/property_test.go`. Outcome also determines whether `WithDifficulty(Expert)` is ever shippable (see `backend/internal/generator/bench/step11-handoff.md` §2).
 
-- [ ] **R-06E** — **Medium / Hard blind calibration test.** R-068d's distribution shows every generated puzzle is Medium or Hard by the classifier, with zero Easy and zero Expert. The classifier split at N=12 k=1 is ~55% Medium / ~45% Hard. Intuition says the split is plausible (the mutator explicitly seeks stalled states), but the label boundary is unverified: a "Medium" may play harder than a "Hard" or vice versa. Requires Phase 6 verdict capture for play-time and user-rated difficulty across a labeled corpus, then a blind-test statistical check on whether the two tiers are actually perceptibly different. If they aren't, either collapse the tiers or retune the classifier thresholds.
+- [ ] **R-084** — **Medium / Hard blind calibration test.** R-068d's distribution shows every generated puzzle is Medium or Hard by the classifier, with zero Easy and zero Expert. The classifier split at N=12 k=1 is ~55% Medium / ~45% Hard. Intuition says the split is plausible (the mutator explicitly seeks stalled states), but the label boundary is unverified: a "Medium" may play harder than a "Hard" or vice versa. Requires Phase 6 verdict capture for play-time and user-rated difficulty across a labeled corpus, then a blind-test statistical check on whether the two tiers are actually perceptibly different. If they aren't, either collapse the tiers or retune the classifier thresholds.
 
 ## Phase 7: Puzzle Replay
 
 Goal: Admin can browse played puzzles and replay them to review quality.
 
-- [ ] **R-065** — `GET /puzzles/:id` endpoint: load any puzzle by ID for replay
-- [ ] **R-066** — Frontend: played puzzle list in admin UI, replay by ID
+- [ ] **R-085** — `GET /puzzles/:id` endpoint: load any puzzle by ID for replay
+- [ ] **R-086** — Frontend: played puzzle list in admin UI, replay by ID
 
 ## Phase 8: Puzzle Analysis Agent
 
 Goal: Automated analysis of played puzzles — generation performance, verdict patterns, engine comparison.
 
-- [ ] **R-067** — Analysis agent: dedicated agent for querying and interpreting puzzle generation data
-- [ ] **R-068** — Analysis endpoint(s) as needed by the agent
+- [ ] **R-087** — Analysis agent: dedicated agent for querying and interpreting puzzle generation data
+- [ ] **R-088** — Analysis endpoint(s) as needed by the agent
 
 ## Phase 9: Difficulty Rating
 
@@ -171,7 +180,7 @@ Candidate items — not yet committed or ordered:
 | KI-004 | Low | PWA service worker disabled — vite-plugin-pwa lacks Vite 8 support. Track [vite-pwa/vite-plugin-pwa#923](https://github.com/vite-pwa/vite-plugin-pwa/issues/923). Manifest + icons in place; re-add plugin when compatible. | R-01A |
 | KI-005 | ~~Low~~ Fixed | ~~Timer does not start immediately when opening a new puzzle.~~ Fixed: immediate tick on timer start. | R-019 |
 | KI-006 | ~~Medium~~ Fixed | ~~Every CD deploy updates the Lambda function even when there are no backend changes.~~ Fixed: reproducible zip (touch + zip -X) means identical source produces identical hash. | R-006 |
-| KI-007 | ~~High~~ Fixed | ~~Double Queens puzzle generation too slow (12+ min for 7x7) with deducibility check. Disabled in replenish and UI.~~ Fixed by Phase 5 generator rework (R-062..R-067). N=9 k=2 generation at 100% success; end-to-end Generate ~3 ms/op. 7x7 Double turned out to be infeasible (N=7 k=2 has 0 solutions under 8-neighbor adjacency + 2 marks/row). 9x9 Double re-enabled in LocalStack seed and the frontend PuzzleSelector. | R-030, R-031, R-066, R-066c |
+| KI-007 | ~~High~~ Fixed | ~~Double Queens puzzle generation too slow (12+ min for 7x7) with deducibility check. Disabled in replenish and UI.~~ Fixed by Phase 5 generator rework (R-062..R-067). N=9 k=2 generation at 100% success; end-to-end Generate ~3 ms/op. 7x7 Double turned out to be infeasible (N=7 k=2 has 0 solutions under 8-neighbor adjacency + 2 marks/row). 9x9 Double re-enabled in LocalStack seed and the frontend PuzzleSelector. | R-030, R-031, R-066, R-067c |
 | KI-008 | ~~Medium~~ Fixed | ~~"Play Again" and "Retry" buttons don't work.~~ Fixed: buttons now trigger re-fetch via state reset instead of URL navigation. | R-044 |
 | KI-009 | **Critical** (pre-production) | `/api/admin/*` routes (`GET /api/admin/pool`, `PUT /api/admin/config/{size}/{mode}`, `POST /api/admin/config`, `POST /api/admin/replenish`) have no authentication in the backend, API Gateway (`authorization = "NONE"`), or CloudFront. Any anonymous caller can read pool state, mutate generation configs, and trigger replenish. Must be gated before exposing the admin UI to any non-trusted network. Pairs with auth rollout in R-075. Interim mitigation: threshold capped at 50 to blunt SQS amplification; CloudFront forwards `Authorization` so the future token flow is ready. | R-051, R-052, R-053, R-054, R-075 |
 | KI-010 | Medium | `GET /api/admin/pool` (`backend/internal/handler/admin_pool.go`) does 1 Query for configs plus 1 per-combo `CountReady` Query serially — N+1 on Lambda cold-start path. Fix with `errgroup` (bounded) or a single pre-aggregated count attribute. | R-051 |
