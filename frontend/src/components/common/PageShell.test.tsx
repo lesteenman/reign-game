@@ -2,13 +2,32 @@ import { render, screen, fireEvent, cleanup } from '../../test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { PageShell } from './PageShell';
+import { ClerkAvailabilityProvider } from '../auth/ClerkAvailability';
+
+// Tests run outside a real ClerkProvider; the components that rely on
+// Clerk hooks (SignedIn / SignedOut / UserMenu / SignInButton) are
+// gated by `useClerkAvailable()`. Default the flag to `false` so the
+// existing behavioural tests still run without booting Clerk.
+vi.mock('@clerk/clerk-react', () => ({
+  SignedIn: () => null,
+  SignedOut: () => null,
+  SignInButton: () => null,
+  UserButton: () => null,
+  useUser: () => ({ isLoaded: false, isSignedIn: false, user: null }),
+}));
 
 afterEach(() => {
   cleanup();
 });
 
-function renderShell(ui: React.ReactElement) {
-  return render(<MemoryRouter>{ui}</MemoryRouter>);
+function renderShell(ui: React.ReactElement, clerkAvailable = false) {
+  return render(
+    <MemoryRouter>
+      <ClerkAvailabilityProvider available={clerkAvailable}>
+        {ui}
+      </ClerkAvailabilityProvider>
+    </MemoryRouter>,
+  );
 }
 
 describe('PageShell', () => {
