@@ -1,4 +1,4 @@
-import { UserButton, useUser } from '@clerk/clerk-react';
+import { UserButton, useUser } from "@clerk/react";
 
 /**
  * Narrow the shape we consume from Clerk's publicMetadata. Clerk types

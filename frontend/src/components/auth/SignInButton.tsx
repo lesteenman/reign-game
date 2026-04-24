@@ -1,4 +1,4 @@
-import { SignInButton as ClerkSignInButton } from '@clerk/clerk-react';
+import { SignInButton as ClerkSignInButton } from "@clerk/react";
 import type { CSSProperties } from 'react';
 
 interface SignInButtonProps {

@@ -1,4 +1,4 @@
-import { SignOutButton } from '@clerk/clerk-react';
+import { SignOutButton } from "@clerk/react";
 import type { CSSProperties } from 'react';
 import { PageShell } from '../components/common/PageShell';
 import { SignInButton } from '../components/auth/SignInButton';

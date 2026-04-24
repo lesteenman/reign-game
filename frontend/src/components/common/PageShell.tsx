@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { SignedIn, SignedOut } from '@clerk/clerk-react';
+import { Show } from "@clerk/react";
 import { useDarkMode } from '../../theme/useDarkMode';
 import { SignInButton } from '../auth/SignInButton';
 import { UserMenu } from '../auth/UserMenu';
@@ -14,10 +14,15 @@ interface PageShellProps {
 }
 
 /**
- * Header-right auth slot. Renders Clerk-driven sign-in/user menu when
- * ClerkProvider is mounted; otherwise renders nothing so the anonymous
- * game still works in dev environments without a Clerk key. The backend
- * is still the source of truth for authorisation (auth-surface.md AS-04).
+ * Header-right auth slot. Renders Clerk-driven sign-in / user menu
+ * when ClerkProvider is mounted; otherwise renders nothing so the
+ * anonymous game still works in dev environments without a Clerk
+ * key. The backend is still the source of truth for authorisation
+ * (auth-surface.md AS-04).
+ *
+ * `<Show when="signed-in|signed-out">` is the v6 replacement for the
+ * removed `<SignedIn>` / `<SignedOut>` components (Clerk core-3
+ * upgrade). See @clerk/react 6 upgrade guide.
  */
 function HeaderAuthSlot() {
   const clerkAvailable = useClerkAvailable();
@@ -26,12 +31,12 @@ function HeaderAuthSlot() {
   }
   return (
     <>
-      <SignedOut>
+      <Show when="signed-out">
         <SignInButton />
-      </SignedOut>
-      <SignedIn>
+      </Show>
+      <Show when="signed-in">
         <UserMenu />
-      </SignedIn>
+      </Show>
     </>
   );
 }

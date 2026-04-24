@@ -1,4 +1,4 @@
-import { useUser } from '@clerk/clerk-react';
+import { useUser } from "@clerk/react";
 import type { CSSProperties } from 'react';
 import { AdminPage } from '../../pages/AdminPage';
 import { AdminLandingPage } from '../../pages/AdminLandingPage';
