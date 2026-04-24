@@ -105,36 +105,45 @@ dynamic modes (R-06A), e2e harness (R-06B), seed capture (R-06C), logging +
 dev-stack lifecycle (R-06D). Two quality deferrals carry over into Phase 6b
 below.
 
-## Phase 6: Verdict System
+## Phase 6: Admin Authentication via Clerk
+
+Goal: Close KI-009 by gating `/api/admin/*` behind authenticated sessions. Ship a minimum-viable auth layer using Clerk (hosted) with Google OAuth. Anyone can sign in; admin role is assigned manually via the Clerk dashboard. No DynamoDB user records, no local-server sync, no premium flow this phase. Design artifacts in `openspec/changes/phase-6-admin-auth/`.
+
+- [ ] **R-089** — Clerk setup + GCP OAuth + Terraform SSM keys + CloudFront cookie forwarding
+- [ ] **R-08A** — Backend auth middleware (`RequireAuth`, `RequireAdmin`) + admin route wiring
+- [ ] **R-08B** — Frontend sign-in flow + user menu + `/admin` route protection
+- [ ] **R-08C** — Glossary + CLAUDE.md role table + KI-009 close + this phase's renumbering
+
+## Phase 7: Verdict System
 
 Goal: Rate puzzles after playing them — upvote, downvote, or skip.
 
 - [ ] **R-081** — `PUT /puzzles/:id/verdict` endpoint: upvote/downvote/skip
 - [ ] **R-082** — Frontend: verdict buttons on puzzle completion/skip
 
-## Phase 6b: Generator quality deferrals
+## Phase 7b: Generator quality deferrals
 
-Two follow-ups from Phase 5's measurement pass (R-068). Both need the audit-loop tooling (Phase 6 verdicts, Phase 7 replay, Phase 8 analysis) to resolve. They are explicitly out of Phase 5 scope — capture here so the next audit pass picks them up.
+Two follow-ups from Phase 5's measurement pass (R-068). Both need the audit-loop tooling (Phase 7 verdicts, Phase 8 replay, Phase 9 analysis) to resolve. They are explicitly out of Phase 5 scope — capture here so the next audit pass picks them up.
 
 - [ ] **R-083** — **Dead-rule investigation (R6, R8, R9).** R-068b's property corpus found R6 (Tier 3), R8 (Tier 4), R9 (Tier 4) never fire across 500 generated puzzles. Per input-spec §7.2 a dormant rule is redundant or buggy. Hand-craft a minimal `solverState` fixture per rule. If a fixture exists the rule is reachable and the generator must be retuned to produce such puzzles — tie-in for the audit-loop's "what kinds of puzzles do we actually produce" analysis. If no fixture can be built, retire the rule from `rules.go` and drop the classifier's tier-max accordingly. Currently tracked in code via `propertyCorpusKnownDead` in `backend/internal/generator/property_test.go`. Outcome also determines whether `WithDifficulty(Expert)` is ever shippable (see `backend/internal/generator/bench/step11-handoff.md` §2).
 
-- [ ] **R-084** — **Medium / Hard blind calibration test.** R-068d's distribution shows every generated puzzle is Medium or Hard by the classifier, with zero Easy and zero Expert. The classifier split at N=12 k=1 is ~55% Medium / ~45% Hard. Intuition says the split is plausible (the mutator explicitly seeks stalled states), but the label boundary is unverified: a "Medium" may play harder than a "Hard" or vice versa. Requires Phase 6 verdict capture for play-time and user-rated difficulty across a labeled corpus, then a blind-test statistical check on whether the two tiers are actually perceptibly different. If they aren't, either collapse the tiers or retune the classifier thresholds.
+- [ ] **R-084** — **Medium / Hard blind calibration test.** R-068d's distribution shows every generated puzzle is Medium or Hard by the classifier, with zero Easy and zero Expert. The classifier split at N=12 k=1 is ~55% Medium / ~45% Hard. Intuition says the split is plausible (the mutator explicitly seeks stalled states), but the label boundary is unverified: a "Medium" may play harder than a "Hard" or vice versa. Requires Phase 7 verdict capture for play-time and user-rated difficulty across a labeled corpus, then a blind-test statistical check on whether the two tiers are actually perceptibly different. If they aren't, either collapse the tiers or retune the classifier thresholds.
 
-## Phase 7: Puzzle Replay
+## Phase 8: Puzzle Replay
 
 Goal: Admin can browse played puzzles and replay them to review quality.
 
 - [ ] **R-085** — `GET /puzzles/:id` endpoint: load any puzzle by ID for replay
 - [ ] **R-086** — Frontend: played puzzle list in admin UI, replay by ID
 
-## Phase 8: Puzzle Analysis Agent
+## Phase 9: Puzzle Analysis Agent
 
 Goal: Automated analysis of played puzzles — generation performance, verdict patterns, engine comparison.
 
 - [ ] **R-087** — Analysis agent: dedicated agent for querying and interpreting puzzle generation data
 - [ ] **R-088** — Analysis endpoint(s) as needed by the agent
 
-## Phase 9: Difficulty Rating
+## Phase 10: Difficulty Rating
 
 Goal: Difficulty rating for all grid sizes and modes, with user-facing difficulty selector.
 
@@ -142,7 +151,7 @@ Goal: Difficulty rating for all grid sizes and modes, with user-facing difficult
 - [ ] **R-032** — Update difficulty rating for Double Queens
 - [ ] **R-034** — UI: difficulty selector (Easy / Medium / Hard)
 
-## Phase 10+: Future (scoped when we get there)
+## Phase 11+: Future (scoped when we get there)
 
 Candidate items — not yet committed or ordered:
 
@@ -151,7 +160,7 @@ Candidate items — not yet committed or ordered:
 - [ ] **R-072** — Daily challenge flow: fetch puzzle, timer, submit completion, show percentile
 - [ ] **R-073** — Anonymous completion submission + percentile calculation (stateless for free players)
 - [ ] **R-074** — Leaderboards: premium members visible, daily and overall
-- [ ] **R-075** — Auth provider setup (not Cognito) — Google + Apple OAuth
+- [ ] **R-075** — ~~Auth provider setup~~ **Superseded by Phase 6** (Google OAuth via Clerk shipped earlier than originally planned). Apple Sign-In remains open as a future additive provider when iOS App Store submission becomes imminent.
 - [ ] **R-076** — One-time premium purchase flow
 - [ ] **R-077** — Premium: full puzzle archive access, detailed stats, cross-device sync
 - [ ] **R-078** — Premium themes: Queens Classic (free), Gems, Garden, Neon, Cosmos
@@ -184,7 +193,7 @@ Candidate items — not yet committed or ordered:
 | KI-006 | ~~Medium~~ Fixed | ~~Every CD deploy updates the Lambda function even when there are no backend changes.~~ Fixed: reproducible zip (touch + zip -X) means identical source produces identical hash. | R-006 |
 | KI-007 | ~~High~~ Fixed | ~~Double Queens puzzle generation too slow (12+ min for 7x7) with deducibility check. Disabled in replenish and UI.~~ Fixed by Phase 5 generator rework (R-062..R-067). N=9 k=2 generation at 100% success; end-to-end Generate ~3 ms/op. 7x7 Double turned out to be infeasible (N=7 k=2 has 0 solutions under 8-neighbor adjacency + 2 marks/row). 9x9 Double re-enabled in LocalStack seed and the frontend PuzzleSelector. | R-030, R-031, R-066, R-067c |
 | KI-008 | ~~Medium~~ Fixed | ~~"Play Again" and "Retry" buttons don't work.~~ Fixed: buttons now trigger re-fetch via state reset instead of URL navigation. | R-044 |
-| KI-009 | **Critical** (pre-production) | `/api/admin/*` routes (`GET /api/admin/pool`, `PUT /api/admin/config/{size}/{mode}`, `POST /api/admin/config`, `POST /api/admin/replenish`) have no authentication in the backend, API Gateway (`authorization = "NONE"`), or CloudFront. Any anonymous caller can read pool state, mutate generation configs, and trigger replenish. Must be gated before exposing the admin UI to any non-trusted network. Pairs with auth rollout in R-075. Interim mitigation: threshold capped at 50 to blunt SQS amplification; CloudFront forwards `Authorization` so the future token flow is ready. | R-051, R-052, R-053, R-054, R-075 |
+| KI-009 | **Critical** (pre-production) — in flight | `/api/admin/*` routes have no authentication. **Phase 6 (admin auth via Clerk) is the fix** — see `openspec/changes/phase-6-admin-auth/`. Interim mitigation stays in place until Phase 6 ships: threshold capped at 50 to blunt SQS amplification; CloudFront forwards `Authorization` and (per R-089) cookies. Closes when R-08C lands. | R-051, R-052, R-053, R-054, R-089, R-08A, R-08B, R-08C |
 | KI-010 | Medium | `GET /api/admin/pool` (`backend/internal/handler/admin_pool.go`) does 1 Query for configs plus 1 per-combo `CountReady` Query serially — N+1 on Lambda cold-start path. Fix with `errgroup` (bounded) or a single pre-aggregated count attribute. | R-051 |
 | KI-011 | Medium | `repository.CountReady` and `repository.NextReady` (`backend/internal/repository/puzzle.go`) use a `FilterExpression` on `status = "ready"`, which forces DynamoDB to read the full partition (including historical served/solved/skipped puzzles) before filtering. Cost + latency grow with lifetime pool volume, not ready inventory. Fix with a sparse GSI keyed on `{size}#{mode}#ready` that only ready items populate (writers add attributes on put, `MarkServed` / `UpdateStatus` remove them). | R-040, R-044 |
 | KI-012 | Medium | `ReplenishHandler` (`backend/internal/handler/replenish.go`) publishes one SQS message per unit of `threshold - count` in a serial loop. For 5 combos at threshold 10 with an empty pool that is 50 sequential `SendMessage` calls inside an HTTP handler. Switch to `SendMessageBatch` (up to 10/call) and/or parallelize across combos. Add a `PublishBatch` method to `queue.Publisher`. | R-042, R-043, R-054 |
