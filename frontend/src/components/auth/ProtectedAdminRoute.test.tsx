@@ -11,7 +11,7 @@ type UseUserReturn = {
 
 const useUserMock = vi.fn<() => UseUserReturn>();
 
-vi.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/react', () => ({
   useUser: () => useUserMock(),
   // Used by the AdminLandingPage in the forbidden branch; we don't exercise
   // its behaviour here, just need it to render without requiring a provider.

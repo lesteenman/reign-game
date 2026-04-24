@@ -13,7 +13,7 @@ type UseUserReturn = {
 
 const useUserMock = vi.fn<() => UseUserReturn>();
 
-vi.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/react', () => ({
   useUser: () => useUserMock(),
   UserButton: Object.assign(
     ({ children }: { children?: React.ReactNode }) => (

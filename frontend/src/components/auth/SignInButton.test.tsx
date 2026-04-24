@@ -5,7 +5,7 @@ import { SignInButton } from './SignInButton';
 // Clerk's SignInButton renders its children inside its own button when
 // children are provided. We mock it to a plain button so we can assert
 // the wrapped output without booting Clerk.
-vi.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/react', () => ({
   SignInButton: ({ children, mode }: { children?: React.ReactNode; mode?: string }) => (
     <div data-testid="clerk-sign-in-button" data-mode={mode}>
       {children ?? <button type="button">Sign in</button>}

@@ -5,7 +5,7 @@ import { AdminLandingPage } from './AdminLandingPage';
 
 // Mock Clerk's SignInButton/SignOutButton to plain buttons so we can
 // assert on them without booting Clerk.
-vi.mock('@clerk/clerk-react', () => ({
+vi.mock('@clerk/react', () => ({
   SignInButton: ({ children, mode }: { children?: React.ReactNode; mode?: string }) => (
     <div data-testid="clerk-sign-in-button" data-mode={mode}>
       {children ?? <button type="button">Sign in</button>}

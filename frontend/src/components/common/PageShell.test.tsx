@@ -5,12 +5,13 @@ import { PageShell } from './PageShell';
 import { ClerkAvailabilityProvider } from '../auth/ClerkAvailability';
 
 // Tests run outside a real ClerkProvider; the components that rely on
-// Clerk hooks (SignedIn / SignedOut / UserMenu / SignInButton) are
-// gated by `useClerkAvailable()`. Default the flag to `false` so the
+// Clerk hooks / auth gates (Show / UserMenu / SignInButton) are gated
+// by `useClerkAvailable()`. Default the flag to `false` so the
 // existing behavioural tests still run without booting Clerk.
-vi.mock('@clerk/clerk-react', () => ({
-  SignedIn: () => null,
-  SignedOut: () => null,
+// Post-v6 (core-3): `<SignedIn>`/`<SignedOut>` were replaced by
+// `<Show when="signed-in|signed-out">`.
+vi.mock('@clerk/react', () => ({
+  Show: () => null,
   SignInButton: () => null,
   UserButton: () => null,
   useUser: () => ({ isLoaded: false, isSignedIn: false, user: null }),
