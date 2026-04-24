@@ -32,14 +32,14 @@ Decisions from the design grill (`design-grill-summary.md`). In one-line form:
 A single cycle of Phase 6 is done when:
 
 - **AC-1. Clerk integrated.** Clerk React SDK installed in `frontend/`; Clerk Go server SDK installed in `backend/`. GCP OAuth app registered; Clerk dashboard configured with Google as the sole OAuth provider.
-- **AC-2. Backend middleware in place.** `RequireAuth` verifies Clerk session and rejects with 401 if absent. `RequireAdmin` additionally checks `publicMetadata.role === 'admin'`; rejects with 403 otherwise. Both middleware applied to all five `/api/admin/*` routes via chi router group.
+- **AC-2. Backend middleware in place.** `RequireAuth` verifies Clerk session and rejects with 401 if absent. `RequireAdmin` additionally checks `publicMetadata.role === 'admin'`; rejects with 403 otherwise. Both middleware applied to all four current `/api/admin/*` routes via a chi router group, so any future admin route inside the group inherits the gate.
 - **AC-3. Frontend sign-in flow works.** Anonymous user clicks sign-in button → Clerk OAuth flow → Google → redirect → signed-in. Avatar + display name replace the sign-in button in the header.
 - **AC-4. Admin link gated.** The "Admin" item in the user menu is present only when the signed-in user has `role === 'admin'`. No visual flicker (no "admin link appears for 100ms then disappears").
 - **AC-5. Admin route gated.** Navigating to `/admin`:
   - Anonymous → landing page with "Sign in as admin to continue" + Clerk sign-in button.
   - Signed-in non-admin → "This account doesn't have admin access" page + sign-out button.
   - Admin → normal AdminPage UI.
-- **AC-6. KI-009 closes.** All five admin routes (`GET /api/admin/pool`, `PUT /api/admin/config/{size}/{mode}`, `POST /api/admin/config`, `POST /api/admin/replenish`, and any future admin route) return 401 for anonymous callers and 403 for signed-in non-admins. Integration test in `backend/internal/handler/admin_*_test.go` proves it for each route.
+- **AC-6. KI-009 closes.** All four current admin routes (`GET /api/admin/pool`, `PUT /api/admin/config/{size}/{mode}`, `POST /api/admin/config`, `POST /api/admin/replenish`) — and any future route added inside the admin group — return 401 for anonymous callers and 403 for signed-in non-admins. Integration test in `backend/internal/handler/admin_*_test.go` proves it for each route.
 - **AC-7. No user records in our DynamoDB.** `backend/internal/repository/` gains no `user.go` file. `puzzle-pool` table schema is unchanged. Clerk stores all identity.
 - **AC-8. CLAUDE.md role table rewritten.** Current FREE/PREMIUM/ADMIN table is replaced with: Anonymous (no account) / User (signed-in via Clerk) / Admin (signed-in with role=admin claim). The "(pre-production)" note on KI-009 is removed.
 - **AC-9. GLOSSARY.md updated.** FREE entry retired. USER entry added. ADMIN entry redefined. PREMIUM entry marked as "term reserved for flip phase."

@@ -102,6 +102,10 @@ Secrets stored in AWS SSM Parameter Store (Terraform adds them in the `devops-en
 
 Reads the Clerk session cookie from the request, verifies it via `clerk.VerifyToken`. On success, attaches a `*clerk.User` to the request context. On failure, returns 401 with the standard error JSON.
 
+The snippet below is **illustrative** — the real clerk-sdk-go v2 surface (clients, option structs, context-plumbing helpers) shifts between minor versions. The R-08A implementer reads the current SDK docs and adapts. The invariants that must hold regardless of SDK shape are the ones spelled out in `specs/backend-middleware.md` BM-01..BM-09.
+
+Also: `OPTIONS` requests must bypass this middleware (per BM-08). Either wire CORS middleware before auth on the admin group, or add an early `if r.Method == http.MethodOptions` check at the top of `RequireAuth`. The snippet below shows the happy path only.
+
 ```go
 // backend/internal/auth/middleware.go
 package auth
@@ -402,12 +406,14 @@ None that block implementation. Things worth confirming during slice execution:
 
 ## 13. Roadmap Effects
 
+Already landed in the design commit (`ROADMAP.md` restructured alongside these artifacts):
+
 - **Phase 6** header becomes "Admin Authentication via Clerk" (was "Verdict System"). Slices: see `tasks.md`.
 - **Phase 7** becomes "Verdict System" (was Phase 6). Slice IDs `R-081`, `R-082` retain their numbers; only the phase header moves.
-- **Phase 6b** (generator quality deferrals) unchanged.
-- **Phase 8** (was Phase 7, Puzzle Replay) → becomes Phase 8. Slices `R-085`, `R-086` unchanged.
-- **Phase 9** (was Phase 8, Analysis Agent) → becomes Phase 9. Slices `R-087`, `R-088` unchanged.
-- **Phase 10** (was Phase 9, Difficulty Rating) → becomes Phase 10.
-- **Phase 11+** (was Phase 10+, Future) → becomes Phase 11+.
+- **Phase 7b** becomes "Generator Quality Deferrals" (was Phase 6b — kept as a sub-phase slot so it stays attached to the Verdict phase that unblocks it).
+- **Phase 8** becomes "Puzzle Replay" (was Phase 7). Slices `R-085`, `R-086` unchanged.
+- **Phase 9** becomes "Puzzle Analysis Agent" (was Phase 8). Slices `R-087`, `R-088` unchanged.
+- **Phase 10** becomes "Difficulty Rating" (was Phase 9).
+- **Phase 11+** becomes "Future" (was Phase 10+).
 
-New slice IDs for Phase 6 Auth: `R-089`, `R-08A`, `R-08B` (three slices in `tasks.md`; IDs allocated to avoid collisions with R-080..R-088 already claimed).
+New slice IDs for Phase 6 Auth: `R-089`, `R-08A`, `R-08B`, `R-08C` (four slices in `tasks.md`; IDs allocated to avoid collisions with R-080..R-088 already claimed).

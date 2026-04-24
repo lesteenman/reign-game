@@ -50,7 +50,7 @@ Server-side auth enforcement contract.
 
 **Value.** Prevents a new admin route from being added without auth. A future dev who copies a route pattern gets auth for free by placing it inside the group.
 
-**Verification.** Code search: no `r.Method(...)` with an `/api/admin/` path outside the `r.Route` block. Integration tests covering each of the five current admin routes, plus a check for "handler exists → is behind the middleware."
+**Verification.** Code search: no `r.Method(...)` with an `/api/admin/` path outside the `r.Route` block. Integration tests cover each of the four current admin routes (`GET /pool`, `PUT /config/{size}/{mode}`, `POST /config`, `POST /replenish`), plus a check for "handler exists → is behind the middleware."
 
 ## BM-06: Public routes are unchanged
 

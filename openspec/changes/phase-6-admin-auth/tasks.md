@@ -94,7 +94,7 @@ All Phase 6 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 - `go build ./...` passes.
 - `go test -short ./...` green.
 - `golangci-lint run` green.
-- Integration test proves all five `/api/admin/*` routes return 401 / 403 / 200 for the three session states.
+- Integration test proves all four current `/api/admin/*` routes return 401 / 403 / 200 for the three session states.
 - CURL test from a dev-stack backend: `curl /api/admin/pool` → 401.
 
 **Files touched**
@@ -183,21 +183,16 @@ All Phase 6 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 - `CLAUDE.md` — rewrite the Roles section table:
   - Remove FREE / PREMIUM / ADMIN table.
   - Add Anonymous / User / Admin table.
-- `ROADMAP.md`:
-  - Phase 6 header becomes "Admin Authentication via Clerk" with R-089, R-08A, R-08B, R-08C rows.
-  - Phase 7 becomes "Verdict System" (was Phase 6). Keeps R-081, R-082.
-  - Phase 8 becomes "Generator Quality Deferrals" (was Phase 6b).
-  - Phase 9 becomes "Puzzle Replay" (was Phase 7). Keeps R-085, R-086.
-  - Phase 10 becomes "Analysis Agent" (was Phase 8). Keeps R-087, R-088.
-  - Phase 11 becomes "Difficulty Rating" (was Phase 9).
-  - Phase 12+ becomes "Future" (was Phase 10+).
-  - Strikethrough-close KI-009 with pointer to this phase: `~~Critical~~ Fixed by Phase 6 admin auth (R-089..R-08C).`
+- `ROADMAP.md`: the phase restructure (Phase 6 = Admin Auth, Phase 7 = Verdict, Phase 7b = Generator deferrals, Phase 8 = Replay, Phase 9 = Analysis, Phase 10 = Difficulty, Phase 11+ = Future) already landed in the design commits. This slice only needs to:
+  - Strikethrough-close KI-009: swap the "in flight" row for `~~Critical~~ Fixed by Phase 6 admin auth (R-089..R-08C).`
+  - Flip the four R-089..R-08C checkboxes in the Phase 6 block from `[ ]` to `[x]`.
+  - Sanity-grep for leftover "pre-production" or "in flight" notes on KI-009 and clear them.
 - `PROJECT_STRUCTURE.md`:
   - Add `backend/internal/auth/` to the backend tree.
   - Add `frontend/src/components/auth/` to the frontend tree.
   - Add `docs/runbooks/admin-auth-setup.md` to the docs tree.
 - E2E smoke: manual check that sign-in works end-to-end on a deployed environment, and that a non-admin sign-in sees the forbidden landing on `/admin`.
-- Flip all three status rows in this `tasks.md` to `[x]` in the same PR as their slice lands (per CLAUDE.md lesson 17). This slice updates R-089, R-08A, R-08B rows to `[x]` as part of the integration.
+- Flip all four status rows in this `tasks.md` to `[x]` (per CLAUDE.md lesson 17). Prior slices R-089, R-08A, R-08B should have already flipped their own rows in their PRs; this slice flips R-08C's row and confirms the other three are already `[x]`.
 
 **Gate**
 
@@ -210,7 +205,7 @@ All Phase 6 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 
 - `GLOSSARY.md` (update)
 - `CLAUDE.md` (update)
-- `ROADMAP.md` (update — Phase 6+ renumbering + KI-009 close)
+- `ROADMAP.md` (update — KI-009 strikethrough-close + flip R-089..R-08C checkboxes; phase renumbering already landed in the design commits)
 - `PROJECT_STRUCTURE.md` (update)
 - `openspec/changes/phase-6-admin-auth/tasks.md` (update — flip rows)
 
@@ -222,7 +217,7 @@ All Phase 6 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 
 Before promoting this epic to main:
 
-- [ ] All five `/api/admin/*` routes return 401 for anonymous, 403 for user-role, 200 for admin. Integration test proves it.
+- [ ] All four current `/api/admin/*` routes return 401 for anonymous, 403 for user-role, 200 for admin. Integration test proves it.
 - [ ] Sign-in button visible to anonymous users in header; avatar+menu for signed-in; admin link only for admin role.
 - [ ] `/admin` route renders correct landing for each of the three session states.
 - [ ] `tasks.md` status table all `[x]`.
