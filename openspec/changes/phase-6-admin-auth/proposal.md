@@ -87,7 +87,7 @@ A single cycle of Phase 6 is done when:
 - **GCP account** for the OAuth app (free tier).
 - **Clerk account** (free tier).
 - **Clerk Go SDK** (`github.com/clerk/clerk-sdk-go/v2`).
-- **Clerk React SDK** (`@clerk/clerk-react`).
+- **Clerk React SDK** (`@clerk/react`). Note: Clerk renamed this package from `@clerk/clerk-react` as part of the "Core 3" release (Nov 2025). The successor (`@clerk/react`) is the one we install; the old name is deprecated.
 - No changes to Terraform (Clerk is external, no AWS resources).
 
 ## Risks

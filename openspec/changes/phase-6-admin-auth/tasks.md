@@ -122,7 +122,7 @@ All Phase 6 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 
 **Work**
 
-- Install Clerk React SDK: `npm install @clerk/clerk-react`.
+- Install Clerk React SDK: `npm install @clerk/react`. (The older `@clerk/clerk-react` package was deprecated by Clerk in favour of `@clerk/react` as part of the "Core 3" release; use the successor from the start.)
 - `frontend/src/main.tsx`: wrap `<App>` in `<ClerkProvider publishableKey={...}>`. Publishable key from `import.meta.env.VITE_CLERK_PUBLISHABLE_KEY`.
 - Create `frontend/src/components/auth/` components:
   - `SignInButton.tsx` — thin wrapper around Clerk's `<SignInButton mode="modal">`.
@@ -130,15 +130,16 @@ All Phase 6 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
   - `ProtectedAdminRoute.tsx` — routes `/admin` to the AdminPage or the landing page based on auth/role state.
 - Create `frontend/src/pages/AdminLandingPage.tsx` — two-state component (anonymous vs forbidden).
 - Update `frontend/src/components/common/PageShell.tsx` header:
-  - `<SignedOut><SignInButton /></SignedOut>`
-  - `<SignedIn><UserMenu /></SignedIn>`
+  - `<Show when="signed-out"><SignInButton /></Show>`
+  - `<Show when="signed-in"><UserMenu /></Show>`
+  - (v6 replaces `<SignedIn>` / `<SignedOut>` with the unified `<Show>` gate.)
 - Update `frontend/src/App.tsx` routes: wrap `/admin` route in `<ProtectedAdminRoute>`.
 - Remove any existing frontend references to the old admin-link-in-header pattern (if any) — admin link lives inside the user menu now.
 - Tests:
   - `UserMenu.test.tsx` — three states (signed out nothing rendered, user no admin link, admin yes admin link).
   - `ProtectedAdminRoute.test.tsx` — four states (loading, anonymous, non-admin, admin).
   - `AdminLandingPage.test.tsx` — anonymous state + forbidden state.
-- Mock `@clerk/clerk-react` using its provided test helpers.
+- Mock `@clerk/react` directly via `vi.mock('@clerk/react', () => ({ ... }))`. The `@clerk/testing` package only ships Playwright/Cypress helpers, not Vitest helpers, so unit tests wire a plain `vi.mock` stub with the hook return shape.
 
 **Gate**
 
