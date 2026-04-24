@@ -17,8 +17,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	chiadapter "github.com/awslabs/aws-lambda-go-api-proxy/chi"
+	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/go-chi/chi/v5"
 
+	"github.com/eriksteenman/reign-game/backend/internal/auth"
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
@@ -40,6 +42,11 @@ func newUUIDv4() (string, error) {
 // newRouter builds and returns the application router with all routes mounted
 // under the /api prefix. The prefix separates API traffic from SPA routes
 // (e.g., the frontend's /admin page vs. the /api/admin/* backend endpoints).
+//
+// Public /api/* routes run anonymously; admin routes are grouped under
+// /api/admin and wrapped in auth.RequireAuth + auth.RequireAdmin so every
+// admin route inherits the middleware chain by construction (BM-05). Adding
+// a new admin route is a single r.Method(...) call inside the admin group.
 func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux {
 	r := chi.NewRouter()
 	r.Route("/api", func(r chi.Router) {
@@ -54,16 +61,39 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 			// /admin/pool — no thresholds, ready counts, or maxAttempts.
 			r.Get("/config/modes", handler.ConfigModesHandler(repo))
 
-			r.Get("/admin/pool", handler.AdminPoolHandler(repo))
-			r.Put("/admin/config/{size}/{mode}", handler.UpdateConfigHandler(repo))
-			r.Post("/admin/config", handler.CreateConfigHandler(repo))
-		}
-		if repo != nil && pub != nil {
-			r.Post("/admin/replenish", handler.ReplenishHandler(repo, repo, pub))
+			// Admin routes live behind the Clerk auth middleware chain.
+			// Middleware order is (RequireAuth, RequireAdmin) per BM-03 —
+			// reversed or missing pieces panic on first admin request so
+			// the mistake surfaces immediately in tests.
+			r.Route("/admin", func(r chi.Router) {
+				r.Use(auth.RequireAuth(auth.NewClerkSessionVerifier()))
+				r.Use(auth.RequireAdmin)
+
+				r.Get("/pool", handler.AdminPoolHandler(repo))
+				r.Put("/config/{size}/{mode}", handler.UpdateConfigHandler(repo))
+				r.Post("/config", handler.CreateConfigHandler(repo))
+				if pub != nil {
+					r.Post("/replenish", handler.ReplenishHandler(repo, repo, pub))
+				}
+			})
 		}
 	})
 
 	return r
+}
+
+// initClerk bootstraps the Clerk SDK for the lifetime of this process.
+// Fails hard (log.Fatal) when neither CLERK_SECRET_KEY nor
+// CLERK_SECRET_PARAM_NAME is set — see auth.LoadClerkSecret for the
+// resolution order. The SDK reads the key from package-level state
+// (clerk.SetKey), so this must run before any request handler does.
+func initClerk(ctx context.Context) {
+	secret, err := auth.LoadClerkSecret(ctx)
+	if err != nil {
+		log.Fatalf("auth bootstrap: %v", err)
+	}
+	clerk.SetKey(secret)
+	log.Printf("auth bootstrap: clerk SDK initialized")
 }
 
 // loadAWSConfig loads the default AWS SDK config with optional endpoint
@@ -162,6 +192,10 @@ func main() {
 			pub = queue.NewPublisher(sqsClient, queueURL)
 		}
 
+		// Clerk must be initialized before the first request arrives,
+		// because admin routes invoke the SDK via RequireAuth.
+		initClerk(ctx)
+
 		r := newRouter(repo, pub)
 		adapter := chiadapter.New(r)
 		lambda.Start(adapter.ProxyWithContext)
@@ -195,6 +229,11 @@ func main() {
 				pub = queue.NewPublisher(sqsClient, queueURL)
 			}
 		}
+
+		// Clerk must be initialized before the first request arrives.
+		// Local dev reads CLERK_SECRET_KEY from backend/.env.local; a
+		// missing or empty value causes log.Fatal by design (BM-10).
+		initClerk(ctx)
 
 		r := newRouter(repo, pub)
 

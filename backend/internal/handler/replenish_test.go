@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
@@ -338,5 +340,34 @@ func TestReplenishHandler_GenerationParams(t *testing.T) {
 	}
 	if msg.MaxAttempts != 15 {
 		t.Errorf("MaxAttempts = %d, want 15", msg.MaxAttempts)
+	}
+}
+
+// TestReplenishHandler_AuthMatrix asserts 401 for anonymous, 403 for
+// role=user, 200 for role=admin on POST /api/admin/replenish.
+// Empty configs guarantee the admin case returns 200 with empty
+// triggered/skipped lists rather than 500 from a missing dependency.
+func TestReplenishHandler_AuthMatrix(t *testing.T) {
+	for _, tc := range adminAuthMatrix {
+		t.Run(tc.name, func(t *testing.T) {
+			// Arrange
+			configReader := &mockConfigReader{configs: []repository.ConfigRecord{}}
+			counter := &mockPoolCounter{counts: map[string]int{}}
+			pub := &mockMessagePublisher{}
+			router := mountAdminWithAuth(func(r chi.Router) {
+				r.Post("/replenish", handler.ReplenishHandler(configReader, counter, pub))
+			}, roleForState(tc.state))
+
+			req := newAdminRequest(tc.state, http.MethodPost, "/api/admin/replenish", nil)
+			rec := httptest.NewRecorder()
+
+			// Act
+			router.ServeHTTP(rec, req)
+
+			// Assert
+			if rec.Code != tc.wantCode {
+				t.Errorf("status = %d, want %d; body = %s", rec.Code, tc.wantCode, rec.Body.String())
+			}
+		})
 	}
 }

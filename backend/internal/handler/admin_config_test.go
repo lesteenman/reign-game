@@ -386,3 +386,84 @@ func TestCreateConfigHandler(t *testing.T) {
 		})
 	}
 }
+
+// TestCreateConfigHandler_AuthMatrix exercises POST /api/admin/config
+// behind the auth middleware chain. The admin row's success code is
+// 201 Created — adjusted inside the loop.
+func TestCreateConfigHandler_AuthMatrix(t *testing.T) {
+	for _, tc := range adminAuthMatrix {
+		t.Run(tc.name, func(t *testing.T) {
+			// Arrange
+			repo := &mockConfigRepo{
+				getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
+					return nil, nil
+				},
+				putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
+					return nil
+				},
+				createConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
+					return nil
+				},
+			}
+			router := mountAdminWithAuth(func(r chi.Router) {
+				r.Post("/config", handler.CreateConfigHandler(repo))
+			}, roleForState(tc.state))
+
+			wantCode := tc.wantCode
+			if wantCode == http.StatusOK {
+				wantCode = http.StatusCreated
+			}
+			req := newAdminRequest(tc.state, http.MethodPost, "/api/admin/config", strings.NewReader(validCreateBody()))
+			rec := httptest.NewRecorder()
+
+			// Act
+			router.ServeHTTP(rec, req)
+
+			// Assert
+			if rec.Code != wantCode {
+				t.Errorf("status = %d, want %d; body = %s", rec.Code, wantCode, rec.Body.String())
+			}
+		})
+	}
+}
+
+// TestUpdateConfigHandler_AuthMatrix exercises PUT
+// /api/admin/config/{size}/{mode} behind the auth middleware chain.
+func TestUpdateConfigHandler_AuthMatrix(t *testing.T) {
+	for _, tc := range adminAuthMatrix {
+		t.Run(tc.name, func(t *testing.T) {
+			// Arrange
+			existing := &repository.ConfigRecord{
+				Size:      7,
+				Mode:      "standard",
+				Threshold: 5,
+				Enabled:   true,
+			}
+			repo := &mockConfigRepo{
+				getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
+					return existing, nil
+				},
+				putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
+					return nil
+				},
+				createConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
+					return nil
+				},
+			}
+			router := mountAdminWithAuth(func(r chi.Router) {
+				r.Put("/config/{size}/{mode}", handler.UpdateConfigHandler(repo))
+			}, roleForState(tc.state))
+
+			req := newAdminRequest(tc.state, http.MethodPut, "/api/admin/config/7/standard", strings.NewReader(validConfigBody()))
+			rec := httptest.NewRecorder()
+
+			// Act
+			router.ServeHTTP(rec, req)
+
+			// Assert
+			if rec.Code != tc.wantCode {
+				t.Errorf("status = %d, want %d; body = %s", rec.Code, tc.wantCode, rec.Body.String())
+			}
+		})
+	}
+}
