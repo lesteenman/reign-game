@@ -1,17 +1,5 @@
 import { UserButton, useUser } from "@clerk/react";
-
-/**
- * Narrow the shape we consume from Clerk's publicMetadata. Clerk types
- * it as `Record<string, unknown>`; we only care about `role`, and only
- * accept the string form documented in auth-surface.md AS-03.
- */
-function resolveRole(
-  publicMetadata: Record<string, unknown> | undefined,
-): string {
-  if (!publicMetadata) return '';
-  const role = publicMetadata.role;
-  return typeof role === 'string' ? role : '';
-}
+import { getClerkUserRole } from './role';
 
 /**
  * UserMenu wraps Clerk's `<UserButton>` with a custom "Admin" menu item
@@ -32,8 +20,7 @@ export function UserMenu() {
     return null;
   }
 
-  const role = resolveRole(user.publicMetadata);
-  const isAdmin = role === 'admin';
+  const isAdmin = getClerkUserRole(user.publicMetadata) === 'admin';
 
   return (
     <UserButton>

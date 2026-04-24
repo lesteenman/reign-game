@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import { AdminPage } from '../../pages/AdminPage';
 import { AdminLandingPage } from '../../pages/AdminLandingPage';
 import { PageShell } from '../common/PageShell';
+import { getClerkUserRole } from './role';
 
 const loadingStyle: CSSProperties = {
   textAlign: 'center',
@@ -57,16 +58,9 @@ export function ProtectedAdminRoute() {
     return <AdminLandingPage state="anonymous" />;
   }
 
-  const role = resolveRole(user.publicMetadata);
-  if (role !== 'admin') {
+  if (getClerkUserRole(user.publicMetadata) !== 'admin') {
     return <AdminLandingPage state="forbidden" />;
   }
 
   return <AdminPage />;
-}
-
-function resolveRole(publicMetadata: Record<string, unknown> | undefined): string {
-  if (!publicMetadata) return '';
-  const role = publicMetadata.role;
-  return typeof role === 'string' ? role : '';
 }

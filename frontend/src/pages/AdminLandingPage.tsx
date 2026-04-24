@@ -2,12 +2,19 @@ import { SignOutButton } from "@clerk/react";
 import type { CSSProperties } from 'react';
 import { PageShell } from '../components/common/PageShell';
 import { SignInButton } from '../components/auth/SignInButton';
+import { compactSecondaryButtonStyle } from '../components/common/buttonStyles';
+import { pressIn, pressOut } from '../components/common/press';
 
 type LandingState = 'anonymous' | 'forbidden';
 
 interface AdminLandingPageProps {
   state: LandingState;
 }
+
+// Card width cap: beyond this, the heading + body + single CTA stop
+// feeling like a focused landing and start looking like a sparse dialog
+// on desktop. 480px keeps the card comfortably readable at any breakpoint.
+const CARD_MAX_WIDTH_PX = 480;
 
 // Card styling aligned with BRAND_GUIDELINES §5.5: 2px ink border,
 // 10px radius, 3px ink offset shadow, surface background.
@@ -17,7 +24,7 @@ const cardStyle: CSSProperties = {
   borderRadius: 'var(--radius)',
   boxShadow: '0 3px 0 var(--color-ink)',
   padding: '32px 24px',
-  maxWidth: 480,
+  maxWidth: CARD_MAX_WIDTH_PX,
   width: '100%',
   display: 'flex',
   flexDirection: 'column',
@@ -39,23 +46,6 @@ const bodyStyle: CSSProperties = {
   fontSize: '1rem',
   color: 'var(--color-body)',
   lineHeight: 1.5,
-};
-
-// Match the SignInButton visual so the forbidden-state button reads as
-// a sibling control — same sizing, same ink shadow.
-const signOutButtonStyle: CSSProperties = {
-  padding: '8px 16px',
-  border: '2px solid var(--color-ink)',
-  borderRadius: 'var(--radius)',
-  fontFamily: '"Nunito Sans", system-ui, sans-serif',
-  fontWeight: 700,
-  fontSize: '0.875rem',
-  backgroundColor: 'var(--color-surface)',
-  color: 'var(--color-ink)',
-  cursor: 'pointer',
-  boxShadow: '0 3px 0 var(--color-ink)',
-  minHeight: '44px',
-  minWidth: '44px',
 };
 
 /**
@@ -85,7 +75,13 @@ export function AdminLandingPage({ state }: AdminLandingPageProps) {
         <h2 style={headingStyle}>No Admin Access</h2>
         <p style={bodyStyle}>This account doesn&apos;t have admin access.</p>
         <SignOutButton>
-          <button type="button" style={signOutButtonStyle}>
+          <button
+            type="button"
+            style={compactSecondaryButtonStyle}
+            onMouseDown={(e) => pressIn(e, 'var(--color-ink)')}
+            onMouseUp={(e) => pressOut(e, 'var(--color-ink)')}
+            onMouseLeave={(e) => pressOut(e, 'var(--color-ink)')}
+          >
             Sign out
           </button>
         </SignOutButton>
