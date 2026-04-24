@@ -75,6 +75,7 @@ Before committing Terraform code, verify:
 3. `terraform init` in CI/CD workflows includes `-backend-config` flags for the S3 state backend
 4. GitHub Actions that reference `terraform plan` with `continue-on-error: true` also have a subsequent step that fails explicitly on plan error
 5. Any `file*()` function (e.g., `filebase64sha256`) taking a variable path must be wrapped in a `fileexists()` guard — CI plan passes dummy paths that don't exist on disk
+6. **Never use `count` with module outputs.** `count = var.x != "" ? 1 : 0` fails when the variable comes from another module's output that isn't known until apply. Either make the resource unconditional or use `for_each` with a known set. Phase 3 CI failed with `Invalid count argument` on two IAM policies.
 
 ## CI/CD Cross-Validation Checklist
 
@@ -83,6 +84,9 @@ Before merging CI or CD workflow changes, verify:
 2. Every `secrets.*` and `vars.*` reference matches what is actually configured in GitHub (secret vs variable namespace matters — `secrets.X` returns empty if X is a variable)
 3. CI and CD workflows use the same `secrets.`/`vars.` namespace for shared values — don't mix
 4. Action versions are consistent across CI and CD workflows
+5. **Production request flow traced end-to-end before shipping a deploy PR.** Walk every URL the frontend calls and confirm it reaches the correct backend in production. Check CloudFront behaviors, API Gateway routes, and proxy config. Dev proxies mask routing issues that break in production. When adding new HTTP methods (PUT, POST) or new path prefixes (`/admin`), verify the API Gateway Terraform has matching method + integration resources — the dev proxy masks missing routes.
+6. **`go test` callers pass `-short` where appropriate.** `testing.Short()` skips in Go tests are a contract with the caller. When a test is guarded by `if testing.Short() { t.Skip(...) }`, every place that runs `go test` must pass `-short` unless it's specifically meant to run the full gate: the pre-push hook, the Taskfile, any CI workflow that isn't a dedicated soak/long-running job. A skip with no caller passing `-short` is dead code and the guarded test silently runs in every context that was supposed to be fast. Phase 5's CI ran without `-short` and blew the 10-min timeout because nothing was passing `-short` into `ci.yml`'s backend step.
+7. **Hook wall-time is a diagnostic signal, not noise.** A local pre-push that takes more than ~2 minutes is telling you something is wrong in the suite — most likely a `testing.Short()`-guarded test isn't being skipped because no caller passes `-short` (see #6 above). When a hook or CI step runs unexpectedly long, diagnose the *slow step* before retrying the outer command. R-067a burned ~30 min chasing a SIGPIPE on `git push` because the pre-push hook was running the 534 s Step 7 gate on every push; the user spotted it in one question. Rule: if the hook's own duration surprises you, stop and time the individual steps (`go test -json`, `time npm run build`, etc.) before varying the invocation.
 
 ## Verify Before Reporting Done
 

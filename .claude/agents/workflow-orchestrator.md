@@ -179,7 +179,9 @@ In parallel (if applicable):
 
 ### 7. Create MR
 
-Push branch, create MR via `glab mr create` (or `gh pr create` / `bkt pr create`). Include a "Key Decisions" section listing intentional design choices.
+Push branch, create MR via `glab mr create` (or `gh pr create` / `bkt pr create`). Include a **"Key Decisions"** section listing intentional design choices.
+
+**Phase-level PRs** (epic → main merges) MUST also include a **"Workarounds shipped"** section. Grep `ROADMAP.md` Known Issues for any KI tagged `[workaround]` that was logged during the phase (git-log on the epic for `docs: KI-` commits). List each with a one-line summary: what shipped, what the real fix is, whether it blocks production. This makes band-aids visible at review time instead of buried in commit messages. Phase 5's PR #56 buried KI-024 (two-identical-fixtures workaround) in a deferred-items list; the new section surfaces it.
 
 ### 8. Review + E2E User Flow Testing (parallel)
 
