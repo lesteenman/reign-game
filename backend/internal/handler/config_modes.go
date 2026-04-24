@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
@@ -49,7 +50,7 @@ func ConfigModesHandler(repo ConfigModesRepo) http.HandlerFunc {
 		configs, err := repo.GetAllConfigs(r.Context())
 		if err != nil {
 			log.Printf("config modes: failed to get configs: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve configured modes.")
+			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve configured modes.")
 			return
 		}
 

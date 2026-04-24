@@ -3,12 +3,16 @@ package auth
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"net/http"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/clerk/clerk-sdk-go/v2/jwt"
 	"github.com/clerk/clerk-sdk-go/v2/user"
+	gojwt "github.com/go-jose/go-jose/v3/jwt"
+
+	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 )
 
 // sessionCookieName is the cookie that Clerk's browser SDK sets for
@@ -98,6 +102,20 @@ func RequireAuth(verifier sessionVerifier) func(http.Handler) http.Handler {
 				// doesn't include the token, but %v on deep SDK
 				// errors could. Log only err.Error() which is the
 				// verifier's human-readable reason.
+				//
+				// BM-01: distinguish an expired session from other
+				// verification failures so the client can render
+				// "session expired, please sign in again" rather
+				// than a generic error. Clerk's jwt.Verify delegates
+				// to go-jose's ValidateWithLeeway, which returns
+				// gojwt.ErrExpired on expiry — matchable via
+				// errors.Is. Every other verify error maps to
+				// "invalid session".
+				if errors.Is(err, gojwt.ErrExpired) {
+					log.Printf("auth: reject path=%s reason=session_expired", r.URL.Path)
+					writeUnauth(w, "session expired")
+					return
+				}
 				log.Printf("WARN: auth: clerk SDK error path=%s reason=verify_failed err=%q", r.URL.Path, err.Error())
 				writeUnauth(w, "invalid session")
 				return
@@ -201,20 +219,11 @@ func WithUserForTest(ctx context.Context, u *clerk.User) context.Context {
 // All auth rejections go through this one function so the client sees
 // a single body shape: {"error":"unauthorized","message":"..."}.
 func writeUnauth(w http.ResponseWriter, message string) {
-	writeAuthError(w, http.StatusUnauthorized, "unauthorized", message)
+	httperr.WriteError(w, http.StatusUnauthorized, "unauthorized", message)
 }
 
 // writeForbidden emits the canonical 403 response shape expected by
 // BM-02.
 func writeForbidden(w http.ResponseWriter, message string) {
-	writeAuthError(w, http.StatusForbidden, "forbidden", message)
-}
-
-func writeAuthError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(struct {
-		Error   string `json:"error"`
-		Message string `json:"message"`
-	}{Error: code, Message: message})
+	httperr.WriteError(w, http.StatusForbidden, "forbidden", message)
 }

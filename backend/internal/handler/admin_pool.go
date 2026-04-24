@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
@@ -39,7 +40,7 @@ func AdminPoolHandler(repo ConfigAndCountRepo) http.HandlerFunc {
 		configs, err := repo.GetAllConfigs(r.Context())
 		if err != nil {
 			log.Printf("admin pool: failed to get configs: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve configs.")
+			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve configs.")
 			return
 		}
 
@@ -50,7 +51,7 @@ func AdminPoolHandler(repo ConfigAndCountRepo) http.HandlerFunc {
 				readyCount, err = repo.CountReady(r.Context(), cfg.Size, cfg.Mode)
 				if err != nil {
 					log.Printf("admin pool: failed to count ready for %d#%s: %v", cfg.Size, cfg.Mode, err)
-					writeError(w, http.StatusInternalServerError, "internal_error", "Failed to count ready puzzles.")
+					httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to count ready puzzles.")
 					return
 				}
 			}

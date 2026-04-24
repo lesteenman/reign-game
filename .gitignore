@@ -5,6 +5,8 @@
 .claude/.*.un~
 .claude/*.swp
 .claude/*.swo
+# Agent worktrees (created by Agent isolation: worktree)
+.claude/worktrees/
 
 # ===== Go (backend) =====
 # Compiled binaries

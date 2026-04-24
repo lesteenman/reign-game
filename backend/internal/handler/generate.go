@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/eriksteenman/reign-game/backend/internal/generator"
+	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/model"
 )
 
@@ -28,14 +29,14 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 
 	size, mode, status, errCode, errMsg := parseSizeMode(r)
 	if status != 0 {
-		writeError(w, status, errCode, errMsg)
+		httperr.WriteError(w, status, errCode, errMsg)
 		return
 	}
 
 	g, err := generator.New(size, MarksPerUnitFromMode(mode))
 	if err != nil {
 		log.Printf("generator construction failed: %v", err)
-		writeError(w, http.StatusBadRequest, "invalid_params", err.Error())
+		httperr.WriteError(w, http.StatusBadRequest, "invalid_params", err.Error())
 		return
 	}
 
@@ -46,13 +47,13 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("puzzle generation failed (size=%d, mode=%s): %v", size, mode, err)
-		writeError(w, http.StatusInternalServerError, "generation_failed", "Could not generate a puzzle. Please try again.")
+		httperr.WriteError(w, http.StatusInternalServerError, "generation_failed", "Could not generate a puzzle. Please try again.")
 		return
 	}
 
 	puzzleID, err := newUUIDv4()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "generation_failed", "failed to generate puzzle ID")
+		httperr.WriteError(w, http.StatusInternalServerError, "generation_failed", "failed to generate puzzle ID")
 		return
 	}
 
@@ -119,13 +120,4 @@ func newUUIDv4() (string, error) {
 
 	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
 		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
-}
-
-// writeError sends a JSON error response.
-func writeError(w http.ResponseWriter, status int, errCode, message string) {
-	w.WriteHeader(status)
-	body := map[string]string{"error": errCode, "message": message}
-	if err := json.NewEncoder(w).Encode(body); err != nil {
-		log.Printf("error writing error response: %v", err)
-	}
 }

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/clerk/clerk-sdk-go/v2"
+	gojwt "github.com/go-jose/go-jose/v3/jwt"
 )
 
 // fakeVerifier implements sessionVerifier for middleware tests. Every
@@ -136,6 +138,63 @@ func TestRequireAuth_InvalidCookie_Returns401(t *testing.T) {
 	if next.called {
 		t.Error("next handler was called despite verify failure")
 	}
+}
+
+func TestRequireAuth_ExpiredSession_Returns401WithExpiredMessage(t *testing.T) {
+	// BM-01: an expired-but-otherwise-valid session must surface as
+	// "session expired" so the client can prompt re-sign-in, not a
+	// generic "invalid session" that looks like tampering.
+
+	// Arrange
+	next := &sentinelHandler{}
+	verifier := &fakeVerifier{
+		verifyFn: func(context.Context, string) (*clerk.SessionClaims, error) {
+			return nil, gojwt.ErrExpired
+		},
+	}
+	mw := RequireAuth(verifier)(next)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/pool", http.NoBody)
+	addSessionCookie(req, "expired-jwt")
+	rec := httptest.NewRecorder()
+
+	// Act
+	mw.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rec.Code)
+	}
+	assertErrorBody(t, rec, "unauthorized", "session expired")
+	if next.called {
+		t.Error("next handler was called despite expired session")
+	}
+}
+
+func TestRequireAuth_ExpiredWrappedError_StillDetected(t *testing.T) {
+	// Verify errors.Is traversal works: a caller might wrap the
+	// underlying expiry error. Ensure we still detect expiry
+	// regardless of wrapping depth.
+
+	// Arrange
+	next := &sentinelHandler{}
+	wrapped := fmt.Errorf("clerk: verify failed: %w", gojwt.ErrExpired)
+	verifier := &fakeVerifier{
+		verifyFn: func(context.Context, string) (*clerk.SessionClaims, error) {
+			return nil, wrapped
+		},
+	}
+	mw := RequireAuth(verifier)(next)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/pool", http.NoBody)
+	addSessionCookie(req, "expired-jwt")
+	rec := httptest.NewRecorder()
+
+	// Act
+	mw.ServeHTTP(rec, req)
+
+	// Assert
+	assertErrorBody(t, rec, "unauthorized", "session expired")
 }
 
 func TestRequireAuth_UserNotFound_Returns401(t *testing.T) {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
@@ -36,38 +37,38 @@ func UpdateConfigHandler(repo ConfigRepo) http.HandlerFunc {
 		sizeStr := chi.URLParam(r, "size")
 		size, err := strconv.Atoi(sizeStr)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_params", "size must be an integer")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "size must be an integer")
 			return
 		}
 		if status, code, msg := validateSize(size); status != 0 {
-			writeError(w, status, code, msg)
+			httperr.WriteError(w, status, code, msg)
 			return
 		}
 
 		mode := chi.URLParam(r, "mode")
 		if status, code, msg := validateMode(mode); status != 0 {
-			writeError(w, status, code, msg)
+			httperr.WriteError(w, status, code, msg)
 			return
 		}
 
 		var req ConfigUpdateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_params", "invalid request body")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "invalid request body")
 			return
 		}
 		if status, code, msg := validateConfigBody(&req.ConfigBody); status != 0 {
-			writeError(w, status, code, msg)
+			httperr.WriteError(w, status, code, msg)
 			return
 		}
 
 		existing, err := repo.GetConfig(r.Context(), size, mode)
 		if err != nil {
 			log.Printf("GetConfig error: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to check existing config")
+			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to check existing config")
 			return
 		}
 		if existing == nil {
-			writeError(w, http.StatusNotFound, "not_found",
+			httperr.WriteError(w, http.StatusNotFound, "not_found",
 				fmt.Sprintf("config not found for %dx%d %s", size, size, mode))
 			return
 		}
@@ -75,7 +76,7 @@ func UpdateConfigHandler(repo ConfigRepo) http.HandlerFunc {
 		record := req.toRecord(size, mode)
 		if err := repo.PutConfig(r.Context(), record); err != nil {
 			log.Printf("PutConfig error: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to update config")
+			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to update config")
 			return
 		}
 
@@ -92,19 +93,19 @@ func CreateConfigHandler(repo ConfigRepo) http.HandlerFunc {
 
 		var req ConfigCreateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_params", "invalid request body")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "invalid request body")
 			return
 		}
 		if status, code, msg := validateSize(req.Size); status != 0 {
-			writeError(w, status, code, msg)
+			httperr.WriteError(w, status, code, msg)
 			return
 		}
 		if status, code, msg := validateMode(req.Mode); status != 0 {
-			writeError(w, status, code, msg)
+			httperr.WriteError(w, status, code, msg)
 			return
 		}
 		if status, code, msg := validateConfigBody(&req.ConfigBody); status != 0 {
-			writeError(w, status, code, msg)
+			httperr.WriteError(w, status, code, msg)
 			return
 		}
 
@@ -112,12 +113,12 @@ func CreateConfigHandler(repo ConfigRepo) http.HandlerFunc {
 		if err := repo.CreateConfig(r.Context(), record); err != nil {
 			var alreadyExists *repository.ConfigAlreadyExistsError
 			if errors.As(err, &alreadyExists) {
-				writeError(w, http.StatusConflict, "conflict",
+				httperr.WriteError(w, http.StatusConflict, "conflict",
 					fmt.Sprintf("config already exists for %dx%d %s", req.Size, req.Size, req.Mode))
 				return
 			}
 			log.Printf("CreateConfig error: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to create config")
+			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to create config")
 			return
 		}
 
