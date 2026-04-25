@@ -17,3 +17,13 @@ output "api_gateway_stage" {
   description = "API Gateway stage name"
   value       = aws_api_gateway_stage.api.stage_name
 }
+
+output "clerk_publishable_key_param_name" {
+  description = "SSM Parameter Store name for the Clerk publishable key. The CD workflow reads this at frontend build time."
+  value       = aws_ssm_parameter.clerk_publishable_key.name
+}
+
+output "clerk_secret_key_param_name" {
+  description = "SSM Parameter Store name for the Clerk secret key. The Lambda fetches this at startup via auth.LoadClerkSecret."
+  value       = aws_ssm_parameter.clerk_secret_key.name
+}

@@ -36,3 +36,17 @@ variable "sqs_queue_arn" {
   type        = string
   default     = ""
 }
+
+variable "clerk_publishable_key" {
+  description = "Clerk publishable key (browser-safe). Stored in SSM as a String parameter; the CD workflow reads it from SSM at frontend build time. Only the initial value is set via Terraform — subsequent changes happen in the SSM console (lifecycle ignore_changes)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "clerk_secret_key" {
+  description = "Clerk server-side secret key. Stored in SSM as a SecureString and fetched by the Lambda at startup via auth.LoadClerkSecret. Only the initial value is set via Terraform — subsequent rotations happen in the SSM console (lifecycle ignore_changes)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
