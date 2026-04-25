@@ -63,6 +63,10 @@ tasks:
   dev:backend:
     desc: Start backend dev server with LocalStack endpoints
     dir: backend
+    # Load dev secrets (e.g. CLERK_SECRET_KEY) from backend/.env.local.
+    # The file is gitignored; copy .env.local.example to bootstrap it.
+    # dotenv variables are available to the child `go run` process.
+    dotenv: ['.env.local']
     env:
       DYNAMODB_ENDPOINT: http://localhost:4566
       SQS_ENDPOINT: http://localhost:4566
@@ -234,6 +238,11 @@ tasks:
       - dev:up:localstack
       - _dev:preflight:orphans
     dir: backend
+    # Load dev secrets (e.g. CLERK_SECRET_KEY) from backend/.env.local.
+    # See backend/.env.local.example for the template. Missing file is
+    # fine for tests but backend/cmd/api will log.Fatal at startup if
+    # no Clerk secret is resolvable from env or SSM.
+    dotenv: ['.env.local']
     env:
       DYNAMODB_ENDPOINT: http://localhost:4566
       SQS_ENDPOINT: http://localhost:4566
@@ -552,6 +561,9 @@ tasks:
       - dev:up:localstack
       - _dev:preflight:orphans
     dir: backend
+    # Shares backend/.env.local with the dev backend so the e2e stack
+    # picks up the same Clerk dev secret.
+    dotenv: ['.env.local']
     env:
       PORT: "5182"
       DYNAMODB_ENDPOINT: http://localhost:4566

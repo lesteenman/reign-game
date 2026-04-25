@@ -44,9 +44,16 @@ backend/
 │   └── reproduce/
 │       └── main.go              # Regenerate a puzzle from (seed, size, mode) for debugging (R-06C)
 ├── internal/
+│   ├── auth/                    # Clerk session middleware (Phase 6, R-08A)
+│   │   ├── doc.go               # Package doc: RequireAuth + RequireAdmin contract
+│   │   ├── middleware.go        # RequireAuth / RequireAdmin chi middleware + UserFromContext
+│   │   └── secret.go            # sync.Once CLERK_SECRET_KEY bootstrap (env var or SSM)
+│   ├── httperr/                 # Shared JSON error-response writer (Phase 6, R-08A)
+│   │   └── httperr.go           # WriteError(w, status, code, message) — used by handler + auth
 │   ├── handler/                 # Chi-mux HTTP handlers, /api/* routes
 │   │   ├── admin_config.go      # PUT /api/admin/config/{size}/{mode}, POST /api/admin/config
 │   │   ├── admin_pool.go        # GET /api/admin/pool
+│   │   ├── auth_test.go         # Admin-route auth-matrix helpers (anonymous/user/admin)
 │   │   ├── config_dto.go        # ConfigBody + ConfigView + request DTOs (R-06A)
 │   │   ├── config_modes.go      # GET /api/config/modes (public, R-06A)
 │   │   ├── generate.go          # GET /api/puzzles/generate (legacy, slow)

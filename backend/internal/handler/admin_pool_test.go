@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
@@ -186,4 +188,31 @@ type comboStatusJSON struct {
 
 type adminPoolResponseJSON struct {
 	Combos []comboStatusJSON `json:"combos"`
+}
+
+// TestAdminPoolHandler_AuthMatrix proves the route returns 401 for
+// an anonymous request, 403 for a signed-in non-admin, and 200 for
+// an admin — the three states BM-01/BM-02/BM-05 must enforce on
+// every admin route.
+func TestAdminPoolHandler_AuthMatrix(t *testing.T) {
+	for _, tc := range adminAuthMatrix {
+		t.Run(tc.name, func(t *testing.T) {
+			// Arrange
+			repo := &mockConfigAndCountRepo{} // no data needed — admin case reaches the handler and returns 200 with empty combos
+			router := mountAdminWithAuth(func(r chi.Router) {
+				r.Get("/pool", handler.AdminPoolHandler(repo))
+			}, roleForState(tc.state))
+
+			req := newAdminRequest(tc.state, http.MethodGet, "/api/admin/pool", nil)
+			rec := httptest.NewRecorder()
+
+			// Act
+			router.ServeHTTP(rec, req)
+
+			// Assert
+			if rec.Code != tc.wantCode {
+				t.Errorf("status = %d, want %d; body = %s", rec.Code, tc.wantCode, rec.Body.String())
+			}
+		})
+	}
 }

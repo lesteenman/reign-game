@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
@@ -34,7 +35,7 @@ func StatusHandler(updater StatusUpdater) http.HandlerFunc {
 		// Extract puzzle ID from URL path.
 		puzzleID := chi.URLParam(r, "id")
 		if puzzleID == "" {
-			writeError(w, http.StatusBadRequest, "invalid_params", "puzzle ID is required")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "puzzle ID is required")
 			return
 		}
 
@@ -43,51 +44,51 @@ func StatusHandler(updater StatusUpdater) http.HandlerFunc {
 		// via the PK builder.
 		sizeStr := r.URL.Query().Get("size")
 		if sizeStr == "" {
-			writeError(w, http.StatusBadRequest, "invalid_params", "size query parameter is required")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "size query parameter is required")
 			return
 		}
 		size, err := strconv.Atoi(sizeStr)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_params", "size must be an integer")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "size must be an integer")
 			return
 		}
 		if status, code, msg := validateSize(size); status != 0 {
-			writeError(w, status, code, msg)
+			httperr.WriteError(w, status, code, msg)
 			return
 		}
 
 		// Validate mode query param.
 		mode := r.URL.Query().Get("mode")
 		if mode == "" {
-			writeError(w, http.StatusBadRequest, "invalid_params", "mode query parameter is required")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "mode query parameter is required")
 			return
 		}
 		if status, code, msg := validateMode(mode); status != 0 {
-			writeError(w, status, code, msg)
+			httperr.WriteError(w, status, code, msg)
 			return
 		}
 
 		// Parse request body.
 		var req statusRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_params", "invalid request body")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "invalid request body")
 			return
 		}
 
 		// Validate status value.
 		if req.Status != "solved" && req.Status != "skipped" {
-			writeError(w, http.StatusBadRequest, "invalid_params", "status must be 'solved' or 'skipped'")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "status must be 'solved' or 'skipped'")
 			return
 		}
 
 		pk := fmt.Sprintf("%d#%s", size, mode)
 		if err := updater.UpdateStatus(r.Context(), pk, puzzleID, req.Status); err != nil {
 			if errors.Is(err, repository.ErrPuzzleNotFound) {
-				writeError(w, http.StatusNotFound, "not_found", "puzzle not found")
+				httperr.WriteError(w, http.StatusNotFound, "not_found", "puzzle not found")
 				return
 			}
 			log.Printf("error updating puzzle %s status to %s: %v", puzzleID, req.Status, err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to update puzzle status")
+			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to update puzzle status")
 			return
 		}
 

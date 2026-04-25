@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
@@ -60,14 +61,14 @@ func ReplenishHandler(configs ConfigReader, counter PoolCounter, publisher Messa
 		if sizeStr := r.URL.Query().Get("size"); sizeStr != "" {
 			s, err := strconv.Atoi(sizeStr)
 			if err != nil {
-				writeError(w, http.StatusBadRequest, "invalid_params", "size must be an integer")
+				httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "size must be an integer")
 				return
 			}
 			filterSize = s
 		}
 		if modeStr := r.URL.Query().Get("mode"); modeStr != "" {
 			if modeStr != ModeStandard && modeStr != ModeDouble {
-				writeError(w, http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'")
+				httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'")
 				return
 			}
 			filterMode = modeStr
@@ -76,7 +77,7 @@ func ReplenishHandler(configs ConfigReader, counter PoolCounter, publisher Messa
 		allConfigs, err := configs.GetAllConfigs(r.Context())
 		if err != nil {
 			log.Printf("error fetching configs: %v", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve configs")
+			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve configs")
 			return
 		}
 
@@ -101,7 +102,7 @@ func ReplenishHandler(configs ConfigReader, counter PoolCounter, publisher Messa
 			count, err := counter.CountReady(r.Context(), config.Size, config.Mode)
 			if err != nil {
 				log.Printf("error counting ready puzzles for %dx%d %s: %v", config.Size, config.Size, config.Mode, err)
-				writeError(w, http.StatusInternalServerError, "internal_error", "Failed to check pool levels")
+				httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to check pool levels")
 				return
 			}
 
@@ -123,7 +124,7 @@ func ReplenishHandler(configs ConfigReader, counter PoolCounter, publisher Messa
 				}
 				if err := publisher.PublishGenerationRequest(r.Context(), req); err != nil {
 					log.Printf("error publishing generation request for %dx%d %s: %v", config.Size, config.Size, config.Mode, err)
-					writeError(w, http.StatusInternalServerError, "internal_error", "Failed to publish generation request")
+					httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to publish generation request")
 					return
 				}
 			}

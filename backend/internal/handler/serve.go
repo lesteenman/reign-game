@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
@@ -51,23 +52,23 @@ func ServeHandler(fetcher PuzzleFetcher) http.HandlerFunc {
 		// Validate size parameter.
 		sizeStr := r.URL.Query().Get("size")
 		if sizeStr == "" {
-			writeError(w, http.StatusBadRequest, "invalid_params", "size parameter is required")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "size parameter is required")
 			return
 		}
 		size, err := strconv.Atoi(sizeStr)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_params", "size must be an integer")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "size must be an integer")
 			return
 		}
 
 		// Validate mode parameter.
 		mode := r.URL.Query().Get("mode")
 		if mode == "" {
-			writeError(w, http.StatusBadRequest, "invalid_params", "mode parameter is required")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "mode parameter is required")
 			return
 		}
 		if mode != ModeStandard && mode != ModeDouble {
-			writeError(w, http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'")
+			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'")
 			return
 		}
 
@@ -75,12 +76,12 @@ func ServeHandler(fetcher PuzzleFetcher) http.HandlerFunc {
 		puzzle, err := fetcher.NextReady(r.Context(), size, mode)
 		if err != nil {
 			log.Printf("error fetching next puzzle for %dx%d %s: %v", size, size, mode, err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to fetch puzzle")
+			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to fetch puzzle")
 			return
 		}
 
 		if puzzle == nil {
-			writeError(w, http.StatusNotFound, "no_puzzles_available", "No puzzles available for this size and mode. Try again shortly.")
+			httperr.WriteError(w, http.StatusNotFound, "no_puzzles_available", "No puzzles available for this size and mode. Try again shortly.")
 			return
 		}
 
@@ -90,11 +91,11 @@ func ServeHandler(fetcher PuzzleFetcher) http.HandlerFunc {
 		pk := fmt.Sprintf("%d#%s", size, mode)
 		if err := fetcher.MarkServed(r.Context(), pk, puzzle.ID); err != nil {
 			if errors.Is(err, repository.ErrPuzzleNotFound) {
-				writeError(w, http.StatusNotFound, "no_puzzles_available", "No puzzles available for this size and mode. Try again shortly.")
+				httperr.WriteError(w, http.StatusNotFound, "no_puzzles_available", "No puzzles available for this size and mode. Try again shortly.")
 				return
 			}
 			log.Printf("error marking puzzle %s as served: %v", puzzle.ID, err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "Failed to serve puzzle")
+			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to serve puzzle")
 			return
 		}
 
