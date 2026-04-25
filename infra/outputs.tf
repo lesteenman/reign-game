@@ -32,3 +32,8 @@ output "generator_function_name" {
   description = "Generator Lambda function name"
   value       = module.generation.generator_function_name
 }
+
+output "clerk_publishable_key_param_name" {
+  description = "SSM Parameter Store name for the Clerk publishable key. CD reads this and passes the fetched value to the frontend build as VITE_CLERK_PUBLISHABLE_KEY."
+  value       = module.api.clerk_publishable_key_param_name
+}

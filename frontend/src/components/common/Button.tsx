@@ -1,4 +1,5 @@
 import type { ReactNode, CSSProperties, MouseEventHandler } from 'react';
+import { pressIn, pressOut } from './press';
 
 interface ButtonProps {
   children: ReactNode;
@@ -20,16 +21,6 @@ const baseStyle: CSSProperties = {
   transition: 'transform 100ms ease-out, box-shadow 100ms ease-out',
 };
 
-function handleEnter(e: React.MouseEvent<HTMLButtonElement>, shadowColor: string) {
-  e.currentTarget.style.transform = 'translateY(1px)';
-  e.currentTarget.style.boxShadow = `0 2px 0 ${shadowColor}`;
-}
-
-function handleLeave(e: React.MouseEvent<HTMLButtonElement>, shadowColor: string) {
-  e.currentTarget.style.transform = 'translateY(0)';
-  e.currentTarget.style.boxShadow = `0 3px 0 ${shadowColor}`;
-}
-
 /** Accent-colored primary action button. */
 export function PrimaryButton({ children, onClick, disabled, type = 'button', ...rest }: ButtonProps) {
   return (
@@ -44,8 +35,8 @@ export function PrimaryButton({ children, onClick, disabled, type = 'button', ..
         color: 'var(--color-on-accent)',
         boxShadow: '0 3px 0 var(--color-accent-shadow)',
       }}
-      onMouseEnter={(e) => handleEnter(e, 'var(--color-accent-shadow)')}
-      onMouseLeave={(e) => handleLeave(e, 'var(--color-accent-shadow)')}
+      onMouseEnter={(e) => pressIn(e, 'var(--color-accent-shadow)')}
+      onMouseLeave={(e) => pressOut(e, 'var(--color-accent-shadow)')}
     >
       {children}
     </button>
@@ -66,8 +57,8 @@ export function SecondaryButton({ children, onClick, disabled, type = 'button', 
         color: 'var(--color-ink)',
         boxShadow: '0 3px 0 var(--color-ink)',
       }}
-      onMouseEnter={(e) => handleEnter(e, 'var(--color-ink)')}
-      onMouseLeave={(e) => handleLeave(e, 'var(--color-ink)')}
+      onMouseEnter={(e) => pressIn(e, 'var(--color-ink)')}
+      onMouseLeave={(e) => pressOut(e, 'var(--color-ink)')}
     >
       {children}
     </button>
