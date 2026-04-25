@@ -100,6 +100,11 @@ resource "aws_lambda_function" "api" {
     variables = {
       PUZZLE_TABLE_NAME = var.puzzle_table_name
       SQS_QUEUE_URL     = var.sqs_queue_url
+      # The Lambda reads the Clerk secret via SSM at startup
+      # (auth.LoadClerkSecret). Only the parameter NAME lives here —
+      # never the secret itself — because Lambda env vars are readable
+      # via lambda:GetFunctionConfiguration.
+      CLERK_SECRET_PARAM_NAME = aws_ssm_parameter.clerk_secret_key.name
     }
   }
 }

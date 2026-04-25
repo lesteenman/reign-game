@@ -19,3 +19,17 @@ variable "lambda_zip_path" {
   description = "Path to the Lambda deployment zip file"
   type        = string
 }
+
+variable "clerk_publishable_key" {
+  description = "Clerk publishable key (browser-safe). Supplied via TF_VAR_clerk_publishable_key in CI for the initial apply only — rotations happen directly in SSM (lifecycle ignore_changes). Default empty so terraform plan succeeds without the secret in CI for non-deploy contexts."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "clerk_secret_key" {
+  description = "Clerk server-side secret key. Supplied via TF_VAR_clerk_secret_key in CI for the initial apply only — rotations happen directly in SSM (lifecycle ignore_changes). Default empty so terraform plan succeeds without the secret in CI for non-deploy contexts."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
