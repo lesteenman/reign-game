@@ -204,11 +204,13 @@ Before: all admin routes registered flat at root level, no middleware. After: gr
 
 ## 5. Frontend Integration
 
+The SDK package is `@clerk/react` (v6, a.k.a. "Core 3"). The older `@clerk/clerk-react` package was renamed by Clerk and is deprecated; do not install it. The snippets below are **illustrative** — verify the exact import shape at https://clerk.com/docs/references/react/overview when writing the code. In particular, v6 replaced the `<SignedIn>` / `<SignedOut>` gate components with a unified `<Show when="signed-in|signed-out">` component.
+
 ### ClerkProvider
 
 ```tsx
 // frontend/src/main.tsx
-import { ClerkProvider } from '@clerk/clerk-react'
+import { ClerkProvider } from '@clerk/react'
 
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY
 
@@ -223,17 +225,17 @@ root.render(
 
 ```tsx
 // frontend/src/components/common/PageShell.tsx (excerpt)
-import { SignedIn, SignedOut, SignInButton, UserButton } from '@clerk/clerk-react'
+import { Show, SignInButton, UserButton } from '@clerk/react'
 
 <header>
   <h1>Reign</h1>
   <nav>
-    <SignedOut>
+    <Show when="signed-out">
       <SignInButton mode="modal" />
-    </SignedOut>
-    <SignedIn>
+    </Show>
+    <Show when="signed-in">
       <UserMenu />  {/* our component: UserButton + conditional Admin link */}
-    </SignedIn>
+    </Show>
   </nav>
 </header>
 ```
@@ -330,7 +332,7 @@ export function AdminLandingPage({ state }: { state: State }) {
 
 - `frontend/src/components/auth/UserMenu.test.tsx`: signed-out → shows nothing / sign-in; signed-in + user role → menu without Admin; signed-in + admin role → menu with Admin.
 - `frontend/src/components/auth/ProtectedRoute.test.tsx`: each state (loading, anonymous, non-admin, admin) renders the expected branch.
-- Mock `@clerk/clerk-react` in tests (vendor provides test helpers).
+- Mock `@clerk/react` in tests via `vi.mock('@clerk/react', () => ({ ... }))`. The `@clerk/testing` package ships Playwright / Cypress helpers only — Vitest unit tests wire a plain `vi.mock` stub with the hook return shape (`{ isLoaded, isSignedIn, user }`).
 
 ### E2E tests (Playwright)
 
