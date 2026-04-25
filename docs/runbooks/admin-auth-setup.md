@@ -25,6 +25,8 @@ The Terraform side (SSM parameter store entries, Lambda IAM, CloudFront cookie f
 
 Don't take the publishable / secret keys yet. Section 4 will copy them with the OAuth flow already wired so you only do the Terraform input once.
 
+> **Heads-up on tenant type vs. domain.** Clerk publishable keys are not interchangeable across tenants — the base64 portion of `pk_test_*` / `pk_live_*` encodes the Frontend API host that the browser uses to fetch `clerk-js`. A `pk_test_*` key always points at `*.clerk.accounts.dev` (Clerk-hosted, works anywhere). A `pk_live_*` key only works if the host it encodes is a custom domain you have configured for the deployment — CloudFront default subdomains (`*.cloudfront.net`) cannot host a Clerk Frontend API and DNS will not resolve. Phase 6 shipped against `dypegk2r2t9nh.cloudfront.net` with a `pk_live_*`, and the prod page failed to load Clerk until the SSM parameters were rotated to a `pk_test_*` dev-tenant pair as a stop-gap. Don't promote a tenant to production keys until R-08D (custom domain) lands.
+
 ## 2. Create the GCP OAuth 2.0 client
 
 1. Open <https://console.cloud.google.com>. Create a project named `Reign Auth` (or similar).
