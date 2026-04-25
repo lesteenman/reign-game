@@ -40,11 +40,9 @@ jobs:
           touch -t 200001010000.00 bootstrap
           zip -jX lambda.zip bootstrap
 
-      - name: Build frontend
+      - name: Frontend install dependencies
         working-directory: frontend
-        run: |
-          npm ci
-          npm run build
+        run: npm ci
 
       - name: Terraform Init
         working-directory: infra
@@ -57,10 +55,42 @@ jobs:
 
       - name: Terraform Apply
         working-directory: infra
+        env:
+          # Initial-apply-only inputs for the Clerk SSM parameters. Both
+          # parameters use lifecycle { ignore_changes = [value] }, so
+          # rotating these values requires changing them in the SSM
+          # console — Terraform will not overwrite later updates. Empty
+          # default in variables.tf keeps `terraform plan` working in CI
+          # (PR context) where the secrets aren't available.
+          TF_VAR_clerk_publishable_key: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
+          TF_VAR_clerk_secret_key: ${{ secrets.CLERK_SECRET_KEY }}
         run: |
           terraform apply -auto-approve \
             -var="aws_region=${{ vars.AWS_REGION }}" \
             -var="lambda_zip_path=${{ github.workspace }}/backend/lambda.zip"
+
+      - name: Fetch Clerk publishable key from SSM
+        id: clerk
+        run: |
+          # Read the publishable key from the SSM parameter created by
+          # Terraform on the previous step. SSM is the source of truth so
+          # rotations done in the SSM console flow through to subsequent
+          # frontend builds without a Terraform change.
+          PARAM_NAME=$(terraform -chdir=infra output -raw clerk_publishable_key_param_name)
+          PUBLISHABLE_KEY=$(aws ssm get-parameter \
+            --name "${PARAM_NAME}" \
+            --query 'Parameter.Value' \
+            --output text)
+          # Mask before exporting so it never appears in subsequent log
+          # output even though publishable keys are browser-safe.
+          echo "::add-mask::${PUBLISHABLE_KEY}"
+          echo "publishable_key=${PUBLISHABLE_KEY}" >> "$GITHUB_OUTPUT"
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ steps.clerk.outputs.publishable_key }}
+        run: npm run build
 
       - name: Sync frontend to S3
         run: |
