@@ -18,7 +18,7 @@ All Phase 6 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 
 | ID    | Slice                                           | Layer | Status |
 |-------|-------------------------------------------------|-------|--------|
-| R-089 | Clerk account + GCP OAuth + Terraform SSM keys  | 0     | [ ]    |
+| R-089 | Clerk account + GCP OAuth + Terraform SSM keys  | 0     | [x]    |
 | R-08A | Backend auth middleware + admin route wiring    | 1     | [ ]    |
 | R-08B | Frontend sign-in flow + user menu + admin route | 1     | [ ]    |
 | R-08C | Glossary + CLAUDE.md + ROADMAP + KI-009 close   | 2     | [ ]    |
