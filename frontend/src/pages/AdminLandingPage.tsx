@@ -1,5 +1,5 @@
-import { SignOutButton } from "@clerk/react";
 import type { CSSProperties } from 'react';
+import { Link } from 'react-router-dom';
 import { PageShell } from '../components/common/PageShell';
 import { SignInButton } from '../components/auth/SignInButton';
 import { compactSecondaryButtonStyle } from '../components/common/buttonStyles';
@@ -54,7 +54,8 @@ const bodyStyle: CSSProperties = {
  *
  *   - 'anonymous' — no session; invite to sign in.
  *   - 'forbidden' — signed in but `publicMetadata.role !== 'admin'`;
- *     offer a sign-out so they can switch accounts.
+ *     offer a way back to the game. Sign-out is reachable from the
+ *     header avatar; duplicating it here would be redundant.
  */
 export function AdminLandingPage({ state }: AdminLandingPageProps) {
   if (state === 'anonymous') {
@@ -74,17 +75,15 @@ export function AdminLandingPage({ state }: AdminLandingPageProps) {
       <div style={cardStyle} data-testid="admin-landing-forbidden">
         <h2 style={headingStyle}>No Admin Access</h2>
         <p style={bodyStyle}>This account doesn&apos;t have admin access.</p>
-        <SignOutButton>
-          <button
-            type="button"
-            style={compactSecondaryButtonStyle}
-            onMouseDown={(e) => pressIn(e, 'var(--color-ink)')}
-            onMouseUp={(e) => pressOut(e, 'var(--color-ink)')}
-            onMouseLeave={(e) => pressOut(e, 'var(--color-ink)')}
-          >
-            Sign out
-          </button>
-        </SignOutButton>
+        <Link
+          to="/"
+          style={{ ...compactSecondaryButtonStyle, textDecoration: 'none' }}
+          onMouseDown={(e) => pressIn(e, 'var(--color-ink)')}
+          onMouseUp={(e) => pressOut(e, 'var(--color-ink)')}
+          onMouseLeave={(e) => pressOut(e, 'var(--color-ink)')}
+        >
+          Home
+        </Link>
       </div>
     </PageShell>
   );

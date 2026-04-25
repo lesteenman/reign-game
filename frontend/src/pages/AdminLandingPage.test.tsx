@@ -3,17 +3,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AdminLandingPage } from './AdminLandingPage';
 
-// Mock Clerk's SignInButton/SignOutButton to plain buttons so we can
-// assert on them without booting Clerk.
+// Mock Clerk's SignInButton to a plain button so we can assert on it
+// without booting Clerk.
 vi.mock('@clerk/react', () => ({
   SignInButton: ({ children, mode }: { children?: React.ReactNode; mode?: string }) => (
     <div data-testid="clerk-sign-in-button" data-mode={mode}>
       {children ?? <button type="button">Sign in</button>}
-    </div>
-  ),
-  SignOutButton: ({ children }: { children?: React.ReactNode }) => (
-    <div data-testid="clerk-sign-out-button">
-      {children ?? <button type="button">Sign out</button>}
     </div>
   ),
 }));
@@ -41,7 +36,7 @@ describe('AdminLandingPage', () => {
     expect(screen.getByTestId('clerk-sign-in-button')).toBeInTheDocument();
   });
 
-  it('forbidden state shows "No Admin Access" heading + sign-out button', () => {
+  it('forbidden state shows "No Admin Access" heading + Home link to /', () => {
     // Arrange & Act
     renderInRouter(<AdminLandingPage state="forbidden" />);
 
@@ -52,7 +47,9 @@ describe('AdminLandingPage', () => {
     expect(
       screen.getByText(/this account doesn't have admin access/i),
     ).toBeInTheDocument();
-    expect(screen.getByTestId('clerk-sign-out-button')).toBeInTheDocument();
+    const home = screen.getByRole('link', { name: /home/i });
+    expect(home).toBeInTheDocument();
+    expect(home).toHaveAttribute('href', '/');
   });
 
   it('forbidden state does not render a sign-in button', () => {
@@ -63,11 +60,11 @@ describe('AdminLandingPage', () => {
     expect(screen.queryByTestId('clerk-sign-in-button')).not.toBeInTheDocument();
   });
 
-  it('anonymous state does not render a sign-out button', () => {
+  it('anonymous state does not render a Home link', () => {
     // Arrange & Act
     renderInRouter(<AdminLandingPage state="anonymous" />);
 
     // Assert
-    expect(screen.queryByTestId('clerk-sign-out-button')).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /home/i })).not.toBeInTheDocument();
   });
 });
