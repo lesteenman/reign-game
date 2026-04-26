@@ -76,6 +76,7 @@ Before committing Terraform code, verify:
 4. GitHub Actions that reference `terraform plan` with `continue-on-error: true` also have a subsequent step that fails explicitly on plan error
 5. Any `file*()` function (e.g., `filebase64sha256`) taking a variable path must be wrapped in a `fileexists()` guard — CI plan passes dummy paths that don't exist on disk
 6. **Never use `count` with module outputs.** `count = var.x != "" ? 1 : 0` fails when the variable comes from another module's output that isn't known until apply. Either make the resource unconditional or use `for_each` with a known set. Phase 3 CI failed with `Invalid count argument` on two IAM policies.
+7. **`lifecycle { ignore_changes = [value] }` makes the Terraform-managed resource the source of truth — input variables become initial-only.** Once such a resource exists, future `terraform apply` runs will not overwrite the value field even if the upstream input variable changes. Rotating the upstream CI secret (e.g. a GitHub `secrets.X` that flows in as `TF_VAR_x`) has zero effect on the deployed value. To rotate: update the resource directly out of band (`aws ssm put-parameter --overwrite`, `aws secretsmanager update-secret`, etc.) and re-trigger any consumer that reads it. Update the CI secret too, but only so the *next* clean-room initial-apply matches. Phase 6 lost ~one CD rerun and ~10 min cognitive overhead because `gh secret set CLERK_PUBLISHABLE_KEY` was assumed to flow into the next build — it didn't, because `/reign/prod/clerk-publishable-key` had `ignore_changes = [value]` and the CD reads from SSM, not directly from the GitHub secret. The runbook (`docs/runbooks/admin-auth-setup.md` §8) already documented the SSM-as-source-of-truth flow; the lesson is to make this the *default* mental model for any Terraform-managed value with `ignore_changes`.
 
 ## CI/CD Cross-Validation Checklist
 
@@ -96,6 +97,7 @@ Before merging CI or CD workflow changes, verify:
 4. IAM policies follow least privilege
 5. No hardcoded secrets in any file
 6. All items in the Terraform Review Checklist above are satisfied
+7. **Open the deployed URL after CD succeeds and verify the user-visible feature actually works** — for any slice that touches build-time env injection, infrastructure, CDN, auth, or any other path where local dev diverges from prod. CI green means "the build compiled and tests passed against local stubs," not "the running site works." Local dev paths often use different env vars, different secret sources, or different DNS than prod (e.g., dev fetches `pk_test_*` from `.env.local`, prod fetches `pk_live_*` from SSM at build time and the embedded host has to actually resolve). Run a headless playwright check against the deployed origin or load it in a browser; look for console errors, failed network requests, and the visible UI element the slice was supposed to ship. R-089 declared "done" all-CI-green, but the deployed page was broken from day one — Clerk JS couldn't load because the `pk_live_*` embedded an unreachable Frontend API host. Caught manually 24 h+ later. A 60-second post-deploy check would have caught it inside the same slice.
 
 ## Team Workflow
 
