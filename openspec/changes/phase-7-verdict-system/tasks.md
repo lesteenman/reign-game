@@ -16,7 +16,7 @@ All Phase 7 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 
 | ID    | Slice                                                          | Layer | Status |
 |-------|----------------------------------------------------------------|-------|--------|
-| R-081 | Backend verdict handler + repository + schema migration        | 1     | [ ]    |
+| R-081 | Backend verdict handler + repository + schema migration        | 1     | [x]    |
 | R-082 | Frontend verdict surface + glossary + docs sweep + close-out   | 2     | [ ]    |
 
 ## Tasks

@@ -72,6 +72,7 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 				r.Get("/pool", handler.AdminPoolHandler(repo))
 				r.Put("/config/{size}/{mode}", handler.UpdateConfigHandler(repo))
 				r.Post("/config", handler.CreateConfigHandler(repo))
+				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
 				if pub != nil {
 					r.Post("/replenish", handler.ReplenishHandler(repo, repo, pub))
 				}

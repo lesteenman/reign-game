@@ -62,7 +62,8 @@ backend/
 │   │   ├── params.go            # Shared handler helpers
 │   │   ├── replenish.go         # POST /api/admin/replenish
 │   │   ├── serve.go             # GET /api/puzzles/next
-│   │   └── status.go            # PUT /api/puzzles/{id}/status
+│   │   ├── status.go            # PUT /api/puzzles/{id}/status
+│   │   └── verdict.go           # PUT /api/admin/puzzles/{id}/verdict (Phase 7, R-081)
 │   ├── model/                   # Legacy domain types (Phase 5 kept puzzle.go only)
 │   │   └── puzzle.go
 │   ├── repository/              # DynamoDB data access
@@ -220,6 +221,7 @@ design/
 | PUT | /api/admin/config/{size}/{mode} | Admin | Update config for an existing combo |
 | POST | /api/admin/config | Admin | Create a new combo config |
 | POST | /api/admin/replenish | Admin | Replenish pools (optional ?size=X&mode=Y filter) |
+| PUT | /api/admin/puzzles/{id}/verdict | Admin | Submit up/down verdict on a played puzzle (Phase 7, R-081) |
 
 *Admin-marked endpoints sit behind `RequireAuth` + `RequireAdmin` (Phase 6, R-08A): anonymous → 401, signed-in non-admin → 403, signed-in with `publicMetadata.role === 'admin'` → 200. `/api/config/modes` is the public alternative the landing page calls so it never has to touch any admin endpoint.*
 
@@ -227,8 +229,7 @@ design/
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| PUT | /api/puzzles/{id}/verdict | No | Upvote/downvote/skip puzzle (Phase 6, R-081) |
-| GET | /api/puzzles/{id} | No | Load puzzle by ID for replay (Phase 7, R-085) |
+| GET | /api/puzzles/{id} | No | Load puzzle by ID for replay (Phase 8, R-085) |
 | GET | /api/daily | No | Get today's daily puzzles (Phase 9+) |
 | POST | /api/completions | Device ID | Submit puzzle completion (Phase 9+) |
 | GET | /api/leaderboard/{puzzleId} | No | Leaderboard for a daily puzzle (Phase 9+) |
