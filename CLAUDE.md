@@ -187,11 +187,13 @@ Stdlib `log` only — no `slog`, no third-party loggers. Small project, small su
 
 ## Roles
 
+Role names are Title-Case in prose (`Anonymous` / `User` / `Admin`); the Clerk metadata claim values are lowercase (`'user'` / `'admin'`).
+
 | Role | Identity | Access |
 |------|----------|--------|
-| FREE | Fully anonymous, no account | Practice puzzles, daily challenge, local stats, see own percentile |
-| PREMIUM | Authenticated (OAuth, one-time purchase) | All free features + full archive, leaderboard identity, detailed stats, cross-device sync, premium themes |
-| ADMIN | Authenticated | Curation UI, puzzle management, generation tooling |
+| Anonymous | No account; device-linked local identity | Practice puzzles, daily challenge, local stats, see own percentile |
+| User | Signed-in via Clerk (Google OAuth); default role with no `publicMetadata.role` set or `'user'` | Same as Anonymous for now; reserved for later phases (leaderboard identity, stats sync, premium flip) |
+| Admin | Signed-in via Clerk with `publicMetadata.role === 'admin'` (assigned manually in the Clerk dashboard) | All User access + `/admin` UI and `/api/admin/*` routes (curation, puzzle management, generation tooling) |
 
 ## Key References
 
