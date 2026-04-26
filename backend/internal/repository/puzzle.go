@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -527,11 +528,14 @@ func (r *PuzzleRepository) ListVerdictsForPuzzle(ctx context.Context, size int, 
 		record.PuzzleID = puzzleID
 
 		// Parse role/id from SK (format: "{raterRole}#{raterId}").
+		// Use SplitN with n=2 so a Clerk user ID containing '#' wouldn't
+		// confuse the split (Clerk IDs don't, but defensively stays
+		// correct under future ID schemes).
 		if skAttr, ok := item["SK"].(*types.AttributeValueMemberS); ok {
-			var parsedRole, parsedID string
-			if _, err := fmt.Sscanf(skAttr.Value, "%[^#]#%s", &parsedRole, &parsedID); err == nil {
-				record.RaterRole = parsedRole
-				record.RaterID = parsedID
+			parts := strings.SplitN(skAttr.Value, "#", 2)
+			if len(parts) == 2 {
+				record.RaterRole = parts[0]
+				record.RaterID = parts[1]
 			}
 		}
 
