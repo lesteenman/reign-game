@@ -1,5 +1,5 @@
 // This test implements the N-feasibility probe described in
-// openspec/changes/phase-5-generator-rework/input-spec.md §4.1 and
+// openspec/archive/phase-5-generator-rework/input-spec.md §4.1 and
 // specs/puzzle-generation.md PG-04.
 //
 // TestFeasibility runs the sampler at every (N in {4..8}, k in {1, 2}) for a

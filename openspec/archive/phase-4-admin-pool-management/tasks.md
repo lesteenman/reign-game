@@ -29,17 +29,17 @@ Layer 5: T-410 (Integration test)
 
 | Task | Title | Milestone | Status |
 |------|-------|-----------|--------|
-| T-400 | Config repository methods | A | [ ] |
-| T-401 | Admin pool handler (GET /admin/pool) | A | [ ] |
-| T-402 | Admin config handlers (PUT + POST) | A | [ ] |
-| T-403 | Replenish refactor (dynamic config) | B | [ ] |
-| T-404 | LocalStack seed: CONFIG items | D | [ ] |
-| T-405 | Route registration (main.go) | B | [ ] |
-| T-406 | Frontend admin API service | C | [ ] |
-| T-407 | Frontend admin page + config form | C | [ ] |
-| T-408 | Frontend admin nav link (PageShell) | C | [ ] |
-| T-409 | Frontend route registration (App.tsx) | C | [ ] |
-| T-410 | Integration test | D | [ ] |
+| T-400 | Config repository methods | A | [x] |
+| T-401 | Admin pool handler (GET /admin/pool) | A | [x] |
+| T-402 | Admin config handlers (PUT + POST) | A | [x] |
+| T-403 | Replenish refactor (dynamic config) | B | [x] |
+| T-404 | LocalStack seed: CONFIG items | D | [x] |
+| T-405 | Route registration (main.go) | B | [x] |
+| T-406 | Frontend admin API service | C | [x] |
+| T-407 | Frontend admin page + config form | C | [x] |
+| T-408 | Frontend admin nav link (PageShell) | C | [x] |
+| T-409 | Frontend route registration (App.tsx) | C | [x] |
+| T-410 | Integration test | D | [x] |
 
 ## Tasks
 
