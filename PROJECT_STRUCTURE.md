@@ -16,7 +16,8 @@ reign-game/
 ├── design/                # UI/UX assets, wireframes, OpenSpec artifacts
 │   └── openspec/          # OpenSpec change artifacts (symlinked or moved from root)
 ├── docs/
-│   └── runbooks/          # Operational runbooks (cutover, rollback, ...)
+│   └── runbooks/          # Operational runbooks
+│       └── admin-auth-setup.md  # Clerk + GCP OAuth setup, key rotation, admin role grants (Phase 6, R-089)
 ├── scripts/               # Ops helpers (flush-pool, seed-configs)
 ├── .claude/               # Agent definitions, skills, settings
 │   ├── agents/            # Agent .md files
@@ -117,12 +118,19 @@ frontend/
 │   ├── App.tsx / App.test.tsx
 │   ├── main.tsx
 │   ├── components/
-│   │   ├── common/              # Button, PageShell
+│   │   ├── auth/                # Clerk sign-in surface (Phase 6, R-08B)
+│   │   │   ├── ClerkAvailability.tsx     # Renders children only when ClerkProvider is mounted
+│   │   │   ├── ProtectedAdminRoute.tsx   # Route guard: anonymous → sign-in, non-admin → forbidden
+│   │   │   ├── SignInButton.tsx          # Header sign-in CTA
+│   │   │   ├── UserMenu.tsx              # Avatar + sign-out menu (signed-in users)
+│   │   │   └── role.ts                   # Role helpers (publicMetadata.role)
+│   │   ├── common/              # Button, PageShell, press helpers, button styles
 │   │   ├── grid/                # Cell, Grid, Marker, ExclusionMark, RegionBorderOverlay
 │   │   └── landing/
 │   │       └── PuzzleSelector.tsx  # Dynamic mode buttons (R-06A)
 │   ├── pages/
-│   │   ├── AdminPage.tsx        # Pool management UI
+│   │   ├── AdminLandingPage.tsx # Forbidden state for signed-in non-admin users on /admin (R-08B)
+│   │   ├── AdminPage.tsx        # Pool management UI (admin-only behind ProtectedAdminRoute)
 │   │   ├── GamePage.tsx         # Active-puzzle view
 │   │   └── LandingPage.tsx      # Entry point / resume / new puzzle
 │   ├── services/
@@ -171,9 +179,9 @@ frontend/
 infra/
 ├── modules/
 │   ├── frontend/                # S3 + CloudFront
-│   ├── api/                     # API Gateway + Lambda
+│   ├── api/                     # API Gateway + Lambda + Clerk SSM keys + IAM (Phase 6 admin auth lives here, R-089)
 │   ├── database/                # DynamoDB tables
-│   └── auth/                    # Auth provider TBD (Phase 5+)
+│   └── generation/              # SQS puzzle-generation queue + DLQ (Phase 4)
 ├── environments/
 │   └── prod/                    # Production tfvars (single env initially)
 ├── main.tf
@@ -208,12 +216,12 @@ design/
 | GET | /api/puzzles/next | No | Serve next ready puzzle from pool by size + mode |
 | PUT | /api/puzzles/{id}/status | No | Update puzzle status (solved/skipped) |
 | GET | /api/config/modes | No | Public list of enabled (size, mode) combos for the landing page (R-06A) |
-| GET | /api/admin/pool | KI-009 | All combos with merged config + ready counts |
-| PUT | /api/admin/config/{size}/{mode} | KI-009 | Update config for an existing combo |
-| POST | /api/admin/config | KI-009 | Create a new combo config |
-| POST | /api/admin/replenish | KI-009 | Replenish pools (optional ?size=X&mode=Y filter) |
+| GET | /api/admin/pool | Admin | All combos with merged config + ready counts |
+| PUT | /api/admin/config/{size}/{mode} | Admin | Update config for an existing combo |
+| POST | /api/admin/config | Admin | Create a new combo config |
+| POST | /api/admin/replenish | Admin | Replenish pools (optional ?size=X&mode=Y filter) |
 
-*KI-009 marks endpoints due for auth-gating. They are currently unauthenticated but `/api/config/modes` is public by design so the landing page never has to call them.*
+*Admin-marked endpoints sit behind `RequireAuth` + `RequireAdmin` (Phase 6, R-08A): anonymous → 401, signed-in non-admin → 403, signed-in with `publicMetadata.role === 'admin'` → 200. `/api/config/modes` is the public alternative the landing page calls so it never has to touch any admin endpoint.*
 
 ### Future (not yet implemented)
 
