@@ -154,7 +154,7 @@ If the project shuts down or moves off Clerk:
 
 ## Reference
 
-- Auth surface spec: `openspec/changes/phase-6-admin-auth/specs/auth-surface.md`
+- Auth surface spec: `openspec/archive/phase-6-admin-auth/specs/auth-surface.md`
 - Backend secret loader contract: `backend/internal/auth/secret.go` (created in slice R-08A)
 - Terraform: `infra/modules/api/ssm.tf`, `infra/modules/api/iam.tf`
 - CD workflow Clerk steps: `.github/workflows/cd.yml`

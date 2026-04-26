@@ -107,7 +107,7 @@ below.
 
 ## Phase 6: Admin Authentication via Clerk
 
-Goal: Close KI-009 by gating `/api/admin/*` behind authenticated sessions. Ship a minimum-viable auth layer using Clerk (hosted) with Google OAuth. Anyone can sign in; admin role is assigned manually via the Clerk dashboard. No DynamoDB user records, no local-server sync, no premium flow this phase. Design artifacts in `openspec/changes/phase-6-admin-auth/`.
+Goal: Close KI-009 by gating `/api/admin/*` behind authenticated sessions. Ship a minimum-viable auth layer using Clerk (hosted) with Google OAuth. Anyone can sign in; admin role is assigned manually via the Clerk dashboard. No DynamoDB user records, no local-server sync, no premium flow this phase. Design artifacts in `openspec/archive/phase-6-admin-auth/`.
 
 - [x] **R-089** — Clerk setup + GCP OAuth + Terraform SSM keys + CloudFront cookie forwarding
 - [x] **R-08A** — Backend auth middleware (`RequireAuth`, `RequireAdmin`) + admin route wiring
