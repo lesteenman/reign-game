@@ -99,16 +99,16 @@ The count of consecutive days on which the player completed at least one daily p
 ## Users & Access
 
 **Device Identity**
-An anonymous, device-linked identifier used to associate completions and local stats before account creation (Phase 1).
+An anonymous, device-linked identifier used to associate completions and local stats before account creation.
 
-**User Account**
-An authenticated identity (via OAuth) that enables cross-device sync, persistent leaderboard names, and premium features (Phase 2).
+**User**
+Signed-in via Clerk (Google OAuth). Default role (no `publicMetadata.role` set, or set to `'user'`). Same access as Anonymous for now; cross-device sync, leaderboard identity, and stats persistence are reserved for later phases. Supersedes the pre–Phase 6 "User Account" concept.
 
-**Free Tier**
-Default access level. Includes daily challenges, limited practice puzzle pool, and basic stats.
+**Admin**
+Signed-in with `publicMetadata.role === 'admin'` claim in Clerk. Access to `/admin` UI and `/api/admin/*` routes. Role assigned manually via Clerk dashboard.
 
-**Premium Tier**
-One-time purchase. Includes full puzzle archive, leaderboard identity, detailed stats, cross-device sync, custom themes, and future premium features.
+**Premium**
+Term reserved for the future paid tier (one-time purchase, see `GAME_DESIGN.md` §Monetization for the intended feature set: full puzzle archive, leaderboard identity, detailed stats, cross-device sync, premium themes). Not used this phase — no Premium-gated features ship until the flip phase lands.
 
 ## Themes
 
