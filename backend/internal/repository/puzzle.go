@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -49,6 +50,54 @@ func (e *ConfigAlreadyExistsError) Error() string {
 	return fmt.Sprintf("config already exists for %d#%s", e.Size, e.Mode)
 }
 
+// VerdictSummary is the denormalized projection of admin verdict
+// counts on a puzzle. The row family at PK="VERDICT#{size}#{mode}#{id}"
+// is canonical; this summary is recomputed from that row family on
+// every write so it stays consistent with no transactional cost. See
+// VR-05 / VR-06 in specs/repository.md.
+type VerdictSummary struct {
+	// Up is the number of admins who voted "up" on this puzzle.
+	Up int `dynamodbav:"up" json:"up"`
+	// Down is the number of admins who voted "down" on this puzzle.
+	Down int `dynamodbav:"down" json:"down"`
+	// LastUpdatedAt is the RFC 3339 timestamp of the most recent
+	// recompute. Empty on never-voted puzzles.
+	LastUpdatedAt string `dynamodbav:"lastUpdatedAt" json:"lastUpdatedAt"`
+}
+
+// VerdictRecord is one admin's verdict on one puzzle. Stored under
+// PK="VERDICT#{size}#{mode}#{puzzleId}", SK="{raterRole}#{raterId}".
+// The PK/SK component fields (PuzzleID, GridSize, Mode, RaterID,
+// RaterRole) are derived from the keys at write/read time and not
+// stored as separate attributes — matching the PuzzleRecord and
+// ConfigRecord conventions in this file. See VR-01 / VR-02.
+type VerdictRecord struct {
+	// PuzzleID is the puzzle UUID, embedded in the PK.
+	PuzzleID string `dynamodbav:"-"`
+	// GridSize is the puzzle's N dimension, embedded in the PK.
+	GridSize int `dynamodbav:"-"`
+	// Mode is the puzzle's mode ("standard" / "double"), embedded in the PK.
+	Mode string `dynamodbav:"-"`
+	// RaterID is the Clerk user ID of the admin who submitted the verdict.
+	RaterID string `dynamodbav:"-"`
+	// RaterRole is the rater's role at submission time. Always
+	// "admin" in this phase; the SK shape is multi-rater-ready.
+	RaterRole string `dynamodbav:"-"`
+	// Value is the verdict — "up" or "down".
+	Value string `dynamodbav:"value"`
+	// PlayTimeMs is the wall-clock time in milliseconds the rater
+	// spent on the producing attempt. Used by R-084 calibration.
+	PlayTimeMs int64 `dynamodbav:"playTimeMs"`
+	// Outcome distinguishes a verdict cast on a solved puzzle from
+	// one cast on a skipped puzzle ("solved" or "skipped").
+	Outcome string `dynamodbav:"outcome"`
+	// ClientVersion is the frontend build SHA at vote time. Free-form;
+	// frontend defaults to "dev" in local dev.
+	ClientVersion string `dynamodbav:"clientVersion"`
+	// SubmittedAt is the RFC 3339 timestamp of the write (server clock).
+	SubmittedAt string `dynamodbav:"submittedAt"`
+}
+
 // PuzzleRecord represents a puzzle stored in the puzzle-pool DynamoDB table.
 // Fields map directly to the DynamoDB attributes defined in the design document.
 type PuzzleRecord struct {
@@ -60,8 +109,10 @@ type PuzzleRecord struct {
 	ID string `dynamodbav:"-"`
 	// Status tracks the puzzle lifecycle: ready, served, solved, skipped.
 	Status string `dynamodbav:"status"`
-	// Verdict is the curation verdict: none, upvote, downvote, skip.
-	Verdict string `dynamodbav:"verdict"`
+	// VerdictSummary is the denormalized projection of admin verdict
+	// counts. Recomputed by RecomputeVerdictSummary on every PUT. The
+	// row family at PK="VERDICT#..." is canonical; this is a cache.
+	VerdictSummary VerdictSummary `dynamodbav:"verdictSummary"`
 	// RegionMap is a 2D array of region IDs defining which region each cell belongs to.
 	RegionMap [][]int `dynamodbav:"regionMap"`
 	// Solution is a 2D boolean array indicating correct marker placements.
@@ -368,6 +419,179 @@ func (r *PuzzleRepository) CreateConfig(ctx context.Context, config *ConfigRecor
 	}
 
 	return nil
+}
+
+// buildVerdictPK constructs the verdict row partition key for a
+// (size, mode, puzzleID) tuple. See VR-01.
+func buildVerdictPK(size int, mode, puzzleID string) string {
+	return fmt.Sprintf("VERDICT#%d#%s#%s", size, mode, puzzleID)
+}
+
+// buildVerdictSK constructs the verdict row sort key for a given
+// rater. The shape is "{raterRole}#{raterId}" so the row family scales
+// to multiple rater roles without a re-key. See VR-01.
+func buildVerdictSK(raterRole, raterID string) string {
+	return fmt.Sprintf("%s#%s", raterRole, raterID)
+}
+
+// GetPuzzle returns the puzzle row at PK="{size}#{mode}", SK="{id}".
+// Returns (nil, nil) if the row is absent — used by VerdictHandler
+// for the 404 check before writing a verdict. See VR-10 / VH-05.
+func (r *PuzzleRepository) GetPuzzle(ctx context.Context, size int, mode, puzzleID string) (*PuzzleRecord, error) {
+	pk := buildPK(size, mode)
+
+	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: pk},
+			"SK": &types.AttributeValueMemberS{Value: puzzleID},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getting puzzle %s/%s: %w", pk, puzzleID, err)
+	}
+
+	if output.Item == nil {
+		return nil, nil
+	}
+
+	var record PuzzleRecord
+	if err := attributevalue.UnmarshalMap(output.Item, &record); err != nil {
+		return nil, fmt.Errorf("unmarshaling puzzle record: %w", err)
+	}
+	record.GridSize = size
+	record.Mode = mode
+	record.ID = puzzleID
+
+	return &record, nil
+}
+
+// PutVerdict writes a verdict row to the puzzle-pool table. The PK is
+// derived from (GridSize, Mode, PuzzleID); the SK from (RaterRole,
+// RaterID). The write is unconditional — re-submission by the same
+// rater overwrites the prior row, matching PUT semantics (VR-03).
+// SubmittedAt is set on the record before marshaling so callers don't
+// have to remember to stamp it.
+func (r *PuzzleRepository) PutVerdict(ctx context.Context, v *VerdictRecord) error {
+	if v.SubmittedAt == "" {
+		v.SubmittedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+
+	item, err := attributevalue.MarshalMap(v)
+	if err != nil {
+		return fmt.Errorf("marshaling verdict record: %w", err)
+	}
+
+	pk := buildVerdictPK(v.GridSize, v.Mode, v.PuzzleID)
+	sk := buildVerdictSK(v.RaterRole, v.RaterID)
+	item["PK"] = &types.AttributeValueMemberS{Value: pk}
+	item["SK"] = &types.AttributeValueMemberS{Value: sk}
+
+	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(r.tableName),
+		Item:      item,
+	})
+	if err != nil {
+		return fmt.Errorf("putting verdict %s/%s: %w", pk, sk, err)
+	}
+
+	return nil
+}
+
+// ListVerdictsForPuzzle returns every verdict row for the given
+// puzzle. Issues a single Query against the verdict partition. Returns
+// an empty slice when no rows exist. See VR-04.
+func (r *PuzzleRepository) ListVerdictsForPuzzle(ctx context.Context, size int, mode, puzzleID string) ([]VerdictRecord, error) {
+	pk := buildVerdictPK(size, mode, puzzleID)
+
+	output, err := r.client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(r.tableName),
+		KeyConditionExpression: aws.String("PK = :pk"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk": &types.AttributeValueMemberS{Value: pk},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("querying verdicts for %s: %w", pk, err)
+	}
+
+	verdicts := make([]VerdictRecord, 0, len(output.Items))
+	for _, item := range output.Items {
+		var record VerdictRecord
+		if err := attributevalue.UnmarshalMap(item, &record); err != nil {
+			return nil, fmt.Errorf("unmarshaling verdict record: %w", err)
+		}
+
+		record.GridSize = size
+		record.Mode = mode
+		record.PuzzleID = puzzleID
+
+		// Parse role/id from SK (format: "{raterRole}#{raterId}").
+		if skAttr, ok := item["SK"].(*types.AttributeValueMemberS); ok {
+			var parsedRole, parsedID string
+			if _, err := fmt.Sscanf(skAttr.Value, "%[^#]#%s", &parsedRole, &parsedID); err == nil {
+				record.RaterRole = parsedRole
+				record.RaterID = parsedID
+			}
+		}
+
+		verdicts = append(verdicts, record)
+	}
+
+	return verdicts, nil
+}
+
+// RecomputeVerdictSummary reads the verdict row family for one puzzle,
+// counts up/down values, and writes the summary to
+// PuzzleRecord.verdictSummary via UpdateItem with attribute_exists(PK)
+// (so a missing puzzle row produces ErrPuzzleNotFound, not a silent
+// upsert). Returns the recomputed summary regardless of whether the
+// projection write succeeded — the row family is canonical, the
+// summary is a cached projection (VR-05 / VH-09).
+func (r *PuzzleRepository) RecomputeVerdictSummary(ctx context.Context, size int, mode, puzzleID string) (VerdictSummary, error) {
+	verdicts, err := r.ListVerdictsForPuzzle(ctx, size, mode, puzzleID)
+	if err != nil {
+		return VerdictSummary{}, fmt.Errorf("listing verdicts for recompute: %w", err)
+	}
+
+	summary := VerdictSummary{LastUpdatedAt: time.Now().UTC().Format(time.RFC3339)}
+	for _, v := range verdicts {
+		switch v.Value {
+		case "up":
+			summary.Up++
+		case "down":
+			summary.Down++
+		}
+	}
+
+	pk := buildPK(size, mode)
+	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: pk},
+			"SK": &types.AttributeValueMemberS{Value: puzzleID},
+		},
+		UpdateExpression:    aws.String("SET verdictSummary = :summary"),
+		ConditionExpression: aws.String("attribute_exists(PK)"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":summary": &types.AttributeValueMemberM{
+				Value: map[string]types.AttributeValue{
+					"up":            &types.AttributeValueMemberN{Value: strconv.Itoa(summary.Up)},
+					"down":          &types.AttributeValueMemberN{Value: strconv.Itoa(summary.Down)},
+					"lastUpdatedAt": &types.AttributeValueMemberS{Value: summary.LastUpdatedAt},
+				},
+			},
+		},
+	})
+	if err != nil {
+		var ccfe *types.ConditionalCheckFailedException
+		if errors.As(err, &ccfe) {
+			return summary, ErrPuzzleNotFound
+		}
+		return summary, fmt.Errorf("updating verdict summary for %s/%s: %w", pk, puzzleID, err)
+	}
+
+	return summary, nil
 }
 
 // CountReady returns the number of puzzles with status "ready" for the given

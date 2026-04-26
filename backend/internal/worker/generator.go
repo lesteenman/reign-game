@@ -142,7 +142,6 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		Mode:                 req.Mode,
 		ID:                   puzzleID,
 		Status:               "ready",
-		Verdict:              "none",
 		RegionMap:            pz.Regions,
 		Solution:             solution,
 		Difficulty:           int(pz.Difficulty),

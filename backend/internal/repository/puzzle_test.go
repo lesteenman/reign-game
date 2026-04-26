@@ -50,7 +50,6 @@ func TestPutPuzzle(t *testing.T) {
 				Mode:       "standard",
 				ID:         "test-uuid-123",
 				Status:     "ready",
-				Verdict:    "none",
 				RegionMap:  [][]int{{0, 0, 1}, {0, 1, 1}, {2, 2, 1}},
 				Solution:   [][]bool{{true, false, false}, {false, false, true}, {false, true, false}},
 				Difficulty: 2,

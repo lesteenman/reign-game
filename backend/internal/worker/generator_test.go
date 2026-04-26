@@ -137,9 +137,6 @@ func TestHandleSQSEvent(t *testing.T) {
 			if capturedRecord.Status != "ready" {
 				t.Errorf("Status = %q, want %q", capturedRecord.Status, "ready")
 			}
-			if capturedRecord.Verdict != "none" {
-				t.Errorf("Verdict = %q, want %q", capturedRecord.Verdict, "none")
-			}
 			if capturedRecord.RegionMap == nil {
 				t.Error("RegionMap should not be nil")
 			}
