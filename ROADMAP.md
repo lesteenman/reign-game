@@ -97,7 +97,7 @@ Goal: Rework the puzzle generator based on new designs (to be detailed via desig
 - [x] **R-061** — Design-flow: capture the new generator design, decide algorithm(s), and split into implementation tasks
 
 Phase 5 implementation slices R-062..R-06D are tracked in
-`openspec/changes/phase-5-generator-rework/tasks.md`. All shipped: generator
+`openspec/archive/phase-5-generator-rework/tasks.md`. All shipped: generator
 scaffold (R-062), sampler (R-063), deductive solver (R-064), region grower
 cheap + solver-guided (R-065 / R-066), mutator + consumer cleanup (R-067),
 measurement + soak + distribution (R-068), cutover (R-069), post-cutover
