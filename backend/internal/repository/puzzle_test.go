@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -50,7 +51,6 @@ func TestPutPuzzle(t *testing.T) {
 				Mode:       "standard",
 				ID:         "test-uuid-123",
 				Status:     "ready",
-				Verdict:    "none",
 				RegionMap:  [][]int{{0, 0, 1}, {0, 1, 1}, {2, 2, 1}},
 				Solution:   [][]bool{{true, false, false}, {false, false, true}, {false, true, false}},
 				Difficulty: 2,
@@ -814,4 +814,442 @@ func TestCreateConfig(t *testing.T) {
 
 func strPtr(s string) *string {
 	return &s
+}
+
+// --- Phase 7 verdict tests (R-081) -----------------------------------------
+
+func TestGetPuzzle(t *testing.T) {
+	tests := []struct {
+		name      string
+		size      int
+		mode      string
+		puzzleID  string
+		item      map[string]types.AttributeValue
+		getErr    error
+		wantNil   bool
+		wantErr   bool
+		wantPK    string
+		wantSK    string
+		wantTable string
+	}{
+		{
+			name:     "returns puzzle when present",
+			size:     7,
+			mode:     "standard",
+			puzzleID: "abc-123",
+			item: map[string]types.AttributeValue{
+				"PK":     &types.AttributeValueMemberS{Value: "7#standard"},
+				"SK":     &types.AttributeValueMemberS{Value: "abc-123"},
+				"status": &types.AttributeValueMemberS{Value: "ready"},
+			},
+			wantPK:    "7#standard",
+			wantSK:    "abc-123",
+			wantTable: "puzzle-pool",
+		},
+		{
+			name:      "returns nil, nil when puzzle is absent",
+			size:      5,
+			mode:      "standard",
+			puzzleID:  "missing",
+			item:      nil,
+			wantNil:   true,
+			wantPK:    "5#standard",
+			wantSK:    "missing",
+			wantTable: "puzzle-pool",
+		},
+		{
+			name:     "propagates DynamoDB error",
+			size:     5,
+			mode:     "standard",
+			puzzleID: "boom",
+			getErr:   errors.New("dynamodb connection error"),
+			wantErr:  true,
+		},
+		{
+			name:     "tolerates legacy verdict attribute on unmarshal",
+			size:     5,
+			mode:     "standard",
+			puzzleID: "legacy",
+			item: map[string]types.AttributeValue{
+				"PK":      &types.AttributeValueMemberS{Value: "5#standard"},
+				"SK":      &types.AttributeValueMemberS{Value: "legacy"},
+				"status":  &types.AttributeValueMemberS{Value: "served"},
+				"verdict": &types.AttributeValueMemberS{Value: "none"},
+			},
+			wantPK:    "5#standard",
+			wantSK:    "legacy",
+			wantTable: "puzzle-pool",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			var capturedInput *dynamodb.GetItemInput
+			mock := &mockDynamoDBClient{
+				getItemFunc: func(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+					capturedInput = params
+					return &dynamodb.GetItemOutput{Item: tt.item}, tt.getErr
+				},
+			}
+			repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+			// Act
+			got, err := repo.GetPuzzle(context.Background(), tt.size, tt.mode, tt.puzzleID)
+
+			// Assert
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if tt.wantNil {
+				if got != nil {
+					t.Fatalf("expected nil record, got %+v", got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatal("expected non-nil record")
+			}
+			if got.GridSize != tt.size || got.Mode != tt.mode || got.ID != tt.puzzleID {
+				t.Errorf("identity = (size=%d, mode=%q, id=%q); want (%d, %q, %q)",
+					got.GridSize, got.Mode, got.ID, tt.size, tt.mode, tt.puzzleID)
+			}
+			if got.VerdictSummary.Up != 0 || got.VerdictSummary.Down != 0 {
+				t.Errorf("zero-value summary expected on legacy/new rows; got %+v", got.VerdictSummary)
+			}
+			if capturedInput == nil {
+				t.Fatal("GetItem was not called")
+			}
+			if pk, ok := capturedInput.Key["PK"].(*types.AttributeValueMemberS); !ok || pk.Value != tt.wantPK {
+				t.Errorf("PK = %v, want %q", capturedInput.Key["PK"], tt.wantPK)
+			}
+			if sk, ok := capturedInput.Key["SK"].(*types.AttributeValueMemberS); !ok || sk.Value != tt.wantSK {
+				t.Errorf("SK = %v, want %q", capturedInput.Key["SK"], tt.wantSK)
+			}
+			if capturedInput.TableName == nil || *capturedInput.TableName != tt.wantTable {
+				t.Errorf("TableName = %v, want %q", capturedInput.TableName, tt.wantTable)
+			}
+		})
+	}
+}
+
+func TestPutVerdict(t *testing.T) {
+	tests := []struct {
+		name    string
+		verdict VerdictRecord
+		putErr  error
+		wantErr bool
+		wantPK  string
+		wantSK  string
+	}{
+		{
+			name: "writes verdict with auto-stamped SubmittedAt",
+			verdict: VerdictRecord{
+				GridSize:      7,
+				Mode:          "standard",
+				PuzzleID:      "abc",
+				RaterRole:     "admin",
+				RaterID:       "user_2abc",
+				Value:         "up",
+				PlayTimeMs:    42_000,
+				Outcome:       "solved",
+				ClientVersion: "0.1.0",
+			},
+			wantPK: "VERDICT#7#standard#abc",
+			wantSK: "admin#user_2abc",
+		},
+		{
+			name: "preserves caller-supplied SubmittedAt",
+			verdict: VerdictRecord{
+				GridSize:    5,
+				Mode:        "standard",
+				PuzzleID:    "xyz",
+				RaterRole:   "admin",
+				RaterID:     "user_2xyz",
+				Value:       "down",
+				SubmittedAt: "2026-04-26T10:00:00Z",
+			},
+			wantPK: "VERDICT#5#standard#xyz",
+			wantSK: "admin#user_2xyz",
+		},
+		{
+			name: "propagates PutItem error",
+			verdict: VerdictRecord{
+				GridSize: 5, Mode: "standard", PuzzleID: "p",
+				RaterRole: "admin", RaterID: "u", Value: "up",
+			},
+			putErr:  errors.New("dynamodb write failed"),
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			var capturedInput *dynamodb.PutItemInput
+			originalSubmittedAt := tt.verdict.SubmittedAt
+			mock := &mockDynamoDBClient{
+				putItemFunc: func(ctx context.Context, params *dynamodb.PutItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+					capturedInput = params
+					return &dynamodb.PutItemOutput{}, tt.putErr
+				},
+			}
+			repo := NewPuzzleRepository(mock, "puzzle-pool")
+			v := tt.verdict
+
+			// Act
+			err := repo.PutVerdict(context.Background(), &v)
+
+			// Assert
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if capturedInput == nil {
+				t.Fatal("PutItem was not called")
+			}
+			if pk, ok := capturedInput.Item["PK"].(*types.AttributeValueMemberS); !ok || pk.Value != tt.wantPK {
+				t.Errorf("PK = %v, want %q", capturedInput.Item["PK"], tt.wantPK)
+			}
+			if sk, ok := capturedInput.Item["SK"].(*types.AttributeValueMemberS); !ok || sk.Value != tt.wantSK {
+				t.Errorf("SK = %v, want %q", capturedInput.Item["SK"], tt.wantSK)
+			}
+			if originalSubmittedAt == "" && v.SubmittedAt == "" {
+				t.Error("expected SubmittedAt to be auto-stamped when caller passed empty string")
+			}
+			if originalSubmittedAt != "" && v.SubmittedAt != originalSubmittedAt {
+				t.Errorf("SubmittedAt mutated from %q to %q; should be preserved", originalSubmittedAt, v.SubmittedAt)
+			}
+		})
+	}
+}
+
+func TestListVerdictsForPuzzle(t *testing.T) {
+	tests := []struct {
+		name     string
+		size     int
+		mode     string
+		puzzleID string
+		items    []map[string]types.AttributeValue
+		queryErr error
+		wantLen  int
+		wantErr  bool
+		wantPK   string
+	}{
+		{
+			name:     "returns empty slice on never-voted puzzle",
+			size:     5,
+			mode:     "standard",
+			puzzleID: "fresh",
+			items:    nil,
+			wantLen:  0,
+			wantPK:   "VERDICT#5#standard#fresh",
+		},
+		{
+			name:     "returns multiple verdict rows with parsed roles and ids",
+			size:     7,
+			mode:     "standard",
+			puzzleID: "popular",
+			items: []map[string]types.AttributeValue{
+				{
+					"PK":            &types.AttributeValueMemberS{Value: "VERDICT#7#standard#popular"},
+					"SK":            &types.AttributeValueMemberS{Value: "admin#user_alice"},
+					"value":         &types.AttributeValueMemberS{Value: "up"},
+					"playTimeMs":    &types.AttributeValueMemberN{Value: "42000"},
+					"outcome":       &types.AttributeValueMemberS{Value: "solved"},
+					"clientVersion": &types.AttributeValueMemberS{Value: "0.1.0"},
+					"submittedAt":   &types.AttributeValueMemberS{Value: "2026-04-26T10:00:00Z"},
+				},
+				{
+					"PK":            &types.AttributeValueMemberS{Value: "VERDICT#7#standard#popular"},
+					"SK":            &types.AttributeValueMemberS{Value: "admin#user_bob"},
+					"value":         &types.AttributeValueMemberS{Value: "down"},
+					"playTimeMs":    &types.AttributeValueMemberN{Value: "12000"},
+					"outcome":       &types.AttributeValueMemberS{Value: "skipped"},
+					"clientVersion": &types.AttributeValueMemberS{Value: "0.1.0"},
+					"submittedAt":   &types.AttributeValueMemberS{Value: "2026-04-26T10:30:00Z"},
+				},
+			},
+			wantLen: 2,
+			wantPK:  "VERDICT#7#standard#popular",
+		},
+		{
+			name:     "propagates Query error",
+			size:     5,
+			mode:     "standard",
+			puzzleID: "p",
+			queryErr: errors.New("dynamodb query failed"),
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			var capturedInput *dynamodb.QueryInput
+			mock := &mockDynamoDBClient{
+				queryFunc: func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+					capturedInput = params
+					return &dynamodb.QueryOutput{Items: tt.items}, tt.queryErr
+				},
+			}
+			repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+			// Act
+			got, err := repo.ListVerdictsForPuzzle(context.Background(), tt.size, tt.mode, tt.puzzleID)
+
+			// Assert
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(got) != tt.wantLen {
+				t.Fatalf("len = %d, want %d", len(got), tt.wantLen)
+			}
+			if capturedInput == nil {
+				t.Fatal("Query was not called")
+			}
+			if pk, ok := capturedInput.ExpressionAttributeValues[":pk"].(*types.AttributeValueMemberS); !ok || pk.Value != tt.wantPK {
+				t.Errorf(":pk = %v, want %q", capturedInput.ExpressionAttributeValues[":pk"], tt.wantPK)
+			}
+			for _, v := range got {
+				if v.GridSize != tt.size || v.Mode != tt.mode || v.PuzzleID != tt.puzzleID {
+					t.Errorf("identity not stamped on row: got (size=%d, mode=%q, id=%q); want (%d, %q, %q)",
+						v.GridSize, v.Mode, v.PuzzleID, tt.size, tt.mode, tt.puzzleID)
+				}
+				if v.RaterRole == "" || v.RaterID == "" {
+					t.Errorf("RaterRole / RaterID not parsed from SK on row: %+v", v)
+				}
+			}
+		})
+	}
+}
+
+func TestRecomputeVerdictSummary(t *testing.T) {
+	verdictItems := func(values ...string) []map[string]types.AttributeValue {
+		out := make([]map[string]types.AttributeValue, 0, len(values))
+		for i, val := range values {
+			out = append(out, map[string]types.AttributeValue{
+				"PK":          &types.AttributeValueMemberS{Value: "VERDICT#7#standard#abc"},
+				"SK":          &types.AttributeValueMemberS{Value: fmt.Sprintf("admin#user_%d", i)},
+				"value":       &types.AttributeValueMemberS{Value: val},
+				"submittedAt": &types.AttributeValueMemberS{Value: "2026-04-26T10:00:00Z"},
+			})
+		}
+		return out
+	}
+
+	tests := []struct {
+		name       string
+		items      []map[string]types.AttributeValue
+		updateErr  error
+		queryErr   error
+		wantUp     int
+		wantDown   int
+		wantErr    bool
+		wantNotFnd bool
+	}{
+		{
+			name:     "all-zero summary on never-voted puzzle still writes the projection",
+			items:    nil,
+			wantUp:   0,
+			wantDown: 0,
+		},
+		{
+			name:     "single up vote",
+			items:    verdictItems("up"),
+			wantUp:   1,
+			wantDown: 0,
+		},
+		{
+			name:     "mixed ups and downs",
+			items:    verdictItems("up", "down", "up", "down", "up"),
+			wantUp:   3,
+			wantDown: 2,
+		},
+		{
+			name:       "ConditionalCheckFailed maps to ErrPuzzleNotFound but still returns computed summary",
+			items:      verdictItems("up"),
+			updateErr:  &types.ConditionalCheckFailedException{},
+			wantUp:     1,
+			wantDown:   0,
+			wantNotFnd: true,
+		},
+		{
+			name:      "non-conditional UpdateItem error propagates",
+			items:     verdictItems("up"),
+			updateErr: errors.New("dynamodb network error"),
+			wantErr:   true,
+		},
+		{
+			name:     "Query error propagates and skips the UpdateItem",
+			queryErr: errors.New("dynamodb query failed"),
+			wantErr:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			var updateCalled bool
+			mock := &mockDynamoDBClient{
+				queryFunc: func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+					return &dynamodb.QueryOutput{Items: tt.items}, tt.queryErr
+				},
+				updateItemFunc: func(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
+					updateCalled = true
+					return &dynamodb.UpdateItemOutput{}, tt.updateErr
+				},
+			}
+			repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+			// Act
+			summary, err := repo.RecomputeVerdictSummary(context.Background(), 7, "standard", "abc")
+
+			// Assert
+			if tt.wantNotFnd {
+				if !errors.Is(err, ErrPuzzleNotFound) {
+					t.Fatalf("expected ErrPuzzleNotFound, got %v", err)
+				}
+				if summary.Up != tt.wantUp || summary.Down != tt.wantDown {
+					t.Errorf("summary even on conditional-fail = %+v, want Up=%d Down=%d", summary, tt.wantUp, tt.wantDown)
+				}
+				return
+			}
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !updateCalled {
+				t.Error("expected UpdateItem to be called")
+			}
+			if summary.Up != tt.wantUp || summary.Down != tt.wantDown {
+				t.Errorf("summary = %+v, want Up=%d Down=%d", summary, tt.wantUp, tt.wantDown)
+			}
+			if summary.LastUpdatedAt == "" {
+				t.Error("LastUpdatedAt should be stamped on the summary")
+			}
+		})
+	}
 }

@@ -163,7 +163,6 @@ func puzzleItem(pk, sk string, seed int64, p *generator.Puzzle, solution [][]boo
 		"PK":                   s(pk),
 		"SK":                   s(sk),
 		"status":               s("ready"),
-		"verdict":              s("none"),
 		"regionMap":            listOfListOfInt(p.Regions),
 		"solution":             listOfListOfBool(solution),
 		"difficulty":           n(int(p.Difficulty)),
