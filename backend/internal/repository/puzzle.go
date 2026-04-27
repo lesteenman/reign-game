@@ -559,8 +559,12 @@ func (r *PuzzleRepository) RecomputeVerdictSummary(ctx context.Context, size int
 	}
 
 	summary := VerdictSummary{LastUpdatedAt: time.Now().UTC().Format(time.RFC3339)}
-	for _, v := range verdicts {
-		switch v.Value {
+	// Index-based iteration rather than `for _, v := range verdicts` —
+	// VerdictRecord is large enough (~144 bytes) that a per-iteration
+	// value copy trips gocritic's rangeValCopy linter, and indexing is
+	// also marginally faster on hot paths.
+	for i := range verdicts {
+		switch verdicts[i].Value {
 		case "up":
 			summary.Up++
 		case "down":

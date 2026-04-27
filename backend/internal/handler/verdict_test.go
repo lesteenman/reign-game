@@ -68,8 +68,12 @@ func (f *fakeVerdictRepo) RecomputeVerdictSummary(_ context.Context, size int, m
 	}
 	puzKey := fmt.Sprintf("%d#%s#%s", size, mode, puzzleID)
 	summary := repository.VerdictSummary{LastUpdatedAt: "2026-04-26T12:00:00Z"}
-	for _, v := range f.verdicts[puzKey] {
-		switch v.Value {
+	// Iterate keys and index back into the map rather than `for _, v
+	// := range f.verdicts[puzKey]` so the 144-byte VerdictRecord is
+	// not copied per iteration (gocritic rangeValCopy).
+	rows := f.verdicts[puzKey]
+	for k := range rows {
+		switch rows[k].Value {
 		case "up":
 			summary.Up++
 		case "down":
