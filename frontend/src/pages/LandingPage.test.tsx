@@ -1,178 +1,144 @@
-import { render, screen, fireEvent, waitFor, cleanup } from '../test-utils';
+import { render, screen, cleanup } from '../test-utils';
+import { fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ThemeProvider } from '../theme/ThemeContext';
-import { LandingPage, buildPlayUrl } from './LandingPage';
 
-// Mock useGameStorage
-const mockLoadState = vi.fn();
-vi.mock('../hooks/useGameStorage', () => ({
-  useGameStorage: () => ({
-    loadState: mockLoadState,
-    saveState: vi.fn(),
-    addCompletion: vi.fn(),
-  }),
-}));
-
-// Mock the enabled-modes fetch so the page's mount effect doesn't hit
-// a real backend. Returns the pre-Phase-5 preset list by default.
-const mockFetchEnabledModes = vi.fn();
-vi.mock('../services/landingService', () => ({
-  fetchEnabledModes: (...args: unknown[]) => mockFetchEnabledModes(...args),
-}));
-
-// Track navigation
-let navigatedTo: string | undefined;
+const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
   return {
     ...actual,
-    useNavigate: () => (path: string) => { navigatedTo = path; },
+    useNavigate: () => mockNavigate,
   };
 });
 
+type UseUserReturn = {
+  isLoaded: boolean;
+  isSignedIn: boolean;
+  user: { publicMetadata: { role?: string } } | null;
+};
+const useUserMock = vi.fn<() => UseUserReturn>();
+vi.mock('@clerk/react', () => ({
+  useUser: () => useUserMock(),
+}));
+
+import { LandingPage } from './LandingPage';
+
 beforeEach(() => {
-  navigatedTo = undefined;
-  mockLoadState.mockResolvedValue(null); // fresh state by default
-  mockFetchEnabledModes.mockResolvedValue([
-    { size: 5, mode: 'standard' },
-    { size: 7, mode: 'standard' },
-    { size: 9, mode: 'standard' },
-    { size: 9, mode: 'double' },
-  ]);
+  mockNavigate.mockClear();
+  useUserMock.mockReset();
 });
 
 afterEach(() => {
   cleanup();
-  vi.restoreAllMocks();
 });
 
-function renderLanding() {
+function renderLandingPage() {
   return render(
-    <ThemeProvider>
-      <MemoryRouter initialEntries={['/']}>
-        <LandingPage />
-      </MemoryRouter>
-    </ThemeProvider>,
+    <MemoryRouter>
+      <LandingPage />
+    </MemoryRouter>,
   );
 }
 
-describe('LandingPage', () => {
-  describe('fresh state (no active puzzle)', () => {
-    it('shows puzzle selector with preset buttons', async () => {
-      // Arrange & Act
-      renderLanding();
+describe('LandingPage — tile visibility across Clerk states', () => {
+  it('signed-out: shows Daily + Packs (both disabled), no Curation tile', () => {
+    // Arrange
+    useUserMock.mockReturnValue({ isLoaded: true, isSignedIn: false, user: null });
 
-      // Assert
-      await waitFor(() => {
-        expect(screen.getByTestId('puzzle-selector')).toBeInTheDocument();
-      });
-      expect(screen.getByTestId('preset-0')).toBeInTheDocument();
-      expect(screen.getByTestId('preset-1')).toBeInTheDocument();
-      expect(screen.getByTestId('preset-2')).toBeInTheDocument();
-    });
+    // Act
+    renderLandingPage();
 
-    it('Play navigates with default preset params', async () => {
-      // Arrange
-      renderLanding();
-      await waitFor(() => {
-        expect(screen.getByTestId('play-button')).toBeInTheDocument();
-      });
-
-      // Act
-      fireEvent.click(screen.getByTestId('play-button'));
-
-      // Assert
-      expect(navigatedTo).toBe('/play?new=true&size=5&mode=standard');
-    });
-
-    it('Play navigates with selected preset params', async () => {
-      // Arrange
-      renderLanding();
-      await waitFor(() => {
-        expect(screen.getByTestId('preset-2')).toBeInTheDocument();
-      });
-
-      // Act
-      fireEvent.click(screen.getByTestId('preset-2'));
-      fireEvent.click(screen.getByTestId('play-button'));
-
-      // Assert
-      expect(navigatedTo).toBe('/play?new=true&size=9&mode=standard');
-    });
+    // Assert
+    expect(screen.getByTestId('tile-daily')).toBeInTheDocument();
+    expect(screen.getByTestId('tile-packs')).toBeInTheDocument();
+    expect(screen.queryByTestId('tile-curation')).not.toBeInTheDocument();
+    expect(screen.getByTestId('tile-daily')).toBeDisabled();
+    expect(screen.getByTestId('tile-packs')).toBeDisabled();
   });
 
-  describe('has-progress state (active puzzle)', () => {
-    beforeEach(() => {
-      mockLoadState.mockResolvedValue({ status: 'in-progress' });
+  it('signed-in user-role: same as signed-out — no Curation tile', () => {
+    // Arrange
+    useUserMock.mockReturnValue({
+      isLoaded: true,
+      isSignedIn: true,
+      user: { publicMetadata: { role: 'user' } },
     });
 
-    it('shows Resume and New Puzzle buttons', async () => {
-      // Arrange & Act
-      renderLanding();
+    // Act
+    renderLandingPage();
 
-      // Assert
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /resume/i })).toBeInTheDocument();
-      });
-      expect(screen.getByRole('button', { name: /new puzzle/i })).toBeInTheDocument();
-    });
-
-    it('clicking New Puzzle reveals the selector', async () => {
-      // Arrange
-      renderLanding();
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /new puzzle/i })).toBeInTheDocument();
-      });
-
-      // Act
-      fireEvent.click(screen.getByRole('button', { name: /new puzzle/i }));
-
-      // Assert
-      expect(screen.getByTestId('puzzle-selector')).toBeInTheDocument();
-    });
-
-    it('Resume navigates to /play', async () => {
-      // Arrange
-      renderLanding();
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /resume/i })).toBeInTheDocument();
-      });
-
-      // Act
-      fireEvent.click(screen.getByRole('button', { name: /resume/i }));
-
-      // Assert
-      expect(navigatedTo).toBe('/play');
-    });
+    // Assert
+    expect(screen.getByTestId('tile-daily')).toBeInTheDocument();
+    expect(screen.getByTestId('tile-packs')).toBeInTheDocument();
+    expect(screen.queryByTestId('tile-curation')).not.toBeInTheDocument();
   });
 
-  describe('buildPlayUrl', () => {
-    it('builds URL with size and mode', () => {
-      // Arrange & Act
-      const url = buildPlayUrl({ size: 7, mode: 'standard' });
-
-      // Assert
-      expect(url).toBe('/play?new=true&size=7&mode=standard');
+  it('signed-in admin: shows all three tiles; Curation enabled, others disabled', () => {
+    // Arrange
+    useUserMock.mockReturnValue({
+      isLoaded: true,
+      isSignedIn: true,
+      user: { publicMetadata: { role: 'admin' } },
     });
 
-    it('builds URL with double mode', () => {
-      // Arrange & Act
-      const url = buildPlayUrl({ size: 9, mode: 'double' });
+    // Act
+    renderLandingPage();
 
-      // Assert
-      expect(url).toBe('/play?new=true&size=9&mode=double');
+    // Assert
+    expect(screen.getByTestId('tile-daily')).toBeDisabled();
+    expect(screen.getByTestId('tile-packs')).toBeDisabled();
+    const curation = screen.getByTestId('tile-curation');
+    expect(curation).toBeInTheDocument();
+    expect(curation).not.toBeDisabled();
+  });
+
+  it('Clerk still loading: hides the Curation tile to avoid role-resolution flicker', () => {
+    // Arrange
+    useUserMock.mockReturnValue({ isLoaded: false, isSignedIn: false, user: null });
+
+    // Act
+    renderLandingPage();
+
+    // Assert
+    expect(screen.getByTestId('tile-daily')).toBeInTheDocument();
+    expect(screen.queryByTestId('tile-curation')).not.toBeInTheDocument();
+  });
+});
+
+describe('LandingPage — tile click behaviour', () => {
+  it('clicking a disabled tile does NOT navigate (Daily/Packs)', () => {
+    // Arrange
+    useUserMock.mockReturnValue({
+      isLoaded: true,
+      isSignedIn: true,
+      user: { publicMetadata: { role: 'admin' } },
     });
+    renderLandingPage();
 
-    it('does not include advanced params', () => {
-      // Arrange & Act
-      const url = buildPlayUrl({ size: 5, mode: 'standard' });
+    // Act — fireEvent.click respects the `disabled` attribute on
+    // buttons (no click event fires); we still call to assert no
+    // navigation happens.
+    fireEvent.click(screen.getByTestId('tile-daily'));
+    fireEvent.click(screen.getByTestId('tile-packs'));
 
-      // Assert
-      expect(url).not.toContain('pipeline');
-      expect(url).not.toContain('solver');
-      expect(url).not.toContain('regions');
-      expect(url).not.toContain('regionVariance');
+    // Assert
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('clicking the Curation tile navigates to /curation (admin only)', () => {
+    // Arrange
+    useUserMock.mockReturnValue({
+      isLoaded: true,
+      isSignedIn: true,
+      user: { publicMetadata: { role: 'admin' } },
     });
+    renderLandingPage();
+
+    // Act
+    fireEvent.click(screen.getByTestId('tile-curation'));
+
+    // Assert
+    expect(mockNavigate).toHaveBeenCalledWith('/curation');
   });
 });
