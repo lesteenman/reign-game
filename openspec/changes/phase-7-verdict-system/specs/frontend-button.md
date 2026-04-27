@@ -61,14 +61,6 @@ Component does not surface `up` / `down` strings in the DOM — only the user-re
 
 **Verification.** Vitest tests assert exact button text via `getByRole('button', { name: ... })` per row above. Service mocks assert the correct payload shape per click.
 
-## FB-03: The two buttons are labelled "Good puzzle" and "Bad puzzle"
-
-**Rule.** The button labels are user-readable English: "Good puzzle" maps to `value: "up"`, "Bad puzzle" maps to `value: "down"`. The component does not surface the raw `up` / `down` values to the user.
-
-**Value.** "Good" / "Bad" is unambiguous. "Upvote" / "Downvote" is correct domain language for the API but reads as social-media jargon in a single-admin curation context. The schema retains `up` / `down` for forward compatibility (when public-rater voting lands, the surface label stays the same; the API value is what matters).
-
-**Verification.** Visual snapshot or DOM-text assertion in the `VerdictSurface` test file. Click "Good puzzle" → service called with `value: "up"`. Click "Bad puzzle" → service called with `value: "down"`.
-
 ## FB-04: Submission posts to `PUT /api/admin/puzzles/{id}/verdict`
 
 **Rule.** The `submitVerdict` service helper in `frontend/src/services/verdictService.ts` calls `apiPut` against `/api/admin/puzzles/{puzzleId}/verdict` with `?size={gridSize}&mode={mode}` and JSON body `{ value, playTimeMs, outcome, clientVersion }`. `clientVersion` is read from `import.meta.env.VITE_GIT_SHA` and defaults to `"dev"` in local dev.

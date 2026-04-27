@@ -115,7 +115,7 @@ export function LandingPage() {
           <LandingTile
             testId="tile-curation"
             title="Curation"
-            subtitle="Rate and tag puzzles for the future corpus"
+            subtitle="Rate puzzles for the future corpus"
             enabled
             onClick={() => navigate('/curation')}
           />

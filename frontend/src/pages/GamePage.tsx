@@ -456,6 +456,8 @@ function GameBoard({
           >
             <div
               style={{
+                // Completion overlay card — 32px padding matches
+                // BRAND_GUIDELINES §5.6 prominent modal.
                 backgroundColor: 'var(--color-surface)',
                 border: '2px solid var(--color-ink)',
                 borderRadius: 'var(--radius)',
@@ -590,6 +592,9 @@ function GameBoard({
         >
           <div
             style={{
+              // Skip modal card — 24px padding (vs 32px on the
+              // completion overlay) implements FB-02's de-emphasized
+              // chrome for the skip variant.
               backgroundColor: 'var(--color-surface)',
               border: '2px solid var(--color-ink)',
               borderRadius: 'var(--radius)',

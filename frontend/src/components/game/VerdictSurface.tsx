@@ -134,38 +134,59 @@ export function VerdictSurface(props: VerdictSurfaceProps) {
   const [wasSubmittedAtMount] = useState(() => isSubmitted(puzzleId));
   const [status, setStatus] = useState<SubmissionStatus>({ kind: 'idle' });
 
-  const submitCompletionVerdict = useCallback(
-    async (value: 'up' | 'down') => {
+  // Status-machine wrapper. `work` is the variant-specific API call;
+  // success → markSubmitted + optional onSuccess hook + done. Failure
+  // re-stores `action` as the retry so the error-state Retry button
+  // re-runs the same flow with the same payload.
+  const runSubmission = useCallback(
+    (work: () => Promise<void>, onSuccess?: () => void) => {
       const action = async () => {
         setStatus({ kind: 'submitting' });
         try {
-          await submitVerdict({
-            puzzleId,
-            size,
-            mode,
-            value,
-            playTimeMs,
-            outcome: 'solved',
-          });
+          await work();
           markSubmitted(puzzleId);
+          onSuccess?.();
           setStatus({ kind: 'done' });
         } catch {
           setStatus({ kind: 'error', retry: action });
         }
       };
-      await action();
+      return action();
     },
-    [puzzleId, size, mode, playTimeMs],
+    [puzzleId],
   );
 
-  const submitIHateThis = useCallback(async () => {
-    if (variant !== 'skip') return;
-    const action = async () => {
-      setStatus({ kind: 'submitting' });
-      try {
-        // Parallel — VH-04 says verdict + status are orthogonal flows;
-        // running in parallel saves a round-trip and the two writes
-        // touch independent DynamoDB row families.
+  const submitCompletionVerdict = useCallback(
+    (value: 'up' | 'down') =>
+      runSubmission(() =>
+        submitVerdict({
+          puzzleId,
+          size,
+          mode,
+          value,
+          playTimeMs,
+          outcome: 'solved',
+        }),
+      ),
+    [runSubmission, puzzleId, size, mode, playTimeMs],
+  );
+
+  // Both skip handlers narrow the union via `props.variant === 'skip'`
+  // before reading `props.onAfterVerdict` — the destructured `variant`
+  // local at the top of the component does not propagate type-narrowing
+  // to `props` itself, so the in-callback discriminant check is what
+  // gives TS confidence that `onAfterVerdict` is required (not optional)
+  // on the SkipVerdictSurfaceProps branch. The check also protects
+  // against accidental cross-variant invocation; the runtime guard is
+  // a no-op on the wrong variant rather than a crash.
+  const submitIHateThis = useCallback(() => {
+    if (props.variant !== 'skip') return Promise.resolve();
+    const onAfterVerdict = props.onAfterVerdict;
+    return runSubmission(
+      // Parallel — VH-04 says verdict + status are orthogonal flows;
+      // running in parallel saves a round-trip and the two writes
+      // touch independent DynamoDB row families.
+      async () => {
         await Promise.all([
           updatePuzzleStatus(puzzleId, size, mode, 'skipped'),
           submitVerdict({
@@ -177,31 +198,19 @@ export function VerdictSurface(props: VerdictSurfaceProps) {
             outcome: 'skipped',
           }),
         ]);
-        markSubmitted(puzzleId);
-        props.onAfterVerdict();
-        setStatus({ kind: 'done' });
-      } catch {
-        setStatus({ kind: 'error', retry: action });
-      }
-    };
-    await action();
-  }, [variant, puzzleId, size, mode, playTimeMs, props]);
+      },
+      onAfterVerdict,
+    );
+  }, [runSubmission, props, puzzleId, size, mode, playTimeMs]);
 
-  const submitJustSkip = useCallback(async () => {
-    if (variant !== 'skip') return;
-    const action = async () => {
-      setStatus({ kind: 'submitting' });
-      try {
-        await updatePuzzleStatus(puzzleId, size, mode, 'skipped');
-        markSubmitted(puzzleId);
-        props.onAfterVerdict();
-        setStatus({ kind: 'done' });
-      } catch {
-        setStatus({ kind: 'error', retry: action });
-      }
-    };
-    await action();
-  }, [variant, puzzleId, size, mode, props]);
+  const submitJustSkip = useCallback(() => {
+    if (props.variant !== 'skip') return Promise.resolve();
+    const onAfterVerdict = props.onAfterVerdict;
+    return runSubmission(
+      () => updatePuzzleStatus(puzzleId, size, mode, 'skipped'),
+      onAfterVerdict,
+    );
+  }, [runSubmission, props, puzzleId, size, mode]);
 
   // FB-07 cache check, captured once at mount. Hides the surface on
   // re-mount within the same tab session (e.g. an admin re-completes
@@ -229,25 +238,23 @@ export function VerdictSurface(props: VerdictSurfaceProps) {
     );
   }
 
-  if (variant === 'completion' && status.kind === 'done') {
-    return (
-      <p
-        style={{
-          ...completionPromptStyle,
-          color: 'var(--color-success, var(--color-ink))',
-        }}
-        data-testid="verdict-surface-thanks"
-      >
-        Thanks — recorded.
-      </p>
-    );
-  }
-
-  // After a successful skip the parent navigates away via
-  // onAfterVerdict; the component briefly renders nothing while the
-  // navigation happens. (Skip variant doesn't need a "Thanks" beat —
-  // the navigation is the feedback.)
-  if (variant === 'skip' && status.kind === 'done') {
+  if (status.kind === 'done') {
+    // Completion variant shows a brief "Thanks — recorded." beat;
+    // skip variant returns null (the parent navigates forward via
+    // onAfterVerdict, so the navigation IS the feedback).
+    if (variant === 'completion') {
+      return (
+        <p
+          style={{
+            ...completionPromptStyle,
+            color: 'var(--color-success, var(--color-ink))',
+          }}
+          data-testid="verdict-surface-thanks"
+        >
+          Thanks — recorded.
+        </p>
+      );
+    }
     return null;
   }
 
