@@ -119,7 +119,7 @@ Goal: Close KI-009 by gating `/api/admin/*` behind authenticated sessions. Ship 
 Goal: Capture admin-only puzzle verdicts (up / down) so a curated corpus can grow for future Daily and Pack flows. Skip stays a status; verdict is up / down only. Design artifacts in `openspec/archive/phase-7-verdict-system/` once archived. ID scheme `R-<phase>-<slice>` applies to new slices in this phase; R-081 keeps its historical name.
 
 - [x] **R-081** — Backend verdict handler + repository + schema migration (`PUT /api/admin/puzzles/{id}/verdict`)
-- [ ] **R-7-02** — Frontend verdict surface + landing reorg (Daily / Packs / Curation tiles) + curation route + explicit Skip button + glossary + close-out
+- [x] **R-7-02** — Frontend verdict surface + landing reorg (Daily / Packs / Curation tiles) + curation route + explicit Skip button + glossary + close-out
 - [ ] **R-7-03** — Per-flow IndexedDB storage (no implicit skips on mode switch)
 
 ## Backlog

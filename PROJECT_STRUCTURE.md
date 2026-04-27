@@ -125,20 +125,24 @@ frontend/
 │   │   │   ├── SignInButton.tsx          # Header sign-in CTA
 │   │   │   ├── UserMenu.tsx              # Avatar + sign-out menu (signed-in users)
 │   │   │   └── role.ts                   # Role helpers (publicMetadata.role)
-│   │   ├── common/              # Button, PageShell, press helpers, button styles
+│   │   ├── common/              # Button (Primary/Secondary/Ghost), PageShell, press helpers, button styles
+│   │   ├── game/                # Verdict surface for admin curation (Phase 7, R-7-02)
+│   │   │   └── VerdictSurface.tsx # Variant: completion (Good/Bad) | skip (Cancel/I-hate-this/Just-skip)
 │   │   ├── grid/                # Cell, Grid, Marker, ExclusionMark, RegionBorderOverlay
 │   │   └── landing/
 │   │       └── PuzzleSelector.tsx  # Dynamic mode buttons (R-06A)
 │   ├── pages/
 │   │   ├── AdminLandingPage.tsx # Forbidden state for signed-in non-admin users on /admin (R-08B)
 │   │   ├── AdminPage.tsx        # Pool management UI (admin-only behind ProtectedAdminRoute)
-│   │   ├── GamePage.tsx         # Active-puzzle view
-│   │   └── LandingPage.tsx      # Entry point / resume / new puzzle
+│   │   ├── CurationPage.tsx     # Admin curation picker — pool buttons + Settings link to /admin (Phase 7, R-7-02)
+│   │   ├── GamePage.tsx         # Active-puzzle view (admin: verdict surface in completion overlay + Skip button)
+│   │   └── LandingPage.tsx      # Three-tile landing: Daily / Packs / Curation (Phase 7, R-7-02)
 │   ├── services/
 │   │   ├── api.ts               # Base apiFetch / apiPut / apiPost wrappers
 │   │   ├── adminService.ts      # MODES, ConfigView, CRUD calls (R-06A)
 │   │   ├── landingService.ts    # fetchEnabledModes (R-06A)
-│   │   └── puzzleService.ts     # /api/puzzles/next
+│   │   ├── puzzleService.ts     # /api/puzzles/next
+│   │   └── verdictService.ts    # PUT /api/admin/puzzles/{id}/verdict (Phase 7, R-7-02)
 │   ├── hooks/
 │   │   ├── useGame.ts
 │   │   ├── useGameStorage.ts

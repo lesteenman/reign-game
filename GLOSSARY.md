@@ -70,6 +70,15 @@ A puzzle produced by the generator that has not yet been curated. May be accepte
 **Curated Puzzle**
 A puzzle that has been reviewed and approved by a human curator. Assigned to a practice pool or scheduled as a daily puzzle.
 
+**Verdict**
+A rater's judgment of a puzzle as a piece of content — `up` (good puzzle, keep it) or `down` (bad puzzle, retire it). Distinct from `Status`, which describes what happened during a play attempt (solved / skipped). Submitted via `PUT /api/admin/puzzles/{id}/verdict` after a play attempt ends. Persisted as a per-rater row in the `puzzle-pool` DynamoDB table; a denormalized `Verdict Summary` projection on the `PuzzleRecord` carries the running counts. In Phase 7, only `Admin` role users can submit verdicts; the schema is multi-rater-ready for a future public-rater role.
+
+**Verdict Summary**
+The denormalized verdict projection stored on `PuzzleRecord` as the `verdictSummary` attribute: `{up: int, down: int, lastUpdatedAt: ISO 8601}`. Recomputed on every verdict write by reading the row family for the puzzle. The verdict row family is the source of truth; the summary is a cached projection — recoverable by re-running `RecomputeVerdictSummary` if it ever drifts.
+
+**Verdict Surface**
+The frontend UI affordance through which a `Rater` submits a `Verdict` — two buttons ("Good puzzle" / "Bad puzzle") rendered after a play attempt ends (completion overlay or post-skip transient state). Cosmetically gated by `publicMetadata.role === 'admin'`; the source of truth is the backend `RequireAdmin` middleware. Lives inside `frontend/src/components/game/VerdictSurface.tsx`.
+
 **Daily Puzzle**
 A curated puzzle assigned to a specific date, mode, and difficulty level. The same puzzle for all players worldwide on that date.
 
@@ -106,6 +115,9 @@ Signed-in via Clerk (Google OAuth). Default role (no `publicMetadata.role` set, 
 
 **Admin**
 Signed-in with `publicMetadata.role === 'admin'` claim in Clerk. Access to `/admin` UI and `/api/admin/*` routes. Role assigned manually via Clerk dashboard.
+
+**Rater**
+The role that submits verdicts on puzzles. In Phase 7, only `Admin` users are raters — the verdict route lives under `/api/admin/*` and is gated by the Phase 6 admin middleware chain. The verdict row schema is keyed by `(raterRole, raterId)` to leave room for a future public-rater role; that role is not yet defined and is explicitly out of Phase 7 scope.
 
 **Premium**
 Term reserved for the future paid tier (one-time purchase, see `GAME_DESIGN.md` §Monetization for the intended feature set: full puzzle archive, leaderboard identity, detailed stats, cross-device sync, premium themes). Not used this phase — no Premium-gated features ship until the flip phase lands.
