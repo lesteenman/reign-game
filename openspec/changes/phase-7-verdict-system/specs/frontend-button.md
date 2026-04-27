@@ -10,18 +10,26 @@ The visible-and-functional frontend contract for the verdict UI.
 
 **Verification.** Vitest tests render `GamePage` with three Clerk hook stubs: `signedOut`, `signedIn role=user`, `signedIn role=admin`. Only the admin case finds the verdict buttons in the DOM. Per-render DOM-presence assertions, not just click-disabled assertions.
 
-## FB-02: Verdict surface appears on completion AND on skip
+## FB-02: Verdict surface appears on completion AND on skip, with completion / skip variants
 
 **Rule.** For an admin user, the verdict surface renders in two places inside `GamePage.tsx`:
 
-1. The completion overlay (when `isSolved` flips true and the existing overlay shows). The two verdict buttons render alongside the existing "Play Again" / "Home" buttons.
-2. The post-skip transient state (when an admin chooses to skip a puzzle). After the existing `PUT /api/puzzles/{id}/status` with `"skipped"` succeeds, the user is held on a small "you skipped — verdict?" panel before navigating home. Non-admins skip → straight home as today.
+1. The completion overlay (when `isSolved` flips true and the existing overlay shows). The two verdict buttons render alongside the existing "Play Again" / "Home" buttons. **Variant: `completion`** — prominent visual weight; the surface is the natural "rate before moving on" prompt.
+2. The post-skip transient state (when an admin chooses to skip a puzzle). After the existing `PUT /api/puzzles/{id}/status` with `"skipped"` succeeds, the user is held on a small "you skipped — verdict?" panel before navigating home. Non-admins skip → straight home as today. **Variant: `skip`** — de-emphasized visual weight; smaller buttons, quieter prompt copy, less prominent layout. Same up/down axis, same labels, same backend.
 
-Both surfaces use the same `<VerdictSurface>` component. The `outcome` prop is the only difference: `"solved"` vs `"skipped"`.
+Both surfaces use the same `<VerdictSurface>` component, parameterized by:
+- `variant: 'completion' | 'skip'` — controls visual weight only (className branch / size tokens). No state-machine, label, or API-call differences.
+- `outcome: 'solved' | 'skipped'` — flows through to the verdict row's `outcome` field, distinguishing the two paths in the data.
 
-**Value.** Locked decision: same UI, same flow on both endpoints. The admin makes the same judgment ("is this puzzle worth keeping?") in both cases. Differentiating UIs adds work without value.
+The two props are independent: `variant` is UI-only; `outcome` is data-only. They will always agree in practice (`completion` ↔ `solved`, `skip` ↔ `skipped`), but separating them keeps the visual layer testable without coupling to the persistence layer.
 
-**Verification.** Vitest test: complete a puzzle as admin → verdict surface visible on overlay. Skip a puzzle as admin → verdict surface visible after status PUT. Both call `submitVerdict` with the correct `outcome` prop.
+**Value.** Resolved (post-grill): the curation framing made it clear that the high-signal click on skip is "this puzzle is bad, bailing" — the cull-from-corpus signal you can't easily get any other way. Both surfaces want verdict UI. But the skip surface should not pressure a tired admin into a coerced upvote / downvote click — the admin's mental state on skip is more variable than on completion. De-emphasized visual weight respects that without losing the cull signal. Playtesting will validate the de-emphasis weight; future tweaks live in the component, not in the spec.
+
+**Verification.** Vitest tests:
+- Complete a puzzle as admin → verdict surface visible on overlay; rendered with `variant="completion"` (prominent layout class present in DOM).
+- Skip a puzzle as admin → verdict surface visible after status PUT; rendered with `variant="skip"` (de-emphasized layout class present in DOM, prominent class absent).
+- Both call `submitVerdict` with the correct `outcome` prop (`"solved"` for completion, `"skipped"` for skip).
+- The same `<VerdictSurface>` component is used in both places — verified by import-graph or by clicking through both surfaces in one test and asserting the same component instance handled both.
 
 ## FB-03: The two buttons are labelled "Good puzzle" and "Bad puzzle"
 

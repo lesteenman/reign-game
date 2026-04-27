@@ -132,13 +132,37 @@ The existing field is unused at read time, but `cmd/genfixtures/main.go` (line 1
 - **Admin role is rare (one or two people).** Confirmed: Phase 6 design grill called this out. The single-table verdict scheme handles up to thousands of admins per puzzle without breaking partition limits, but that scale is irrelevant — the row family will have at most a few rows per puzzle for the foreseeable future.
 - **Play-time on the verdict row is the admin's elapsed time on the attempt that produced the verdict, not their fastest run on the puzzle ever.** This matters for R-084 — the calibration test wants per-attempt signal, not per-puzzle aggregates. The frontend hands `useTimer.elapsed` to the API at vote time and that's what gets stored.
 
-## Open Questions (flagged for human override on return)
+## Resolutions (post-grill)
 
-The autonomous walk landed without genuinely high-stakes opens — the locked decision on voter identity drove most of the choices. Two items are flagged anyway because they have low-cost reversibility windows:
+The autonomous walk surfaced two questions that needed human input. Both were resolved in a follow-up grill before R-082 frontend started. Captured here for the design record so the rationale doesn't disappear in PR comments.
 
-1. **Should the verdict on a skipped puzzle be a separate (smaller) UI surface from the verdict on a completed puzzle, or identical?** The default chosen is **identical** — same two buttons, same flow, same labels — because the admin is making the same judgment ("is this puzzle worth keeping?") in both cases. If the human wants to differentiate ("downvote on skip is a stronger signal than downvote on completion"), the schema already supports it via the `outcome` field — no rework needed; it's a UI question only.
+### What the verdict system is actually for
 
-2. **Should the existing `Verdict string` field on `PuzzleRecord` be removed in this slice, or kept as a deprecated alias for one more phase to ease rollback?** The default chosen is **remove now** because (a) the field is unused at read time today (zero handler reads it), (b) DynamoDB tolerates the leftover attribute on legacy rows without intervention, and (c) keeping a deprecated alias forces every new generator-write path to keep populating it. The conservative alternative is "leave the field on `PuzzleRecord` as `verdict_legacy` for one phase, remove in Phase 8" — that's the human's call if reversal cost matters more than schema cleanliness.
+The first resolution is framing — load-bearing for everything below. The verdict system is a **curation tool**, not an end-user enjoyment signal:
+
+- **Primary use:** building a curated puzzle corpus for **campaign mode** — a future feature where players play through a hand-picked set of puzzles on top of the daily challenge. Admin upvotes flag corpus-worthy puzzles; downvotes cull from the candidate pool.
+- **Secondary use:** A/B comparing generator changes — "did the new mutator produce more upvoteable puzzles than the old one?" Coarse-grained but workable from per-puzzle up/down counts.
+- **Out of scope this phase:** end-user-facing recommendation, sorting, or enjoyment-driven feedback loops. Those may come later but do not shape Phase 7's schema or UI.
+
+This locks the schema choices to (A) quality-gate framing — verdicts decide whether a puzzle stays in the candidate pool — with a side helping of (C) calibration — eventually feeding into R-084's blind difficulty test. The user-rated-difficulty field R-084 wants is *deferred*; up/down + outcome + play-time is enough to start, and adding a `perceivedDifficulty` field later is non-destructive (DynamoDB tolerates new optional fields). Captured as a future seam, not blocking.
+
+### 1. Verdict surface on skip vs completion — RESOLVED
+
+**Resolution:** Single `<VerdictSurface>` component with a `variant: 'completion' | 'skip'` prop. The completion variant is prominent (the natural "rate before moving on" prompt). The skip variant is **visually de-emphasized** — smaller, quieter prompt — to honor the lower confidence of an opinion formed mid-attempt. Same component, same data path, same axis. The `outcome` field on the verdict row continues to distinguish solved-rating from skipped-rating in the data, while the variant prop only changes UI weight.
+
+**Rationale.** The grill walked through the admin's mental state on each path. On completion the admin saw the deduction chain; the rating is high-signal. On skip the admin's state is variable: "this is bad, bailing" (cull signal — high-value), "I gave up but the puzzle is fine" (no opinion), "tired, will come back" (no opinion). The "skip is bad" downvote is the *most informative click* in the whole curation flow — that's the cull-from-corpus signal you can't easily get any other way. So both surfaces want verdict UI, but the skip surface should not pressure a tired admin into a coerced upvote / downvote click. De-emphasized visual weight respects that without losing the cull signal.
+
+Reversal cost: zero — schema unchanged; the variant prop is a one-line CSS / className branch in the component. Playtesting will show if the de-emphasis is the right call; future tweaks live in the component, not in the spec.
+
+### 2. Legacy `Verdict string` field — RESOLVED
+
+**Resolution:** Remove now. No `verdict_legacy` interim alias. Already implemented in R-081's repository commit.
+
+**Rationale.** The field is unused at read time today (no handler reads `Verdict string`); DynamoDB tolerates the leftover attribute on legacy rows on unmarshal; keeping a deprecated alias would force every new generator-write path to keep populating it. The cleanup is self-contained: four files (`worker/generator.go`, `worker/generator_test.go`, `cmd/genfixtures/main.go`, plus a test fixture in `repository/puzzle_test.go`). Reversal cost if the cleanup turns out to be wrong: low — re-add the field as a deprecated alias, write code is one line.
+
+### Future seam (named for the record, not addressed this phase)
+
+The campaign-corpus use case eventually wants a pool-level read pattern: "give me all puzzles where every admin upvoted, none downvoted, status=ready." Today's row family is per-puzzle queryable (audit-on-one-puzzle path), but the corpus-builder query either iterates `PuzzleRecord` in memory and filters on `verdictSummary` (cheap at current pool size — single-digit thousands of puzzles) or eventually wants a GSI. The current design defers the GSI to Phase 9 — that's still correct, but the future GSI key should match the actual query — likely `(verdictBucket, lastUpdatedAt)` where `verdictBucket` is a denormalized `"approved" | "rejected" | "contested" | "unrated"` tag the recompute writes alongside up/down counts. **Phase 7 does not add this field.** Phase 9's analysis-agent slice (or a campaign-mode setup slice if it lands first) will. Naming the seam now so the future GSI doesn't get keyed against the wrong shape.
 
 ## Roadmap Effects
 

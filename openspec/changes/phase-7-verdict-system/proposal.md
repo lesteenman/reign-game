@@ -15,9 +15,18 @@ The existing unused `Verdict string` field on `PuzzleRecord` (set to `"none"` at
 - **Play-time signal is cheap to capture now and expensive to retrofit.** R-084 wants per-attempt play-time across a labeled corpus. Capturing on every verdict — even when only admins vote — costs four extra fields and gives the calibration test a signal-bearing corpus the moment it lands.
 - **The endpoint placement (`/api/admin/*` rather than the public `/api/puzzles/*`) is the simplest way to satisfy admin-only voting.** It picks up the Phase 6 middleware chain by construction; no new auth wiring.
 
+## Primary Use Cases
+
+The verdict system is a **curation tool**, not an end-user enjoyment signal. Two concrete consumers shape every decision in this proposal:
+
+- **Campaign-mode corpus building (primary).** Future feature: players play through a hand-picked set of puzzles on top of the daily challenge. Admin upvotes flag corpus-worthy puzzles; downvotes cull from the candidate pool. Verdicts are the curator's primary input. The campaign-mode feature itself is out of scope for this phase — Phase 7 ships the *data collection* that the corpus-builder slice will read from.
+- **Generator A/B comparison (secondary).** When a future generator change lands (new mutator, retuned classifier, etc.), the verdict counts on puzzles produced before vs after the change give a coarse-grained "did the new generator produce more upvoteable puzzles?" signal. Per-puzzle up/down counts are sufficient for this — no schema additions needed.
+
+What the verdict system is **not** doing this phase: end-user-facing recommendation, sorting, enjoyment-driven feedback loops, or perceived-difficulty calibration. R-084's blind difficulty test wants a `perceivedDifficulty` field, but that's a non-destructive future addition (DynamoDB tolerates new optional fields) and doesn't block Phase 7 from shipping.
+
 ## Summary of Locked Decisions
 
-Decisions from `design-grill-summary.md`. One-line form:
+All locked. Items 8 and 10 were originally flagged as open questions; both were resolved in a post-design-flow grill with the human. Full rationale in `design-grill-summary.md` § "Resolutions (post-grill)".
 
 1. **Voter identity:** Admin-only (locked by human). Schema is multi-rater-ready — keyed by `(puzzleId, raterId, raterRole)`.
 2. **Route:** `PUT /api/admin/puzzles/{id}/verdict` — mounted inside the Phase 6 `/api/admin` group, inherits `RequireAuth` + `RequireAdmin`. Note the deviation from the ROADMAP wording ("PUT /puzzles/:id/verdict"): admin-only voting drives the path under `/api/admin/*`.
@@ -26,8 +35,9 @@ Decisions from `design-grill-summary.md`. One-line form:
 5. **Idempotency:** PUT semantics — same `(puzzleId, raterId)` overwrites the row. Last-write-wins on the summary projection.
 6. **Play-time capture:** Yes, from day one. Verdict row stores `playTimeMs`, `outcome` (`solved` / `skipped`), `clientVersion`, `submittedAt`.
 7. **Frontend gating:** Verdict UI renders only for `publicMetadata.role === 'admin'`. Anonymous and User-role players see nothing — no buttons, no API calls, no path leakage. Same role helper as `ProtectedAdminRoute`.
-8. **Existing `Verdict string` field on `PuzzleRecord`:** Removed in this slice. Field is unused at read time today; legacy rows tolerate the removal (DynamoDB ignores unknown attributes on unmarshal).
+8. **Existing `Verdict string` field on `PuzzleRecord` — RESOLVED (post-grill):** Removed in this slice; no `verdict_legacy` interim alias. Already implemented in R-081's repository commit. Field was unused at read time today; legacy rows tolerate the removal (DynamoDB ignores unknown attributes on unmarshal).
 9. **Glossary:** Add `Verdict`, `Verdict Summary`, `Rater`, `Verdict Surface`. Document `Verdict` distinct from `Status`.
+10. **Verdict surface UI — RESOLVED (post-grill):** Single `<VerdictSurface>` component with a `variant: 'completion' | 'skip'` prop. Completion variant is prominent (the natural "rate before moving on" prompt). Skip variant is **visually de-emphasized** — smaller, quieter prompt — to honor the lower confidence of an opinion formed mid-attempt without losing the high-value "this puzzle is bad, bailing" cull signal. Same component, same data path, same up/down axis. The `outcome` field on the verdict row continues to distinguish solved-rating from skipped-rating in the data; the variant prop only changes UI weight. Playtesting will validate the de-emphasis weight.
 
 ## Acceptance Criteria
 
