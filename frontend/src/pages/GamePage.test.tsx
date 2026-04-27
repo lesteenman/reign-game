@@ -35,6 +35,7 @@ let lastFetchArgs: { size: number; mode: string } | undefined;
 let fetchCallCount = 0;
 let mockFetchResult: () => Promise<PuzzleData> = () => Promise.resolve(MOCK_PUZZLE_WITH_METADATA);
 const mockUpdateStatus = vi.fn().mockResolvedValue(undefined);
+const mockSubmitVerdict = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('../services/puzzleService', () => ({
   fetchNextPuzzle: (size: number, mode: string) => {
@@ -49,6 +50,22 @@ vi.mock('../services/puzzleService', () => ({
       this.name = 'NoPuzzlesAvailableError';
     }
   },
+}));
+
+vi.mock('../services/verdictService', () => ({
+  submitVerdict: (...args: unknown[]) => mockSubmitVerdict(...args),
+}));
+
+// Clerk hook mock — controls the role-gated UI (verdict surface, Skip
+// button) under three states: signedOut, role=user, role=admin.
+type UseUserReturn = {
+  isLoaded: boolean;
+  isSignedIn: boolean;
+  user: { publicMetadata: { role?: string } } | null;
+};
+const useUserMock = vi.fn<() => UseUserReturn>();
+vi.mock('@clerk/react', () => ({
+  useUser: () => useUserMock(),
 }));
 
 // Mock useGameStorage with stable references
@@ -71,6 +88,15 @@ beforeEach(() => {
   mockSaveState.mockClear();
   mockAddCompletion.mockClear();
   mockUpdateStatus.mockClear();
+  mockSubmitVerdict.mockClear();
+  mockSubmitVerdict.mockResolvedValue(undefined);
+  mockUpdateStatus.mockResolvedValue(undefined);
+  // Default to signed-out state. Each test that needs a different
+  // Clerk state overrides via useUserMock.mockReturnValue(...) before
+  // calling renderGamePage.
+  useUserMock.mockReset();
+  useUserMock.mockReturnValue({ isLoaded: true, isSignedIn: false, user: null });
+  sessionStorage.clear();
   fetchCallCount = 0;
   lastFetchArgs = undefined;
   mockFetchResult = () => Promise.resolve(MOCK_PUZZLE_WITH_METADATA);
@@ -476,3 +502,159 @@ describe('GamePage undo/redo (R-060)', () => {
     }, { timeout: 1000 });
   });
 });
+
+describe('GamePage — Skip button visibility (FB-11)', () => {
+  it('hides the Skip button when signed out', async () => {
+    // Arrange
+    useUserMock.mockReturnValue({ isLoaded: true, isSignedIn: false, user: null });
+
+    // Act
+    renderGamePage();
+    await waitForHeader();
+
+    // Assert
+    expect(screen.queryByTestId('skip-button')).not.toBeInTheDocument();
+  });
+
+  it('hides the Skip button when signed in as a user-role player', async () => {
+    // Arrange
+    useUserMock.mockReturnValue({
+      isLoaded: true,
+      isSignedIn: true,
+      user: { publicMetadata: { role: 'user' } },
+    });
+
+    // Act
+    renderGamePage();
+    await waitForHeader();
+
+    // Assert
+    expect(screen.queryByTestId('skip-button')).not.toBeInTheDocument();
+  });
+
+  it('shows the Skip button when signed in as admin', async () => {
+    // Arrange
+    useUserMock.mockReturnValue({
+      isLoaded: true,
+      isSignedIn: true,
+      user: { publicMetadata: { role: 'admin' } },
+    });
+
+    // Act
+    renderGamePage();
+    await waitForHeader();
+
+    // Assert
+    const skip = await screen.findByTestId('skip-button');
+    expect(skip).toBeInTheDocument();
+    expect(skip).toHaveTextContent('Skip puzzle');
+  });
+
+  it('hides the Skip button if Clerk has not loaded yet (no flicker)', async () => {
+    // Arrange
+    useUserMock.mockReturnValue({ isLoaded: false, isSignedIn: false, user: null });
+
+    // Act
+    renderGamePage();
+    await waitForHeader();
+
+    // Assert
+    expect(screen.queryByTestId('skip-button')).not.toBeInTheDocument();
+  });
+});
+
+describe('GamePage — Skip modal flow (FB-02 §2)', () => {
+  beforeEach(() => {
+    useUserMock.mockReturnValue({
+      isLoaded: true,
+      isSignedIn: true,
+      user: { publicMetadata: { role: 'admin' } },
+    });
+  });
+
+  it('opens the modal with three buttons when admin clicks Skip', async () => {
+    // Arrange
+    renderGamePage();
+    await waitForHeader();
+    const skip = await screen.findByTestId('skip-button');
+
+    // Act
+    fireEvent.click(skip);
+
+    // Assert — three buttons inside the modal
+    await screen.findByTestId('skip-modal');
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'I hate this' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Just skip' })).toBeInTheDocument();
+    // Status PUT not called by the button click itself (FB-11).
+    expect(mockUpdateStatus).not.toHaveBeenCalled();
+    expect(mockSubmitVerdict).not.toHaveBeenCalled();
+  });
+
+  it('Cancel closes the modal without calling any service', async () => {
+    // Arrange
+    renderGamePage();
+    await waitForHeader();
+    const skip = await screen.findByTestId('skip-button');
+    fireEvent.click(skip);
+    await screen.findByTestId('skip-modal');
+
+    // Act
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    // Assert
+    await waitFor(() => {
+      expect(screen.queryByTestId('skip-modal')).not.toBeInTheDocument();
+    });
+    expect(mockUpdateStatus).not.toHaveBeenCalled();
+    expect(mockSubmitVerdict).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalledWith('/curation');
+  });
+
+  it('"I hate this" calls both updatePuzzleStatus and submitVerdict, then navigates to /curation', async () => {
+    // Arrange
+    renderGamePage();
+    await waitForHeader();
+    const skip = await screen.findByTestId('skip-button');
+    fireEvent.click(skip);
+    await screen.findByTestId('skip-modal');
+
+    // Act
+    fireEvent.click(screen.getByRole('button', { name: 'I hate this' }));
+
+    // Assert
+    await waitFor(() => {
+      expect(mockUpdateStatus).toHaveBeenCalledTimes(1);
+      expect(mockSubmitVerdict).toHaveBeenCalledTimes(1);
+    });
+    expect(mockSubmitVerdict).toHaveBeenCalledWith(
+      expect.objectContaining({
+        value: 'down',
+        outcome: 'skipped',
+      }),
+    );
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/curation');
+    });
+  });
+
+  it('"Just skip" calls only updatePuzzleStatus, then navigates to /curation', async () => {
+    // Arrange
+    renderGamePage();
+    await waitForHeader();
+    const skip = await screen.findByTestId('skip-button');
+    fireEvent.click(skip);
+    await screen.findByTestId('skip-modal');
+
+    // Act
+    fireEvent.click(screen.getByRole('button', { name: 'Just skip' }));
+
+    // Assert
+    await waitFor(() => {
+      expect(mockUpdateStatus).toHaveBeenCalledTimes(1);
+      expect(mockNavigate).toHaveBeenCalledWith('/curation');
+    });
+    expect(mockSubmitVerdict).not.toHaveBeenCalled();
+  });
+});
+

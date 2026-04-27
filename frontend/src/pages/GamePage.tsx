@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useUser } from '@clerk/react';
 import { Grid } from '../components/grid/Grid';
 import { useGame } from '../hooks/useGame';
 import { useTimer } from '../hooks/useTimer';
@@ -7,7 +8,9 @@ import { useGameStorage } from '../hooks/useGameStorage';
 import { fetchNextPuzzle, updatePuzzleStatus, NoPuzzlesAvailableError } from '../services/puzzleService';
 import { createFreshGameState } from '../storage/utils';
 import { PageShell } from '../components/common/PageShell';
-import { PrimaryButton, SecondaryButton } from '../components/common/Button';
+import { PrimaryButton, SecondaryButton, GhostButton } from '../components/common/Button';
+import { getClerkUserRole } from '../components/auth/role';
+import { VerdictSurface } from '../components/game/VerdictSurface';
 import type { Mode, PuzzleData, CellState } from '../engine/types';
 import { isMode } from '../engine/types';
 import type { GameState, GameHistory, CompletionRecord } from '../storage/types';
@@ -265,6 +268,14 @@ function GameBoard({
   const completionHandledRef = useRef(false);
   const [showCompletion, setShowCompletion] = useState(false);
   const [completionTime, setCompletionTime] = useState(0);
+  const [showSkipModal, setShowSkipModal] = useState(false);
+
+  // Admin-only verdict surface + Skip button gating per FB-01 / FB-10.
+  // Reads from the same Clerk hook used by UserMenu / ProtectedAdminRoute
+  // so all role-gated UI uses one source of truth.
+  const { user, isLoaded: userIsLoaded } = useUser();
+  const isAdmin =
+    userIsLoaded && getClerkUserRole(user?.publicMetadata) === 'admin';
 
   // Preserve the original startedAt across puzzle-state refreshes so a
   // mid-game re-render can't reset the elapsed-time anchor.
@@ -482,6 +493,16 @@ function GameBoard({
                 <PrimaryButton onClick={handlePlayAgain}>Play Again</PrimaryButton>
                 <SecondaryButton onClick={handleGoHome}>Home</SecondaryButton>
               </div>
+              {isAdmin && (
+                <VerdictSurface
+                  variant="completion"
+                  outcome="solved"
+                  puzzleId={puzzle.puzzleId}
+                  size={puzzle.gridSize}
+                  mode={puzzle.mode}
+                  playTimeMs={completionTime * 1000}
+                />
+              )}
             </div>
           </div>
         )}
@@ -539,7 +560,61 @@ function GameBoard({
         <SecondaryButton onClick={resetGame} data-testid="reset-button">
           Reset
         </SecondaryButton>
+        {isAdmin && !isSolved && (
+          <GhostButton
+            onClick={() => setShowSkipModal(true)}
+            data-testid="skip-button"
+            aria-label="Skip puzzle (abandon and rate)"
+          >
+            Skip puzzle
+          </GhostButton>
+        )}
       </div>
+
+      {/* Skip modal — admin-only. Mounts <VerdictSurface variant="skip">
+          inside the BRAND_GUIDELINES §5.6 modal pattern. Cancel
+          dismisses; "I hate this" / "Just skip" navigate forward. */}
+      {showSkipModal && (
+        <div
+          data-testid="skip-modal"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 50,
+          }}
+        >
+          <div
+            style={{
+              backgroundColor: 'var(--color-surface)',
+              border: '2px solid var(--color-ink)',
+              borderRadius: 'var(--radius)',
+              padding: '24px',
+              boxShadow: '0 4px 0 var(--color-ink), 0 12px 32px rgba(0,0,0,0.08)',
+              maxWidth: '90%',
+              minWidth: '280px',
+            }}
+          >
+            <VerdictSurface
+              variant="skip"
+              outcome="skipped"
+              puzzleId={puzzle.puzzleId}
+              size={puzzle.gridSize}
+              mode={puzzle.mode}
+              playTimeMs={timer.elapsed * 1000}
+              onDismiss={() => setShowSkipModal(false)}
+              onAfterVerdict={() => {
+                setShowSkipModal(false);
+                navigate('/curation');
+              }}
+            />
+          </div>
+        </div>
+      )}
     </PageShell>
   );
 }
