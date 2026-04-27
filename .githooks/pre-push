@@ -11,11 +11,14 @@ echo "=== Pre-push checks ==="
 # Backend
 echo "--- Backend: lint ---"
 cd "$ROOT/backend"
-if command -v golangci-lint &>/dev/null; then
-  golangci-lint run
-else
-  echo "WARN: golangci-lint not found, skipping lint"
+if ! command -v golangci-lint &>/dev/null; then
+  echo "ERROR: golangci-lint not found on PATH."
+  echo "       CI uses v1.64.8 (pinned in .github/workflows/ci.yml)."
+  echo "       Install: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8"
+  echo "       Failing loud here so a missing local tool doesn't ship lint-broken commits to CI."
+  exit 1
 fi
+golangci-lint run
 
 echo "--- Backend: test ---"
 go test -short ./... -count=1
@@ -23,13 +26,15 @@ go test -short ./... -count=1
 # Infrastructure
 echo "--- Terraform: fmt check ---"
 cd "$ROOT/infra"
-if command -v terraform &>/dev/null; then
-  if ! terraform fmt -recursive -check -diff; then
-    echo "ERROR: Terraform files not formatted. Run: terraform -chdir=infra fmt -recursive"
-    exit 1
-  fi
-else
-  echo "WARN: terraform not found, skipping fmt check"
+if ! command -v terraform &>/dev/null; then
+  echo "ERROR: terraform not found on PATH."
+  echo "       Install: https://developer.hashicorp.com/terraform/install"
+  echo "       Failing loud here so an unformatted Terraform diff doesn't ship to CI."
+  exit 1
+fi
+if ! terraform fmt -recursive -check -diff; then
+  echo "ERROR: Terraform files not formatted. Run: terraform -chdir=infra fmt -recursive"
+  exit 1
 fi
 
 # Frontend
@@ -46,10 +51,13 @@ npm audit --audit-level=moderate
 # Secrets
 echo "--- Secret scan ---"
 cd "$ROOT"
-if command -v gitleaks &>/dev/null; then
-  gitleaks detect --source .
-else
-  echo "WARN: gitleaks not found, skipping secret scan"
+if ! command -v gitleaks &>/dev/null; then
+  echo "ERROR: gitleaks not found on PATH."
+  echo "       Install (macOS): brew install gitleaks"
+  echo "       Install (other):  https://github.com/gitleaks/gitleaks#installing"
+  echo "       Failing loud here — secrets must not ship to CI / origin without a local scan."
+  exit 1
 fi
+gitleaks detect --source .
 
 echo "=== All pre-push checks passed ==="
