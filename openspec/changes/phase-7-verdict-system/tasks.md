@@ -118,9 +118,10 @@ All Phase 7 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
   - 401 / 403 → resolves silently (FB-05).
   - 500 → throws `ApiError`.
 - Create `frontend/src/components/game/VerdictSurface.tsx`:
-  - Props per FB design.md §5.
+  - Props per FB design.md §5, plus a `variant: 'completion' | 'skip'` prop (FB-02 post-grill resolution).
+  - **Variant behavior:** `completion` renders prominent layout (current full-size buttons + "Rate this puzzle?" prompt). `skip` renders de-emphasized layout (smaller buttons, quieter prompt copy like "Quick rate before moving on?", less visual prominence). Branch is a className / size-token swap; no state-machine, label, or API-call differences between variants. Same up/down axis on both.
   - State machine: `idle` → `submitting` → `done` | `error` (FB-06).
-  - Buttons labelled "Good puzzle" / "Bad puzzle" (FB-03).
+  - Buttons labelled "Good puzzle" / "Bad puzzle" (FB-03) — same labels in both variants.
   - Submitted-set `sessionStorage` cache (FB-07): if `puzzleId` already in `reign:verdict:submitted`, return null on mount.
   - Error state: "Couldn't save your verdict." + Retry button.
   - Done state: "Thanks — recorded." text replaces buttons.
@@ -131,18 +132,19 @@ All Phase 7 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
   - Success → `done` state renders, no buttons (FB-06).
   - 500 → `error` state with Retry; clicking Retry re-invokes service with the previously-clicked value.
   - sessionStorage cache: pre-seed key with puzzleId → component renders null (FB-07).
+  - Variant rendering: `variant="completion"` produces the prominent layout class in DOM; `variant="skip"` produces the de-emphasized layout class and not the prominent one. Same buttons, same labels, same backend call shape across both variants (FB-02 post-grill).
 - Update `frontend/src/pages/GamePage.tsx`:
   - Read `useUser()` from `@clerk/react` inside `GameBoard`.
   - Compute `isAdmin = getClerkUserRole(user?.publicMetadata) === 'admin'` using existing helper from `frontend/src/components/auth/role.ts`.
-  - Render `<VerdictSurface>` inside the completion overlay JSX (after Play Again / Home), conditional on `isAdmin && ready && showCompletion` (FB-01, FB-02).
+  - Render `<VerdictSurface variant="completion" outcome="solved" ...>` inside the completion overlay JSX (after Play Again / Home), conditional on `isAdmin && ready && showCompletion` (FB-01, FB-02).
   - Add the post-skip transient state for admins:
-    - When an admin clicks an existing skip control (or invokes the skip flow that calls `updatePuzzleStatus(..., 'skipped')`), hold the user on a `<VerdictSurface outcome="skipped">` panel before navigating home.
+    - When an admin clicks an existing skip control (or invokes the skip flow that calls `updatePuzzleStatus(..., 'skipped')`), hold the user on a `<VerdictSurface variant="skip" outcome="skipped" ...>` panel before navigating home.
     - Non-admins continue to navigate home directly — behaviour unchanged.
   - `playTimeMs` prop: `completionTime * 1000` for the completion path, `timer.elapsed * 1000` for the skip path.
 - Update `frontend/src/pages/GamePage.test.tsx`:
   - Three Clerk hook stubs (signedOut / role=user / role=admin); only admin stub finds verdict buttons in DOM (FB-01).
-  - Admin completion path → buttons visible, click → service called with `outcome: 'solved'` (FB-02, FB-08).
-  - Admin skip path → buttons visible after status PUT, click → service called with `outcome: 'skipped'` (FB-02).
+  - Admin completion path → buttons visible, click → service called with `outcome: 'solved'`; rendered with `variant="completion"` (prominent layout class in DOM) (FB-02, FB-08).
+  - Admin skip path → buttons visible after status PUT, click → service called with `outcome: 'skipped'`; rendered with `variant="skip"` (de-emphasized layout class in DOM, prominent class absent) (FB-02).
   - Submission failure does not block the Play Again / Home buttons (FB-09).
 - Update `GLOSSARY.md`:
   - Add `Verdict`, `Verdict Summary`, `Verdict Surface` in the Puzzle Lifecycle section per GT-01 / GT-02 / GT-04.

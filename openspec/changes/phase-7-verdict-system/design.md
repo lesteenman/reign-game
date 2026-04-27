@@ -389,27 +389,25 @@ If the puzzle ID appears in `submittedSet`, the surface renders nothing. Best-ef
 | `playTimeMs` is wrong (timer paused / restored across visibility events) | Acceptable — `useTimer.elapsed` already handles visibility-change pause / resume. The verdict captures the player's actual on-task time, which is what R-084 wants. Edge cases (timer drift) are documented in `useTimer.ts` and are tolerable for calibration. |
 | Verdict surface renders for a brief flicker before Clerk loads `user` | The `useUser` hook returns `isLoaded: false` initially — the verdict surface only renders inside a branch that already requires `user.publicMetadata`. If `isLoaded` is false, the role check returns `''` (empty string) and the surface stays hidden. No flicker. |
 
-## 7. Key Decisions (autonomous-mode summary)
+## 7. Key Decisions
 
-The autonomous walk landed on these defaults. Each one has the reversibility cost called out so the human can reverse the decision cheaply on review.
+All locked. Items 4 and 5 were originally flagged as open questions; both were resolved in a post-design-flow grill with the human (captured in `design-grill-summary.md` § "Resolutions (post-grill)"). Each decision has its reversibility cost called out so a future revisit is cheap.
 
 1. **Per-rater rows in the existing puzzle-pool table, with a summary projection on PuzzleRecord.** Reversal cost: one repository refactor — moderate. Reversed by going to a separate `verdict-pool` table or to the append-only log shape (Approach E in `design-grill-summary.md`).
 2. **Skip stays a status; verdict is up/down only.** Reversal cost: low. Reversed by adding `"skip"` as a third valid value to the verdict request, but doing so re-creates the parallel-concept problem with `status="skipped"`.
 3. **Play-time captured from day one.** Reversal cost: zero — the field is additive. The cost of NOT doing it is high (corpus split into pre-/post-instrumentation slices).
-4. **Existing `Verdict string` field removed in this slice.** Reversal cost: low (re-add the field as a deprecated alias). The conservative alternative is to keep the field one phase longer for rollback ease — flagged as OPEN in `design-grill-summary.md` for human override.
-5. **Verdict surface UI is identical on completion vs skip.** Reversal cost: zero — the schema's `outcome` field already distinguishes them; only the UI changes.
+4. **Existing `Verdict string` field removed in this slice — RESOLVED (post-grill).** Reversal cost: low (re-add the field as a deprecated alias). Already implemented in R-081's repository commit; sweep covers `worker/generator.go`, `worker/generator_test.go`, `cmd/genfixtures/main.go`, and a test fixture in `repository/puzzle_test.go`.
+5. **Verdict surface UI uses one component with `variant: 'completion' | 'skip'` — completion prominent, skip de-emphasized — RESOLVED (post-grill).** Same `<VerdictSurface>` component, same data path, same up/down axis on both surfaces. The visual weight differs: completion is the natural "rate before moving on" prompt; skip is smaller and quieter to respect the lower confidence of an opinion formed mid-attempt without losing the high-value "this puzzle is bad, bailing" cull signal. The `outcome` field on the verdict row distinguishes the two paths in the data; the variant prop only changes UI weight. Reversal cost: zero — variant is a one-line className branch in the component. Playtesting will validate the de-emphasis weight.
 6. **No conditional-write race protection on summary updates.** Reversal cost: low — add `ConditionExpression` to the summary update. Not done now because single-admin scale doesn't see the race.
-7. **No GSI on `(verdictBucket, createdAt)` for the analyst's "find downvoted puzzles" query.** Reversal cost: medium — adds a Terraform change and a backfill of the GSI key on existing rows. Phase 9 owns this decision.
+7. **No GSI on `(verdictBucket, createdAt)` for the analyst's "find downvoted puzzles" query.** Reversal cost: medium — adds a Terraform change and a backfill of the GSI key on existing rows. Phase 9 owns this decision. The future GSI key should match the campaign-corpus query shape — likely `verdictBucket ∈ {approved, rejected, contested, unrated}` denormalized at recompute time. Named here so the seam isn't accidentally painted into a corner; not addressed this phase.
 8. **`raterRole` hard-coded to `"admin"` in the handler.** Reversal cost: zero — replace the literal with a read from `user.publicMetadata.role` when the public-rater role lands.
 
-## 8. Open Questions
+## 8. Resolutions (post-grill)
 
-Two items where the autonomous walk picked a default but the human override is cheap:
+The two open questions from the autonomous walk were resolved by the human in a follow-up grill. Full rationale lives in `design-grill-summary.md` § "Resolutions (post-grill)" (including the campaign-mode-corpus framing that drove both calls); summary here for fast reference:
 
-1. **Verdict surface on skip — same UI as on completion, or a separate compact widget?** Default: same UI. Reversal cost: zero — the `outcome` field on the row distinguishes them, only the UI changes.
-2. **Legacy `Verdict string` field — remove now, or keep one phase longer for rollback ease?** Default: remove now (it's unused at read time). Reversal cost: low. Conservative alternative is "keep as `verdict_legacy` for one phase, remove in Phase 8."
-
-Both are documented in `design-grill-summary.md` so the human can flip them on review without re-walking the design.
+1. **Verdict surface on skip vs completion** — RESOLVED to **single component with completion / skip variant**. Skip surface is visually de-emphasized; same buttons, same data, same up/down axis. Captured in §7 item 5 above and in spec FB-02.
+2. **Legacy `Verdict string` field timing** — RESOLVED to **remove now, no `verdict_legacy` interim**. Already shipped in R-081's repository commit. Captured in §7 item 4 above.
 
 ## 9. Testing Strategy
 
