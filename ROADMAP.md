@@ -113,70 +113,86 @@ Goal: Close KI-009 by gating `/api/admin/*` behind authenticated sessions. Ship 
 - [x] **R-08A** — Backend auth middleware (`RequireAuth`, `RequireAdmin`) + admin route wiring
 - [x] **R-08B** — Frontend sign-in flow + user menu + `/admin` route protection
 - [x] **R-08C** — Glossary + CLAUDE.md role table + KI-009 close + this phase's renumbering
-- [ ] **R-08D** — **Custom domain + production Clerk tenant.** Prod is currently running on the `wanted-lioness-50` Clerk **dev** tenant (`pk_test_*` / `sk_test_*` in SSM `/reign/prod/clerk-{publishable,secret}-key`) as a stop-gap because production Clerk tenants require a user-controlled custom domain for the Frontend API host, and the deployed CloudFront subdomain (`dypegk2r2t9nh.cloudfront.net`) can't host one. Once a real custom domain is acquired: register it with Clerk, provision a production tenant against it, point the SSM parameters at the new `pk_live_*` / `sk_live_*` pair (also rotate the GitHub `CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` repo secrets so the next initial-apply matches), and re-run CD. The dev-keys console warning ("Clerk has been loaded with development keys…") disappears at that point. Until then: prod usage is capped by Clerk's dev-instance limits — fine for testing, not fine for any real launch.
 
 ## Phase 7: Verdict System
 
-Goal: Rate puzzles after playing them — upvote, downvote, or skip.
+Goal: Capture admin-only puzzle verdicts (up / down) so a curated corpus can grow for future Daily and Pack flows. Skip stays a status; verdict is up / down only. Design artifacts in `openspec/archive/phase-7-verdict-system/` once archived. ID scheme `R-<phase>-<slice>` applies to new slices in this phase; R-081 keeps its historical name.
 
-- [ ] **R-081** — `PUT /puzzles/:id/verdict` endpoint: upvote/downvote/skip
-- [ ] **R-082** — Frontend: verdict buttons on puzzle completion/skip
+- [x] **R-081** — Backend verdict handler + repository + schema migration (`PUT /api/admin/puzzles/{id}/verdict`)
+- [ ] **R-7-02** — Frontend verdict surface + landing reorg (Daily / Packs / Curation tiles) + curation route + explicit Skip button + glossary + close-out
+- [ ] **R-7-03** — Per-flow IndexedDB storage (no implicit skips on mode switch)
 
-## Phase 7b: Generator quality deferrals
+## Backlog
 
-Two follow-ups from Phase 5's measurement pass (R-068). Both need the audit-loop tooling (Phase 7 verdicts, Phase 8 replay, Phase 9 analysis) to resolve. They are explicitly out of Phase 5 scope — capture here so the next audit pass picks them up.
+Items not committed to a phase. Each entry is roughly one phase's worth of work. We assign a phase number when we commit to starting one — until then, these are unranked beyond a rough priority order. Sub-bullets where the shape is already clear; otherwise a one-liner that gets fleshed out during that phase's design grill.
 
-- [ ] **R-083** — **Dead-rule investigation (R6, R8, R9).** R-068b's property corpus found R6 (Tier 3), R8 (Tier 4), R9 (Tier 4) never fire across 500 generated puzzles. Per input-spec §7.2 a dormant rule is redundant or buggy. Hand-craft a minimal `solverState` fixture per rule. If a fixture exists the rule is reachable and the generator must be retuned to produce such puzzles — tie-in for the audit-loop's "what kinds of puzzles do we actually produce" analysis. If no fixture can be built, retire the rule from `rules.go` and drop the classifier's tier-max accordingly. Currently tracked in code via `propertyCorpusKnownDead` in `backend/internal/generator/property_test.go`. Outcome also determines whether `WithDifficulty(Expert)` is ever shippable (see `backend/internal/generator/bench/step11-handoff.md` §2).
+### Player-facing features (toward the eventual launch)
 
-- [ ] **R-084** — **Medium / Hard blind calibration test.** R-068d's distribution shows every generated puzzle is Medium or Hard by the classifier, with zero Easy and zero Expert. The classifier split at N=12 k=1 is ~55% Medium / ~45% Hard. Intuition says the split is plausible (the mutator explicitly seeks stalled states), but the label boundary is unverified: a "Medium" may play harder than a "Hard" or vice versa. Requires Phase 7 verdict capture for play-time and user-rated difficulty across a labeled corpus, then a blind-test statistical check on whether the two tiers are actually perceptibly different. If they aren't, either collapse the tiers or retune the classifier thresholds.
+- **Daily Puzzle.** Date-keyed schedule with global UTC rollover, `GET /api/daily/{date}`, completion submission, percentile. Stateless for anonymous players; sync via Player Progress Sync for authenticated. Subsumes the prior backlog items: separate production puzzle table, daily scheduling, daily challenge flow, anonymous completion + percentile.
 
-## Phase 8: Puzzle Replay
+- **Puzzle Packs + curation tooling.** Pack model (manifest + ordered list of puzzle IDs), admin UI for pack assembly under `/admin/packs` drawing from the verdict-up corpus, `GET /api/packs/{id}`. Pack progress local until Player Progress Sync ships.
 
-Goal: Admin can browse played puzzles and replay them to review quality.
+- **Player Progress Sync.** Server-side progress keyed by Clerk user ID. **Walks back the Phase 6 "no DynamoDB user records" stance** — when this lands, revisit `GLOSSARY.md` User definition and reintroduce the pre-Phase-6 "User Account" semantics for cross-device sync. `GET / POST /api/progress`. One-time local→server merge on first signed-in load. Anonymous play remains local-only.
 
-- [ ] **R-085** — `GET /puzzles/:id` endpoint: load any puzzle by ID for replay
-- [ ] **R-086** — Frontend: played puzzle list in admin UI, replay by ID
+- **Username for leaderboard.** Name-set flow with uniqueness check, profanity filter, ability to change. Required before any public leaderboard ships — emails are not displayable. Surface probably appears after first leaderboard-eligible completion as a "claim a name to appear on the board" prompt.
 
-## Phase 9: Puzzle Analysis Agent
+- **Leaderboards.** Daily-puzzle leaderboards by completion time. Anonymous players see their own percentile only; authenticated players appear by username. Depends on Username + Player Progress Sync.
 
-Goal: Automated analysis of played puzzles — generation performance, verdict patterns, engine comparison.
+### Cross-platform (toward Android)
 
-- [ ] **R-087** — Analysis agent: dedicated agent for querying and interpreting puzzle generation data
-- [ ] **R-088** — Analysis endpoint(s) as needed by the agent
+- **`@reign/core` package extraction.** Workspace restructure: engine, theme tokens, storage interface, shared types into a shared package. Web app consumes it; no user-visible changes. Required prerequisite for the React Native phase.
 
-## Phase 10: Difficulty Rating
+- **Static bundle pipeline.** S3 + CloudFront serves immutable per-pack JSON files + a daily manifest. Generated from DynamoDB by an admin-triggered or cron'd Lambda. Versioned paths.
 
-Goal: Difficulty rating for all grid sizes and modes, with user-facing difficulty selector.
+- **React Native Android.** RN client consuming `@reign/core` + bundles. Tutorial + first 3-5 Beginner Pack puzzles bundled in the APK; everything else background-synced. Open decisions to make in this phase: per-pack download vs full-corpus background sync (depends on JSON-per-puzzle size — measure first), WiFi-only vs metered-data background sync, offline-Daily strategy (preload next N days vs hard-fail when offline). Clerk RN SDK for sign-in (verify it works against the same tenant). Progress sync via Player Progress Sync API. Subsumes prior backlog items: offline practice from curated pool, offline detection.
 
-- [ ] **R-021** — Difficulty rating algorithm (region shape complexity, deduction chain depth)
-- [ ] **R-032** — Update difficulty rating for Double Queens
-- [ ] **R-034** — UI: difficulty selector (Easy / Medium / Hard)
+### Operational
 
-## Phase 11+: Future (scoped when we get there)
+- **Custom domain.** ACM cert + DNS (Route 53 or wherever the domain lives) + CloudFront alias + Clerk Frontend API host wiring. Once landed, the Clerk dev → prod tenant swap is a user-side dashboard task, not tracked here.
 
-Candidate items — not yet committed or ordered:
+- **Production deployment.** Separate always-stable environment with manual-trigger deploy, distinct from the rolling main deploy. Subsumes the previous "Dev/prod environment split (Terraform workspaces)" backlog item.
 
-- [ ] **R-070** — Separate production puzzle table: approved puzzles copied from pool for numbered/daily serving
-- [ ] **R-071** — Daily puzzle scheduling: assign puzzles to dates, serve by date + mode + difficulty
-- [ ] **R-072** — Daily challenge flow: fetch puzzle, timer, submit completion, show percentile
-- [ ] **R-073** — Anonymous completion submission + percentile calculation (stateless for free players)
-- [ ] **R-074** — Leaderboards: premium members visible, daily and overall
-- [ ] **R-075** — ~~Auth provider setup~~ **Superseded by Phase 6** (Google OAuth via Clerk shipped earlier than originally planned). Apple Sign-In remains open as a future additive provider when iOS App Store submission becomes imminent.
-- [ ] **R-076** — One-time premium purchase flow
-- [ ] **R-077** — Premium: full puzzle archive access, detailed stats, cross-device sync
-- [ ] **R-078** — Premium themes: Queens Classic (free), Gems, Garden, Neon, Cosmos
-- [ ] **R-079** — Performance audit: Core Web Vitals, Lambda cold starts, DynamoDB latency
-- [ ] **R-07A** — Monitoring: CloudWatch dashboards, error alerting
-- [ ] **R-07B** — Dev/prod environment split (Terraform workspaces)
-- [ ] **R-07C** — Accessibility audit: WCAG 2.1 AA compliance
-- [ ] **R-07D** — Colorblind-friendly region palettes
-- [ ] **R-07E** — Rate limiting and abuse prevention on completion API
-- [ ] **R-07F** — Landing page / marketing site
-- [ ] **R-07G** — Open source preparation: LICENSE files, CONTRIBUTING.md, README for generator
-- [ ] **R-07H** — Frontend: curation UI — visual solver, "pick best of N" comparison mode
-- [ ] **R-07I** — Frontend: offline practice from curated pool (IndexedDB caching)
-- [ ] **R-07J** — Offline detection: graceful degradation
-- [ ] **R-080** — **R-06B follow-up — full e2e coverage.** R-06B shipped the e2e infrastructure plus two validating tests (Standard 5×5 play-through with undo + dynamic-modes wiring). Expand coverage to: Double 9×9 play-through, serve-then-mark-served lifecycle (seed two puzzles, confirm different ones served and both marked `served` after), pool-empty UI state, generation-path tests once the generator is exercised through `task e2e:up` rather than pre-seeded fixtures. Each new flow adds one spec file under `frontend/playwright/e2e/`.
+- **Monitoring.** CloudWatch dashboards + error alerting.
+
+- **Performance audit.** Core Web Vitals, Lambda cold starts, DynamoDB latency.
+
+- **Rate limiting and abuse prevention** on the player-facing completion submission API. Lands once Daily ships.
+
+- **R-06B e2e coverage expansion.** Double 9×9 play-through, serve-then-mark-served lifecycle, pool-empty UI state, generation-path tests once the generator is exercised through `task e2e:up`. Each new flow adds one spec file under `frontend/playwright/e2e/`.
+
+### Generator quality
+
+- **Dead-rule investigation (R6, R8, R9).** R-068b's property corpus found those rules never fire across 500 generated puzzles; per input-spec §7.2 a dormant rule is redundant or buggy. Hand-craft a minimal `solverState` fixture per rule. If a fixture exists, retune the generator to produce such puzzles. If no fixture can be built, retire the rule from `rules.go` and drop the classifier's tier-max accordingly. Outcome also determines whether `WithDifficulty(Expert)` is ever shippable.
+
+- **Medium / Hard blind calibration.** R-068d's distribution shows every generated puzzle is Medium or Hard by the classifier, with zero Easy and zero Expert. Requires verdict + completion-time corpus from Daily / Packs. Then a blind-test statistical check on whether the two tiers are perceptibly different — if not, collapse the tiers or retune the classifier thresholds.
+
+### Audit loop / analysis
+
+- **Puzzle replay.** `GET /puzzles/{id}` endpoint + frontend played-puzzle list with per-puzzle replay UI.
+
+- **Analysis agent.** Dedicated agent for querying generator data + supporting endpoints.
+
+- **Difficulty rating.** Region-shape complexity + deduction-chain-depth algorithm + Double Queens variant + UI selector (Easy / Medium / Hard).
+
+### Premium / monetization
+
+- **Premium tier (one-time purchase).** Purchase flow + premium-only feature gating: full puzzle archive access, detailed stats. Cross-device sync is separately available via Player Progress Sync — not gated to premium.
+
+- **Premium themes.** Queens Classic (free), Gems, Garden, Neon, Cosmos.
+
+### Long-tail polish
+
+- **Accessibility audit.** WCAG 2.1 AA compliance.
+
+- **Colorblind-friendly region palettes.** Could fold into the accessibility audit or ship separately as a theme set.
+
+- **Landing page / marketing site.** Public-facing site distinct from the app.
+
+- **Open source preparation.** LICENSE files, CONTRIBUTING.md, README for the generator (algorithm is MIT per the original game-design vision).
+
+- **Curation UI: visual solver + "pick best of N" comparison.** Extends the curation flow with a stepper that walks the deductive solver's chain, plus a side-by-side comparison mode for batched puzzle review.
+
+- **Apple Sign-In.** Future additive provider when iOS App Store submission becomes imminent. Not relevant for Android-first launch.
 
 ---
 
