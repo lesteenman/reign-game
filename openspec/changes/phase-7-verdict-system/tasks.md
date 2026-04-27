@@ -5,19 +5,24 @@
 ```
 R-081 (Backend handler + repository + schema migration)
     │
-    └── R-082 (Frontend verdict surface + glossary + docs sweep + slice close-out)
+    └── R-7-02 (Frontend verdict surface + landing reorg + curation route + explicit Skip + glossary + close-out)
+            │
+            └── R-7-03 (Per-flow IndexedDB storage — no implicit skips)
 ```
 
-R-081 ships first. R-082 depends on R-081's API being live (the frontend posts to it) and folds the docs / glossary / ROADMAP sweep into the same PR — splitting that out as a third slice would be wasted ceremony for two-slice work. Per CLAUDE.md lesson 18 (grep for ID collisions): R-08D is reserved for the Phase 6 custom-domain follow-up; R-08E and R-08F are next free in the R-08x family but neither is needed.
+R-081 (historical name, retained) ships first. R-7-02 depends on R-081's API being live (the frontend posts to it) and folds the landing-page reorganization, the curation route, the explicit Skip button, the docs / glossary / ROADMAP sweep, and the verdict surface into one slice. R-7-03 follows R-7-02 — it reworks `frontend/src/storage/db.ts` to a `(flowType, flowId) → currentPuzzleId` shape so each pool keeps its in-progress puzzle independently and switching pools no longer implicitly skips.
+
+ID-scheme note: this phase uses the new `R-<phase>-<slice>` naming for new slices. R-081 keeps its historical name because it shipped under the old scheme.
 
 ## Status
 
 All Phase 7 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slice's PR must flip its row to `[x]` as a required artifact — no post-hoc sweeps.
 
-| ID    | Slice                                                          | Layer | Status |
-|-------|----------------------------------------------------------------|-------|--------|
-| R-081 | Backend verdict handler + repository + schema migration        | 1     | [x]    |
-| R-082 | Frontend verdict surface + glossary + docs sweep + close-out   | 2     | [ ]    |
+| ID     | Slice                                                                                 | Layer | Status |
+|--------|---------------------------------------------------------------------------------------|-------|--------|
+| R-081  | Backend verdict handler + repository + schema migration                               | 1     | [x]    |
+| R-7-02 | Frontend verdict surface + landing reorg + curation route + explicit Skip + close-out | 2     | [ ]    |
+| R-7-03 | Per-flow IndexedDB storage (no implicit skips)                                        | 3     | [ ]    |
 
 ## Tasks
 
@@ -100,9 +105,9 @@ All Phase 7 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 
 ---
 
-### R-082: Frontend verdict surface + glossary + docs sweep + slice close-out
+### R-7-02: Frontend verdict surface + landing reorg + curation route + explicit Skip + close-out
 
-- **Roadmap:** R-082
+- **Roadmap:** R-7-02
 - **Agent:** frontend-dev (component + service work) + general-purpose (docs sweep)
 - **OpenSpec:** `specs/frontend-button.md` (FB-01 through FB-10), `specs/glossary-terms.md` (GT-01 through GT-06)
 
@@ -151,14 +156,14 @@ All Phase 7 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
   - Add `Rater` in the Users & Access section per GT-03.
   - No changes to existing entries.
 - Update `ROADMAP.md`:
-  - Flip R-081 and R-082 checkboxes from `[ ]` to `[x]` in the Phase 7 block. (R-081's row will already be `[x]` from its own PR; this slice flips R-082's and confirms R-081's stayed `[x]`.)
+  - Flip the R-7-02 checkbox from `[ ]` to `[x]` in the Phase 7 block. (R-081's row was flipped during its own PR and stays `[x]`; R-7-03 stays `[ ]` for the next slice.)
   - Sanity grep: no leftover "Phase 6: Verdict" references (Phase 6 is now Admin Auth).
 - Update `PROJECT_STRUCTURE.md`:
   - Add `frontend/src/components/game/VerdictSurface.tsx` to the frontend tree.
   - Add `frontend/src/services/verdictService.ts` to the services tree.
 - Term consistency sweep (GT-06): grep new code for synonyms (`Judgment`, `Rating`, `Vote`, `Score`) — none should appear unless explicitly defined.
 - E2E smoke (manual, not Playwright this phase): on a deployed environment with a Clerk admin session, complete a puzzle → verdict surface visible → click Good → row appears in DynamoDB. Sign out → complete a puzzle → no verdict surface.
-- Flip R-082 row in this `tasks.md` from `[ ]` to `[x]`.
+- Flip the R-7-02 row in this `tasks.md` from `[ ]` to `[x]`.
 
 **Gate**
 
@@ -177,11 +182,32 @@ All Phase 7 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 - `frontend/src/pages/GamePage.tsx` (update — render VerdictSurface conditional on admin role)
 - `frontend/src/pages/GamePage.test.tsx` (update — three-state visibility coverage)
 - `GLOSSARY.md` (update — add four terms)
-- `ROADMAP.md` (update — flip R-081 and R-082 to `[x]`)
+- `ROADMAP.md` (update — flip R-7-02 to `[x]`; R-081 already `[x]` from its own PR)
 - `PROJECT_STRUCTURE.md` (update — add new frontend files)
-- `openspec/changes/phase-7-verdict-system/tasks.md` (update — flip R-082 row to `[x]`)
+- `openspec/changes/phase-7-verdict-system/tasks.md` (update — flip R-7-02 row to `[x]`)
 
 **Dependencies:** R-081 (the API the frontend posts to must be live).
+
+**Commit after completion.**
+
+---
+
+### R-7-03: Per-flow IndexedDB storage (no implicit skips)
+
+- **Roadmap:** R-7-03
+- **Agent:** frontend-dev
+- **OpenSpec:** detailed work items captured during this slice's own design grill — the spec below is a deliberate stub.
+
+**Goal**
+
+Switch `frontend/src/storage/db.ts` from a single `currentGame` slot to a `(flowType, flowId) → currentPuzzleId` keyed shape so each `(size, mode)` pool keeps its in-progress puzzle independently. Switching pools no longer implicitly marks the prior puzzle `skipped` — only the explicit Skip button (added in R-7-02) does. Same shape generalizes to `(flow="daily", flowId="2026-04-27")` and `(flow="pack", flowId="beginner-001")` when those flows land later.
+
+**Open before this slice starts**
+
+- Migration: existing single `currentGame` rows need either a one-time migration to the new key or a graceful "no resume on upgrade" fallback. Decision deferred to the slice's design grill.
+- Storage size implications — small on web (a handful of in-progress puzzles per user) but worth measuring once the per-flow shape is in place.
+
+**Dependencies:** R-7-02 (the curation route + explicit Skip button must exist; this slice only changes how progress is keyed).
 
 **Commit after completion. Then archive this OpenSpec change via `/opsx:archive`.**
 
@@ -197,7 +223,7 @@ Before promoting this epic to main:
 - [ ] `playTimeMs` captured from `useTimer.elapsed` at action time; row carries the value verbatim.
 - [ ] Skip remains the existing `PUT /api/puzzles/{id}/status` flow; the verdict endpoint rejects `value="skip"`.
 - [ ] `GLOSSARY.md` contains `Verdict`, `Verdict Summary`, `Rater`, `Verdict Surface` with the wording from `specs/glossary-terms.md`.
-- [ ] `ROADMAP.md` Phase 7 block: R-081 and R-082 flipped to `[x]`.
+- [ ] `ROADMAP.md` Phase 7 block: R-7-02 flipped to `[x]` (R-081 already `[x]`; R-7-03 stays `[ ]` for the next slice).
 - [ ] `PROJECT_STRUCTURE.md`: API endpoints table moves verdict from Future to Implemented; new files listed.
 - [ ] `tasks.md` status table all `[x]`.
 - [ ] No new KIs opened by this phase. (The summary-projection lag is documented in `design.md` Risks but not promoted to a KI — single-admin scale makes it invisible.)

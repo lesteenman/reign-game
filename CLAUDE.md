@@ -223,6 +223,8 @@ Agents must NOT just summarize or paraphrase a skill. They must read and execute
 
 ### Lessons from Past Reviews
 
+**Slice ID scheme.** New slices use `R-<phase>-<slice>` where `<phase>` is the integer phase number (no decimals, no letters) and `<slice>` is either the literal `exploration` or a strictly increasing 2-digit zero-padded number (`01`, `02`, …, `99`). Examples: `R-7-02`, `R-7-exploration`, `R-12-01`. Only the current phase is numbered; everything else lives on the ROADMAP backlog without an ID until we commit to starting it. Already-shipped slices keep their historical IDs (e.g., `R-067a`, `R-08C`, `R-081`) — those stay because they're baked into commit messages, PR titles, and archived OpenSpec artifacts that aren't worth churning. The lessons below reference historical IDs for that reason.
+
 Pipeline, CI, infra, and git-hook lessons live on the **devops-engineer** agent (`.claude/agents/devops-engineer.md`), not here — they only apply when that agent is running. Always spawn `devops-engineer` for any change under `.github/workflows/`, `infra/`, `.githooks/`, `docker-compose.yml`, `Dockerfile`, or workflow-shaped changes to `Taskfile.yml`. The agent owns its own checklists.
 
 1. **Parallel agent spawning:** When spawning parallel agents (e.g., backend-dev + frontend-dev), always use a single message with multiple Agent tool calls. Never spawn one agent, wait for it, then spawn another — this wastes time and breaks the parallelism the task plan designed for.
