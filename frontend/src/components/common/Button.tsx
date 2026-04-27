@@ -64,3 +64,31 @@ export function SecondaryButton({ children, onClick, disabled, type = 'button', 
     </button>
   );
 }
+
+/**
+ * Ghost / tertiary button. Transparent background, muted text, no
+ * border or shadow. For deliberate-but-rare actions (Skip, Cancel,
+ * dismiss-style controls) where the visual weight of Primary or
+ * Secondary would compete with the main CTA.
+ *
+ * Per BRAND_GUIDELINES §5.4.
+ */
+export function GhostButton({ children, onClick, disabled, type = 'button', ...rest }: ButtonProps) {
+  return (
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      {...rest}
+      style={{
+        ...baseStyle,
+        backgroundColor: 'transparent',
+        color: 'var(--color-muted)',
+        border: '2px solid transparent',
+        boxShadow: 'none',
+      }}
+    >
+      {children}
+    </button>
+  );
+}
