@@ -1184,11 +1184,11 @@ func TestRecomputeVerdictSummary(t *testing.T) {
 			wantDown: 2,
 		},
 		{
-			name:      "ConditionalCheckFailed maps to ErrPuzzleNotFound but still returns computed summary",
-			items:     verdictItems("up"),
-			updateErr: &types.ConditionalCheckFailedException{},
-			wantUp:    1,
-			wantDown:  0,
+			name:       "ConditionalCheckFailed maps to ErrPuzzleNotFound but still returns computed summary",
+			items:      verdictItems("up"),
+			updateErr:  &types.ConditionalCheckFailedException{},
+			wantUp:     1,
+			wantDown:   0,
 			wantNotFnd: true,
 		},
 		{

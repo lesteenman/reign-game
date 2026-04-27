@@ -21,7 +21,7 @@ import (
 // (VR-01..VR-10) so the handler tests exercise the same semantics the
 // real DynamoDB repository implements.
 type fakeVerdictRepo struct {
-	puzzles  map[string]*repository.PuzzleRecord // key = "size#mode#id"
+	puzzles  map[string]*repository.PuzzleRecord            // key = "size#mode#id"
 	verdicts map[string]map[string]repository.VerdictRecord // outer = "size#mode#id", inner = SK ("role#raterId")
 
 	// Failure injection knobs for VH-09 + error-propagation tests.
