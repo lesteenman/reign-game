@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './theme/ThemeContext';
 import { LandingPage } from './pages/LandingPage';
 import { GamePage } from './pages/GamePage';
+import { CurationPage } from './pages/CurationPage';
 import { ProtectedAdminRoute } from './components/auth/ProtectedAdminRoute';
 import type { PuzzleData } from './engine/types';
 
@@ -29,6 +30,14 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/play" element={<GamePage />} />
+          <Route
+            path="/curation"
+            element={
+              <ProtectedAdminRoute>
+                <CurationPage />
+              </ProtectedAdminRoute>
+            }
+          />
           <Route path="/admin" element={<ProtectedAdminRoute />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

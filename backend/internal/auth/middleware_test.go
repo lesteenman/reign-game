@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	gojwt "github.com/go-jose/go-jose/v3/jwt"
@@ -479,6 +480,175 @@ func TestRequireAuth_DoesNotLogSessionTokenOrCookie(t *testing.T) {
 // router group with real middleware (admin_pool_test.go,
 // admin_config_test.go, replenish_test.go).
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// cachedSessionVerifier tests.
+//
+// Without caching, every admin request round-trips Clerk's
+// `/v1/users/{id}` endpoint to read publicMetadata.role — at ~200 ms
+// over the public internet, the dev experience became unworkable.
+// These tests prove the cache hits hold for the TTL window, expire
+// correctly, and don't leak across subjects.
+// ---------------------------------------------------------------------------
+
+func TestCachedVerifier_GetUser_HitsInnerOnFirstCall(t *testing.T) {
+	// Arrange
+	calls := 0
+	inner := &fakeVerifier{
+		getUserFn: func(_ context.Context, id string) (*clerk.User, error) {
+			calls++
+			return userWithRole(id, "admin"), nil
+		},
+	}
+	cached := newCachedVerifier(inner, time.Minute)
+
+	// Act
+	u, err := cached.GetUser(context.Background(), "user_alice")
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if u == nil || u.ID != "user_alice" {
+		t.Fatalf("user = %+v, want id=user_alice", u)
+	}
+	if calls != 1 {
+		t.Errorf("inner GetUser called %d times, want 1", calls)
+	}
+}
+
+func TestCachedVerifier_GetUser_SkipsInnerWithinTTL(t *testing.T) {
+	// Arrange
+	calls := 0
+	inner := &fakeVerifier{
+		getUserFn: func(_ context.Context, id string) (*clerk.User, error) {
+			calls++
+			return userWithRole(id, "admin"), nil
+		},
+	}
+	cached := newCachedVerifier(inner, time.Minute)
+
+	// Act — three rapid calls to the same subject
+	for i := 0; i < 3; i++ {
+		if _, err := cached.GetUser(context.Background(), "user_alice"); err != nil {
+			t.Fatalf("call %d unexpected error: %v", i, err)
+		}
+	}
+
+	// Assert
+	if calls != 1 {
+		t.Errorf("inner GetUser called %d times, want 1 (cache should serve calls 2 and 3)", calls)
+	}
+}
+
+func TestCachedVerifier_GetUser_RefetchesAfterTTL(t *testing.T) {
+	// Arrange — 1 ns TTL so the second call is past expiry the moment
+	// the goroutine yields.
+	calls := 0
+	inner := &fakeVerifier{
+		getUserFn: func(_ context.Context, id string) (*clerk.User, error) {
+			calls++
+			return userWithRole(id, "admin"), nil
+		},
+	}
+	cached := newCachedVerifier(inner, time.Nanosecond)
+
+	// Act
+	if _, err := cached.GetUser(context.Background(), "user_alice"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	time.Sleep(2 * time.Nanosecond)
+	if _, err := cached.GetUser(context.Background(), "user_alice"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// Assert
+	if calls != 2 {
+		t.Errorf("inner GetUser called %d times, want 2 (post-TTL must refetch)", calls)
+	}
+}
+
+func TestCachedVerifier_GetUser_CacheIsPerSubject(t *testing.T) {
+	// Arrange
+	calls := 0
+	inner := &fakeVerifier{
+		getUserFn: func(_ context.Context, id string) (*clerk.User, error) {
+			calls++
+			return userWithRole(id, "admin"), nil
+		},
+	}
+	cached := newCachedVerifier(inner, time.Minute)
+
+	// Act — two different subjects, repeated
+	for _, sub := range []string{"user_alice", "user_bob", "user_alice", "user_bob"} {
+		if _, err := cached.GetUser(context.Background(), sub); err != nil {
+			t.Fatalf("unexpected error for %s: %v", sub, err)
+		}
+	}
+
+	// Assert
+	if calls != 2 {
+		t.Errorf("inner GetUser called %d times, want 2 (one per distinct subject)", calls)
+	}
+}
+
+func TestCachedVerifier_GetUser_DoesNotCacheErrors(t *testing.T) {
+	// Arrange — first call fails, second succeeds. The cache must not
+	// remember a failure (a transient Clerk outage shouldn't block
+	// subsequent admin requests indefinitely).
+	calls := 0
+	inner := &fakeVerifier{
+		getUserFn: func(_ context.Context, id string) (*clerk.User, error) {
+			calls++
+			if calls == 1 {
+				return nil, errors.New("transient: clerk API timeout")
+			}
+			return userWithRole(id, "admin"), nil
+		},
+	}
+	cached := newCachedVerifier(inner, time.Minute)
+
+	// Act
+	if _, err := cached.GetUser(context.Background(), "user_alice"); err == nil {
+		t.Fatal("expected first call to surface inner error")
+	}
+	u, err := cached.GetUser(context.Background(), "user_alice")
+
+	// Assert
+	if err != nil {
+		t.Fatalf("second call unexpected error: %v", err)
+	}
+	if u == nil || u.ID != "user_alice" {
+		t.Fatalf("second call user = %+v, want id=user_alice", u)
+	}
+	if calls != 2 {
+		t.Errorf("inner GetUser called %d times, want 2 (errors must not cache)", calls)
+	}
+}
+
+func TestCachedVerifier_Verify_PassesThrough(t *testing.T) {
+	// Arrange — Verify is not cached (JWT lib already caches JWKS).
+	calls := 0
+	inner := &fakeVerifier{
+		verifyFn: func(_ context.Context, token string) (*clerk.SessionClaims, error) {
+			calls++
+			return claimsFor("user_alice"), nil
+		},
+	}
+	cached := newCachedVerifier(inner, time.Minute)
+
+	// Act
+	for i := 0; i < 3; i++ {
+		if _, err := cached.Verify(context.Background(), "tok"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	}
+
+	// Assert
+	if calls != 3 {
+		t.Errorf("inner Verify called %d times, want 3 (Verify is pass-through, not cached)", calls)
+	}
+}
 
 // assertErrorBody checks the 401/403 JSON shape from writeUnauth /
 // writeForbidden.

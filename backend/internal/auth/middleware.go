@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"sync"
+	"time"
 
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/clerk/clerk-sdk-go/v2/jwt"
@@ -52,10 +54,20 @@ type sessionVerifier interface {
 type clerkSessionVerifier struct{}
 
 // NewClerkSessionVerifier returns a sessionVerifier backed by the
-// real Clerk Go SDK v2. Call clerk.SetKey(secret) exactly once before
-// handling requests so the SDK's default user client can authenticate.
+// real Clerk Go SDK v2 with a TTL-cached `GetUser`. Call
+// clerk.SetKey(secret) exactly once before handling requests so the
+// SDK's default user client can authenticate.
+//
+// Caching the user fetch is the main perf lever for admin routes: the
+// session JWT does not carry `publicMetadata`, so without a cache
+// every admin request round-trips Clerk's `/v1/users/{id}` endpoint
+// to read the role claim. At ~200 ms per fetch over the public
+// internet, repeated admin views (e.g. the curation flow toggling
+// pages) became dev-untestable. The cache turns the second-and-later
+// hits into ~1 us in-process lookups; role changes propagate within
+// the TTL window, which is acceptable for an admin tool.
 func NewClerkSessionVerifier() sessionVerifier {
-	return clerkSessionVerifier{}
+	return newCachedVerifier(clerkSessionVerifier{}, defaultUserCacheTTL)
 }
 
 func (clerkSessionVerifier) Verify(ctx context.Context, token string) (*clerk.SessionClaims, error) {
@@ -64,6 +76,57 @@ func (clerkSessionVerifier) Verify(ctx context.Context, token string) (*clerk.Se
 
 func (clerkSessionVerifier) GetUser(ctx context.Context, id string) (*clerk.User, error) {
 	return user.Get(ctx, id)
+}
+
+// defaultUserCacheTTL bounds how stale a cached user record can be
+// before the next admin request triggers a refresh. 60s lets a typical
+// curation session refresh across navigations without paying the round
+// trip per click; role changes (admin promote / demote in Clerk
+// dashboard) take at most this long to propagate to a long-lived
+// session.
+const defaultUserCacheTTL = 60 * time.Second
+
+type cachedUser struct {
+	user  *clerk.User
+	until time.Time
+}
+
+// cachedSessionVerifier wraps a sessionVerifier and caches the
+// `GetUser` response per subject ID for `ttl`. `Verify` is passed
+// through unchanged — JWT verification is already fast (signing-key
+// JWKS is cached inside the SDK after the first lookup).
+//
+// The cache is shared across goroutines via sync.Map. Stale entries
+// are returned for one extra read (ttl is enforced by `until`); the
+// race where two goroutines both miss and both fetch is benign — both
+// writes set the same value.
+type cachedSessionVerifier struct {
+	inner sessionVerifier
+	ttl   time.Duration
+	cache sync.Map // map[string]cachedUser
+}
+
+func newCachedVerifier(inner sessionVerifier, ttl time.Duration) *cachedSessionVerifier {
+	return &cachedSessionVerifier{inner: inner, ttl: ttl}
+}
+
+func (c *cachedSessionVerifier) Verify(ctx context.Context, token string) (*clerk.SessionClaims, error) {
+	return c.inner.Verify(ctx, token)
+}
+
+func (c *cachedSessionVerifier) GetUser(ctx context.Context, id string) (*clerk.User, error) {
+	if entry, ok := c.cache.Load(id); ok {
+		if cu, ok := entry.(cachedUser); ok && time.Now().Before(cu.until) {
+			return cu.user, nil
+		}
+	}
+
+	u, err := c.inner.GetUser(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	c.cache.Store(id, cachedUser{user: u, until: time.Now().Add(c.ttl)})
+	return u, nil
 }
 
 // RequireAuth returns HTTP middleware that enforces Clerk session
@@ -95,7 +158,15 @@ func RequireAuth(verifier sessionVerifier) func(http.Handler) http.Handler {
 				return
 			}
 
+			// Per-step timing to surface slow paths in the dev log.
+			// Verify is JWT validation (cached JWKS); GetUser is the
+			// Clerk user fetch (cached after R-7-02 perf commit). When
+			// the dev experience feels slow, these millis tell us
+			// whether the bottleneck is one of these or further down
+			// in the handler / DDB layer.
+			verifyStart := time.Now()
 			claims, err := verifier.Verify(r.Context(), cookie.Value)
+			verifyMs := time.Since(verifyStart).Milliseconds()
 			if err != nil {
 				// BM-07: do NOT log the cookie value or the full
 				// error object — the error string from jwt.Verify
@@ -126,9 +197,11 @@ func RequireAuth(verifier sessionVerifier) func(http.Handler) http.Handler {
 				return
 			}
 
+			getUserStart := time.Now()
 			u, err := verifier.GetUser(r.Context(), claims.Subject)
+			getUserMs := time.Since(getUserStart).Milliseconds()
 			if err != nil {
-				log.Printf("WARN: auth: clerk SDK error path=%s reason=user_fetch_failed sub=%s err=%q", r.URL.Path, claims.Subject, err.Error())
+				log.Printf("WARN: auth: clerk SDK error path=%s reason=user_fetch_failed sub=%s err=%q verify_ms=%d get_user_ms=%d", r.URL.Path, claims.Subject, err.Error(), verifyMs, getUserMs)
 				writeUnauth(w, "user not found")
 				return
 			}
@@ -138,7 +211,7 @@ func RequireAuth(verifier sessionVerifier) func(http.Handler) http.Handler {
 				return
 			}
 
-			log.Printf("auth: allow path=%s sub=%s", r.URL.Path, u.ID)
+			log.Printf("auth: allow path=%s sub=%s verify_ms=%d get_user_ms=%d", r.URL.Path, u.ID, verifyMs, getUserMs)
 			ctx := context.WithValue(r.Context(), userContextKey{}, u)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

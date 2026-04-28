@@ -12,32 +12,54 @@ The visible-and-functional frontend contract for the verdict UI.
 
 ## FB-02: Verdict surface appears on completion AND on skip, with completion / skip variants
 
-**Rule.** For an admin user, the verdict surface renders in two places inside `GamePage.tsx`:
+**Rule.** For an admin user, the verdict surface renders in two places inside `GamePage.tsx`. The two surfaces share a single `<VerdictSurface>` component but render *different button sets* — the post-grill resolution diverged the two flows further than the original "same buttons, different visual weight" model.
 
-1. The completion overlay (when `isSolved` flips true and the existing overlay shows). The two verdict buttons render alongside the existing "Play Again" / "Home" buttons. **Variant: `completion`** — prominent visual weight; the surface is the natural "rate before moving on" prompt.
-2. The post-skip transient state (when an admin chooses to skip a puzzle). After the existing `PUT /api/puzzles/{id}/status` with `"skipped"` succeeds, the user is held on a small "you skipped — verdict?" panel before navigating home. Non-admins skip → straight home as today. **Variant: `skip`** — de-emphasized visual weight; smaller buttons, quieter prompt copy, less prominent layout. Same up/down axis, same labels, same backend.
+**1. Completion overlay** (when `isSolved` flips true and the existing overlay shows). **Variant: `completion`**.
+- Two verdict buttons rendered inside the overlay alongside the existing "Play Again" / "Home" navigation:
+  - **"Good puzzle"** → `submitVerdict({ value: 'up', outcome: 'solved', ... })`.
+  - **"Bad puzzle"** → `submitVerdict({ value: 'down', outcome: 'solved', ... })`.
+- The admin can also navigate forward (Play Again / Home) without voting — silence is a valid "no opinion" vote.
+- Visual weight: prominent. The verdict prompt is the natural "rate before moving on" beat.
 
-Both surfaces use the same `<VerdictSurface>` component, parameterized by:
-- `variant: 'completion' | 'skip'` — controls visual weight only (className branch / size tokens). No state-machine, label, or API-call differences.
-- `outcome: 'solved' | 'skipped'` — flows through to the verdict row's `outcome` field, distinguishing the two paths in the data.
+**2. Skip modal** (when an admin clicks the explicit Skip button — added in this slice; see FB-11). **Variant: `skip`**.
+- The skip button does NOT immediately PUT skipped status. It opens a modal with three buttons:
+  - **"Cancel"** → close the modal, return to the puzzle. No API calls. Timer keeps running.
+  - **"I hate this"** → `PUT /api/puzzles/{id}/status` with `"skipped"` AND `submitVerdict({ value: 'down', outcome: 'skipped', ... })`, run in parallel. Close modal, navigate to curation picker (or `/`).
+  - **"Just skip"** → `PUT /api/puzzles/{id}/status` with `"skipped"` only. No verdict row written. Close modal, navigate forward.
+- No upvote-on-skip path. Rationale: an admin who liked the puzzle but bailed mid-attempt is rare and weakly-signaled; the high-value signal on skip is "this puzzle is bad," and that's the only verdict the surface offers.
+- Visual weight: de-emphasized chrome (smaller padding, quieter prompt copy, secondary-button styling on the action buttons), keeping the modal pattern from BRAND_GUIDELINES §5.6 but with a more compact card. The Cancel button is a Ghost variant — it's the dismissal action, not the primary intent.
 
-The two props are independent: `variant` is UI-only; `outcome` is data-only. They will always agree in practice (`completion` ↔ `solved`, `skip` ↔ `skipped`), but separating them keeps the visual layer testable without coupling to the persistence layer.
+**Component shape.** `<VerdictSurface>` takes:
+- `variant: 'completion' | 'skip'` — controls the rendered button row (set + labels + click handlers) AND the chrome de-emphasis tokens.
+- `outcome: 'solved' | 'skipped'` — flows through to the verdict row's `outcome` field. Always `'solved'` when `variant === 'completion'`; always `'skipped'` when `variant === 'skip'` — they're parallel constants.
+- `puzzleId`, `gridSize`, `mode`, `playTimeMs` — payload for the verdict service.
+- `onDismiss?: () => void` — called when Cancel (skip variant) closes the modal without action; the parent restores the playable view.
+- `onAfterVerdict?: () => void` — called after a successful verdict submission OR a "Just skip" (the parent navigates forward).
 
-**Value.** Resolved (post-grill): the curation framing made it clear that the high-signal click on skip is "this puzzle is bad, bailing" — the cull-from-corpus signal you can't easily get any other way. Both surfaces want verdict UI. But the skip surface should not pressure a tired admin into a coerced upvote / downvote click — the admin's mental state on skip is more variable than on completion. De-emphasized visual weight respects that without losing the cull signal. Playtesting will validate the de-emphasis weight; future tweaks live in the component, not in the spec.
+**Value.** Resolved post-second-grill: the skip flow is *user-action-and-verdict* combined into a single decision point. Cancel keeps the admin on the puzzle if they regret clicking Skip; the two destructive options are explicit about what's happening (skip alone vs skip-plus-cull). Avoids the "modal whack-a-mole" of skip → status PUT → another modal → vote.
 
 **Verification.** Vitest tests:
-- Complete a puzzle as admin → verdict surface visible on overlay; rendered with `variant="completion"` (prominent layout class present in DOM).
-- Skip a puzzle as admin → verdict surface visible after status PUT; rendered with `variant="skip"` (de-emphasized layout class present in DOM, prominent class absent).
-- Both call `submitVerdict` with the correct `outcome` prop (`"solved"` for completion, `"skipped"` for skip).
-- The same `<VerdictSurface>` component is used in both places — verified by import-graph or by clicking through both surfaces in one test and asserting the same component instance handled both.
+- Complete a puzzle as admin → completion-variant verdict surface visible inside the completion overlay. Click "Good puzzle" → service called with `value: 'up', outcome: 'solved'`. Click "Bad puzzle" → service called with `value: 'down', outcome: 'solved'`. Click Play Again or Home without voting → no service call.
+- Click the Skip button as admin → skip-variant modal opens with three buttons. Click Cancel → modal closes, no API calls, puzzle still playable. Click "I hate this" → both `updatePuzzleStatus(..., 'skipped')` and `submitVerdict({ value: 'down', outcome: 'skipped' })` called; navigation forward. Click "Just skip" → only `updatePuzzleStatus(..., 'skipped')` called; navigation forward.
+- The same `<VerdictSurface>` component is used in both places, verified by import-graph or by mounting both variants in one test file.
 
-## FB-03: The two buttons are labelled "Good puzzle" and "Bad puzzle"
+## FB-03: Button labels and verdict values
 
-**Rule.** The button labels are user-readable English: "Good puzzle" maps to `value: "up"`, "Bad puzzle" maps to `value: "down"`. The component does not surface the raw `up` / `down` values to the user.
+**Rule.** Button labels are user-readable English; the underlying API values are the technical `up` / `down` strings. The mapping by variant:
 
-**Value.** "Good" / "Bad" is unambiguous. "Upvote" / "Downvote" is correct domain language for the API but reads as social-media jargon in a single-admin curation context. The schema retains `up` / `down` for forward compatibility (when public-rater voting lands, the surface label stays the same; the API value is what matters).
+| Variant | Button | Label | API call |
+|---|---|---|---|
+| `completion` | up | "Good puzzle" | `submitVerdict({ value: 'up', outcome: 'solved', ... })` |
+| `completion` | down | "Bad puzzle" | `submitVerdict({ value: 'down', outcome: 'solved', ... })` |
+| `skip` | cancel | "Cancel" | (none — dismiss only) |
+| `skip` | down | "I hate this" | `updatePuzzleStatus + submitVerdict({ value: 'down', outcome: 'skipped' })` (parallel) |
+| `skip` | none | "Just skip" | `updatePuzzleStatus(..., 'skipped')` only |
 
-**Verification.** Visual snapshot or DOM-text assertion in the `VerdictSurface` test file. Click "Good puzzle" → service called with `value: "up"`. Click "Bad puzzle" → service called with `value: "down"`.
+Component does not surface `up` / `down` strings in the DOM — only the user-readable labels. The schema retains `up` / `down` for forward compatibility (when public-rater voting lands, the surface label stays the same; the API value is what matters).
+
+**Value.** Wording is unambiguous in context. "Good puzzle" / "Bad puzzle" reads cleanly during a curation session. "I hate this" / "Just skip" is intentionally informal — it's an internal admin tool, not a player-facing surface, and the casual language matches the curator's mental state ("ugh, this one's broken").
+
+**Verification.** Vitest tests assert exact button text via `getByRole('button', { name: ... })` per row above. Service mocks assert the correct payload shape per click.
 
 ## FB-04: Submission posts to `PUT /api/admin/puzzles/{id}/verdict`
 
@@ -100,4 +122,20 @@ State machine is monotonic on success: once `done`, the surface does not re-ente
 
 **Value.** Backend middleware is the source of truth. Frontend hiding is cosmetic. Non-admins do not need to know a curation feature exists.
 
-**Verification.** Vitest test: render `GameBoard` with `signedOut` and `signedIn role=user` Clerk stubs — no DOM nodes match `text="Good puzzle"` or `text="Bad puzzle"`. The completion overlay otherwise renders identically (Play Again + Home).
+**Verification.** Vitest test: render `GameBoard` with `signedOut` and `signedIn role=user` Clerk stubs — no DOM nodes match `text="Good puzzle"` or `text="Bad puzzle"` or `text="Skip puzzle"`. The completion overlay otherwise renders identically (Play Again + Home).
+
+## FB-11: Explicit Skip button on GamePage (admin-only)
+
+**Rule.** GamePage shows a **Skip puzzle** button in the bottom action row alongside Undo / Redo / Reset, visible only when `getClerkUserRole(user.publicMetadata) === 'admin'`. The button is rendered with the **Ghost** button variant (transparent background, muted text, no shadow) — Skip is a deliberate, rare action; visual de-emphasis distinguishes it from Undo/Redo/Reset (frequent, lightweight) and keeps the button row from competing visually with the grid.
+
+Click behavior: opens the skip modal (FB-02 §2). The button click does NOT directly call `updatePuzzleStatus` — that happens inside the modal, after the admin confirms via "I hate this" or "Just skip." Cancel returns to the puzzle with no API calls.
+
+**Value.** Replaces the implicit-skip-on-mode-switch behavior with an explicit click. Admins curating need to express "I'm bailing on this puzzle" cleanly; an implicit skip on navigation is unreliable (closing the tab, navigating to /admin, etc. all leave the puzzle in an ambiguous state). Per CLAUDE.md Roles model, only admin-role users see the button at all — regular User-role players have no need to skip explicitly because the curation flow is admin-only this phase.
+
+R-7-03 (next slice) reworks IndexedDB storage so each pool has its own in-progress slot — until then, switching pools still implicitly skips, but the explicit Skip click is the new canonical way to mark a puzzle skipped.
+
+**Verification.** Vitest tests:
+- `signedIn role=admin` → "Skip puzzle" button visible in the bottom action row (using `getByRole('button', { name: 'Skip puzzle' })`).
+- `signedOut` and `signedIn role=user` → no "Skip puzzle" button in DOM.
+- Click as admin → skip modal opens (assert one of the three skip-variant buttons is rendered: e.g. `getByRole('button', { name: 'Cancel' })`).
+- Click does NOT call `updatePuzzleStatus` (verified by service mock assertion: zero calls until "I hate this" or "Just skip" is clicked).

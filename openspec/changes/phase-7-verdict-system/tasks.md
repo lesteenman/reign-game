@@ -21,7 +21,7 @@ All Phase 7 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 | ID     | Slice                                                                                 | Layer | Status |
 |--------|---------------------------------------------------------------------------------------|-------|--------|
 | R-081  | Backend verdict handler + repository + schema migration                               | 1     | [x]    |
-| R-7-02 | Frontend verdict surface + landing reorg + curation route + explicit Skip + close-out | 2     | [ ]    |
+| R-7-02 | Frontend verdict surface + landing reorg + curation route + explicit Skip + close-out | 2     | [x]    |
 | R-7-03 | Per-flow IndexedDB storage (no implicit skips)                                        | 3     | [ ]    |
 
 ## Tasks
@@ -123,34 +123,56 @@ All Phase 7 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
   - 401 / 403 → resolves silently (FB-05).
   - 500 → throws `ApiError`.
 - Create `frontend/src/components/game/VerdictSurface.tsx`:
-  - Props per FB design.md §5, plus a `variant: 'completion' | 'skip'` prop (FB-02 post-grill resolution).
-  - **Variant behavior:** `completion` renders prominent layout (current full-size buttons + "Rate this puzzle?" prompt). `skip` renders de-emphasized layout (smaller buttons, quieter prompt copy like "Quick rate before moving on?", less visual prominence). Branch is a className / size-token swap; no state-machine, label, or API-call differences between variants. Same up/down axis on both.
-  - State machine: `idle` → `submitting` → `done` | `error` (FB-06).
-  - Buttons labelled "Good puzzle" / "Bad puzzle" (FB-03) — same labels in both variants.
-  - Submitted-set `sessionStorage` cache (FB-07): if `puzzleId` already in `reign:verdict:submitted`, return null on mount.
-  - Error state: "Couldn't save your verdict." + Retry button.
-  - Done state: "Thanks — recorded." text replaces buttons.
+  - Props per FB-02 + FB-03: `variant: 'completion' | 'skip'`, `outcome: 'solved' | 'skipped'`, `puzzleId`, `gridSize`, `mode`, `playTimeMs`, optional `onDismiss` (skip-Cancel callback) and `onAfterVerdict` (post-action navigation callback).
+  - **Variant behavior — diverged button sets, not just visual de-emphasis (post-second-grill):**
+    - `completion`: two buttons — "Good puzzle" (up) and "Bad puzzle" (down). Prominent layout. After click, runs the verdict service; the parent overlay's existing Play Again / Home navigation buttons remain functional independently. Silence on the verdict surface = "no opinion" — admin can navigate forward without voting.
+    - `skip`: three buttons — "Cancel" (Ghost variant, dismiss; calls `onDismiss`), "I hate this" (status PUT + verdict POST in parallel), "Just skip" (status PUT only). De-emphasized chrome: smaller padding, quieter prompt copy, secondary-button styling on the action buttons. After "I hate this" or "Just skip", calls `onAfterVerdict`.
+  - State machine: `idle` → `submitting` → `done` | `error` (FB-06). Applies to both variants; disable all buttons (including Cancel) during `submitting`.
+  - Submitted-set `sessionStorage` cache (FB-07): on successful verdict submission OR successful skip, mark `puzzleId` in `reign:verdict:submitted` so re-mount returns null.
+  - Error state: "Couldn't save." + Retry button. Retry re-invokes the same action that just failed.
+  - Done state: brief "Thanks — recorded." (completion) or just navigates forward (skip).
 - Create `frontend/src/components/game/VerdictSurface.test.tsx`:
-  - Idle render: both buttons present.
-  - Click "Good puzzle" → service called with `value: 'up'`; click "Bad puzzle" → `value: 'down'` (FB-03).
-  - Submitting state disables both buttons (FB-06).
-  - Success → `done` state renders, no buttons (FB-06).
-  - 500 → `error` state with Retry; clicking Retry re-invokes service with the previously-clicked value.
-  - sessionStorage cache: pre-seed key with puzzleId → component renders null (FB-07).
-  - Variant rendering: `variant="completion"` produces the prominent layout class in DOM; `variant="skip"` produces the de-emphasized layout class and not the prominent one. Same buttons, same labels, same backend call shape across both variants (FB-02 post-grill).
+  - Idle render with `variant="completion"`: "Good puzzle" + "Bad puzzle" buttons present; no Cancel.
+  - Idle render with `variant="skip"`: Cancel + "I hate this" + "Just skip" buttons present; no Good/Bad.
+  - Click "Good puzzle" → `submitVerdict({ value: 'up', outcome: 'solved' })`. Click "Bad puzzle" → `value: 'down', outcome: 'solved'`.
+  - Click Cancel → `onDismiss()` called, no service calls.
+  - Click "I hate this" → both `updatePuzzleStatus(..., 'skipped')` AND `submitVerdict({ value: 'down', outcome: 'skipped' })` called (parallel — assert both called before resolution).
+  - Click "Just skip" → only `updatePuzzleStatus(..., 'skipped')` called; no `submitVerdict` call.
+  - Submitting state disables every button in the row (FB-06).
+  - Success on completion → `done` state renders. Success on skip → `onAfterVerdict()` called, no `done` state needed.
+  - 500 → `error` state with Retry; Retry re-invokes the same action.
+  - sessionStorage cache: pre-seed key with puzzleId → component returns null (both variants).
+  - Variant rendering: chrome class differs (prominent vs de-emphasized) per FB-02.
 - Update `frontend/src/pages/GamePage.tsx`:
   - Read `useUser()` from `@clerk/react` inside `GameBoard`.
   - Compute `isAdmin = getClerkUserRole(user?.publicMetadata) === 'admin'` using existing helper from `frontend/src/components/auth/role.ts`.
-  - Render `<VerdictSurface variant="completion" outcome="solved" ...>` inside the completion overlay JSX (after Play Again / Home), conditional on `isAdmin && ready && showCompletion` (FB-01, FB-02).
-  - Add the post-skip transient state for admins:
-    - When an admin clicks an existing skip control (or invokes the skip flow that calls `updatePuzzleStatus(..., 'skipped')`), hold the user on a `<VerdictSurface variant="skip" outcome="skipped" ...>` panel before navigating home.
-    - Non-admins continue to navigate home directly — behaviour unchanged.
-  - `playTimeMs` prop: `completionTime * 1000` for the completion path, `timer.elapsed * 1000` for the skip path.
+  - Render `<VerdictSurface variant="completion" outcome="solved" ...>` inside the completion overlay JSX (after Play Again / Home), conditional on `isAdmin && ready && showCompletion` (FB-01, FB-02 §1).
+  - **Add explicit Skip button in the bottom action row** (FB-11) using the **Ghost** button variant, alongside Undo / Redo / Reset. Visible only when `isAdmin`. Click opens a state flag `showSkipModal` that mounts `<VerdictSurface variant="skip" outcome="skipped" onDismiss={() => setShowSkipModal(false)} onAfterVerdict={() => navigate('/curation')} ...>` (or `/` if curation route is not yet the landing entry — wire to whichever is in this slice).
+  - The Skip button click does NOT directly call `updatePuzzleStatus` — that happens inside the verdict surface on "I hate this" or "Just skip".
+  - `playTimeMs` prop: `completionTime * 1000` for the completion path, `timer.elapsed * 1000` for the skip path. (Note: `useTimer.elapsed` is in seconds.)
 - Update `frontend/src/pages/GamePage.test.tsx`:
   - Three Clerk hook stubs (signedOut / role=user / role=admin); only admin stub finds verdict buttons in DOM (FB-01).
   - Admin completion path → buttons visible, click → service called with `outcome: 'solved'`; rendered with `variant="completion"` (prominent layout class in DOM) (FB-02, FB-08).
   - Admin skip path → buttons visible after status PUT, click → service called with `outcome: 'skipped'`; rendered with `variant="skip"` (de-emphasized layout class in DOM, prominent class absent) (FB-02).
   - Submission failure does not block the Play Again / Home buttons (FB-09).
+- **Reorganize the landing page (`frontend/src/pages/LandingPage.tsx`).** Replace the current PuzzleSelector-as-landing pattern with three top-level Card-pattern tiles (BRAND_GUIDELINES §5.5):
+  - **Daily** — disabled (reduced opacity, `pointer-events: none`), supporting line "Coming soon."
+  - **Packs** — disabled, supporting line "Coming soon."
+  - **Curation** — enabled and rendered ONLY when `getClerkUserRole(user.publicMetadata) === 'admin'` (FB-01 / FB-10 visibility model). Anonymous and User-role players see two disabled tiles and no Curation tile.
+  - Tiles stack vertically on mobile, three across at `md`+ per BRAND_GUIDELINES §4.2 breakpoints.
+  - "Resume" / "New puzzle" branching for in-progress play state moves *into* the curation route (since it's the only flow that produces in-progress state this phase).
+- **Add a `/curation` route** in `frontend/src/App.tsx` mounted under `<ProtectedAdminRoute>` (same auth guard as `/admin`), pointing at a new `frontend/src/pages/CurationPage.tsx`:
+  - The page reuses the existing `<PuzzleSelector>` component (button per enabled pool) and the existing has-progress / fresh state branching from the old LandingPage.
+  - A **Settings** button at the top of the picker links to `/admin` via `useNavigate('/admin')`. Ghost variant; small.
+  - "Play" launches `/play?new=true&size=N&mode=M` with the `flow=curation` query param so GamePage knows to show the verdict surface + Skip button (Phase-7 scope keeps this as a query param; R-7-03 may move it into IndexedDB).
+- Create `frontend/src/pages/CurationPage.test.tsx`:
+  - Renders the picker for admin role; `useUser()` mocked to admin.
+  - Settings button navigates to `/admin`.
+  - Selecting a pool navigates to `/play?new=true&size=...&mode=...&flow=curation`.
+- Update `frontend/src/pages/LandingPage.test.tsx`:
+  - Three Clerk states (signedOut, role=user, role=admin); only admin sees the Curation tile.
+  - Daily and Packs tiles render disabled (assert `aria-disabled="true"` or equivalent) for all three roles.
+  - Click on disabled Daily/Packs tile → no navigation.
 - Update `GLOSSARY.md`:
   - Add `Verdict`, `Verdict Summary`, `Verdict Surface` in the Puzzle Lifecycle section per GT-01 / GT-02 / GT-04.
   - Add `Rater` in the Users & Access section per GT-03.
@@ -179,8 +201,13 @@ All Phase 7 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 - `frontend/src/services/verdictService.test.ts` (new)
 - `frontend/src/components/game/VerdictSurface.tsx` (new)
 - `frontend/src/components/game/VerdictSurface.test.tsx` (new)
-- `frontend/src/pages/GamePage.tsx` (update — render VerdictSurface conditional on admin role)
-- `frontend/src/pages/GamePage.test.tsx` (update — three-state visibility coverage)
+- `frontend/src/pages/GamePage.tsx` (update — render VerdictSurface conditional on admin role + add explicit Skip button)
+- `frontend/src/pages/GamePage.test.tsx` (update — three-state visibility coverage + Skip button + skip modal flow)
+- `frontend/src/pages/LandingPage.tsx` (update — replace PuzzleSelector landing with three top-level tiles)
+- `frontend/src/pages/LandingPage.test.tsx` (update — tile visibility + disabled-tile behaviour across three Clerk states)
+- `frontend/src/pages/CurationPage.tsx` (new — picker + settings link, behind ProtectedAdminRoute)
+- `frontend/src/pages/CurationPage.test.tsx` (new — settings link + pool selection navigation)
+- `frontend/src/App.tsx` (update — register `/curation` route)
 - `GLOSSARY.md` (update — add four terms)
 - `ROADMAP.md` (update — flip R-7-02 to `[x]`; R-081 already `[x]` from its own PR)
 - `PROJECT_STRUCTURE.md` (update — add new frontend files)

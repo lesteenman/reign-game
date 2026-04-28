@@ -1,174 +1,126 @@
-import { useState, useEffect, useCallback, useSyncExternalStore } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useGameStorage } from '../hooks/useGameStorage';
+import { useUser } from '@clerk/react';
+import type { CSSProperties, ReactNode } from 'react';
 import { PageShell } from '../components/common/PageShell';
-import { PrimaryButton, SecondaryButton } from '../components/common/Button';
-import { PuzzleSelector } from '../components/landing/PuzzleSelector';
-import type { PuzzleSelection } from '../components/landing/PuzzleSelector';
-import { fetchEnabledModes } from '../services/landingService';
-import type { ModeEntry } from '../services/landingService';
+import { getClerkUserRole } from '../components/auth/role';
 
-type PageState =
-  | { status: 'loading' }
-  | { status: 'fresh' }
-  | { status: 'has-progress' }
-  | { status: 'has-progress-selecting' }
-  | { status: 'error'; message: string };
+/**
+ * Landing page (Phase 7 redesign — R-7-02).
+ *
+ * Three top-level tiles for the project's eventual feature set:
+ * Daily, Packs, and (admin-only) Curation. Daily and Packs are
+ * disabled placeholders this phase — Daily is a future feature
+ * (date-keyed schedule + leaderboard); Packs is a future feature
+ * (curated bundles built from verdict-up puzzles in the corpus).
+ *
+ * Per the FB-01 / FB-10 visibility model, the Curation tile is
+ * rendered only when `getClerkUserRole(user.publicMetadata) === 'admin'`.
+ * Anonymous + User-role players see only the two disabled tiles —
+ * no playable flow this phase, by design (the user explicitly chose
+ * "admin-only Curation, Daily and Packs are coming soon" during the
+ * Phase 7 design grill).
+ */
 
-/** Subscribe to online/offline events and return current connectivity status. */
-function subscribeOnline(callback: () => void) {
-  window.addEventListener('online', callback);
-  window.addEventListener('offline', callback);
-  return () => {
-    window.removeEventListener('online', callback);
-    window.removeEventListener('offline', callback);
-  };
+const containerStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '16px',
+  width: '100%',
+  maxWidth: '600px',
+  alignItems: 'stretch',
+};
+
+const tileBaseStyle: CSSProperties = {
+  backgroundColor: 'var(--color-surface)',
+  border: '2px solid var(--color-ink)',
+  borderRadius: 'var(--radius)',
+  boxShadow: '0 3px 0 var(--color-ink)',
+  padding: '24px',
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '4px',
+  textAlign: 'left',
+  fontFamily: '"Nunito Sans", system-ui, sans-serif',
+  textDecoration: 'none',
+  color: 'var(--color-ink)',
+  cursor: 'pointer',
+  transition: 'transform 100ms ease-out',
+};
+
+const tileDisabledStyle: CSSProperties = {
+  ...tileBaseStyle,
+  opacity: 0.5,
+  cursor: 'not-allowed',
+  pointerEvents: 'none',
+};
+
+const tileTitleStyle: CSSProperties = {
+  fontSize: '1.25rem',
+  fontWeight: 800,
+  margin: 0,
+};
+
+const tileSubtitleStyle: CSSProperties = {
+  fontSize: '0.875rem',
+  color: 'var(--color-muted)',
+  margin: 0,
+  fontStyle: 'italic',
+};
+
+interface LandingTileProps {
+  testId: string;
+  title: string;
+  subtitle: ReactNode;
+  enabled: boolean;
+  onClick?: () => void;
 }
 
-function getOnlineSnapshot(): boolean {
-  return navigator.onLine;
-}
-
-function getServerOnlineSnapshot(): boolean {
-  return true;
-}
-
-/** Build a URL search string from puzzle selection. */
-function buildPlayUrl(selection: PuzzleSelection): string {
-  const params = new URLSearchParams();
-  params.set('new', 'true');
-  params.set('size', String(selection.size));
-  params.set('mode', selection.mode);
-  return `/play?${params.toString()}`;
-}
-
-/** Landing page with resume/new puzzle flow. */
-export function LandingPage() {
-  const navigate = useNavigate();
-  const { loadState } = useGameStorage();
-  const [state, setState] = useState<PageState>({ status: 'loading' });
-  // null while the modes fetch is in flight; empty-array once a fetch
-  // resolves with no enabled combos or the fetch fails. Either way the
-  // PuzzleSelector handles the empty case with a friendly message.
-  const [modes, setModes] = useState<ModeEntry[] | null>(null);
-  const isOnline = useSyncExternalStore(subscribeOnline, getOnlineSnapshot, getServerOnlineSnapshot);
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadState().then((saved) => {
-      if (cancelled) return;
-      if (saved && saved.status === 'in-progress') {
-        setState({ status: 'has-progress' });
-      } else {
-        setState({ status: 'fresh' });
-      }
-    }).catch(() => {
-      if (!cancelled) setState({ status: 'fresh' });
-    });
-    return () => { cancelled = true; };
-  }, [loadState]);
-
-  useEffect(() => {
-    let cancelled = false;
-    void fetchEnabledModes()
-      .then((list) => {
-        if (!cancelled) setModes(list);
-      })
-      .catch((err) => {
-        // Network or backend failure — fall through to the empty-state
-        // UI. The offline banner separately covers connectivity loss.
-        // Logged at warn level so dev-tools surfaces the root cause
-        // instead of a silent "no puzzles" message hiding a 500.
-        console.warn('LandingPage: fetchEnabledModes failed', err);
-        if (!cancelled) setModes([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handleNewPuzzle = useCallback((selection: PuzzleSelection) => {
-    if (!navigator.onLine) {
-      setState({
-        status: 'error',
-        message: "You're offline — resume your current puzzle or connect to start a new one",
-      });
-      return;
-    }
-    navigate(buildPlayUrl(selection));
-  }, [navigate]);
-
-  const handleResume = useCallback(() => {
-    navigate('/play');
-  }, [navigate]);
-
-  const handleShowSelector = useCallback(() => {
-    setState({ status: 'has-progress-selecting' });
-  }, []);
-
+function LandingTile({ testId, title, subtitle, enabled, onClick }: LandingTileProps) {
   return (
-    <PageShell>
-      {!isOnline && (
-        <div
-          role="alert"
-          data-testid="offline-banner"
-          style={{
-            padding: '8px 16px',
-            borderRadius: 'var(--radius)',
-            backgroundColor: 'var(--color-surface)',
-            border: '2px solid var(--color-ink)',
-            fontWeight: 600,
-            fontSize: '0.875rem',
-            textAlign: 'center',
-          }}
-        >
-          You&apos;re offline — resume your current puzzle or connect to start a new one
-        </div>
-      )}
-
-      {state.status === 'loading' && (
-        <div data-testid="loading-state" style={{ padding: '48px 0', fontWeight: 600 }}>
-          Loading...
-        </div>
-      )}
-
-      {state.status === 'fresh' && (
-        <PuzzleSelector modes={modes ?? []} onSelect={handleNewPuzzle} />
-      )}
-
-      {state.status === 'has-progress' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center' }}>
-          <PrimaryButton onClick={handleResume}>Resume</PrimaryButton>
-          <SecondaryButton onClick={handleShowSelector}>New Puzzle</SecondaryButton>
-        </div>
-      )}
-
-      {state.status === 'has-progress-selecting' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', alignItems: 'center', width: '100%' }}>
-          <SecondaryButton onClick={handleResume}>Resume</SecondaryButton>
-          <PuzzleSelector modes={modes ?? []} onSelect={handleNewPuzzle} />
-        </div>
-      )}
-
-      {state.status === 'error' && (
-        <div
-          data-testid="error-state"
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '16px',
-            padding: '48px 0',
-          }}
-        >
-          <p style={{ color: 'var(--color-destructive)', fontWeight: 600 }}>
-            {state.message}
-          </p>
-          <PuzzleSelector modes={modes ?? []} onSelect={handleNewPuzzle} />
-        </div>
-      )}
-    </PageShell>
+    <button
+      type="button"
+      data-testid={testId}
+      onClick={enabled ? onClick : undefined}
+      disabled={!enabled}
+      aria-disabled={!enabled}
+      style={enabled ? tileBaseStyle : tileDisabledStyle}
+    >
+      <h2 style={tileTitleStyle}>{title}</h2>
+      <p style={tileSubtitleStyle}>{subtitle}</p>
+    </button>
   );
 }
 
-export { buildPlayUrl };
+export function LandingPage() {
+  const navigate = useNavigate();
+  const { user, isLoaded } = useUser();
+  const isAdmin = isLoaded && getClerkUserRole(user?.publicMetadata) === 'admin';
+
+  return (
+    <PageShell>
+      <div style={containerStyle} data-testid="landing-tiles">
+        <LandingTile
+          testId="tile-daily"
+          title="Daily Puzzle"
+          subtitle="Coming soon"
+          enabled={false}
+        />
+        <LandingTile
+          testId="tile-packs"
+          title="Puzzle Packs"
+          subtitle="Coming soon"
+          enabled={false}
+        />
+        {isAdmin && (
+          <LandingTile
+            testId="tile-curation"
+            title="Curation"
+            subtitle="Rate puzzles for the future corpus"
+            enabled
+            onClick={() => navigate('/curation')}
+          />
+        )}
+      </div>
+    </PageShell>
+  );
+}

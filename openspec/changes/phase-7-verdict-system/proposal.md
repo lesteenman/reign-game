@@ -47,14 +47,21 @@ A single cycle of Phase 7 is done when:
 - **AC-2. Verdict row family in DynamoDB.** Rows write to `PK = "VERDICT#{size}#{mode}#{puzzleId}"`, `SK = "{raterRole}#{raterId}"`. Re-submission overwrites — at most one row per (puzzle, rater) pair.
 - **AC-3. Summary projection on PuzzleRecord.** Every successful verdict write is followed by a recompute of `verdictSummary` on the puzzle row: `{up: int, down: int, lastUpdatedAt: ISO 8601}`. The summary is read directly by handlers; no fanout query on the read path.
 - **AC-4. Skip is not a verdict.** The `PUT /api/admin/puzzles/{id}/verdict` endpoint rejects any value other than `up` or `down` with 400. Skipping a puzzle remains a status flow (`PUT /api/puzzles/{id}/status` with `"skipped"`); the two flows do not coerce one another.
-- **AC-5. Frontend verdict surface — admin only.** The verdict buttons render in two places inside the gameplay flow: (a) the completion overlay, (b) the post-skip transient state. Both surfaces are wrapped in a check for `getClerkUserRole(user.publicMetadata) === 'admin'`. Anonymous and User-role play-throughs render no verdict UI.
-- **AC-6. Play-time captured.** The frontend hands `useTimer.elapsed` (in milliseconds) to the verdict request body. The generated verdict row carries the value verbatim.
+- **AC-5. Frontend verdict surface — admin only, two diverged button sets per FB-02 (post-grill).** The verdict UI renders in two places inside the gameplay flow:
+  - **Completion overlay (variant=completion):** "Good puzzle" + "Bad puzzle" buttons rendered alongside the existing Play Again / Home navigation. Optional — the admin can navigate forward without voting.
+  - **Skip modal (variant=skip):** opened by the new explicit Skip button (FB-11). Three buttons: Cancel (dismiss, no API call), "I hate this" (status PUT + verdict POST in parallel), "Just skip" (status PUT only, no verdict written).
+
+  Both surfaces wrap in `getClerkUserRole(user.publicMetadata) === 'admin'`. Anonymous and User-role play-throughs render no verdict UI and no Skip button.
+- **AC-6. Play-time captured.** The frontend hands `useTimer.elapsed` × 1000 (timer is in seconds; the verdict body wants milliseconds) to the verdict request body. The generated verdict row carries the value verbatim.
 - **AC-7. Backend auth tests prove gating.** New integration tests in the handler package iterate the existing 3-state `adminAuthMatrix` (anonymous → 401, user → 403, admin → 200) on the verdict endpoint, plus per-value validation tests (invalid `value` → 400, missing puzzle → 404).
 - **AC-8. Existing `Verdict string` field retired.** The field is removed from `PuzzleRecord`; references in `cmd/genfixtures/main.go` and `worker/generator.go` are removed; tests no longer assert on it. A grep sweep confirms no remaining read-side references.
-- **AC-9. Frontend tests.** New Vitest specs cover (a) admin role → verdict surface visible, (b) user role → verdict surface absent, (c) anonymous → verdict surface absent, (d) submit success → "Thanks — recorded" confirmation, (e) submit failure (5xx) → retry-able error message, no flow-block.
+- **AC-9. Frontend tests.** New Vitest specs cover:
+  - Three Clerk states (signedOut, role=user, role=admin) for both the verdict surface and the Skip button — only admin sees either (FB-01, FB-10, FB-11).
+  - Completion variant: "Good puzzle" → `submitVerdict({value:'up', outcome:'solved'})`. "Bad puzzle" → `value:'down'`. Success → "Thanks — recorded." Submission failure (5xx) → retry-able error, no flow-block.
+  - Skip variant: Cancel calls `onDismiss` with no API. "I hate this" calls both `updatePuzzleStatus + submitVerdict` and navigates to `/curation`. "Just skip" calls only `updatePuzzleStatus` and navigates.
 - **AC-10. Glossary updated.** `Verdict`, `Verdict Summary`, `Rater`, `Verdict Surface` defined. `Status` and `Verdict` are explicitly contrasted.
-- **AC-11. ROADMAP updated.** R-081 and R-082 flipped to `[x]` in their respective PRs. KI catalog unchanged (no new KIs from this phase).
-- **AC-12. PROJECT_STRUCTURE.md updated.** API endpoints table moves the verdict row from "Future" to "Implemented" with auth=Admin. New backend handler file and frontend component listed.
+- **AC-11. ROADMAP updated.** R-081 (R-7-01-equivalent under the historical name) and R-7-02 flipped to `[x]` in their respective PRs. KI catalog unchanged (no new KIs from this phase).
+- **AC-12. PROJECT_STRUCTURE.md updated.** API endpoints table moves the verdict row from "Future" to "Implemented" with auth=Admin. New backend handler file (`backend/internal/handler/verdict.go`) and frontend component (`frontend/src/components/game/VerdictSurface.tsx`) + service (`frontend/src/services/verdictService.ts`) + page (`frontend/src/pages/CurationPage.tsx`) listed.
 
 ## Scope
 
@@ -63,8 +70,11 @@ A single cycle of Phase 7 is done when:
 - New backend handler `PUT /api/admin/puzzles/{id}/verdict` mounted inside the Phase 6 admin route group.
 - New repository methods on `PuzzleRepository`: `PutVerdict`, `GetVerdictSummary` (used by the admin pool view in a follow-up if needed; the summary on `PuzzleRecord` covers the immediate read path), and `RecomputeVerdictSummary` (called from the handler after a successful row write).
 - Schema changes on `PuzzleRecord`: remove `Verdict string`, add `VerdictSummary VerdictSummary` (typed struct).
-- Frontend verdict surface inside `GamePage.tsx` — two buttons on the completion overlay and on the post-skip transient state.
-- Frontend service `submitVerdict(puzzleId, value, playTimeMs, outcome)` in a new `frontend/src/services/verdictService.ts`.
+- Frontend verdict surface inside `GamePage.tsx`. Two diverged variants (post-grill): the completion overlay shows two buttons ("Good puzzle" / "Bad puzzle"); the Skip button opens a modal with three buttons (Cancel / "I hate this" / "Just skip"). Both gated on admin role.
+- New explicit Skip button on `GamePage` bottom action row (Ghost variant), admin-only, that opens the skip modal (FB-11).
+- New top-level landing page reorganization (`LandingPage.tsx`): three tiles — Daily / Packs (both disabled "coming soon") and Curation (admin-only).
+- New `/curation` route + `CurationPage.tsx` mounted under `<ProtectedAdminRoute>` — picker + Settings link to `/admin`. Refactored `ProtectedAdminRoute` to accept `children` for the wrapper pattern.
+- Frontend service `submitVerdict(args)` in a new `frontend/src/services/verdictService.ts`.
 - Backend tests: handler-level auth matrix, request validation, idempotency proof, summary recompute proof.
 - Frontend tests: role-gated visibility, submit success / failure handling.
 - Glossary additions.

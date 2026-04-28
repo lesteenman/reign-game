@@ -1,6 +1,11 @@
 services:
   localstack:
-    image: localstack/localstack:latest
+    # Pinned to a stable release. Using `latest` once pulled a
+    # 2026.3.1.dev4973 build whose SQS SendMessage was broken
+    # (returned 500 InternalError with an empty exception body in
+    # the logs — a LocalStack regression that took an hour to
+    # diagnose). Bump intentionally; never auto-pull.
+    image: localstack/localstack:4.14.0
     ports:
       - "4566:4566"
     environment:
