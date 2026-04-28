@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -99,13 +100,43 @@ func initClerk(ctx context.Context) {
 
 // loadAWSConfig loads the default AWS SDK config with optional endpoint
 // overrides for local development.
+//
+// Why the http.DefaultTransport.Clone(): the Clerk Go SDK v2's
+// clerk.SetKey() wraps http.DefaultClient (or installs middleware
+// somewhere along that path). When the AWS SDK is allowed to inherit
+// the live default, its first DynamoDB Query against LocalStack jumps
+// from ~12 ms to ~1.8 s. Cloning the default Transport snapshots the
+// underlying TCP transport without Clerk's wrappers; the AWS SDK then
+// uses the snapshot. Measured: 9 ms cold with the clone, with
+// clerk.SetKey having been called.
+//
+// Strategies considered (standalone probe, with clerk.SetKey first):
+//
+//	(1) SDK default (no HTTPClient option):   1842 ms cold
+//	(2) awshttp.NewBuildableClient:            144 ms cold
+//	(3) hand-rolled Transport (no HTTP/2):       9 ms cold
+//	(4) http.DefaultTransport.Clone:             9 ms cold  ← chosen
+//
+// (4) is preferred over (3) because it inherits whatever Go's net/http
+// chooses for current platform / runtime defaults — fewer foot-guns
+// than hand-rolling. The Clone() must run AFTER the Clerk SDK has
+// initialized so the clone source is the wrapped state — but cloning
+// detaches us from any subsequent mutation, which is what matters.
 func loadAWSConfig(ctx context.Context) (aws.Config, error) {
 	region := os.Getenv("AWS_REGION")
 	if region == "" {
 		region = "us-east-1"
 	}
 
-	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(region))
+	httpClient := &http.Client{
+		Transport: http.DefaultTransport.(*http.Transport).Clone(),
+	}
+
+	cfg, err := config.LoadDefaultConfig(
+		ctx,
+		config.WithRegion(region),
+		config.WithHTTPClient(httpClient),
+	)
 	if err != nil {
 		return aws.Config{}, fmt.Errorf("loading AWS config: %w", err)
 	}
@@ -235,6 +266,26 @@ func main() {
 		// Local dev reads CLERK_SECRET_KEY from backend/.env.local; a
 		// missing or empty value causes log.Fatal by design (BM-10).
 		initClerk(ctx)
+
+		// Warm up the DDB client by issuing one throwaway Query before
+		// the HTTP server starts accepting requests. The first SDK
+		// call after Clerk init carries a multi-second penalty
+		// (transport + connection-pool warm-up + the Clerk wrapping
+		// effect documented in loadAWSConfig); paying it here means
+		// the first user-facing request hits a warm SDK and lands in
+		// tens of milliseconds instead of seconds. Failures are
+		// logged WARN and ignored — LocalStack may be slow to start
+		// during `task dev:up`, in which case the user will pay the
+		// warm-up cost on the first request as before.
+		if repo != nil {
+			warmStart := time.Now()
+			_, warmErr := repo.GetAllConfigs(ctx)
+			if warmErr != nil {
+				log.Printf("WARN: ddb warm-up failed (will pay cost on first request): err=%v warm_ms=%d", warmErr, time.Since(warmStart).Milliseconds())
+			} else {
+				log.Printf("ddb warm-up: warm_ms=%d", time.Since(warmStart).Milliseconds())
+			}
+		}
 
 		r := newRouter(repo, pub)
 
