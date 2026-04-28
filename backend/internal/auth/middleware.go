@@ -158,7 +158,15 @@ func RequireAuth(verifier sessionVerifier) func(http.Handler) http.Handler {
 				return
 			}
 
+			// Per-step timing to surface slow paths in the dev log.
+			// Verify is JWT validation (cached JWKS); GetUser is the
+			// Clerk user fetch (cached after R-7-02 perf commit). When
+			// the dev experience feels slow, these millis tell us
+			// whether the bottleneck is one of these or further down
+			// in the handler / DDB layer.
+			verifyStart := time.Now()
 			claims, err := verifier.Verify(r.Context(), cookie.Value)
+			verifyMs := time.Since(verifyStart).Milliseconds()
 			if err != nil {
 				// BM-07: do NOT log the cookie value or the full
 				// error object — the error string from jwt.Verify
@@ -189,9 +197,11 @@ func RequireAuth(verifier sessionVerifier) func(http.Handler) http.Handler {
 				return
 			}
 
+			getUserStart := time.Now()
 			u, err := verifier.GetUser(r.Context(), claims.Subject)
+			getUserMs := time.Since(getUserStart).Milliseconds()
 			if err != nil {
-				log.Printf("WARN: auth: clerk SDK error path=%s reason=user_fetch_failed sub=%s err=%q", r.URL.Path, claims.Subject, err.Error())
+				log.Printf("WARN: auth: clerk SDK error path=%s reason=user_fetch_failed sub=%s err=%q verify_ms=%d get_user_ms=%d", r.URL.Path, claims.Subject, err.Error(), verifyMs, getUserMs)
 				writeUnauth(w, "user not found")
 				return
 			}
@@ -201,7 +211,7 @@ func RequireAuth(verifier sessionVerifier) func(http.Handler) http.Handler {
 				return
 			}
 
-			log.Printf("auth: allow path=%s sub=%s", r.URL.Path, u.ID)
+			log.Printf("auth: allow path=%s sub=%s verify_ms=%d get_user_ms=%d", r.URL.Path, u.ID, verifyMs, getUserMs)
 			ctx := context.WithValue(r.Context(), userContextKey{}, u)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

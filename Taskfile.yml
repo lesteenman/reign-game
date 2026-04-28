@@ -68,8 +68,8 @@ tasks:
     # dotenv variables are available to the child `go run` process.
     dotenv: ['.env.local']
     env:
-      DYNAMODB_ENDPOINT: http://localhost:4566
-      SQS_ENDPOINT: http://localhost:4566
+      DYNAMODB_ENDPOINT: http://127.0.0.1:4566
+      SQS_ENDPOINT: http://127.0.0.1:4566
       SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
       AWS_REGION: us-east-1
       PUZZLE_TABLE_NAME: puzzle-pool
@@ -83,8 +83,8 @@ tasks:
     dir: backend
     env:
       GENERATOR_MODE: sqs
-      DYNAMODB_ENDPOINT: http://localhost:4566
-      SQS_ENDPOINT: http://localhost:4566
+      DYNAMODB_ENDPOINT: http://127.0.0.1:4566
+      SQS_ENDPOINT: http://127.0.0.1:4566
       SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
       AWS_REGION: us-east-1
       PUZZLE_TABLE_NAME: puzzle-pool
@@ -152,7 +152,7 @@ tasks:
       - |
         echo "waiting for LocalStack on :4566..."
         for i in $(seq 1 60); do
-          if curl -sf http://localhost:4566/_localstack/health >/dev/null 2>&1; then
+          if curl -sf http://127.0.0.1:4566/_localstack/health >/dev/null 2>&1; then
             break
           fi
           sleep 1
@@ -244,8 +244,8 @@ tasks:
     # no Clerk secret is resolvable from env or SSM.
     dotenv: ['.env.local']
     env:
-      DYNAMODB_ENDPOINT: http://localhost:4566
-      SQS_ENDPOINT: http://localhost:4566
+      DYNAMODB_ENDPOINT: http://127.0.0.1:4566
+      SQS_ENDPOINT: http://127.0.0.1:4566
       SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
       AWS_REGION: us-east-1
       PUZZLE_TABLE_NAME: puzzle-pool
@@ -283,8 +283,8 @@ tasks:
     dir: backend
     env:
       GENERATOR_MODE: sqs
-      DYNAMODB_ENDPOINT: http://localhost:4566
-      SQS_ENDPOINT: http://localhost:4566
+      DYNAMODB_ENDPOINT: http://127.0.0.1:4566
+      SQS_ENDPOINT: http://127.0.0.1:4566
       SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
       AWS_REGION: us-east-1
       PUZZLE_TABLE_NAME: puzzle-pool
@@ -566,8 +566,8 @@ tasks:
     dotenv: ['.env.local']
     env:
       PORT: "5182"
-      DYNAMODB_ENDPOINT: http://localhost:4566
-      SQS_ENDPOINT: http://localhost:4566
+      DYNAMODB_ENDPOINT: http://127.0.0.1:4566
+      SQS_ENDPOINT: http://127.0.0.1:4566
       SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
       AWS_REGION: us-east-1
       PUZZLE_TABLE_NAME: puzzle-pool-e2e
@@ -669,7 +669,7 @@ tasks:
         fi
 
         echo "flushing puzzle-pool-e2e..."
-        TABLE_NAME=puzzle-pool-e2e AWS_ENDPOINT_URL=http://localhost:4566 \
+        TABLE_NAME=puzzle-pool-e2e AWS_ENDPOINT_URL=http://127.0.0.1:4566 \
           AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-1 \
           CONFIRM=YES ./scripts/flush-pool.sh
 

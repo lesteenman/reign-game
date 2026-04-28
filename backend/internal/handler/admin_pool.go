@@ -3,8 +3,11 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
@@ -33,28 +36,44 @@ type adminPoolResponse struct {
 
 // AdminPoolHandler creates an HTTP handler for GET /admin/pool.
 // It returns all config items with their ready puzzle counts.
+//
+// Logs per-DDB-call timing on every request: GetAllConfigs latency
+// plus a per-combo CountReady latency map. Useful for diagnosing
+// "the pool page feels slow" — the breakdown surfaces whether the
+// bottleneck is the configs query or one of the count-ready scans.
 func AdminPoolHandler(repo ConfigAndCountRepo) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
+		handlerStart := time.Now()
+
+		configsStart := time.Now()
 		configs, err := repo.GetAllConfigs(r.Context())
+		configsMs := time.Since(configsStart).Milliseconds()
 		if err != nil {
-			log.Printf("admin pool: failed to get configs: %v", err)
+			log.Printf("admin pool: failed to get configs: %v configs_ms=%d", err, configsMs)
 			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve configs.")
 			return
 		}
 
 		combos := make([]ComboStatus, 0, len(configs))
+		// Each entry: "<size>#<mode>=<ms>" — terse so a single log line
+		// shows the per-combo breakdown without bloating the format.
+		countTimings := make([]string, 0, len(configs))
 		for _, cfg := range configs {
 			readyCount := 0
+			countMs := int64(-1) // sentinel for "skipped (config disabled)"
 			if cfg.Enabled {
+				countStart := time.Now()
 				readyCount, err = repo.CountReady(r.Context(), cfg.Size, cfg.Mode)
+				countMs = time.Since(countStart).Milliseconds()
 				if err != nil {
-					log.Printf("admin pool: failed to count ready for %d#%s: %v", cfg.Size, cfg.Mode, err)
+					log.Printf("admin pool: failed to count ready for %d#%s: %v count_%d#%s_ms=%d", cfg.Size, cfg.Mode, err, cfg.Size, cfg.Mode, countMs)
 					httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to count ready puzzles.")
 					return
 				}
 			}
+			countTimings = append(countTimings, fmt.Sprintf("%d#%s=%dms", cfg.Size, cfg.Mode, countMs))
 
 			combos = append(combos, ComboStatus{
 				Size:       cfg.Size,
@@ -68,5 +87,13 @@ func AdminPoolHandler(repo ConfigAndCountRepo) http.HandlerFunc {
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			log.Printf("admin pool: failed to write response: %v", err)
 		}
+
+		log.Printf(
+			"admin pool: total_ms=%d configs_ms=%d combos=%d count_breakdown=[%s]",
+			time.Since(handlerStart).Milliseconds(),
+			configsMs,
+			len(configs),
+			strings.Join(countTimings, " "),
+		)
 	}
 }
