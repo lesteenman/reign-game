@@ -762,5 +762,73 @@ describe('GamePage — Flow Slot URL contract (R-7-03)', () => {
     // Assert — fetch ran exactly once (the defensive fallback).
     expect(fetchCallCount).toBe(1);
   });
+
+  it('clears the right Flow Slot on solve (ST-07)', async () => {
+    // Arrange — pre-seed an in-progress slot with cells that already
+    // satisfy FALLBACK_PUZZLE's constraints (1-marker-per-row/col/region,
+    // no adjacency). When useGame computes `isSolved`, the completion
+    // effect fires on mount and calls clearState.
+    //
+    // Solved layout for FALLBACK_PUZZLE region map:
+    //   r0c3, r1c1, r2c4, r3c2, r4c0
+    const solvedCells: ('empty' | 'excluded' | 'marked')[][] = emptyGrid5();
+    solvedCells[0]![3] = 'marked';
+    solvedCells[1]![1] = 'marked';
+    solvedCells[2]![4] = 'marked';
+    solvedCells[3]![2] = 'marked';
+    solvedCells[4]![0] = 'marked';
+
+    mockLoadState.mockResolvedValue({
+      id: 'curation:5x5-standard',
+      flowType: 'curation',
+      flowId: '5x5-standard',
+      puzzle: FALLBACK_PUZZLE,
+      cells: solvedCells,
+      timer: { elapsedAtLastPause: 5, lastResumedAt: null },
+      status: 'in-progress',
+      startedAt: Date.now(),
+    });
+
+    // Act
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    await waitForHeader();
+
+    // Assert — clearState was called with the matching slot.
+    await waitFor(() => {
+      expect(mockClearState).toHaveBeenCalledWith('curation', '5x5-standard');
+    });
+  });
+
+  it('switching pools preserves the prior slot — slot A is never cleared by mounting B', async () => {
+    // Arrange — first mount slot A (5x5 standard), let it settle, then
+    // unmount and mount slot B (7x7 double).
+    mockLoadState.mockResolvedValue(null);
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    await waitForHeader();
+
+    // Sanity: slot A's saveState ran with the right tag.
+    await waitFor(() => {
+      const matched = mockSaveState.mock.calls.find((c: unknown[]) => {
+        const state = c[0] as { flowType?: string; flowId?: string };
+        return state.flowType === 'curation' && state.flowId === '5x5-standard';
+      });
+      expect(matched).toBeDefined();
+    });
+
+    // Act — unmount A, mount B with a different (size, mode).
+    cleanup();
+    mockLoadState.mockResolvedValue(null);
+    renderGamePage('/play?flow=curation&size=7&mode=double');
+    await waitForHeader();
+
+    // Assert — no clearState call ever targeted slot A. Slot B may
+    // call its own clear on solve (it never solves here), but slot A
+    // must not be touched.
+    const aClearCalls = mockClearState.mock.calls.filter(
+      (args: unknown[]) =>
+        args[0] === 'curation' && args[1] === '5x5-standard',
+    );
+    expect(aClearCalls).toHaveLength(0);
+  });
 });
 
