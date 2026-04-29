@@ -45,7 +45,7 @@ export function CurationPage() {
   const handleSelect = useCallback(
     (selection: PuzzleSelection) => {
       const params = new URLSearchParams();
-      params.set('new', 'true');
+      params.set('flow', 'curation');
       params.set('size', String(selection.size));
       params.set('mode', selection.mode);
       navigate(`/play?${params.toString()}`);

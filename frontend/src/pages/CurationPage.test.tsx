@@ -107,9 +107,10 @@ describe('CurationPage', () => {
     const playUrl = mockNavigate.mock.calls.find(
       (c) => typeof c[0] === 'string' && (c[0] as string).startsWith('/play?'),
     )?.[0] as string;
-    expect(playUrl).toContain('new=true');
+    expect(playUrl).toContain('flow=curation');
     expect(playUrl).toContain('size=9');
     expect(playUrl).toContain('mode=double');
+    expect(playUrl).not.toContain('new=true');
   });
 
   it('falls through to an empty state when fetchEnabledModes rejects', async () => {
