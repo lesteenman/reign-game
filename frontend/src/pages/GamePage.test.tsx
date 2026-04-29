@@ -71,11 +71,13 @@ vi.mock('@clerk/react', () => ({
 // Mock useGameStorage with stable references
 const mockLoadState = vi.fn().mockResolvedValue(null);
 const mockSaveState = vi.fn().mockResolvedValue(undefined);
+const mockClearState = vi.fn().mockResolvedValue(undefined);
 const mockAddCompletion = vi.fn().mockResolvedValue(undefined);
 vi.mock('../hooks/useGameStorage', () => ({
   useGameStorage: () => ({
     loadState: mockLoadState,
     saveState: mockSaveState,
+    clearState: mockClearState,
     addCompletion: mockAddCompletion,
   }),
 }));
@@ -85,7 +87,9 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   mockNavigate.mockClear();
   mockLoadState.mockClear();
+  mockLoadState.mockResolvedValue(null);
   mockSaveState.mockClear();
+  mockClearState.mockClear();
   mockAddCompletion.mockClear();
   mockUpdateStatus.mockClear();
   mockSubmitVerdict.mockClear();
@@ -111,7 +115,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-function renderGamePage(initialEntry = '/play?new=true') {
+function renderGamePage(initialEntry = '/play?flow=curation&size=5&mode=standard') {
   return render(
     <ThemeProvider>
       <MemoryRouter initialEntries={[initialEntry]}>
@@ -191,16 +195,17 @@ describe('GamePage back navigation preserves state', () => {
     // Act — navigate back
     fireEvent.click(screen.getByTestId('back-button'));
 
-    // Assert — navigate was called with '/' (not '/play?new=true' which would discard state)
+    // Assert — navigate was called with '/' (back-to-home, not a /play
+    // URL that would discard state).
     expect(mockNavigate).toHaveBeenCalledWith('/');
-    expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining('new=true'));
+    expect(mockNavigate).not.toHaveBeenCalledWith(expect.stringContaining('/play'));
   });
 });
 
 describe('GamePage fetchNextPuzzle integration', () => {
   it('calls fetchNextPuzzle with size and mode from URL params', async () => {
     // Arrange & Act
-    renderGamePage('/play?new=true&size=7&mode=double');
+    renderGamePage('/play?flow=curation&size=7&mode=double');
     await waitForHeader();
 
     // Assert
@@ -209,7 +214,7 @@ describe('GamePage fetchNextPuzzle integration', () => {
 
   it('uses default size=5 and mode=standard when params absent', async () => {
     // Arrange & Act
-    renderGamePage('/play?new=true');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -218,7 +223,7 @@ describe('GamePage fetchNextPuzzle integration', () => {
 
   it('does not read pipeline, solver, regions, or regionVariance from URL', async () => {
     // Arrange & Act
-    renderGamePage('/play?new=true&size=9&mode=standard&pipeline=iterative&solver=propagation');
+    renderGamePage('/play?flow=curation&size=9&mode=standard&pipeline=iterative&solver=propagation');
     await waitForHeader();
 
     // Assert — only size and mode matter now
@@ -230,7 +235,7 @@ describe('GamePage error states', () => {
   it('shows generic error on fetch failure', async () => {
     // Arrange
     mockFetchResult = () => Promise.reject(new Error('network error'));
-    renderGamePage('/play?new=true&size=7&mode=standard');
+    renderGamePage('/play?flow=curation&size=7&mode=standard');
 
     // Act
     const errorState = await screen.findByTestId('error-state');
@@ -242,7 +247,7 @@ describe('GamePage error states', () => {
   it('Try Again on error retries fetch without navigating', async () => {
     // Arrange
     mockFetchResult = () => Promise.reject(new Error('generation failed'));
-    renderGamePage('/play?new=true&size=9&mode=double');
+    renderGamePage('/play?flow=curation&size=9&mode=double');
 
     // Act
     await screen.findByTestId('error-state');
@@ -263,7 +268,7 @@ describe('GamePage no-puzzles state (FE-04)', () => {
     // Arrange — import the mock error class
     const { NoPuzzlesAvailableError } = await import('../services/puzzleService');
     mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
-    renderGamePage('/play?new=true&size=7&mode=standard');
+    renderGamePage('/play?flow=curation&size=7&mode=standard');
 
     // Act
     const noPuzzlesState = await screen.findByTestId('no-puzzles-state');
@@ -277,7 +282,7 @@ describe('GamePage no-puzzles state (FE-04)', () => {
     // Arrange
     const { NoPuzzlesAvailableError } = await import('../services/puzzleService');
     mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
-    renderGamePage('/play?new=true&size=7&mode=standard');
+    renderGamePage('/play?flow=curation&size=7&mode=standard');
 
     // Act
     await screen.findByTestId('no-puzzles-state');
@@ -290,7 +295,7 @@ describe('GamePage no-puzzles state (FE-04)', () => {
     // Arrange
     const { NoPuzzlesAvailableError } = await import('../services/puzzleService');
     mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
-    renderGamePage('/play?new=true&size=9&mode=double');
+    renderGamePage('/play?flow=curation&size=9&mode=double');
 
     // Act
     await screen.findByTestId('no-puzzles-state');
@@ -309,7 +314,7 @@ describe('GamePage no-puzzles state (FE-04)', () => {
 describe('GamePage metadata display (FE-05)', () => {
   it('shows metadata when puzzle has metadata', async () => {
     // Arrange & Act
-    renderGamePage('/play?new=true&size=5&mode=standard');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -325,7 +330,7 @@ describe('GamePage metadata display (FE-05)', () => {
       ...MOCK_PUZZLE_WITH_METADATA,
       metadata: { ...MOCK_PUZZLE_WITH_METADATA.metadata!, generationDurationMs: 450 },
     });
-    renderGamePage('/play?new=true&size=5&mode=standard');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -336,7 +341,7 @@ describe('GamePage metadata display (FE-05)', () => {
   it('does not show metadata when puzzle has no metadata', async () => {
     // Arrange
     mockFetchResult = () => Promise.resolve(FALLBACK_PUZZLE);
-    renderGamePage('/play?new=true&size=5&mode=standard');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -346,14 +351,16 @@ describe('GamePage metadata display (FE-05)', () => {
   it('does not show metadata for resumed game without metadata', async () => {
     // Arrange
     mockLoadState.mockResolvedValue({
-      id: 'current',
+      id: 'curation:5x5-standard',
+      flowType: 'curation',
+      flowId: '5x5-standard',
       puzzle: FALLBACK_PUZZLE,
       cells: Array.from({ length: 5 }, () => Array(5).fill('empty')),
       timer: { elapsedAtLastPause: 10, lastResumedAt: null },
       status: 'in-progress',
       startedAt: Date.now(),
     });
-    renderGamePage('/play');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -369,7 +376,9 @@ describe('GamePage undo/redo (R-060)', () => {
     const afterTap: ('empty' | 'excluded' | 'marked')[][] = emptyGrid5();
     afterTap[0]![0] = 'excluded';
     mockLoadState.mockResolvedValue({
-      id: 'current',
+      id: 'curation:5x5-standard',
+      flowType: 'curation',
+      flowId: '5x5-standard',
       puzzle: FALLBACK_PUZZLE,
       cells: afterTap,
       timer: { elapsedAtLastPause: 10, lastResumedAt: null },
@@ -381,7 +390,7 @@ describe('GamePage undo/redo (R-060)', () => {
 
   it('renders undo and redo buttons, initially disabled for fresh puzzle', async () => {
     // Arrange & Act
-    renderGamePage('/play?new=true');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -395,7 +404,7 @@ describe('GamePage undo/redo (R-060)', () => {
     mockStateWithUndoable();
 
     // Act
-    renderGamePage('/play');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -407,7 +416,7 @@ describe('GamePage undo/redo (R-060)', () => {
   it('clicking undo reverts state and flips button enabled states', async () => {
     // Arrange
     mockStateWithUndoable();
-    renderGamePage('/play');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
     const undoBtn = await screen.findByTestId('undo-button');
     expect(undoBtn).not.toBeDisabled();
@@ -423,7 +432,7 @@ describe('GamePage undo/redo (R-060)', () => {
   it('Ctrl+Z triggers undo when history is available', async () => {
     // Arrange
     mockStateWithUndoable();
-    renderGamePage('/play');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
     await screen.findByTestId('undo-button');
 
@@ -438,7 +447,7 @@ describe('GamePage undo/redo (R-060)', () => {
   it('Ctrl+Shift+Z triggers redo after an undo', async () => {
     // Arrange
     mockStateWithUndoable();
-    renderGamePage('/play');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
     await screen.findByTestId('undo-button');
     fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
@@ -455,7 +464,7 @@ describe('GamePage undo/redo (R-060)', () => {
   it('Meta+Z also triggers undo (Mac chord)', async () => {
     // Arrange
     mockStateWithUndoable();
-    renderGamePage('/play');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
     await screen.findByTestId('undo-button');
 
@@ -469,7 +478,7 @@ describe('GamePage undo/redo (R-060)', () => {
   it('plain Z (no modifier) does not trigger undo', async () => {
     // Arrange
     mockStateWithUndoable();
-    renderGamePage('/play');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
     const undoBtn = await screen.findByTestId('undo-button');
 
@@ -483,7 +492,7 @@ describe('GamePage undo/redo (R-060)', () => {
   it('saveState payload includes history after an undo', async () => {
     // Arrange
     mockStateWithUndoable();
-    renderGamePage('/play');
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
     const undoBtn = await screen.findByTestId('undo-button');
     mockSaveState.mockClear();
