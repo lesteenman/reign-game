@@ -91,13 +91,14 @@ jobs:
         with:
           terraform_wrapper: true
 
-      - name: Terraform Init
-        run: |
-          terraform init \
-            -backend-config="bucket=${{ secrets.TF_VAR_TERRAFORM_STATE_BUCKET }}" \
-            -backend-config="key=${{ vars.TF_VAR_TERRAFORM_STATE_PREFIX }}/terraform.tfstate" \
-            -backend-config="region=${{ vars.AWS_REGION }}" \
-            -backend-config="use_lockfile=true"
+      # Two-pass init: newer Terraform versions reject `terraform validate`
+      # against a partial backend block (the empty `backend "s3" {}` in
+      # infra/backend.tf) even when init has succeeded with -backend-config
+      # flags. HashiCorp's recommended pattern is to init with -backend=false
+      # for source-only checks (validate, fmt) and re-init with the real
+      # backend before plan/apply.
+      - name: Terraform Init (no backend)
+        run: terraform init -backend=false
 
       - name: Terraform Validate
         run: terraform validate
@@ -110,6 +111,14 @@ jobs:
           cd ${{ github.workspace }}/backend
           GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bootstrap ./cmd/api
           zip -j lambda.zip bootstrap
+
+      - name: Terraform Init (with backend)
+        run: |
+          terraform init -reconfigure \
+            -backend-config="bucket=${{ secrets.TF_VAR_TERRAFORM_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_VAR_TERRAFORM_STATE_PREFIX }}/terraform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="use_lockfile=true"
 
       - name: Terraform Plan
         id: plan
