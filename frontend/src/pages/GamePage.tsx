@@ -13,8 +13,8 @@ import { getClerkUserRole } from '../components/auth/role';
 import { VerdictSurface } from '../components/game/VerdictSurface';
 import type { Mode, PuzzleData, CellState } from '../engine/types';
 import { isMode } from '../engine/types';
-import type { GameState, GameHistory, CompletionRecord } from '../storage/types';
-import { EMPTY_HISTORY } from '../storage/types';
+import type { FlowType, GameState, GameHistory, CompletionRecord } from '../storage/types';
+import { EMPTY_HISTORY, buildCurationFlowId, parseFlowType } from '../storage/types';
 
 /** Format seconds as MM:SS. */
 function formatTime(seconds: number): string {
@@ -31,23 +31,24 @@ function formatDuration(ms: number): string {
 
 type LoadState =
   | { status: 'loading' }
-  | { status: 'ready'; puzzle: PuzzleData; initialCells: CellState[][]; initialHistory: GameHistory; timerElapsed: number; timerResumedAt: number | null; startedAt: number }
+  | { status: 'ready'; puzzle: PuzzleData; flowType: FlowType; flowId: string; initialCells: CellState[][]; initialHistory: GameHistory; timerElapsed: number; timerResumedAt: number | null; startedAt: number }
   | { status: 'no-state' }
   | { status: 'no-puzzles' }
   | { status: 'error'; message: string };
 
 /**
- * Main gameplay page. Loads persisted state from IndexedDB or fetches
- * a new puzzle when ?new=true is present.
+ * Main gameplay page. The URL specifies the Flow Slot
+ * (`?flow=curation&size=N&mode=M`); storage decides resume vs. fetch.
+ * An unrecognized or missing `flow` redirects home (ST-11).
  */
 export function GamePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { loadState, saveState, addCompletion } = useGameStorage();
+  const { loadState, saveState, clearState, addCompletion } = useGameStorage();
   const [loadStatus, setLoadStatus] = useState<LoadState>({ status: 'loading' });
   const [fetchKey, setFetchKey] = useState(0);
 
-  /** Force a re-fetch of the current puzzle params (used by Retry / Play Again). */
+  /** Force a re-fetch of the current Flow Slot (used by Retry / Play Again). */
   const retryFetch = useCallback(() => {
     setLoadStatus({ status: 'loading' });
     setFetchKey((k) => k + 1);
@@ -60,27 +61,38 @@ export function GamePage() {
 
   useEffect(() => {
     let cancelled = false;
-    const isNew = searchParams.get('new') === 'true';
+    const flowType = parseFlowType(searchParams.get('flow'));
+    if (flowType === null) {
+      setLoadStatus({ status: 'no-state' });
+      return () => { cancelled = true; };
+    }
 
-    if (isNew) {
-      const size = Number(searchParams.get('size')) || 5;
-      const modeParam = searchParams.get('mode');
-      const mode: Mode = isMode(modeParam) ? modeParam : 'standard';
+    const size = Number(searchParams.get('size')) || 5;
+    const modeParam = searchParams.get('mode');
+    const mode: Mode = isMode(modeParam) ? modeParam : 'standard';
+    // Phase 7 wires curation only; daily / pack producers will branch
+    // here when their flowId conventions land.
+    const flowId = buildCurationFlowId(size, mode);
 
-      void fetchNextPuzzle(size, mode).then(async (puzzle) => {
+    async function fetchFresh(): Promise<void> {
+      try {
+        const puzzle = await fetchNextPuzzle(size, mode);
         if (cancelled) return;
-        const gameState = createFreshGameState(puzzle);
+        const gameState = createFreshGameState(flowType!, flowId, puzzle);
         await saveState(gameState);
+        if (cancelled) return;
         setLoadStatus({
           status: 'ready',
           puzzle: gameState.puzzle,
+          flowType: gameState.flowType,
+          flowId: gameState.flowId,
           initialCells: gameState.cells,
           initialHistory: gameState.history ?? EMPTY_HISTORY,
           timerElapsed: 0,
           timerResumedAt: null,
           startedAt: gameState.startedAt,
         });
-      }).catch((err) => {
+      } catch (err) {
         if (cancelled) return;
         if (err instanceof NoPuzzlesAvailableError) {
           setLoadStatus({ status: 'no-puzzles' });
@@ -88,27 +100,32 @@ export function GamePage() {
         }
         const message = err instanceof Error ? err.message : 'Unknown error';
         setLoadStatus({ status: 'error', message });
-      });
-    } else {
-      void loadState().then((saved) => {
-        if (cancelled) return;
-        if (!saved) {
-          setLoadStatus({ status: 'no-state' });
-          return;
-        }
+      }
+    }
+
+    void loadState(flowType, flowId).then((saved) => {
+      if (cancelled) return;
+      // Hit + in-progress → resume. Miss or solved (defensive — clear-on-
+      // solve should have removed it) → fetch fresh.
+      if (saved && saved.status !== 'solved') {
         setLoadStatus({
           status: 'ready',
           puzzle: saved.puzzle,
+          flowType: saved.flowType,
+          flowId: saved.flowId,
           initialCells: saved.cells,
           initialHistory: saved.history ?? EMPTY_HISTORY,
           timerElapsed: saved.timer.elapsedAtLastPause,
           timerResumedAt: saved.timer.lastResumedAt,
           startedAt: saved.startedAt,
         });
-      }).catch(() => {
-        if (!cancelled) setLoadStatus({ status: 'no-state' });
-      });
-    }
+        return;
+      }
+      void fetchFresh();
+    }).catch(() => {
+      if (!cancelled) void fetchFresh();
+    });
+
     return () => { cancelled = true; };
   }, [searchParams, loadState, saveState, fetchKey]);
 
@@ -176,6 +193,8 @@ export function GamePage() {
     <GameBoard
       key={loadStatus.puzzle.puzzleId}
       puzzle={loadStatus.puzzle}
+      flowType={loadStatus.flowType}
+      flowId={loadStatus.flowId}
       initialCells={loadStatus.initialCells}
       initialHistory={loadStatus.initialHistory}
       timerElapsed={loadStatus.timerElapsed}
@@ -183,6 +202,7 @@ export function GamePage() {
       startedAt={loadStatus.startedAt}
       navigate={navigate}
       saveState={saveState}
+      clearState={clearState}
       addCompletion={addCompletion}
       onBack={handleBack}
       onPlayAgain={retryFetch}
@@ -199,6 +219,8 @@ function RedirectToHome() {
 
 interface GameBoardProps {
   puzzle: PuzzleData;
+  flowType: FlowType;
+  flowId: string;
   initialCells: CellState[][];
   initialHistory: GameHistory;
   timerElapsed: number;
@@ -206,6 +228,7 @@ interface GameBoardProps {
   startedAt: number;
   navigate: ReturnType<typeof useNavigate>;
   saveState: (state: GameState) => Promise<void>;
+  clearState: (flowType: FlowType, flowId: string) => Promise<void>;
   addCompletion: (record: CompletionRecord) => Promise<void>;
   onBack: () => void;
   onPlayAgain: () => void;
@@ -214,6 +237,8 @@ interface GameBoardProps {
 /** Build the current GameState from refs, preserving the original startedAt. */
 function buildCurrentState(
   puzzle: PuzzleData,
+  flowType: FlowType,
+  flowId: string,
   cellsRef: React.RefObject<CellState[][]>,
   historyRef: React.RefObject<GameHistory>,
   timerRef: React.RefObject<ReturnType<typeof useTimer>>,
@@ -221,7 +246,9 @@ function buildCurrentState(
   startedAtRef: React.RefObject<number>,
 ): GameState {
   return {
-    id: 'current',
+    id: `${flowType}:${flowId}`,
+    flowType,
+    flowId,
     puzzle,
     cells: cellsRef.current,
     timer: timerRef.current.timerState,
@@ -233,6 +260,8 @@ function buildCurrentState(
 
 function GameBoard({
   puzzle,
+  flowType,
+  flowId,
   initialCells,
   initialHistory,
   timerElapsed,
@@ -240,6 +269,7 @@ function GameBoard({
   startedAt,
   navigate,
   saveState,
+  clearState,
   addCompletion,
   onBack,
   onPlayAgain,
@@ -308,7 +338,7 @@ function GameBoard({
   useEffect(() => {
     if (!ready) return;
     const timeout = setTimeout(() => {
-      void saveState(buildCurrentState(puzzle, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
+      void saveState(buildCurrentState(puzzle, flowType, flowId, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
     }, 200);
     return () => clearTimeout(timeout);
     // Save whenever cells or history change
@@ -320,7 +350,7 @@ function GameBoard({
     function handleVisibility() {
       if (document.hidden) {
         timerRef.current.pause();
-        void saveState(buildCurrentState(puzzle, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
+        void saveState(buildCurrentState(puzzle, flowType, flowId, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
       } else {
         if (timerStartedRef.current && !isSolvedRef.current) {
           timerRef.current.start();
@@ -335,13 +365,15 @@ function GameBoard({
   useEffect(() => {
     function handleBeforeUnload() {
       timerRef.current.pause();
-      void saveState(buildCurrentState(puzzle, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
+      void saveState(buildCurrentState(puzzle, flowType, flowId, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
     }
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [puzzle, saveState]);
 
-  // Handle puzzle completion
+  // Handle puzzle completion. Clear-on-solve (ST-07): the Flow Slot is
+  // removed so the next visit to this `(flowType, flowId)` URL fetches
+  // a fresh puzzle without a defensive read of a solved row.
   useEffect(() => {
     if (isSolved && !completionHandledRef.current) {
       completionHandledRef.current = true;
@@ -349,14 +381,12 @@ function GameBoard({
       const finalTime = timer.elapsed;
       setCompletionTime(finalTime);
       setShowCompletion(true);
-      // Save final state + completion record
-      void saveState(buildCurrentState(puzzle, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
       void addCompletion({
         puzzleId: puzzle.puzzleId,
         time: finalTime,
         completedAt: Date.now(),
       });
-      // puzzle.mode is already typed as Mode — no narrowing needed.
+      void clearState(flowType, flowId);
       void updatePuzzleStatus(puzzle.puzzleId, puzzle.gridSize, puzzle.mode, 'solved');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
