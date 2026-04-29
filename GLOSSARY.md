@@ -139,6 +139,14 @@ A theme available only to premium tier subscribers. Examples: Gems, Garden, Neon
 **Theme Token**
 A design variable (color, spacing, animation config, icon reference) consumed by UI components via React Context. Components never hard-code visual values — they read theme tokens.
 
+## Flows & Storage
+
+**Flow**
+A top-level mode of play. Determines which API surface produces puzzles for the player and which storage slot tracks in-progress state. The typed union is `'curation' | 'daily' | 'pack'`. Curation is the only flow wired this phase (admin-only, picks a `(size, mode)` pool and fetches from it). Daily and Packs are placeholders on the landing page (BRAND_GUIDELINES §5.5 tile pattern) that ship in later phases. The flow type is carried as the `flow` query parameter on `/play` URLs and as the first segment of the IndexedDB `Flow Slot` key.
+
+**Flow Slot**
+A single `(flowType, flowId)` entry in the frontend per-flow IndexedDB store (`gameState` object store, `keyPath: 'id'`, composite-string key `"{flowType}:{flowId}"`). Holds at most one in-progress puzzle for that flow. `flowId` is the per-flow scope identifier — `<size>x<size>-<mode>` for curation (e.g., `5x5-standard`), an ISO date for daily, a pack slug for pack. Switching flows or pools no longer overwrites another slot — each `(flowType, flowId)` keeps its own in-progress state. A solved slot is cleared (no resume of solved puzzles); next visit fetches fresh.
+
 ## Technical
 
 **Puzzle Generator**
