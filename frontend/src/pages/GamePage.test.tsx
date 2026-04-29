@@ -667,3 +667,100 @@ describe('GamePage — Skip modal flow (FB-02 §2)', () => {
   });
 });
 
+describe('GamePage — Flow Slot URL contract (R-7-03)', () => {
+  const emptyGrid5 = (): ('empty' | 'excluded' | 'marked')[][] =>
+    Array.from({ length: 5 }, () => Array(5).fill('empty'));
+
+  it('redirects home when flow query param is unrecognized (ST-11)', async () => {
+    // Arrange
+    renderGamePage('/play?flow=junk&size=5&mode=standard');
+
+    // Act — wait for the redirect effect to fire
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+    });
+
+    // Assert — no fetch/load happened for an unknown flow
+    expect(fetchCallCount).toBe(0);
+    expect(mockLoadState).not.toHaveBeenCalled();
+  });
+
+  it('redirects home when flow query param is missing', async () => {
+    // Arrange — no flow param at all
+    renderGamePage('/play?size=5&mode=standard');
+
+    // Act
+    await waitFor(() => {
+      expect(mockNavigate).toHaveBeenCalledWith('/', { replace: true });
+    });
+
+    // Assert
+    expect(fetchCallCount).toBe(0);
+    expect(mockLoadState).not.toHaveBeenCalled();
+  });
+
+  it('mount with valid flow + no slot → fetch path runs and saves a fresh slot', async () => {
+    // Arrange — explicit miss
+    mockLoadState.mockResolvedValue(null);
+
+    // Act
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    await waitForHeader();
+
+    // Assert — fetched the right (size, mode); saveState wrote a slot
+    // tagged with the derived (flowType, flowId).
+    expect(lastFetchArgs).toEqual({ size: 5, mode: 'standard' });
+    await waitFor(() => {
+      const matched = mockSaveState.mock.calls.find((c: unknown[]) => {
+        const state = c[0] as { flowType?: string; flowId?: string };
+        return state.flowType === 'curation' && state.flowId === '5x5-standard';
+      });
+      expect(matched).toBeDefined();
+    });
+  });
+
+  it('mount with pre-seeded matching in-progress slot → resume (no fetch)', async () => {
+    // Arrange — slot already present, status in-progress
+    mockLoadState.mockResolvedValue({
+      id: 'curation:5x5-standard',
+      flowType: 'curation',
+      flowId: '5x5-standard',
+      puzzle: FALLBACK_PUZZLE,
+      cells: emptyGrid5(),
+      timer: { elapsedAtLastPause: 12, lastResumedAt: null },
+      status: 'in-progress',
+      startedAt: Date.now(),
+    });
+
+    // Act
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    await waitForHeader();
+
+    // Assert — no fetch happened; the resume path took over.
+    expect(fetchCallCount).toBe(0);
+  });
+
+  it("mount with pre-seeded slot whose status is 'solved' → defensive fetch (ST-06)", async () => {
+    // Arrange — solved slot is treated as a miss; clear-on-solve
+    // should normally have removed it, but a crashed completion
+    // could leave it behind.
+    mockLoadState.mockResolvedValue({
+      id: 'curation:5x5-standard',
+      flowType: 'curation',
+      flowId: '5x5-standard',
+      puzzle: FALLBACK_PUZZLE,
+      cells: emptyGrid5(),
+      timer: { elapsedAtLastPause: 30, lastResumedAt: null },
+      status: 'solved',
+      startedAt: Date.now(),
+    });
+
+    // Act
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    await waitForHeader();
+
+    // Assert — fetch ran exactly once (the defensive fallback).
+    expect(fetchCallCount).toBe(1);
+  });
+});
+
