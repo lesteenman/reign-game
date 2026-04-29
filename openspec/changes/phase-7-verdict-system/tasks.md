@@ -223,18 +223,96 @@ All Phase 7 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 
 - **Roadmap:** R-7-03
 - **Agent:** frontend-dev
-- **OpenSpec:** detailed work items captured during this slice's own design grill — the spec below is a deliberate stub.
+- **OpenSpec:** `specs/storage.md` (ST-01 through ST-12)
 
-**Goal**
+**Context — R-7-02's spec drift.** R-7-02's task spec (line 167 above) said the curation flow would pass a `flow=curation` query param to `/play`. That wiring shipped only partially: the backend / IDB plumbing was deferred and the URL parameter was never added. R-7-03 is therefore the slice that *actually* implements the URL contract envisioned in R-7-02. No history rewrite — call out in the PR body.
 
-Switch `frontend/src/storage/db.ts` from a single `currentGame` slot to a `(flowType, flowId) → currentPuzzleId` keyed shape so each `(size, mode)` pool keeps its in-progress puzzle independently. Switching pools no longer implicitly marks the prior puzzle `skipped` — only the explicit Skip button (added in R-7-02) does. Same shape generalizes to `(flow="daily", flowId="2026-04-27")` and `(flow="pack", flowId="beginner-001")` when those flows land later.
+**Locked decisions** (from `design-grill-summary.md`):
 
-**Open before this slice starts**
+- D1 — composite-string key `'<flowType>:<flowId>'` on the existing `gameState` store (not compound IDB key, not store-per-flowType).
+- D2/D3 — bump `DB_VERSION` to 2 + clear the `gameState` store on upgrade. Graceful drop, no row-level migration.
+- D4 — URL specifies the flow + flow-identifying params; `loadState` decides resume vs. fetch. The `?new=true` URL contract is removed entirely.
+- D6 — typed `FlowType = 'curation' | 'daily' | 'pack'` union (`'daily'` and `'pack'` pre-declared even though only `'curation'` is wired).
+- D9 — clear-on-solve.
 
-- Migration: existing single `currentGame` rows need either a one-time migration to the new key or a graceful "no resume on upgrade" fallback. Decision deferred to the slice's design grill.
-- Storage size implications — small on web (a handful of in-progress puzzles per user) but worth measuring once the per-flow shape is in place.
+**Work**
 
-**Dependencies:** R-7-02 (the curation route + explicit Skip button must exist; this slice only changes how progress is keyed).
+- Update `frontend/src/storage/types.ts`:
+  - Add `export type FlowType = 'curation' | 'daily' | 'pack'` (ST-02).
+  - Replace `id: 'current'` literal on `GameState` with `id: string`. Add `flowType: FlowType` and `flowId: string` fields (ST-03).
+- Update `frontend/src/storage/db.ts`:
+  - Bump `DB_VERSION` from `1` to `2`.
+  - In `onupgradeneeded`, when `event.oldVersion < 2`, clear the `gameState` store (preserve `completions`) (ST-04).
+  - Add an internal helper `idFor(flowType, flowId): string` returning `${flowType}:${flowId}` — the only place the `':'` separator appears in production code (ST-09).
+- Update `frontend/src/storage/utils.ts`:
+  - `createFreshGameState(flowType: FlowType, flowId: string, puzzle: PuzzleData): GameState` — construct `id = "${flowType}:${flowId}"`, set `flowType` / `flowId` on the row body. Update tests in `storage/utils.test.ts` accordingly.
+- Update `frontend/src/hooks/useGameStorage.ts` (ST-09):
+  - `saveState(state: GameState)` unchanged signature — `state.id` already encodes the slot.
+  - `loadState(flowType: FlowType, flowId: string): Promise<GameState | null>` — `store.get(idFor(flowType, flowId))`.
+  - `clearState(flowType: FlowType, flowId: string): Promise<void>` — `store.delete(idFor(flowType, flowId))`.
+- Add `parseFlowType(raw: string | null): FlowType | null` helper next to the type (ST-11). Returns null for unknown / missing values.
+- Update `frontend/src/pages/GamePage.tsx`:
+  - Drop the `searchParams.get('new') === 'true'` branch entirely (ST-08).
+  - Read `flow` / `size` / `mode` (and future `date` / `id`) from URL. Use `parseFlowType` for the `flow` value; null → redirect to `/`.
+  - Build `flowId` per flow type. Phase 7 only wires curation → `flowId = "${size}x${size}-${mode}"`. Document the convention in a single helper (`buildCurationFlowId(size, mode)`) so daily / pack producers extend the same module later.
+  - Effect logic (ST-06): call `loadState(flowType, flowId)`. Hit + `status !== 'solved'` → resume. Else → `fetchNextPuzzle(size, mode)`, then `saveState(createFreshGameState(flowType, flowId, puzzle))`.
+  - Completion handler (ST-07): after `addCompletion`, call `clearState(flowType, flowId)`.
+  - Update the doc comment on `GamePage` (currently mentions `?new=true`).
+  - "Play Again" button: navigate to the same `/play?flow=curation&size=N&mode=M` URL — the slot was just cleared by ST-07, so the next render fetches fresh.
+- Update `frontend/src/pages/CurationPage.tsx`:
+  - Drop `new=true` from the navigation. Add `flow=curation`. Final URL: `/play?flow=curation&size=${size}&mode=${mode}`.
+- **Sweep `?new=true` from the codebase** (ST-08):
+  - `grep -rn "new=true\\|searchParams.*['\\\"]new['\\\"]" frontend/src` — every hit must be removed or converted to a negative-assertion test. Includes `CurationPage.tsx`, any leftover landing-page references, and the `GamePage` test file.
+- Update `frontend/src/pages/GamePage.test.tsx`:
+  - Drop the `new=true` test cases; convert to per-flow URL `/play?flow=curation&size=...&mode=...`.
+  - Add: mount with no slot → fetch path runs and saves. Mount with pre-seeded matching slot (status `in-progress`) → resume path renders persisted cells. Mount with pre-seeded slot but `status: 'solved'` → fetch path runs (defensive, ST-06). Mount with `?flow=junk` → redirect to `/` (ST-11).
+  - Solve a puzzle → assert `clearState` was called for the right `(flowType, flowId)`.
+  - Switching pools (mount A, then mount B with different size+mode) → A's slot is preserved on disk after B's fetch.
+- Add `frontend/src/storage/db.test.ts` (or expand existing test file if present):
+  - Round-trip per-slot writes: two slots, two rows.
+  - Upsert: three writes to same slot, one row, last wins (ST-05).
+  - V1 → V2 upgrade: seed a v1 `{id: 'current', ...}` row, bump version, verify `gameState` is empty and `completions` is preserved (ST-04).
+- Add `frontend/src/storage/types.test.ts` (or fold into existing utils test):
+  - `parseFlowType('curation')` → `'curation'`. `parseFlowType('daily')` → `'daily'`. `parseFlowType('pack')` → `'pack'`. `parseFlowType('curations')` → `null`. `parseFlowType(null)` → `null`.
+- Update `frontend/src/pages/CurationPage.test.tsx`:
+  - Selecting a pool navigates to `/play?flow=curation&size=...&mode=...` (no `new=true`).
+- Update `GLOSSARY.md`:
+  - Already done in glossary commit on this branch — verify `Flow` and `Flow Slot` entries are present and the wording matches the storage spec.
+- Update `PROJECT_STRUCTURE.md`:
+  - No new files (everything edits existing files), but add a one-line note in the storage section describing the per-flow shape if the existing description claims a single-slot pattern.
+- Update `ROADMAP.md`:
+  - Flip the R-7-03 checkbox from `[ ]` to `[x]` in the Phase 7 block.
+- Flip the R-7-03 row in this `tasks.md` from `[ ]` to `[x]`.
+
+**Gate**
+
+- `npx tsc -b` passes.
+- `npm test` green (new tests + existing tests still pass).
+- `npm run build` succeeds.
+- Grep sweep clean (ST-08): `grep -rn "new=true" frontend/src` returns zero matches in production code.
+- Grep sweep clean (ST-09): `grep -rn "':'\\|\":\"" frontend/src/storage` shows the separator only in `idFor`.
+- Manual: `task dev:up` → sign in as admin → Curation tile → 5×5 standard → make a few moves. Reload page → puzzle resumes. Navigate back to Curation → 7×7 standard → fresh puzzle; the 5×5 slot is preserved (verifiable via DevTools → Application → IndexedDB → reign-game → gameState; two rows). Solve the 5×5 → that slot is removed.
+- Manual upgrade test: deploy the slice to dev. An admin who had a v1 in-progress puzzle pre-deploy first navigates after deploy → no resume, fresh fetch (ST-04 wipe behavior verified by user feedback / direct DevTools inspection).
+
+**Files touched**
+
+- `frontend/src/storage/types.ts` (update — `FlowType` union, `GameState` shape, `parseFlowType` helper)
+- `frontend/src/storage/db.ts` (update — `DB_VERSION=2`, upgrade clear, `idFor` helper)
+- `frontend/src/storage/utils.ts` (update — `createFreshGameState` takes `(flowType, flowId, puzzle)`)
+- `frontend/src/storage/utils.test.ts` (update — new signature)
+- `frontend/src/storage/db.test.ts` (new — round-trip + upsert + v1→v2 upgrade)
+- `frontend/src/storage/types.test.ts` (new or folded — `parseFlowType` cases)
+- `frontend/src/hooks/useGameStorage.ts` (update — `loadState` / `clearState` take `(flowType, flowId)`)
+- `frontend/src/pages/GamePage.tsx` (update — URL parsing, resume vs. fetch branch, clear-on-solve, drop `new=true`)
+- `frontend/src/pages/GamePage.test.tsx` (update — per-flow URL cases, resume + fetch + solved-defensive + invalid-flow + clear-on-solve + pool-switch isolation)
+- `frontend/src/pages/CurationPage.tsx` (update — emit `flow=curation`, drop `new=true`)
+- `frontend/src/pages/CurationPage.test.tsx` (update — assert new URL shape)
+- `GLOSSARY.md` (already updated on this branch — verify only)
+- `PROJECT_STRUCTURE.md` (update if storage description mentions single-slot)
+- `ROADMAP.md` (update — flip R-7-03 checkbox)
+- `openspec/changes/phase-7-verdict-system/tasks.md` (update — flip R-7-03 row to `[x]`)
+
+**Dependencies:** R-7-02 (the curation route + explicit Skip button must exist; this slice only changes how in-progress state is keyed and how `/play` URLs are shaped).
 
 **Commit after completion. Then archive this OpenSpec change via `/opsx:archive`.**
 
