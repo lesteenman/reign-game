@@ -67,6 +67,11 @@ jobs:
   terraform-plan:
     name: Terraform Plan
     runs-on: ubuntu-latest
+    # Dependabot PRs run with the read-only Dependabot context and have no access
+    # to repo Actions secrets (AWS_ROLE_ARN, TF_VAR_TERRAFORM_STATE_BUCKET), so
+    # configure-aws-credentials fails before doing anything. Dependabot bumps
+    # don't touch infra/** anyway — skip the plan for them.
+    if: github.actor != 'dependabot[bot]'
     permissions:
       contents: read
       pull-requests: write
