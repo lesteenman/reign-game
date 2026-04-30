@@ -320,16 +320,16 @@ All Phase 7 slices are `[ ]` until completed. Per CLAUDE.md lesson 17, each slic
 
 Before promoting this epic to main:
 
-- [ ] `PUT /api/admin/puzzles/{id}/verdict` returns 401 for anonymous, 403 for user-role, 200 for admin. Integration test proves it.
-- [ ] Verdict rows persist with PK = `"VERDICT#{size}#{mode}#{puzzleId}"`, SK = `"{raterRole}#{raterId}"`. Idempotent overwrite verified.
-- [ ] `verdictSummary` projection on `PuzzleRecord` matches the row family after every write.
-- [ ] Legacy `verdict: "none"` field removed from `PuzzleRecord`; legacy rows tolerate the schema change without backfill.
-- [ ] Frontend verdict surface renders only for admin role; anonymous and User-role play-throughs see no verdict UI.
-- [ ] `playTimeMs` captured from `useTimer.elapsed` at action time; row carries the value verbatim.
-- [ ] Skip remains the existing `PUT /api/puzzles/{id}/status` flow; the verdict endpoint rejects `value="skip"`.
-- [ ] `GLOSSARY.md` contains `Verdict`, `Verdict Summary`, `Rater`, `Verdict Surface` with the wording from `specs/glossary-terms.md`.
-- [ ] `ROADMAP.md` Phase 7 block: R-7-02 flipped to `[x]` (R-081 already `[x]`; R-7-03 stays `[ ]` for the next slice).
-- [ ] `PROJECT_STRUCTURE.md`: API endpoints table moves verdict from Future to Implemented; new files listed.
-- [ ] `tasks.md` status table all `[x]`.
-- [ ] No new KIs opened by this phase. (The summary-projection lag is documented in `design.md` Risks but not promoted to a KI — single-admin scale makes it invisible.)
-- [ ] Follow 4-axis review-local + security-review before epic→main merge (per CLAUDE.md lesson 13).
+- [x] `PUT /api/admin/puzzles/{id}/verdict` returns 401 for anonymous, 403 for user-role, 200 for admin. Integration test proves it. — `backend/internal/handler/verdict_test.go::TestVerdictHandler_AuthMatrix`.
+- [x] Verdict rows persist with PK = `"VERDICT#{size}#{mode}#{puzzleId}"`, SK = `"{raterRole}#{raterId}"`. Idempotent overwrite verified. — `backend/internal/repository/puzzle.go:428` (`buildVerdictPK`) + `:434` (`buildVerdictSK`); idempotency covered in `puzzle_test.go::TestPutVerdict` + `TestRecomputeVerdictSummary` ("mixed ups and downs" case).
+- [x] `verdictSummary` projection on `PuzzleRecord` matches the row family after every write. — `RecomputeVerdictSummary` runs after every `PutVerdict` (handler line 90+); `puzzle_test.go::TestRecomputeVerdictSummary` covers correctness across overwrite + multi-rater.
+- [x] Legacy `verdict: "none"` field removed from `PuzzleRecord`; legacy rows tolerate the schema change without backfill. — Field is gone from `PuzzleRecord`. The two `verdict: "none"` literals remaining in `puzzle_test.go` are intentional legacy-row test fixtures (lines 146, 877) — production code is clean.
+- [x] Frontend verdict surface renders only for admin role; anonymous and User-role play-throughs see no verdict UI. — `frontend/src/pages/GamePage.tsx:307-308` computes `isAdmin` via `getClerkUserRole`; both VerdictSurface mounts (completion + skip-modal) gated on `isAdmin`. Three-state visibility test in `GamePage.test.tsx`.
+- [x] `playTimeMs` captured from `useTimer.elapsed` at action time; row carries the value verbatim. — `GamePage.tsx:535` (completion: `completionTime * 1000`) and `:643` (skip: `timer.elapsed * 1000`).
+- [x] Skip remains the existing `PUT /api/puzzles/{id}/status` flow; the verdict endpoint rejects `value="skip"`. — Verdict handler accepts only `value ∈ {up, down}`; `outcome ∈ {solved, skipped}` is the channel for "this was a skip". The skip path in `VerdictSurface.tsx` calls `updatePuzzleStatus` for the status update and only optionally posts a `down` verdict ("I hate this"); "Just skip" leaves verdict untouched.
+- [x] `GLOSSARY.md` contains `Verdict`, `Verdict Summary`, `Rater`, `Verdict Surface` with the wording from `specs/glossary-terms.md`. — Verified at `GLOSSARY.md` lines 74, 76, 80, 119.
+- [x] `ROADMAP.md` Phase 7 block: R-7-02 flipped to `[x]` (R-081 already `[x]`; R-7-03 stays `[ ]` for the next slice). — Original wording preserved as historical record. As of close-out: all three rows are `[x]` (R-081 line 121, R-7-02 line 122, R-7-03 line 123).
+- [x] `PROJECT_STRUCTURE.md`: API endpoints table moves verdict from Future to Implemented; new files listed. — `PROJECT_STRUCTURE.md` line 228 lists `PUT /api/admin/puzzles/{id}/verdict` under Implemented; backend tree includes `verdict.go` (line 66), frontend tree includes `VerdictSurface.tsx` (line 130) + `verdictService.ts` (line 145).
+- [x] `tasks.md` status table all `[x]`. — Verified above (R-081 / R-7-02 / R-7-03 rows in the Status table).
+- [x] No new KIs opened by this phase. — No KI tracks the verdict pipeline itself. The summary-projection lag is documented in `design.md` Risks and stays there (single-admin scale makes it invisible). KI-022 (local backend slowness) and KI-023 (Home empty-state flash) and KI-024 (StrictMode workaround) were *opened* during the Phase 7 calendar window but are platform/landing/StrictMode issues unrelated to the verdict system.
+- [x] Follow 4-axis review-local + security-review before epic→main merge (per CLAUDE.md lesson 13). — Done at slice level: R-081 (PR #71), R-7-02 (PR #73), R-7-03 (the merge that landed before #82). The close-out PR itself is docs-only and not subject to the security gate.
