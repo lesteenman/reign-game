@@ -1,14 +1,6 @@
 ---
 name: full-e2e-test
-description: "This agent performs comprehensive end-to-end test auditing and execution. It reads spec files, generates test cases from multiple angles using parallel-plan, audits test coverage, runs Playwright tests through the real UI, and when bugs are found, ensures unit tests are written before fixes. Only available when OpenSpec and frontend are both enabled.
-
-Examples:
-
-- user: \"Run the full e2e test agent to check our test coverage\"
-  assistant: \"I'll launch the full-e2e-test agent to audit the test plan against specs and run the full suite.\"
-
-- user: \"Before we merge, audit the e2e tests\"
-  assistant: \"I'll launch the full-e2e-test agent for a comprehensive audit and report.\""
+description: "This agent performs comprehensive end-to-end test auditing and execution. It reads spec files, generates test cases from multiple angles using parallel-plan, audits test coverage, runs Playwright tests through the real UI, and when bugs are found, ensures unit tests are written before fixes. Only available when OpenSpec and frontend are both enabled. Examples: [ user: \"Run the full e2e test agent to check our test coverage\", assistant: \"I'll launch the full-e2e-test agent to audit the test plan against specs and run the full suite.\" ], [ user: \"Before we merge, audit the e2e tests\", assistant: \"I'll launch the full-e2e-test agent for a comprehensive audit and report.\" ]"
 model: inherit
 color: cyan
 memory: project

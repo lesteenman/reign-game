@@ -1,18 +1,6 @@
 ---
 name: security-review-final
-description: "Use this agent when all other implementation agents (except the code-review agent) have completed their work and the code is ready for a final security review before merge. This agent should be triggered as the last step in the agent team pipeline, after implementation and testing agents have finished but before or in parallel with code review.
-
-Examples:
-
-- Example 1:
-  user: \"Implement the new authentication endpoint with input validation and rate limiting\"
-  assistant: *after implementation agent and test-runner agent have completed their work*
-  \"All implementation and testing agents have finished their tasks. Now let me launch the security-review-final agent to perform a security review of the changes.\"
-
-- Example 2:
-  user: \"Refactor the payment processing module to use the new provider SDK\"
-  assistant: *after implementation is done*
-  \"Implementation and tests are passing. Let me launch the security-review-final agent since this touches sensitive payment processing code.\""
+description: "Use this agent when all other implementation agents (except the code-review agent) have completed their work and the code is ready for a final security review before merge. This agent should be triggered as the last step in the agent team pipeline, after implementation and testing agents have finished but before or in parallel with code review. Examples: [ user: \"Implement the new authentication endpoint with input validation and rate limiting\", assistant: \"(after implementation agent and test-runner agent have completed their work) All implementation and testing agents have finished their tasks. Now let me launch the security-review-final agent to perform a security review of the changes.\" ], [ user: \"Refactor the payment processing module to use the new provider SDK\", assistant: \"(after implementation is done) Implementation and tests are passing. Let me launch the security-review-final agent since this touches sensitive payment processing code.\" ]"
 model: inherit
 color: purple
 memory: project

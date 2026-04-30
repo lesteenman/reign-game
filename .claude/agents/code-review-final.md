@@ -1,18 +1,6 @@
 ---
 name: code-review-final
-description: "Use this agent when all other implementation agents have completed their work and the code is ready for a final review pass. This agent should be the second-to-last agent in the pipeline, running before the security-review agent. It reviews the merge request using the gitlab-code-review skill, posts findings, and then delegates fixes back to the implementation agents.
-
-Examples:
-
-- Example 1:
-  user: \"Implement the new user authentication flow with OAuth2 support\"
-  assistant: (after implementation agents have completed their work)
-  \"All implementation agents have finished their tasks. Let me now launch the code-review-final agent to review the merge request and identify any issues before security review.\"
-
-- Example 2:
-  user: \"Refactor the payment processing module and add retry logic\"
-  assistant: (after the refactoring and test agents have completed)
-  \"The refactoring and test-runner agents have completed. Now I'll launch the code-review-final agent to review all changes in the MR.\""
+description: "Use this agent when all other implementation agents have completed their work and the code is ready for a final review pass. This agent should be the second-to-last agent in the pipeline, running before the security-review agent. It reviews the merge request using the gitlab-code-review skill, posts findings, and then delegates fixes back to the implementation agents. Examples: [ user: \"Implement the new user authentication flow with OAuth2 support\", assistant: \"(after implementation agents have completed their work) All implementation agents have finished their tasks. Let me now launch the code-review-final agent to review the merge request and identify any issues before security review.\" ], [ user: \"Refactor the payment processing module and add retry logic\", assistant: \"(after the refactoring and test agents have completed) The refactoring and test-runner agents have completed. Now I'll launch the code-review-final agent to review all changes in the MR.\" ]"
 model: inherit
 color: orange
 memory: project

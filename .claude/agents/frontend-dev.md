@@ -1,17 +1,6 @@
 ---
 name: frontend-dev
-description: "Use this agent when anything frontend-related needs to be done, including designing user interfaces, implementing frontend components, building pages or features, writing unit tests for frontend logic, running end-to-end tests with Playwright, fixing UI bugs, improving accessibility, or refactoring frontend code. This agent reads the project's tech stack from CLAUDE.md and follows the conventions of whatever frontend framework is in use.
-
-Examples:
-
-- User: \"Create a responsive navbar component with a dropdown menu\"
-  Assistant: \"I'll use the frontend-dev agent to design and implement this navbar component with proper testing.\"
-
-- User: \"The login form isn't validating email addresses correctly\"
-  Assistant: \"Let me use the frontend-dev agent to fix the email validation and ensure it has proper test coverage.\"
-
-- User: \"We need a new dashboard page that shows user analytics\"
-  Assistant: \"I'll launch the frontend-dev agent to design the dashboard UI, implement it, and set up both unit and e2e tests.\""
+description: "Use this agent when anything frontend-related needs to be done, including designing user interfaces, implementing frontend components, building pages or features, writing unit tests for frontend logic, running end-to-end tests with Playwright, fixing UI bugs, improving accessibility, or refactoring frontend code. This agent reads the project's tech stack from CLAUDE.md and follows the conventions of whatever frontend framework is in use. Examples: [ user: \"Create a responsive navbar component with a dropdown menu\", assistant: \"I'll use the frontend-dev agent to design and implement this navbar component with proper testing.\" ], [ user: \"The login form isn't validating email addresses correctly\", assistant: \"Let me use the frontend-dev agent to fix the email validation and ensure it has proper test coverage.\" ], [ user: \"We need a new dashboard page that shows user analytics\", assistant: \"I'll launch the frontend-dev agent to design the dashboard UI, implement it, and set up both unit and e2e tests.\" ]"
 model: inherit
 color: red
 memory: project
