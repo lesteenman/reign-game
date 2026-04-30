@@ -17,6 +17,8 @@ No setup beyond `npm install`. The existing dev server on `:5180` is reused if r
 npm run test:integration
 ```
 
+> The e2e suite skips this `webServer` block (it sets `PLAYWRIGHT_SKIP_WEBSERVER=1` because `task e2e:up` already provides Vite on `:5183`).
+
 ## Running the e2e suite
 
 The e2e project drives a **separate Vite on `:5183`** (proxying `/api/*` to the **separate backend on `:5182`** reading **`puzzle-pool-e2e`**). This keeps the dev stack on `:5180`/`:5181` untouched.
