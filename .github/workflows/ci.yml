@@ -34,7 +34,7 @@ jobs:
         run: go test -short ./... -v
 
       - name: Lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
           working-directory: backend
           install-mode: goinstall
