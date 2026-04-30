@@ -15,19 +15,8 @@ const MOCK_PUZZLE = {
 
 test.describe("Grid Interaction", () => {
   test.beforeEach(async ({ page }) => {
-    // Intercept puzzle API calls and return mock data so tests
-    // don't depend on a running backend. LandingPage reads
-    // /api/config/modes on mount (R-06A) so that one needs a mock
-    // too or the Play button never renders.
-    await page.route("**/api/config/modes*", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          modes: [{ size: 5, mode: "standard" }],
-        }),
-      }),
-    );
+    // Intercept puzzle API calls and return mock data so tests don't
+    // depend on a running backend.
     await page.route("**/api/puzzles/next*", (route) =>
       route.fulfill({
         status: 200,
@@ -38,14 +27,12 @@ test.describe("Grid Interaction", () => {
     await page.route("**/api/puzzles/*/status*", (route) =>
       route.fulfill({ status: 200, body: "{}" }),
     );
-    // Go to landing page, click Play to navigate to /play?new=true
-    await page.goto("/");
-    await expect(page.getByRole("heading", { name: /reign/i })).toBeVisible();
-    // Click Play button to navigate to /play?new=true where puzzle is fetched
-    const playButton = page.getByRole("button", { name: /play/i });
-    await expect(playButton).toBeVisible();
-    await playButton.click();
-    // Wait for the grid to appear on the game page
+    // Navigate directly to the game route. The post-R-7-02 LandingPage
+    // has no public play flow (Daily/Packs are placeholders, Curation
+    // is admin-gated), but GamePage itself reads flow/size/mode from
+    // the URL and fetches /api/puzzles/next on mount — auth-independent.
+    // These tests assert grid mechanics, not landing nav.
+    await page.goto("/play?flow=curation&size=5&mode=standard");
     await expect(page.getByTestId("game-grid")).toBeVisible();
   });
 
