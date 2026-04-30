@@ -104,7 +104,7 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
 
-      - name: Install dependencies
+      - name: Install frontend dependencies
         run: npm ci
 
       # Only chromium — playwright.config.ts pins browserName: 'chromium'
@@ -144,14 +144,6 @@ jobs:
     # tasks in multiple `dir:`-scoped subtasks. npm scripts that run in
     # frontend/ set working-directory per-step.
     runs-on: ubuntu-latest
-    env:
-      # Job-level env so both `task e2e:up` (which boots the e2e backend
-      # reading CLERK_SECRET_KEY) and `npm run test:e2e` (which loads
-      # the Vite bundle reading VITE_CLERK_PUBLISHABLE_KEY) see them.
-      # Dev-tenant keys ONLY — prod keys are not in scope for any CI
-      # job (CW-12, design-grill Finding 1).
-      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
-      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
     steps:
       - uses: actions/checkout@v6
 
@@ -203,7 +195,21 @@ jobs:
       # /api/config/modes to defuse KI-022's DDB cold start. Per
       # CLAUDE.md lesson 25, do not split warmup or seeding into the
       # workflow — keep the lifecycle in the task.
+      # Step-level env: scope the Clerk secrets to ONLY the step that
+      # needs them. The e2e backend (booted inside `task e2e:up:backend`)
+      # reads CLERK_SECRET_KEY at startup; the e2e Vite (booted inside
+      # `task e2e:up:frontend`) bakes VITE_CLERK_PUBLISHABLE_KEY into
+      # the bundle at startup. After `task e2e:up` returns, both servers
+      # have already consumed the values — subsequent steps (test
+      # execution, artifact upload, cleanup) don't need them. Closing
+      # the supply-chain exfiltration window: `npm ci` runs earlier in
+      # the job and now NEVER sees these secrets, so a malicious
+      # npm postinstall in a Dependabot-bumped dep cannot exfiltrate
+      # them. Dev-tenant keys ONLY (CW-12, design-grill Finding 1).
       - name: Bring up e2e stack
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
         run: task e2e:up
 
       - name: Run e2e project
