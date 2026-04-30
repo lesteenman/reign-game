@@ -1,14 +1,6 @@
 ---
 name: workflow-orchestrator
-description: "This agent orchestrates the full implementation pipeline. It uses the SPAWN_REQUEST protocol to request that the lead agent spawn implementation agents (backend-dev, frontend-dev, etc.), monitors their progress, runs quality gates, and drives the merge request to completion.
-
-Examples:
-
-- user: \"Implement the new order management feature\"
-  assistant: \"I'll run the workflow-orchestrator to execute the full Agent Team Pipeline.\"
-
-- user: \"The profile endpoint returns 500 when the user has no unit. Fix this using the full pipeline.\"
-  assistant: \"I'll run the workflow-orchestrator to implement this fix through the full quality pipeline.\""
+description: "This agent orchestrates the full implementation pipeline. It uses the SPAWN_REQUEST protocol to request that the lead agent spawn implementation agents (backend-dev, frontend-dev, etc.), monitors their progress, runs quality gates, and drives the merge request to completion. Examples: [ user: \"Implement the new order management feature\", assistant: \"I'll run the workflow-orchestrator to execute the full Agent Team Pipeline.\" ], [ user: \"The profile endpoint returns 500 when the user has no unit. Fix this using the full pipeline.\", assistant: \"I'll run the workflow-orchestrator to implement this fix through the full quality pipeline.\" ]"
 model: inherit
 color: blue
 memory: project

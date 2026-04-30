@@ -1,16 +1,6 @@
 ---
 name: backend-dev
-description: "Use this agent when writing, modifying, or creating any back-end code. This includes implementing new features, refactoring existing code, creating services, controllers, repositories, DTOs, or any server-side class. The agent reads the project's tech stack from CLAUDE.md and follows the conventions of whatever language and framework is in use. It writes clean, production-quality code following SOLID principles and automatically creates comprehensive unit tests.
-
-Examples:
-- user: \"Create a service that handles user registration with email validation\"
-  assistant: \"I'll use the backend-dev agent to implement this service with clean code and comprehensive tests.\"
-
-- user: \"Add a new endpoint to process payment refunds\"
-  assistant: \"Let me use the backend-dev agent to build this endpoint following SOLID principles with proper security and tests.\"
-
-- user: \"Refactor the OrderService to support multiple discount strategies\"
-  assistant: \"I'll launch the backend-dev agent to refactor this using clean design patterns and update the tests accordingly.\""
+description: "Use this agent when writing, modifying, or creating any back-end code. This includes implementing new features, refactoring existing code, creating services, controllers, repositories, DTOs, or any server-side class. The agent reads the project's tech stack from CLAUDE.md and follows the conventions of whatever language and framework is in use. It writes clean, production-quality code following SOLID principles and automatically creates comprehensive unit tests. Examples: [ user: \"Create a service that handles user registration with email validation\", assistant: \"I'll use the backend-dev agent to implement this service with clean code and comprehensive tests.\" ], [ user: \"Add a new endpoint to process payment refunds\", assistant: \"Let me use the backend-dev agent to build this endpoint following SOLID principles with proper security and tests.\" ], [ user: \"Refactor the OrderService to support multiple discount strategies\", assistant: \"I'll launch the backend-dev agent to refactor this using clean design patterns and update the tests accordingly.\" ]"
 model: inherit
 color: green
 memory: project
