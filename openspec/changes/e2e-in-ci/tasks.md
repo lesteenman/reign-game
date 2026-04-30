@@ -4,7 +4,7 @@
 
 | ID | Slice | Status |
 |---|---|---|
-| — | E2E in CI (Playwright integration + e2e jobs) | [ ] |
+| — | E2E in CI (Playwright integration + e2e jobs) | [x] |
 
 Flip to `[x]` in the same branch as the implementation per CLAUDE.md
 lesson 17.
