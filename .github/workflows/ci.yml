@@ -80,6 +80,20 @@ jobs:
     # separate artifact set). Required-check from day one (CW-30).
     # CW-03, CW-06, CW-15, CW-16, CW-17, CW-20, CW-22, CW-24, CW-27, CW-32.
     runs-on: ubuntu-latest
+    env:
+      # Vite bakes VITE_CLERK_PUBLISHABLE_KEY into the SPA bundle at
+      # startup. Without it, the SPA boots in Clerk-less mode (no
+      # ClerkProvider), which crashes useUser() calls in GamePage /
+      # LandingPage. The publishable key is explicitly browser-safe
+      # per docs/runbooks/admin-auth-setup.md Path C — exposing it to
+      # every step in the job (including npm ci) carries no
+      # supply-chain risk. The secret key (CLERK_SECRET_KEY) is NOT
+      # set here — the integration job has no backend.
+      # Env-mapping: GitHub secret named CLERK_PUBLISHABLE_KEY (the Path A
+      # name, shared with the CD pipeline) is exposed to Vite under the
+      # VITE_-prefixed env var name that Vite requires for browser-bundle
+      # injection. Same value, two names — no separate Path C secret.
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
     defaults:
       run:
         working-directory: frontend
@@ -144,6 +158,18 @@ jobs:
     # tasks in multiple `dir:`-scoped subtasks. npm scripts that run in
     # frontend/ set working-directory per-step.
     runs-on: ubuntu-latest
+    env:
+      # Same rationale as frontend-integration: VITE_CLERK_PUBLISHABLE_KEY
+      # must be visible when Vite starts (inside `task e2e:up:frontend`)
+      # so the SPA bundle gets it baked in. Browser-safe per Path C.
+      # CLERK_SECRET_KEY is NOT set here — it stays step-scoped on
+      # `task e2e:up` only, closing the supply-chain exfiltration window
+      # via npm ci. (See PR-#89 review-local Security MAJOR finding.)
+      # Env-mapping: GitHub secret named CLERK_PUBLISHABLE_KEY (the Path A
+      # name, shared with the CD pipeline) is exposed to Vite under the
+      # VITE_-prefixed env var name that Vite requires for browser-bundle
+      # injection. Same value, two names — no separate Path C secret.
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
     steps:
       - uses: actions/checkout@v6
 
@@ -195,20 +221,14 @@ jobs:
       # /api/config/modes to defuse KI-022's DDB cold start. Per
       # CLAUDE.md lesson 25, do not split warmup or seeding into the
       # workflow — keep the lifecycle in the task.
-      # Step-level env: scope the Clerk secrets to ONLY the step that
-      # needs them. The e2e backend (booted inside `task e2e:up:backend`)
-      # reads CLERK_SECRET_KEY at startup; the e2e Vite (booted inside
-      # `task e2e:up:frontend`) bakes VITE_CLERK_PUBLISHABLE_KEY into
-      # the bundle at startup. After `task e2e:up` returns, both servers
-      # have already consumed the values — subsequent steps (test
-      # execution, artifact upload, cleanup) don't need them. Closing
-      # the supply-chain exfiltration window: `npm ci` runs earlier in
-      # the job and now NEVER sees these secrets, so a malicious
-      # npm postinstall in a Dependabot-bumped dep cannot exfiltrate
-      # them. Dev-tenant keys ONLY (CW-12, design-grill Finding 1).
+      # Step-level env: CLERK_SECRET_KEY is supply-chain-sensitive
+      # (a malicious npm postinstall earlier in the job could exfiltrate
+      # it). Scope to only this step — the e2e backend (booted by
+      # `task e2e:up:backend`) reads it at startup and no later step
+      # needs it. VITE_CLERK_PUBLISHABLE_KEY is at job-level (browser-
+      # safe). Dev-tenant keys ONLY (CW-12, design-grill Finding 1).
       - name: Bring up e2e stack
         env:
-          VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
         run: task e2e:up
 

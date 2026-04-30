@@ -103,14 +103,14 @@ Add both keys in **both** secret scopes:
 
 | Scope | Path | Keys |
 |---|---|---|
-| Actions | `Settings → Secrets and variables → Actions → New repository secret` | `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` |
-| Dependabot | `Settings → Secrets and variables → Dependabot → New repository secret` | `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` |
+| Actions | `Settings → Secrets and variables → Actions → New repository secret` | `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` |
+| Dependabot | `Settings → Secrets and variables → Dependabot → New repository secret` | `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` |
 
 Both scopes are required. Workflows triggered by Dependabot PRs only see Dependabot-scoped secrets — Actions secrets are not available in that context. Mirroring the same secret names into both scopes lets the workflow YAML reference `${{ secrets.CLERK_SECRET_KEY }}` once and resolve in either context.
 
 When rotating: rotate **both** scopes together. The values must match — if Actions has key A and Dependabot has key B, only one set of PRs (Dependabot vs. human) will pass CI.
 
-> Note the `VITE_` prefix on the publishable key here, distinct from `CLERK_PUBLISHABLE_KEY` in Path A. The CD path passes the publishable key into Terraform/SSM/Lambda; the CI e2e path needs the same value but exposed under the `VITE_*` prefix so Vite injects it into the browser bundle. The two are conceptually the same key (both publishable), but live under different secret names because they enter different build pipelines.
+> Path C reuses Path A's secret names (`CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`) — same secret, no duplication. Inside `.github/workflows/ci.yml`, an env-mapping renames `secrets.CLERK_PUBLISHABLE_KEY` to the `VITE_CLERK_PUBLISHABLE_KEY` env var that Vite requires for browser-bundle injection. So the **secret name in GitHub** stays `CLERK_PUBLISHABLE_KEY`; the **env var Vite reads** is `VITE_CLERK_PUBLISHABLE_KEY`. They're the same value with different surface names.
 
 ## 6. Grant an account the admin role
 
