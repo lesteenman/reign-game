@@ -8,7 +8,7 @@
 - **Node.js 20+** — [install](https://nodejs.org/)
 - **Terraform 1.5+** — [install](https://developer.hashicorp.com/terraform/install)
 - **Docker** — for LocalStack (local DynamoDB)
-- **golangci-lint** — `go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest`
+- **golangci-lint** — `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4` (v2 module path; CI is pinned to v2.11.4 in `.github/workflows/ci.yml`)
 - **gitleaks** — secret scanning, required before every commit. [install](https://github.com/gitleaks/gitleaks#installing)
 
 ### Claude Code Setup

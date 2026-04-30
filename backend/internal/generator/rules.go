@@ -669,10 +669,11 @@ func forcesAdjacentMark(s *solverState, r, c int) bool {
 		remaining := 0
 		for rr := range n {
 			mask := s.regCellsByRow[rid][rr]
-			if rr == r {
+			switch rr {
+			case r:
 				mask &^= selfMask
 				mask &^= colSpread
-			} else if rr == r-1 || rr == r+1 {
+			case r - 1, r + 1:
 				mask &^= colSpread
 			}
 			remaining += bits.OnesCount16(mask)

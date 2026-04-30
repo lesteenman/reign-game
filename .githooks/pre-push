@@ -13,8 +13,8 @@ echo "--- Backend: lint ---"
 cd "$ROOT/backend"
 if ! command -v golangci-lint &>/dev/null; then
   echo "ERROR: golangci-lint not found on PATH."
-  echo "       CI uses v1.64.8 (pinned in .github/workflows/ci.yml)."
-  echo "       Install: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8"
+  echo "       CI uses v2.11.4 (pinned in .github/workflows/ci.yml)."
+  echo "       Install: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4"
   echo "       Failing loud here so a missing local tool doesn't ship lint-broken commits to CI."
   exit 1
 fi
