@@ -7,6 +7,14 @@ tasks:
     cmds:
       - go build ./...
 
+  build:lambda:
+    desc: Build the reproducible Lambda zip (cmd/api → backend/lambda.zip). Same recipe in CI and CD so terraform plan stays clean across PRs.
+    dir: backend
+    cmds:
+      - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bootstrap ./cmd/api
+      - touch -t 200001010000.00 bootstrap
+      - zip -jX lambda.zip bootstrap
+
   test:backend:
     desc: Run backend tests
     dir: backend
