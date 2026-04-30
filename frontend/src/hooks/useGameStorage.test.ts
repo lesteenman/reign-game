@@ -19,7 +19,9 @@ const TEST_PUZZLE: PuzzleData = {
 
 function makeGameState(): GameState {
   return {
-    id: 'current',
+    id: 'curation:3x3-standard',
+    flowType: 'curation',
+    flowId: '3x3-standard',
     puzzle: TEST_PUZZLE,
     cells: [
       ['empty', 'excluded', 'empty'],
@@ -58,7 +60,7 @@ beforeEach(async () => {
 describe('useGameStorage', () => {
   it('loadState returns null when no state saved', async () => {
     const { result } = renderHook(() => useGameStorage());
-    const loaded = await result.current.loadState();
+    const loaded = await result.current.loadState('curation', '3x3-standard');
     expect(loaded).toBeNull();
   });
 
@@ -66,16 +68,29 @@ describe('useGameStorage', () => {
     const { result } = renderHook(() => useGameStorage());
     const state = makeGameState();
     await result.current.saveState(state);
-    const loaded = await result.current.loadState();
+    const loaded = await result.current.loadState('curation', '3x3-standard');
     expect(loaded).toEqual(state);
   });
 
   it('clearState removes saved state', async () => {
     const { result } = renderHook(() => useGameStorage());
     await result.current.saveState(makeGameState());
-    await result.current.clearState();
-    const loaded = await result.current.loadState();
+    await result.current.clearState('curation', '3x3-standard');
+    const loaded = await result.current.loadState('curation', '3x3-standard');
     expect(loaded).toBeNull();
+  });
+
+  it('keeps Flow Slots independent — writing one does not affect another', async () => {
+    const { result } = renderHook(() => useGameStorage());
+    const slotA = makeGameState();
+    const slotB = { ...makeGameState(), id: 'curation:5x5-standard', flowId: '5x5-standard' };
+    await result.current.saveState(slotA);
+    await result.current.saveState(slotB);
+
+    const loadedA = await result.current.loadState('curation', '3x3-standard');
+    const loadedB = await result.current.loadState('curation', '5x5-standard');
+    expect(loadedA).toEqual(slotA);
+    expect(loadedB).toEqual(slotB);
   });
 
   it('addCompletion appends a record', async () => {

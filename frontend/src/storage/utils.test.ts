@@ -34,7 +34,7 @@ describe('createFreshGameState', () => {
     const puzzle = PUZZLE_WITH_METADATA;
 
     // Act
-    const state = createFreshGameState(puzzle);
+    const state = createFreshGameState('curation', '5x5-standard', puzzle);
 
     // Assert
     expect(state.puzzle.metadata).toEqual({
@@ -52,7 +52,7 @@ describe('createFreshGameState', () => {
     const puzzle = BASE_PUZZLE;
 
     // Act
-    const state = createFreshGameState(puzzle);
+    const state = createFreshGameState('curation', '5x5-standard', puzzle);
 
     // Assert
     expect(state.puzzle.metadata).toBeUndefined();
@@ -63,10 +63,12 @@ describe('createFreshGameState', () => {
     const puzzle = PUZZLE_WITH_METADATA;
 
     // Act
-    const state = createFreshGameState(puzzle);
+    const state = createFreshGameState('curation', '5x5-standard', puzzle);
 
     // Assert
-    expect(state.id).toBe('current');
+    expect(state.id).toBe('curation:5x5-standard');
+    expect(state.flowType).toBe('curation');
+    expect(state.flowId).toBe('5x5-standard');
     expect(state.puzzle.puzzleId).toBe('test-002');
     expect(state.puzzle.gridSize).toBe(5);
     expect(state.puzzle.mode).toBe('standard');
@@ -86,11 +88,24 @@ describe('createFreshGameState', () => {
     };
 
     // Act
-    const state = createFreshGameState(oldPuzzle);
+    const state = createFreshGameState('curation', '5x5-standard', oldPuzzle);
 
     // Assert
     expect(state.puzzle.metadata).toBeUndefined();
     expect(state.puzzle.puzzleId).toBe('old-001');
     expect(state.status).toBe('in-progress');
+  });
+
+  it('builds the composite id from a different flowType for future flows', () => {
+    // Arrange
+    const puzzle = BASE_PUZZLE;
+
+    // Act
+    const state = createFreshGameState('daily', '2026-04-29', puzzle);
+
+    // Assert
+    expect(state.id).toBe('daily:2026-04-29');
+    expect(state.flowType).toBe('daily');
+    expect(state.flowId).toBe('2026-04-29');
   });
 });

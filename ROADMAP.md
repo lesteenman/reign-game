@@ -120,7 +120,7 @@ Goal: Capture admin-only puzzle verdicts (up / down) so a curated corpus can gro
 
 - [x] **R-081** — Backend verdict handler + repository + schema migration (`PUT /api/admin/puzzles/{id}/verdict`)
 - [x] **R-7-02** — Frontend verdict surface + landing reorg (Daily / Packs / Curation tiles) + curation route + explicit Skip button + glossary + close-out
-- [ ] **R-7-03** — Per-flow IndexedDB storage (no implicit skips on mode switch)
+- [x] **R-7-03** — Per-flow IndexedDB storage (no implicit skips on mode switch)
 
 ## Backlog
 

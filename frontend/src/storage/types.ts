@@ -1,4 +1,35 @@
-import type { CellState, PuzzleData } from '../engine/types';
+import type { CellState, Mode, PuzzleData } from '../engine/types';
+
+/**
+ * Top-level mode of play. Determines which API surface produces puzzles
+ * and which Flow Slot tracks in-progress state. Phase 7 wires curation
+ * only; daily and pack are pre-declared so future producers extend the
+ * same union without storage-layer churn.
+ */
+export type FlowType = 'curation' | 'daily' | 'pack';
+
+const FLOW_TYPES: ReadonlyArray<FlowType> = ['curation', 'daily', 'pack'];
+
+/**
+ * Validate a raw URL parameter against the FlowType union. Returns null
+ * for missing or unrecognized values; callers redirect to home in that
+ * case so a typo'd `?flow=curations` doesn't silently miss the IDB lookup.
+ */
+export function parseFlowType(raw: string | null): FlowType | null {
+  if (raw === null) return null;
+  return (FLOW_TYPES as ReadonlyArray<string>).includes(raw)
+    ? (raw as FlowType)
+    : null;
+}
+
+/**
+ * Build a curation Flow Slot identifier from `(size, mode)`. Kept in one
+ * helper so future flow producers (daily ISO date, pack slug) extend the
+ * same module.
+ */
+export function buildCurationFlowId(size: number, mode: Mode): string {
+  return `${size}x${size}-${mode}`;
+}
 
 /**
  * Undo/redo history persisted with the rest of the game state so Ctrl+Z
@@ -13,23 +44,30 @@ export interface GameHistory {
 /** Shared empty-history literal so hook initializers and loaders agree. */
 export const EMPTY_HISTORY: GameHistory = { past: [], future: [] };
 
-/** Persisted game state stored in IndexedDB. */
+/**
+ * Persisted game state stored in IndexedDB. `id` is the composite Flow
+ * Slot key (`"{flowType}:{flowId}"`); `flowType` and `flowId` are
+ * duplicated onto the row body so DevTools inspection doesn't require
+ * re-parsing the composite key.
+ */
 export interface GameState {
-  id: 'current';
+  id: string;
+  flowType: FlowType;
+  flowId: string;
   puzzle: PuzzleData;
   cells: CellState[][];
   timer: {
-    elapsedAtLastPause: number; // accumulated seconds
-    lastResumedAt: number | null; // timestamp ms, null when paused
+    elapsedAtLastPause: number;
+    lastResumedAt: number | null;
   };
   status: 'in-progress' | 'solved';
-  startedAt: number; // timestamp ms
+  startedAt: number;
   history?: GameHistory;
 }
 
 /** Record of a completed puzzle for history/stats. */
 export interface CompletionRecord {
   puzzleId: string;
-  time: number; // seconds
-  completedAt: number; // timestamp ms
+  time: number;
+  completedAt: number;
 }

@@ -151,7 +151,7 @@ frontend/
 │   │   ├── constraints.ts
 │   │   ├── types.ts
 │   │   └── validator.ts
-│   ├── storage/                 # IndexedDB game state
+│   ├── storage/                 # IndexedDB game state — per-flow Flow Slot keyed (flowType, flowId) in the gameState store
 │   │   ├── db.ts
 │   │   ├── types.ts
 │   │   └── utils.ts

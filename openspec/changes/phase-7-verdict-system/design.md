@@ -466,3 +466,23 @@ Out of scope this phase. Phase 7 ships behind admin auth, and the e2e suite (`fr
 - Phase 7 keeps its current header (`Verdict System`) and slice IDs (R-081, R-082).
 - No phase renumbering required.
 - No new slice IDs claimed. The docs sweep (glossary + PROJECT_STRUCTURE.md update + ROADMAP flips) folds into R-082's PR — splitting it into a third slice (analogous to R-08C in Phase 6) is dead weight for two-slice work. R-082's PR carries the full slice close-out per `tasks.md`.
+
+## 13. R-7-03 — per-flow IndexedDB storage (post-R-7-02 design grill)
+
+R-7-03 is the third slice in the phase. Specs in `specs/storage.md` (ST-01..ST-12); task breakdown in `tasks.md`. Locked decisions:
+
+- **Composite-string IDB key.** `gameState.id` becomes `"{flowType}:{flowId}"` instead of the literal `'current'`. Compound-key and store-per-flowType alternatives rejected — they don't simplify the primary access pattern (single `.get` by full key) and complicate the secondary one (future "list all in-progress" via `getAll`).
+- **Typed `FlowType` union.** `'curation' | 'daily' | 'pack'`. `'daily'` and `'pack'` pre-declared even though only curation is wired in Phase 7. URL-derived values are validated through `parseFlowType` (CLAUDE.md lesson 9).
+- **DB_VERSION=2 with graceful drop.** No row-level migration. The audience is admins; the cost of one lost in-progress puzzle on upgrade day is negligible vs. shipping (and forever maintaining) a one-shot migration that infers `(flowType, flowId)` from `puzzle.gridSize` + `puzzle.mode`.
+- **Resume contract: URL specifies the flow; storage decides resume-vs-fetch.** No `?new=true` flag. URL → `(flowType, flowId)` → `loadState` → resume on hit, fetch on miss (or solved-row defensive fallback). Combined with clear-on-solve, the same URL after a completion naturally fetches a fresh puzzle.
+- **Clear-on-solve.** `clearState(flowType, flowId)` runs in the same handler as `addCompletion`. Without it, ST-06's resume path would resume a solved puzzle.
+
+### Spec drift note
+
+R-7-02's `tasks.md` (line 167) claimed CurationPage would pass `flow=curation` in the URL. That wiring was specced but never shipped — the curation route still navigates with `?new=true&size=N&mode=M`. R-7-03 is the slice that actually implements the URL contract. Not a rewrite of history; just context for the R-7-03 PR body.
+
+### Risks
+
+- **Cross-tab safety:** two tabs writing to the same slot remain last-write-wins, identical to today's two-tabs-on-`id:'current'` behavior. Documented in ST-10. No locking added.
+- **Storage size:** worst-case ~30 KB per slot × ~9 plausible curation pools ≈ 270 KB. IndexedDB quotas are in GB. Non-issue at this scale.
+- **First-load-after-upgrade UX:** admins lose any in-progress puzzle on the post-deploy first load. Acceptable for the audience; called out in the slice's PR body.

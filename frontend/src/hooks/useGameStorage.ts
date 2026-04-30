@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
-import { openDB } from '../storage/db';
-import type { GameState, CompletionRecord } from '../storage/types';
+import { idFor, openDB } from '../storage/db';
+import type { CompletionRecord, FlowType, GameState } from '../storage/types';
 
 /** Hook providing IndexedDB persistence for game state and completions. */
 export function useGameStorage() {
@@ -15,27 +15,33 @@ export function useGameStorage() {
     });
   }, []);
 
-  const loadState = useCallback(async (): Promise<GameState | null> => {
-    const db = await openDB();
-    return new Promise<GameState | null>((resolve, reject) => {
-      const tx = db.transaction('gameState', 'readonly');
-      const store = tx.objectStore('gameState');
-      const req = store.get('current');
-      req.onsuccess = () => resolve((req.result as GameState) ?? null);
-      req.onerror = () => reject(req.error);
-    });
-  }, []);
+  const loadState = useCallback(
+    async (flowType: FlowType, flowId: string): Promise<GameState | null> => {
+      const db = await openDB();
+      return new Promise<GameState | null>((resolve, reject) => {
+        const tx = db.transaction('gameState', 'readonly');
+        const store = tx.objectStore('gameState');
+        const req = store.get(idFor(flowType, flowId));
+        req.onsuccess = () => resolve((req.result as GameState) ?? null);
+        req.onerror = () => reject(req.error);
+      });
+    },
+    [],
+  );
 
-  const clearState = useCallback(async (): Promise<void> => {
-    const db = await openDB();
-    return new Promise<void>((resolve, reject) => {
-      const tx = db.transaction('gameState', 'readwrite');
-      const store = tx.objectStore('gameState');
-      const req = store.delete('current');
-      req.onsuccess = () => resolve();
-      req.onerror = () => reject(req.error);
-    });
-  }, []);
+  const clearState = useCallback(
+    async (flowType: FlowType, flowId: string): Promise<void> => {
+      const db = await openDB();
+      return new Promise<void>((resolve, reject) => {
+        const tx = db.transaction('gameState', 'readwrite');
+        const store = tx.objectStore('gameState');
+        const req = store.delete(idFor(flowType, flowId));
+        req.onsuccess = () => resolve();
+        req.onerror = () => reject(req.error);
+      });
+    },
+    [],
+  );
 
   const addCompletion = useCallback(
     async (record: CompletionRecord): Promise<void> => {
