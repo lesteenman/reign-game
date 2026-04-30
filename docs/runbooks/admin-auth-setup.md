@@ -93,6 +93,25 @@ clerk_secret_key      = "sk_live_..."
 
 Run `terraform apply` from `infra/`. Delete the file after — secrets shouldn't sit on disk longer than a few seconds.
 
+### Path C: CI e2e (dev-tenant, both Actions and Dependabot scopes)
+
+The Playwright e2e job (`.github/workflows/ci.yml::frontend-e2e`) needs Clerk dev-tenant keys at workflow time so the e2e backend can verify Clerk JWTs and the Vite bundle can render the sign-in button. Use the **dev tenant**, not the prod tenant — these keys live in CI logs / cache directories indefinitely and the blast radius must be the dev sandbox only.
+
+> **Do NOT also add the Path A prod-tenant `CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` to either the Actions or Dependabot secret scope.** Path A keys belong only in Terraform → SSM → Lambda. Path C keys are dev-tenant only and live entirely under repo Secrets and variables. Mixing the two is the failure mode that lesson 21's "dashboard work in runbook" pattern exists to prevent.
+
+Add both keys in **both** secret scopes:
+
+| Scope | Path | Keys |
+|---|---|---|
+| Actions | `Settings → Secrets and variables → Actions → New repository secret` | `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` |
+| Dependabot | `Settings → Secrets and variables → Dependabot → New repository secret` | `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` |
+
+Both scopes are required. Workflows triggered by Dependabot PRs only see Dependabot-scoped secrets — Actions secrets are not available in that context. Mirroring the same secret names into both scopes lets the workflow YAML reference `${{ secrets.CLERK_SECRET_KEY }}` once and resolve in either context.
+
+When rotating: rotate **both** scopes together. The values must match — if Actions has key A and Dependabot has key B, only one set of PRs (Dependabot vs. human) will pass CI.
+
+> Path C reuses Path A's secret names (`CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`) — same secret, no duplication. Inside `.github/workflows/ci.yml`, an env-mapping renames `secrets.CLERK_PUBLISHABLE_KEY` to the `VITE_CLERK_PUBLISHABLE_KEY` env var that Vite requires for browser-bundle injection. So the **secret name in GitHub** stays `CLERK_PUBLISHABLE_KEY`; the **env var Vite reads** is `VITE_CLERK_PUBLISHABLE_KEY`. They're the same value with different surface names.
+
 ## 6. Grant an account the admin role
 
 Once the application is deployed and at least one user has signed in via Google:

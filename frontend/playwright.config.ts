@@ -16,9 +16,21 @@ import { defineConfig } from "@playwright/test";
  * Invocations:
  *
  *   npm run test:integration   -> integration project only
- *   npm run test:e2e           -> e2e project only (assumes task e2e:up ran)
+ *   npm run test:e2e           -> e2e project only (assumes task e2e:up ran;
+ *                                 the npm script sets PLAYWRIGHT_SKIP_WEBSERVER=1
+ *                                 so Playwright does NOT spawn a redundant Vite
+ *                                 on :5180 — the e2e Vite is already on :5183)
  *   npm run test:playwright    -> both projects
+ *
+ * webServer note: Playwright's webServer block is top-level (not per-project),
+ * so we gate it on PLAYWRIGHT_SKIP_WEBSERVER. The e2e npm script sets that flag
+ * because `task e2e:up` already provides Vite on :5183. Without the gate the
+ * e2e job in CI would launch a wasted `npm run dev` on :5180 that no test
+ * actually uses (e2e baseURL is :5183). See design-grill-summary Finding 2 #3
+ * in openspec/changes/e2e-in-ci/.
  */
+const skipWebServer = !!process.env.PLAYWRIGHT_SKIP_WEBSERVER;
+
 export default defineConfig({
   testDir: "./playwright",
   fullyParallel: true,
@@ -55,9 +67,11 @@ export default defineConfig({
       retries: 0,
     },
   ],
-  webServer: {
-    command: "npm run dev",
-    port: 5180,
-    reuseExistingServer: !process.env.CI,
-  },
+  webServer: skipWebServer
+    ? undefined
+    : {
+        command: "npm run dev",
+        port: 5180,
+        reuseExistingServer: !process.env.CI,
+      },
 });

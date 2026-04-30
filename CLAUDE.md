@@ -31,6 +31,13 @@ task lint:backend       # Run golangci-lint
 task build:frontend     # Build frontend
 task test:frontend      # Run frontend unit tests
 task deploy             # Build + terraform apply
+
+# E2E lifecycle
+task e2e:up              # Bring up the full e2e stack (LocalStack + e2e backend + e2e frontend + seeded fixtures)
+task e2e:down            # Tear down the e2e stack (LocalStack stays up — shared with dev)
+task e2e:seed            # Re-seed committed fixture puzzles into puzzle-pool-e2e (idempotent)
+task e2e:status          # Show e2e backend status + fixture count
+task e2e:genfixtures     # Regenerate committed fixture puzzles (deterministic from fixed seeds)
 ```
 
 ## Running the Dev Stack (STANDARD — always use these)
@@ -118,12 +125,14 @@ Configure with: `git config core.hooksPath .githooks`
 
 ## Dev Server Ports
 
-| Service    | Port | Started by                 |
-|------------|------|----------------------------|
-| Frontend   | 5180 | `task dev:up:frontend`     |
-| Backend    | 5181 | `task dev:up:backend`      |
-| Generator  | —    | `task dev:up:generator` (SQS consumer, no HTTP port; PID in `logs/generator.pid`) |
-| LocalStack | 4566 | `task dev:up:localstack`   |
+| Service      | Port | Started by                 |
+|--------------|------|----------------------------|
+| Frontend     | 5180 | `task dev:up:frontend`     |
+| Backend      | 5181 | `task dev:up:backend`      |
+| E2E Backend  | 5182 | `task e2e:up:backend`      |
+| E2E Frontend | 5183 | `task e2e:up:frontend`     |
+| Generator    | —    | `task dev:up:generator` (SQS consumer, no HTTP port; PID in `logs/generator.pid`) |
+| LocalStack   | 4566 | `task dev:up:localstack`   |
 
 Frontend already binds `--host 0.0.0.0` (for mobile testing over LAN) and the Vite proxy forwards `/api/*` to `localhost:5181`. All backend routes live under `/api/` — SPA routes (e.g., `/admin` page) stay on the frontend. Do not start services with raw `go run`/`npm run dev` — always go through `task dev:up` (see "Running the Dev Stack" above).
 

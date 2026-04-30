@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:integration": "playwright test --project=integration",
-    "test:e2e": "playwright test --project=e2e",
+    "test:e2e": "PLAYWRIGHT_SKIP_WEBSERVER=1 playwright test --project=e2e",
     "test:playwright": "playwright test"
   },
   "dependencies": {
