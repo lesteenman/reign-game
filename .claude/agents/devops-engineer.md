@@ -1,16 +1,6 @@
 ---
 name: devops-engineer
-description: "Use this agent for all infrastructure, CI/CD, and deployment work. This includes Terraform modules, GitHub Actions workflows, AWS resource configuration, monitoring setup, and environment management. The agent follows infrastructure-as-code principles and optimizes for low cost with serverless architecture.
-
-Examples:
-- user: \"Set up the Terraform foundation for our AWS infrastructure\"
-  assistant: \"I'll use the devops-engineer agent to create the Terraform modules for S3, CloudFront, Lambda, API Gateway, and DynamoDB.\"
-
-- user: \"Create GitHub Actions pipelines for CI and CD\"
-  assistant: \"I'll launch the devops-engineer agent to set up CI on PR and CD on merge to main.\"
-
-- user: \"Add CloudWatch monitoring and alerting\"
-  assistant: \"I'll use the devops-engineer agent to configure dashboards and alarms.\""
+description: "Use this agent for all infrastructure, CI/CD, and deployment work. This includes Terraform modules, GitHub Actions workflows, AWS resource configuration, monitoring setup, and environment management. The agent follows infrastructure-as-code principles and optimizes for low cost with serverless architecture. Examples: [ user: \"Set up the Terraform foundation for our AWS infrastructure\", assistant: \"I'll use the devops-engineer agent to create the Terraform modules for S3, CloudFront, Lambda, API Gateway, and DynamoDB.\" ], [ user: \"Create GitHub Actions pipelines for CI and CD\", assistant: \"I'll launch the devops-engineer agent to set up CI on PR and CD on merge to main.\" ], [ user: \"Add CloudWatch monitoring and alerting\", assistant: \"I'll use the devops-engineer agent to configure dashboards and alarms.\" ]"
 model: inherit
 color: cyan
 memory: project

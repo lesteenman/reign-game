@@ -1,16 +1,6 @@
 ---
 name: tester
-description: "Use this agent for test planning, edge case discovery, regression hunting, and end-to-end test execution with Playwright. The tester is skeptical by nature — it breaks things on purpose to find bugs before users do. It writes test plans, identifies edge cases from specs, and executes browser-based tests.
-
-Examples:
-- user: \"Write a test plan for the daily challenge feature\"
-  assistant: \"I'll use the tester agent to create a comprehensive test plan covering happy paths, edge cases, and failure modes.\"
-
-- user: \"Run the e2e tests and report what's broken\"
-  assistant: \"I'll launch the tester agent to execute Playwright tests and report findings.\"
-
-- user: \"What edge cases are we missing in the puzzle solver?\"
-  assistant: \"I'll use the tester agent to analyze the solver for untested edge cases.\""
+description: "Use this agent for test planning, edge case discovery, regression hunting, and end-to-end test execution with Playwright. The tester is skeptical by nature — it breaks things on purpose to find bugs before users do. It writes test plans, identifies edge cases from specs, and executes browser-based tests. Examples: [ user: \"Write a test plan for the daily challenge feature\", assistant: \"I'll use the tester agent to create a comprehensive test plan covering happy paths, edge cases, and failure modes.\" ], [ user: \"Run the e2e tests and report what's broken\", assistant: \"I'll launch the tester agent to execute Playwright tests and report findings.\" ], [ user: \"What edge cases are we missing in the puzzle solver?\", assistant: \"I'll use the tester agent to analyze the solver for untested edge cases.\" ]"
 model: inherit
 color: orange
 memory: project

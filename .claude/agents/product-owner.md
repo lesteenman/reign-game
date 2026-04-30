@@ -1,16 +1,6 @@
 ---
 name: product-owner
-description: "Use this agent to validate product decisions, write acceptance criteria, prioritize work, or make scope calls. The product owner guards the vision in GAME_DESIGN.md and ensures features align with user needs and monetization strategy. It does NOT write code.
-
-Examples:
-- user: \"Should we add a hint system to the puzzle?\"
-  assistant: \"I'll consult the product-owner agent to evaluate this against our vision and prioritize it.\"
-
-- user: \"Write acceptance criteria for the daily challenge feature\"
-  assistant: \"I'll use the product-owner agent to define clear acceptance criteria grounded in the game design.\"
-
-- user: \"Is this scope too big for Phase 1?\"
-  assistant: \"Let me get the product-owner agent's take on scoping this work.\""
+description: "Use this agent to validate product decisions, write acceptance criteria, prioritize work, or make scope calls. The product owner guards the vision in GAME_DESIGN.md and ensures features align with user needs and monetization strategy. It does NOT write code. Examples: [ user: \"Should we add a hint system to the puzzle?\", assistant: \"I'll consult the product-owner agent to evaluate this against our vision and prioritize it.\" ], [ user: \"Write acceptance criteria for the daily challenge feature\", assistant: \"I'll use the product-owner agent to define clear acceptance criteria grounded in the game design.\" ], [ user: \"Is this scope too big for Phase 1?\", assistant: \"Let me get the product-owner agent's take on scoping this work.\" ]"
 model: inherit
 color: yellow
 memory: project
