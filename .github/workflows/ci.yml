@@ -4,6 +4,14 @@ on:
   pull_request:
     branches: [main]
 
+# Cancel in-progress runs only on PRs (rapid feedback on rebase / push).
+# The conditional shape preserves correctness if a future `push: branches: [main]`
+# trigger is added — main runs should NEVER cancel, so every merged commit
+# leaves a green CI run on the timeline. Decision 9 in design.md, CW-02.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 
@@ -63,6 +71,169 @@ jobs:
 
       - name: Test
         run: npm test
+
+  frontend-integration:
+    name: Frontend Integration
+    # Playwright integration project: real frontend, mocked /api/* via
+    # page.route. No backend, no LocalStack. Independent of the
+    # `frontend` job above (parallel runners, separate failure surface,
+    # separate artifact set). Required-check from day one (CW-30).
+    # CW-03, CW-06, CW-15, CW-16, CW-17, CW-20, CW-22, CW-24, CW-27, CW-32.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Cache Playwright browsers (chromium only — see step below).
+      # Key includes the lockfile hash; any frontend dep change refreshes
+      # the cache. Conservative on purpose (Finding 3 in
+      # design-grill-summary.md): a narrower key risks serving a stale
+      # browser when Playwright bumps its bundled binary without a
+      # playwright-core major bump.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Only chromium — playwright.config.ts pins browserName: 'chromium'
+      # for both projects. Skipping firefox + webkit avoids ~60 s of
+      # unnecessary download (CW-17).
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run integration project
+        run: npm run test:integration
+
+      # Failure-only artifact upload (CW-24..CW-27). if-no-files-found:
+      # ignore prevents the upload step from failing when the run died
+      # before reports were written. Retention 7 days matches GH default
+      # and is plenty for "the PR author looks once."
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-integration-report
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+
+  frontend-e2e:
+    name: Frontend E2E
+    # Playwright e2e project: real e2e backend on :5182 + Vite proxy on
+    # :5183 + LocalStack DynamoDB (puzzle-pool-e2e) + seeded fixtures.
+    # Lifecycle reuses `task e2e:up` (decision 6 / CW-09). The
+    # auth.spec.ts "sign-in button" test runs (un-skipped) as soon as
+    # VITE_CLERK_PUBLISHABLE_KEY is present in the env (CW-23).
+    # CW-04, CW-07..CW-11, CW-14..CW-18, CW-21..CW-23, CW-28, CW-29, CW-33.
+    #
+    # Working directory is repo root because `task e2e:up` orchestrates
+    # tasks in multiple `dir:`-scoped subtasks. npm scripts that run in
+    # frontend/ set working-directory per-step.
+    runs-on: ubuntu-latest
+    env:
+      # Job-level env so both `task e2e:up` (which boots the e2e backend
+      # reading CLERK_SECRET_KEY) and `npm run test:e2e` (which loads
+      # the Vite bundle reading VITE_CLERK_PUBLISHABLE_KEY) see them.
+      # Dev-tenant keys ONLY — prod keys are not in scope for any CI
+      # job (CW-12, design-grill Finding 1).
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
+      CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Go is needed because `task e2e:up:backend` runs `go run ./cmd/api`
+      # against the e2e env. setup-go's built-in cache hits the same
+      # backend/go.sum the Backend job populates (CW-14).
+      - uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+          cache-dependency-path: backend/go.sum
+
+      - uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      # task dev:up:localstack starts LocalStack via the existing
+      # docker-compose.yml (image pinned to localstack/localstack:4.14.0
+      # per CLAUDE.md lesson 22), runs the .localstack/init-aws.sh seed
+      # script (creates puzzle-pool, puzzle-pool-e2e, queues, CONFIG
+      # rows), and gates on BOTH /_localstack/health AND the queue +
+      # table being ACTIVE. Reusing the local task means CI inherits
+      # any future readiness fixes for free (CW-08, lesson 14).
+      - name: Start LocalStack and wait for init
+        run: task dev:up:localstack
+
+      # task e2e:up brings up the e2e backend on :5182, the e2e Vite
+      # proxy on :5183, seeds fixtures into puzzle-pool-e2e, and warms
+      # /api/config/modes to defuse KI-022's DDB cold start. Per
+      # CLAUDE.md lesson 25, do not split warmup or seeding into the
+      # workflow — keep the lifecycle in the task.
+      - name: Bring up e2e stack
+        run: task e2e:up
+
+      - name: Run e2e project
+        working-directory: frontend
+        run: npm run test:e2e
+
+      # Always-run cleanup. Runner is ephemeral so cleanup is mostly
+      # cosmetic, but the pattern keeps a future self-hosted-runner
+      # migration safe (CW-29).
+      - name: Tear down e2e stack
+        if: always()
+        run: |
+          task e2e:down || true
+          docker compose down localstack || true
+
+      # Failure-only artifact upload — adds backend + frontend logs to
+      # the standard Playwright reports so failures with stack traces
+      # in backend output are diagnosable post-hoc (CW-28).
+      - name: Upload Playwright report and logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-e2e-report
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+            logs/e2e-backend.log
+            logs/e2e-frontend.log
 
   terraform-plan:
     name: Terraform Plan

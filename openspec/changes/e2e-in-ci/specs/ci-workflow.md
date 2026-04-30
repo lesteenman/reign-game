@@ -101,8 +101,12 @@ ships. Prefix `CW-` (CI Workflow). Numbered for citation from
   `frontend/playwright-report/` and `frontend/test-results/`.
 - **CW-28.** `frontend-e2e` artifact name is `playwright-e2e-report`
   and includes `frontend/playwright-report/`,
-  `frontend/test-results/`, `logs/backend.log`, and
-  `logs/frontend.log`.
+  `frontend/test-results/`, `logs/e2e-backend.log`, and
+  `logs/e2e-frontend.log`. (The e2e lifecycle tasks
+  `e2e:up:backend` / `e2e:up:frontend` write to the `e2e-`-prefixed
+  log files; the dev-stack `dev:up:backend` / `dev:up:frontend` tasks
+  write to `logs/backend.log` / `logs/frontend.log`. The e2e job uses
+  the e2e tasks, so the e2e log paths are the right ones.)
 
 ## Cleanup
 
