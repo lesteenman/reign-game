@@ -96,6 +96,11 @@ jobs:
         with:
           terraform_wrapper: true
 
+      - uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Terraform Init
         run: |
           terraform init \
@@ -110,11 +115,9 @@ jobs:
       - name: Terraform Format Check
         run: terraform fmt -check
 
-      - name: Build Lambda zip for accurate plan
-        run: |
-          cd ${{ github.workspace }}/backend
-          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o bootstrap ./cmd/api
-          zip -j lambda.zip bootstrap
+      - name: Build reproducible Lambda zip
+        working-directory: ${{ github.workspace }}
+        run: task build:lambda
 
       - name: Terraform Plan
         id: plan
