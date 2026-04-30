@@ -158,7 +158,9 @@ Items not committed to a phase. Each entry is roughly one phase's worth of work.
 
 - **Rate limiting and abuse prevention** on the player-facing completion submission API. Lands once Daily ships.
 
-- **R-06B e2e coverage expansion.** Double 9×9 play-through, serve-then-mark-served lifecycle, pool-empty UI state, generation-path tests once the generator is exercised through `task e2e:up`. Each new flow adds one spec file under `frontend/playwright/e2e/`.
+- **E2E in CI + coverage expansion.** Two parts, the first load-bearing:
+  - **Wire e2e into GitHub Actions.** The full `task e2e:up*` lifecycle runs locally only — LocalStack + e2e backend on :5182 + e2e frontend on :5183 + `task e2e:seed` + `npx playwright test`. None of `.github/workflows/{ci,cd,generator-check}.yml` references Playwright, so dependency bumps (frontend or backend), framework upgrades, and SDK migrations land on green CI without ever being exercised in a real browser. The Vitest + jsdom unit suite has known blind spots — CLAUDE.md lesson 3 (synthesized mouse-after-touch events pass jsdom but break real mobile). The Dependabot batch on 2026-04-30 (#77, #78 jsdom 26→29 major, #79 backend SDK group) merged on green CI without e2e ever running, which is exactly the gap to close. Until this lands, treat green CI on dependency PRs as necessary-but-not-sufficient and run e2e locally before merge.
+  - **Coverage expansion.** Double 9×9 play-through, serve-then-mark-served lifecycle, pool-empty UI state, generation-path tests once the generator is exercised through `task e2e:up`. Each new flow adds one spec file under `frontend/playwright/e2e/`.
 
 ### Generator quality
 
