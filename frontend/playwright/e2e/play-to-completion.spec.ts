@@ -33,19 +33,17 @@ async function placeMarker(page: import("@playwright/test").Page, row: number, c
 }
 
 test.describe("e2e: play to completion (7x7 Standard)", () => {
-  test.beforeEach(async ({ page }) => {
-    await page.goto("/");
-    await expect(page.getByRole("heading", { name: /reign/i })).toBeVisible();
-  });
-
   test("place seven marks, exercise undo/redo mid-play, reach solved", async ({ page }) => {
-    // Arrange — wait for the dynamic button list to render (cold-
-    // start latency on the first DynamoDB call — KI-022), pick 7×7
-    // Standard, and start the game.
-    const sevenByFive = page.getByRole("button", { name: /7.7 standard/i });
-    await expect(sevenByFive).toBeVisible({ timeout: 15_000 });
-    await sevenByFive.click();
-    await page.getByTestId("play-button").click();
+    // Arrange — navigate directly to the game route. The post-R-7-02
+    // LandingPage no longer surfaces size/mode preset buttons (those
+    // moved to admin-gated /curation), but GamePage reads flow/size/
+    // mode from the URL and fetches /api/puzzles/next on mount, which
+    // hits the e2e backend's seeded fixture pool. The 15s timeout
+    // absorbs first-DynamoDB-call cold-start latency (KI-022). This
+    // spec's value is the play-through against a real backend, not the
+    // landing → curation navigation chain — that's covered separately
+    // once Clerk admin session injection lands (see auth.spec.ts).
+    await page.goto("/play?flow=curation&size=7&mode=standard");
     await expect(page.getByTestId("game-grid")).toBeVisible({ timeout: 15_000 });
 
     // Act — place the first mark, then exercise undo (marked → excluded
