@@ -93,6 +93,23 @@ clerk_secret_key      = "sk_live_..."
 
 Run `terraform apply` from `infra/`. Delete the file after — secrets shouldn't sit on disk longer than a few seconds.
 
+### Path C: CI e2e (dev-tenant, both Actions and Dependabot scopes)
+
+The Playwright e2e job (`.github/workflows/ci.yml::frontend-e2e`) needs Clerk dev-tenant keys at workflow time so the e2e backend can verify Clerk JWTs and the Vite bundle can render the sign-in button. Use the **dev tenant**, not the prod tenant — these keys live in CI logs / cache directories indefinitely and the blast radius must be the dev sandbox only.
+
+Add both keys in **both** secret scopes:
+
+| Scope | Path | Keys |
+|---|---|---|
+| Actions | `Settings → Secrets and variables → Actions → New repository secret` | `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` |
+| Dependabot | `Settings → Secrets and variables → Dependabot → New repository secret` | `VITE_CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` |
+
+Both scopes are required. Workflows triggered by Dependabot PRs only see Dependabot-scoped secrets — Actions secrets are not available in that context. Mirroring the same secret names into both scopes lets the workflow YAML reference `${{ secrets.CLERK_SECRET_KEY }}` once and resolve in either context.
+
+When rotating: rotate **both** scopes together. The values must match — if Actions has key A and Dependabot has key B, only one set of PRs (Dependabot vs. human) will pass CI.
+
+> Note the `VITE_` prefix on the publishable key here, distinct from `CLERK_PUBLISHABLE_KEY` in Path A. The CD path passes the publishable key into Terraform/SSM/Lambda; the CI e2e path needs the same value but exposed under the `VITE_*` prefix so Vite injects it into the browser bundle. The two are conceptually the same key (both publishable), but live under different secret names because they enter different build pipelines.
+
 ## 6. Grant an account the admin role
 
 Once the application is deployed and at least one user has signed in via Google:
