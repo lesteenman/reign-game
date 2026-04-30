@@ -30,9 +30,12 @@ ships. Prefix `CW-` (CI Workflow). Numbered for citation from
 - **CW-06.** `frontend-integration` does NOT start LocalStack, the
   e2e backend, or any Docker container. The integration project
   uses `page.route` to mock `/api/*`.
-- **CW-07.** `frontend-e2e` starts LocalStack via `docker compose
-  up -d localstack` from the repo root. The container uses the
-  pinned image referenced in `docker-compose.yml`
+- **CW-07.** `frontend-e2e` starts LocalStack via `task
+  dev:up:localstack` (which wraps `docker compose up -d localstack`
+  plus the init-script completion gate — `puzzle-pool` table
+  ACTIVE, puzzle-generation queue exists; reuse over re-
+  implementation per CLAUDE.md lesson 14) from the repo root. The
+  container uses the pinned image referenced in `docker-compose.yml`
   (`localstack/localstack:4.14.0` per CLAUDE.md lesson 22).
 - **CW-08.** `frontend-e2e` waits for LocalStack readiness AND the
   init script's completion before any e2e backend boot. Reuses the

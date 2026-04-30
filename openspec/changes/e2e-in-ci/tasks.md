@@ -79,7 +79,7 @@ for CI / workflow rules.
    - On failure, `actions/upload-artifact@v7.0.1` with
      `if-no-files-found: ignore`, `retention-days: 7`,
      `name: playwright-e2e-report`,
-     `path: |\n        frontend/playwright-report/\n        frontend/test-results/\n        logs/backend.log\n        logs/frontend.log`,
+     `path: |\n        frontend/playwright-report/\n        frontend/test-results/\n        logs/e2e-backend.log\n        logs/e2e-frontend.log`,
      `if: failure()`. Decision 8.
    - Final step (always run): `task e2e:down` and `docker compose
      down localstack`. Use `if: always()` to ensure cleanup runs
@@ -145,7 +145,7 @@ The slice is done when ALL of the following hold:
 - [ ] On a deliberately-broken PR (e.g., a temporary commit that
       fails one e2e spec), failure artifacts are uploaded and contain
       `playwright-report/index.html`, `test-results/`, and (e2e job
-      only) `logs/backend.log` + `logs/frontend.log`.
+      only) `logs/e2e-backend.log` + `logs/e2e-frontend.log`.
 - [ ] Both jobs fall under 20 min wall-clock time on a cold cache.
 
 ## Verification Checklist (Phase Close)

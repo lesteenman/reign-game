@@ -111,6 +111,8 @@ design):** Does `npm run test:e2e` already work locally because
 because Playwright's `webServer` block is bypassed by some other
 mechanism? Confirm before assuming the same will hold in CI.
 
+**Resolution adopted:** Neither per-project override (Playwright doesn't support a per-project `webServer` block — it's top-level only) nor unconditional `reuseExistingServer: true` (which masks the integration project's expected Vite spawn locally). Instead: gate the entire top-level `webServer` block on a `PLAYWRIGHT_SKIP_WEBSERVER=1` env flag, set by the `npm run test:e2e` script. The integration project's invocation (`npm run test:integration`) does not set the flag, preserving its `webServer` spawn-or-reuse behavior. The e2e project's invocation sets the flag, eliminating the redundant :5180 spawn. See `frontend/playwright.config.ts:32-77` and the explanatory block comment.
+
 ## Finding 3: Playwright browser cache — worst-case dep bump?
 
 **Severity:** LOW (acceptable risk, no spec change).

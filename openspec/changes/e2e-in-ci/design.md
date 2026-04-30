@@ -8,7 +8,7 @@
 | 1 | Workflow placement | (b) — new job(s) in `ci.yml` |
 | 2 | Integration vs e2e split | (ii) — two separate jobs (`frontend-integration` + `frontend-e2e`) |
 | 3 | Path filtering | (p1) — every PR for first month |
-| 4 | LocalStack approach | (L2) — `docker compose up localstack` reusing existing config + init script |
+| 4 | LocalStack approach | (L2) — `task dev:up:localstack` (which wraps `docker compose up -d localstack` plus the init-script completion gate — `puzzle-pool` table ACTIVE, puzzle-generation queue exists; reuse over re-implementation per CLAUDE.md lesson 14) |
 | 5 | Clerk secrets | (a) — mirror dev-tenant `VITE_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` in BOTH Actions and Dependabot scopes |
 | 6 | Lifecycle reuse | Reuse `task e2e:up` directly (NOT `dev:up`) |
 | 7 | Caching | Go modules + npm + Playwright browsers; skip LocalStack image + Go build |
@@ -44,12 +44,17 @@ SQS or DDB. Path filtering on `frontend/**` would skip exactly the
 runs that catch those upstream regressions. Re-evaluate after a
 month with concrete data on which PRs triggered each job.
 
-### 4. `docker compose up localstack` (L2)
+### 4. `task dev:up:localstack` (L2)
 
 The init script `.localstack/init-aws.sh` is the contract. Anything
 that re-implements it in CI YAML diverges from local; lesson 14
-applies. Same image (pinned to `localstack/localstack:4.14.0` per
-lesson 22), same init script, same readiness contract.
+applies. The CI job invokes `task dev:up:localstack` (which wraps
+`docker compose up -d localstack` plus the init-script completion
+gate — `puzzle-pool` table ACTIVE, puzzle-generation queue exists;
+reuse over re-implementation per CLAUDE.md lesson 14) rather than
+calling `docker compose` directly. Same image (pinned to
+`localstack/localstack:4.14.0` per lesson 22), same init script,
+same readiness contract.
 
 ### 5. Clerk secrets in BOTH scopes
 
@@ -93,7 +98,7 @@ parity (lesson 14) and avoids re-implementing readiness logic.
 artifact-clean on green runs. Seven days matches GH defaults and is
 plenty for "the PR author needs to look once". E2e job uploads
 `frontend/playwright-report/`, `frontend/test-results/`, and
-`logs/backend.log` + `logs/frontend.log`. Integration job uploads
+`logs/e2e-backend.log` + `logs/e2e-frontend.log`. Integration job uploads
 only the Playwright artifacts (no backend logs to surface).
 
 ### 9. Cancel-in-progress on PR only
@@ -187,14 +192,16 @@ All versions verified against the live GitHub releases API at the
 timestamp above (lesson 26 — verify external dependency versions at
 the source of truth, not from memory).
 
-| Action | Pin | Released | Notes |
-|---|---|---|---|
-| `actions/checkout` | `@v6.0.2` | 2026-01-09 | Already in repo |
-| `actions/setup-go` | `@v6.4.0` | 2026-03-30 | Already in repo |
-| `actions/setup-node` | `@v6.4.0` | 2026-04-20 | Already in repo |
-| `actions/cache` | `@v5.0.5` | 2026-04-13 | New for Playwright browsers |
-| `actions/upload-artifact` | `@v7.0.1` | 2026-04-10 | New for failure artifacts |
-| `arduino/setup-task` | `@v2.0.0` | (verified earlier today) | Already in repo |
+**Pinning convention:** major-tag pins (`@v6`, `@v5`, `@v7`) match the rest of the repo (`actions/checkout@v6`, `golangci/golangci-lint-action@v9`, `gitleaks/gitleaks-action@v2`, etc.). The patch-level versions in this table are the registry-verified latest at design time (per CLAUDE.md lesson 26) and document that the major-tag pin will resolve to those or any newer version in the same major. Dependabot's grouped GitHub Actions update keeps these moving forward.
+
+| Action | Pin used | Latest patch at design time | Released | Notes |
+|---|---|---|---|---|
+| `actions/checkout` | `@v6` | `v6.0.2` | 2026-01-09 | Already in repo |
+| `actions/setup-go` | `@v6` | `v6.4.0` | 2026-03-30 | Already in repo |
+| `actions/setup-node` | `@v6` | `v6.4.0` | 2026-04-20 | Already in repo |
+| `actions/cache` | `@v5` | `v5.0.5` | 2026-04-13 | New for Playwright browsers |
+| `actions/upload-artifact` | `@v7` | `v7.0.1` | 2026-04-10 | New for failure artifacts |
+| `arduino/setup-task` | `@v2` | `v2.0.0` | (verified earlier today) | Already in repo |
 
 Verification commands (re-runnable on slice start):
 
