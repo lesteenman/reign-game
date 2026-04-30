@@ -125,7 +125,7 @@ func (g *Generator) growRegionsSolverGuided(seeds [][]Mark, dst *[nMax][nMax]int
 	// Authoritative (mutable) growth state for this call. Kept as a local
 	// value struct so we can snapshot it with value copy into scoringGrow
 	// during probes. Start FROM the scratch so setup is not duplicated.
-	var gs growState = g.scoringGrow
+	var gs = g.scoringGrow
 
 	// Reuse the pre-allocated frontier buffer on the Generator. growCheapLoopOn
 	// uses the same buffer when invoked from probeAssignment — that's safe

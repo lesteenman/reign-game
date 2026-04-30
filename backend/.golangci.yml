@@ -1,3 +1,5 @@
+version: "2"
+
 run:
   timeout: 3m
 
@@ -7,21 +9,20 @@ linters:
     - govet
     - staticcheck
     - unused
-    - gosimple
     - ineffassign
-    - typecheck
     - gocritic
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - style
+        - performance
+
+formatters:
+  enable:
     - gofmt
     - goimports
 
-linters-settings:
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - style
-      - performance
-
 issues:
-  exclude-use-default: false
   max-issues-per-linter: 50
   max-same-issues: 10
