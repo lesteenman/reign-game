@@ -34,10 +34,10 @@ This slice delivers, in one branch:
 
 The design-grill pass produced 14 locked decisions plus the Q-A resolution (`(a)` — keep `7#double=false` as the always-disabled sentinel). The full table lives in `design.md`. Highlights:
 
-- Decision #6 retargets the dynamic-modes admin spec at `7#double=false` rather than re-enabling it, which would require the underlying generator infeasibility (per KI-007) to be fixed first.
+- Per the design's locked decisions, the dynamic-modes admin spec retargets at `7#double=false` rather than re-enabling it, which would require the underlying generator infeasibility (per KI-007) to be fixed first.
 - Generator runs in the e2e stack on a separate queue (`puzzle-generation-e2e`) so dev and e2e never cross-contaminate.
 - Clerk session is injected via storage-state, not API-mocked, so the auth path stays exercised end-to-end.
-- A dedicated test admin user lives in the same Clerk dev tenant as local development; production tenant is untouched.
+- Two dedicated test users (admin + non-admin) live in the same Clerk dev tenant as local development; production tenant is untouched. See design.md D2.
 
 ## Out of scope
 

@@ -95,6 +95,8 @@ Run `terraform apply` from `infra/`. Delete the file after — secrets shouldn't
 
 ### Path C: CI e2e (dev-tenant, both Actions and Dependabot scopes)
 
+> Note: The CI e2e job (slice e2e-coverage-and-clerk-injection) needs 4 additional Clerk test-user secrets beyond the 2 documented here. See `docs/runbooks/e2e-clerk-setup.md` for the complete CI secret-prep procedure.
+
 The Playwright e2e job (`.github/workflows/ci.yml::frontend-e2e`) needs Clerk dev-tenant keys at workflow time so the e2e backend can verify Clerk JWTs and the Vite bundle can render the sign-in button. Use the **dev tenant**, not the prod tenant — these keys live in CI logs / cache directories indefinitely and the blast radius must be the dev sandbox only.
 
 > **Do NOT also add the Path A prod-tenant `CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` to either the Actions or Dependabot secret scope.** Path A keys belong only in Terraform → SSM → Lambda. Path C keys are dev-tenant only and live entirely under repo Secrets and variables. Mixing the two is the failure mode that lesson 21's "dashboard work in runbook" pattern exists to prevent.

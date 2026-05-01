@@ -2,7 +2,7 @@
 
 ## 1. Summary
 
-Re-enable the four currently-skipped Playwright tests and add four new e2e specs that cover gaps surfaced after R-7-02/R-7-03 (replenish queue, served-marking, pool-empty fallback, daily-challenge backfill). Use `@clerk/testing/playwright` for real Clerk session injection (replacing the cookie-stub middleware bypass) and run an isolated generator process inside e2e (`task e2e:up:generator` against `puzzle-generation-e2e` + `puzzle-pool-e2e`) so SQS-driven flows can be asserted end-to-end. See `proposal.md` for scope, `tasks.md` for the implementation checklist, and `design-grill-summary.md` for the full decision log.
+Re-enable the four currently-skipped Playwright tests and add four new e2e specs that cover gaps surfaced after R-7-02/R-7-03 (admin config flow, replenish queue, served-marking, pool-empty fallback). Use `@clerk/testing/playwright` for real Clerk session injection (replacing the cookie-stub middleware bypass) and run an isolated generator process inside e2e (`task e2e:up:generator` against `puzzle-generation-e2e` + `puzzle-pool-e2e`) so SQS-driven flows can be asserted end-to-end. See `proposal.md` for scope, `tasks.md` for the implementation checklist, and `design-grill-summary.md` for the full decision log.
 
 ## 2. Locked decisions
 
@@ -22,16 +22,18 @@ Eighteen decisions: 14 from chunk 2's grill + 4 follow-ups from chunk 3.
 | D10 | Flat 30 s polling budget in both local and CI (per chunk 3 follow-up #1). | Single timing constant is simpler than env-split and avoids "passes locally, flakes in CI" surprises; F4 in grill summary stays at "accept". |
 | D11 | Pool-mutating specs (replenish, served-marking, pool-empty-fallback) run in `test.describe.serial` with `workers: 1` (per chunk 3 follow-up #2). | Three specs all mutate `puzzle-pool-e2e` rows; parallel execution would race. Other specs stay parallel. |
 | D12 | Empty-pool fallback assertion is text-only, no screenshot (per chunk 3 follow-up #3). | A non-blank user-readable text assertion is sufficient; F1 in grill summary stays at "accept" — no screenshot mitigation needed. |
-| D13 | Daily-challenge backfill spec uses Playwright system-clock override (no app-level clock injection). | Spec-only concern; production code stays untouched. |
+| D13 | Admin config flow spec covers create-combo + replenish-trigger paths (replaces the originally-scoped daily-challenge backfill spec, which was descoped in chunk 4). | Daily-challenge surface area isn't yet shipped; admin config flow is load-bearing today. |
 | D14 | Q-A 404 retry-on-stale spec asserts the retry path executes once on a stale served-list hit. | Closes the regression class from R-7-02 where stale Q-A indexes returned 404s. |
-| D15 | Generator binary in e2e is the same `cmd/generator/main.go` as dev — env-overridden, not a test build. | "Test what we ship" — different binary in e2e was ruled out in chunk 2's grill. |
+| D15 | Generator binary in e2e is the same `cmd/api` (with `GENERATOR_MODE=sqs`) as dev — env-overridden, not a test build. | "Test what we ship" — different binary in e2e was ruled out in chunk 2's grill. |
 | D16 | Env-override matrix: `PUZZLE_TABLE_NAME=puzzle-pool-e2e`, `SQS_QUEUE_URL=http://localhost:4566/000000000000/puzzle-generation-e2e`, `CLERK_SECRET_KEY=<dev tenant>`, `CLERK_PUBLISHABLE_KEY=<dev tenant>`, `AWS_ENDPOINT_URL=http://localhost:4566`. | Single source of truth in `frontend/playwright.config.ts` `webServer` block + `task e2e:up:*`. |
 | D17 | R-08D-equivalent rotation phrased as **"production Clerk tenant rotation (post-launch operational task)"** in proposal.md (per chunk 3 follow-up #5). | Lesson 21: dashboard rotation is not a code slice; the dev-tenant scoping in this slice is what makes the eventual rotation safe. |
 | D18 | No new GitHub Actions added; `@clerk/testing/playwright` pinned via `package-lock.json` only. | Per CLAUDE.md lesson 19/26 — no version pinning needed at the spec level since no new action surfaces are introduced. |
 
+**Implementation note (D11 deferred)**: D11's project split (a serial `pool-mutating` Playwright project + a parallel project for non-mutating specs) was not implemented because the existing `e2e` project's `workers: 1` setting (a pre-slice fixture-pool-race constraint) binds the same as a serial project would. Implementing the split without first breaking the fixture-pool constraint would just move the race. Tracked as a follow-up if/when fixture-pool size grows. Estimated savings: ~10–25 s wall clock per CI run.
+
 ## 3. Generator-in-e2e architecture
 
-The generator is the same Go binary that runs in dev (`cmd/generator/main.go`). E2E runs a second instance against isolated infra:
+The generator is the same Go binary that runs in dev (`cmd/api` launched with `GENERATOR_MODE=sqs`). E2E runs a second instance against isolated infra:
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -124,7 +126,7 @@ Four new specs + four unskipped tests. See `tasks.md` for file paths.
 5. `pool-replenishment.spec.ts` (serial) — `beforeAll` truncates `puzzle-pool-e2e` to `count=1`. Spec triggers `POST /api/admin/replenish` (verified route per `backend/internal/handler/replenish_test.go` and `backend/cmd/api/main.go:78`) and `expect.poll(... .count, { timeout: 30_000 }).toBeGreaterThanOrEqual(targetCount)`. Asserts the generator drained at least one SQS message by tailing `logs/e2e-generator.log` for a `produced puzzle` line.
 6. `served-marking.spec.ts` (serial) — `beforeAll` seeds 3 puzzles. Spec serves a puzzle via `GET /api/puzzle?mode=...&difficulty=...`, asserts the served puzzle's row is updated to `served=true` (via `/api/admin/pool` count breakdown), then `expect.poll` confirms the generator replenishes back to baseline within 30 s.
 7. `pool-empty-fallback.spec.ts` (serial) — `beforeAll` truncates `puzzle-pool-e2e` to empty. Spec navigates to a puzzle page; asserts a non-blank user-readable text element (per D12 — no screenshot) like "puzzle is being prepared, please retry shortly" is rendered, and that `/api/puzzle` returns the expected `503`/`409` shape.
-8. `daily-challenge-backfill.spec.ts` (parallel-safe) — uses Playwright's `page.clock.setFixedTime(...)` (D13) to advance to the next UTC day mid-test; asserts a fresh daily-challenge puzzle is fetched and the previous day's leaderboard is no longer shown.
+8. `admin-config-flow.spec.ts` (parallel-safe) — sign in as admin, exercise the create-combo + replenish-trigger admin UI flow end-to-end, and assert the resulting `/api/admin/pool` row reflects the new combo. Replaces the originally-scoped daily-challenge backfill spec per D13 (chunk 4 descope).
 
 A fifth assertion path — Q-A 404 retry-on-stale (D14) — is folded into `served-marking.spec.ts` rather than its own file: after the first served puzzle, the spec deliberately serves the same indices again to provoke the stale path, asserts the response is **not** a 404 (the retry kicked in) and that the backend log line `WARN: served-list stale, retrying` appears once.
 
@@ -133,7 +135,7 @@ A fifth assertion path — Q-A 404 retry-on-stale (D14) — is folded into `serv
 Per D11 / chunk 3 follow-up #2:
 
 - **`test.describe.serial` + `workers: 1`** for `replenish.spec.ts`, `served-marking.spec.ts`, `pool-empty-fallback.spec.ts`. All three mutate `puzzle-pool-e2e`; running them in parallel would race on row counts and message ordering.
-- **Parallel-safe**: `auth.spec.ts`, `dynamic-modes.spec.ts`, `daily-challenge-backfill.spec.ts`. None mutate the puzzle pool — auth flips Clerk session state per browser context (isolated by Playwright), dynamic-modes mutates the modes config table (single-row, idempotent), and the daily-challenge spec only reads.
+- **Parallel-safe**: `auth.spec.ts`, `dynamic-modes.spec.ts`, `admin-config-flow.spec.ts`. None mutate the puzzle pool — auth flips Clerk session state per browser context (isolated by Playwright), dynamic-modes mutates the modes config table (single-row, idempotent), and the admin-config-flow spec only reads/writes the modes config (not the puzzle pool).
 - **`beforeAll` per serial spec** truncates `puzzle-pool-e2e` and reseeds the fixture relevant to that spec (e.g. replenish seeds `count=1`, served-marking seeds `count=3`). Avoids leakage between specs even within the serial group.
 - **Implementation note**: configure via `playwright.config.ts` `projects:` — one project for the serial group with `fullyParallel: false, workers: 1`, another for the parallel specs with the default settings. This is more robust than file-level `test.describe.serial` decorators alone, since it prevents Playwright's worker pool from picking up a serial spec on a parallel worker.
 

@@ -158,9 +158,7 @@ Items not committed to a phase. Each entry is roughly one phase's worth of work.
 
 - **Rate limiting and abuse prevention** on the player-facing completion submission API. Lands once Daily ships.
 
-- **E2E coverage expansion** (slice 1 of 3 shipped 2026-04-30, see `openspec/archive/e2e-in-ci/` after merge).
-  - **Slice 2 — Clerk admin session injection.** Wire `@clerk/testing`'s session-injection helper into `frontend/playwright/e2e/auth.spec.ts` to unskip the 3 admin-gated tests (admin sign-in, admin lands on `/admin`, user-role redirect). Slice 1 already unblocks the 4th skipped test (sign-in button render) by exposing `VITE_CLERK_PUBLISHABLE_KEY` in CI.
-  - **Slice 3 — coverage expansion.** Double 9×9 play-through, serve-then-mark-served lifecycle, pool-empty UI state, generation-path tests (once the generator is exercised through `task e2e:up`). Each new flow adds one spec file under `frontend/playwright/e2e/`.
+- **E2E coverage expansion** (slices 2+3 shipped 2026-05-01 — see `openspec/archive/e2e-coverage-and-clerk-injection/` after merge). Slice 1 (E2E in CI) shipped 2026-04-30 in PR #89.
 
 ### Generator quality
 
