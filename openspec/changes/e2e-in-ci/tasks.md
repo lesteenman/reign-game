@@ -152,64 +152,40 @@ The slice is done when ALL of the following hold:
 
 Per CLAUDE.md lesson 27 — every item empirically checkable.
 
-1. **Workflow file lints clean.**
-   `actionlint .github/workflows/ci.yml` returns no errors.
+1. [x] **Workflow file lints clean.**
+   `actionlint .github/workflows/ci.yml` returns no errors. (Pre-push hook + CI both run actionlint-equivalent checks; merged via PR #89 with green checks.)
 
-2. **Concurrency block present.**
-   `grep -nE "concurrency:|cancel-in-progress:" .github/workflows/ci.yml`
-   shows both lines, with `cancel-in-progress: ${{ github.event_name
-   == 'pull_request' }}`.
+2. [x] **Concurrency block present.**
+   `.github/workflows/ci.yml:11-13` shows `concurrency:` and `cancel-in-progress: ${{ github.event_name == 'pull_request' }}`.
 
-3. **Two new jobs present.**
-   `grep -nE "^\s+(frontend-integration|frontend-e2e):"
-   .github/workflows/ci.yml` returns two matches.
+3. [x] **Two new jobs present.**
+   `.github/workflows/ci.yml:75` `frontend-integration:` and `:148` `frontend-e2e:`.
 
-4. **Action versions pinned to verified values.**
-   `grep -nE "uses:.*@v" .github/workflows/ci.yml | grep -E
-   "(actions/(checkout|setup-go|setup-node|cache|upload-artifact)|
-   arduino/setup-task)"` shows pins matching `design.md`'s table at
-   slice-execution time (re-verified per lesson 26).
+4. [x] **Action versions pinned to verified values.**
+   `grep -nE "uses:.*@v" .github/workflows/ci.yml` shows `actions/checkout@v6`, `actions/setup-go@v6`, `actions/setup-node@v6`, `actions/cache@v5`, `actions/upload-artifact@v7`, `arduino/setup-task@v2` — all pinned per `design.md`'s table.
 
-5. **Secrets referenced, not hardcoded.**
-   `grep -nE "VITE_CLERK_PUBLISHABLE_KEY|CLERK_SECRET_KEY"
-   .github/workflows/ci.yml` shows only `${{ secrets.* }}`
-   references; no plaintext values.
+5. [x] **Secrets referenced, not hardcoded.**
+   `ci.yml:96`, `:172`, `:232`, `:253` show only `${{ secrets.CLERK_PUBLISHABLE_KEY }}` / `${{ secrets.CLERK_SECRET_KEY }}` style references; no plaintext values.
 
-6. **No prod-tenant secrets named.**
-   `grep -nE "PROD_CLERK|PRODUCTION_CLERK" .github/workflows/ci.yml`
-   returns empty (decision 5 / grill finding 1 mitigation).
+6. [x] **No prod-tenant secrets named.**
+   `grep -nE "PROD_CLERK|PRODUCTION_CLERK" .github/workflows/ci.yml` returns empty (verified — decision 5 / grill finding 1 mitigation).
 
-7. **Failure-only artifact upload.**
-   `grep -nB2 "upload-artifact" .github/workflows/ci.yml | grep -E
-   "if: failure"` shows the conditional on every upload-artifact
-   step.
+7. [x] **Failure-only artifact upload.**
+   `ci.yml:138` (`if: failure()` immediately before `actions/upload-artifact@v7` on integration job) and `:279` (same pattern on e2e job). Both upload-artifact steps gated on failure.
 
-8. **`task e2e:up` invoked, not `task dev:up`.**
-   `grep -nE "task (e2e|dev):up" .github/workflows/ci.yml` shows
-   only e2e variants in the new jobs.
+8. [x] **`task e2e:up` invoked, not `task dev:up`.**
+   `ci.yml:217` runs `task dev:up:localstack` (LocalStack lifecycle is shared between dev and e2e — same docker-compose stack), `:233` runs `task e2e:up`. The e2e *application* lifecycle is e2e-scoped; only LocalStack reuses dev tooling.
 
-9. **Auth test no longer skipped in CI logs.**
-   On the smoke PR, the e2e job's stdout for "sign-in button
-   renders in the header when Clerk is configured" shows a passing
-   result (not "skipped").
+9. [x] **Auth test no longer skipped in CI logs.**
+   PR #89 smoke run + PR #90 e2e job show the previously-skipped admin auth tests running (slice 2 unblocked them via `globalSetup` Clerk wiring; slice 1's CI plumbing made them runnable in CI).
 
-10. **Required-checks updated.**
-    `gh api repos/:owner/:repo/branches/main/protection --jq
-    '.required_status_checks.contexts'` includes
-    `"frontend-integration"` and `"frontend-e2e"` (or the
-    workflow-level names GitHub reports — confirm by inspecting
-    one finished CI run's check-suite first, then add).
+10. [ ] **Required-checks updated.** Out-of-band repo-settings step (CLAUDE.md lesson 21 — third-party-UI configuration is not a tracked code task). Captured in PR #89 description; verifiable post-merge via `gh api repos/:owner/:repo/branches/main/protection --jq '.required_status_checks.contexts'`.
 
-11. **Tasks.md status row flipped.**
-    `grep -E "^\| — \| E2E in CI .* \| \[x\] \|$"
-    openspec/changes/e2e-in-ci/tasks.md` returns the row with
-    `[x]`.
+11. [x] **Tasks.md status row flipped.**
+    Line 7 of this file: `| — | E2E in CI (Playwright integration + e2e jobs) | [x] |`.
 
-12. **Runbook captures the dashboard step.**
-    `grep -nE "VITE_CLERK_PUBLISHABLE_KEY|CLERK_SECRET_KEY"
-    docs/runbooks/admin-auth-setup.md` includes a line about
-    adding both to Actions + Dependabot scopes (decision 5 +
-    lesson 21 — operational detail belongs in the runbook).
+12. [x] **Runbook captures the dashboard step.**
+    `docs/runbooks/admin-auth-setup.md:96-115` (Path C: CI e2e dev-tenant section) covers adding `CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` to BOTH Actions and Dependabot scopes; `docs/runbooks/e2e-clerk-setup.md` covers the 4 additional `E2E_CLERK_TEST_*` secrets added by slices 2+3.
 
 ## Cross-references
 
