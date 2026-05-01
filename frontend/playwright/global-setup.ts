@@ -29,9 +29,9 @@ import { clerkSetup } from "@clerk/testing/playwright";
  *   - VITE_CLERK_PUBLISHABLE_KEY      — Clerk dev tenant publishable key (always required)
  *   - CLERK_SECRET_KEY                — Clerk dev tenant secret key (required when running e2e specs)
  *   - E2E_CLERK_TEST_ADMIN_EMAIL      — admin test user email (validated at sign-in time)
- *   - E2E_CLERK_TEST_ADMIN_PASSWORD   — admin test user password (validated at sign-in time)
+ *   - E2E_CLERK_TEST_ADMIN_PASSWORD   — admin test user password (unused by current helpers)
  *   - E2E_CLERK_TEST_USER_EMAIL       — non-admin test user email (validated at sign-in time)
- *   - E2E_CLERK_TEST_USER_PASSWORD    — non-admin test user password (validated at sign-in time)
+ *   - E2E_CLERK_TEST_USER_PASSWORD    — non-admin test user password (unused by current helpers)
  *
  * See `docs/runbooks/e2e-clerk-setup.md` for the dashboard prep that creates
  * the dev tenant + the two seeded test users.

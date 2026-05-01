@@ -12,6 +12,7 @@
 
 - [x] `Taskfile.yml` — add `e2e:up:generator` and `e2e:down:generator` tasks. Pattern after `dev:up:generator` but pin the queue to `puzzle-generation-e2e` via env var. PID file: `./logs/e2e-generator.pid`.
 - [x] `Taskfile.yml` — wire `e2e:up:generator` into `e2e:up` (deps array) and `e2e:down:generator` into `e2e:down`. Readiness probe: same "starting local SQS poller" log line, but on a separate log file `./logs/e2e-generator.log`.
+- [x] `Taskfile.yml` — set `SQS_QUEUE_URL=http://localhost:4566/000000000000/puzzle-generation-e2e` on `e2e:up:backend` (NOT the dev `puzzle-generation` queue). Lockstep with the generator queue per ES-01.5 — both the e2e backend (enqueues from `/api/admin/replenish`) and the e2e generator (dequeues) must point at the same queue, otherwise replenish messages disappear silently. Corrected in commit 62f0e50.
 - [x] `.localstack/init-aws.sh` — provision the `puzzle-generation-e2e` SQS queue alongside the existing `puzzle-generation` queue. Idempotent guard so dev and e2e LocalStack runs both work.
 - [x] `.localstack/init-aws.sh` — seed the `puzzle-pool` CONFIG items needed by the new specs (replenishment thresholds, the `7#double=false` flip, served-marking state). Use the existing CONFIG seed block; add fixture path comments.
 

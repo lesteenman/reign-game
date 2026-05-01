@@ -1,4 +1,4 @@
-import { clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
+import { clerk } from "@clerk/testing/playwright";
 import type { Page } from "@playwright/test";
 
 /**
@@ -10,8 +10,10 @@ import type { Page } from "@playwright/test";
  *
  * Env vars (validated lazily here — see global-setup.ts header for why
  * the validation moved out of globalSetup):
- *   E2E_CLERK_TEST_ADMIN_EMAIL, E2E_CLERK_TEST_ADMIN_PASSWORD
- *   E2E_CLERK_TEST_USER_EMAIL,  E2E_CLERK_TEST_USER_PASSWORD
+ *   E2E_CLERK_TEST_ADMIN_EMAIL
+ *   E2E_CLERK_TEST_USER_EMAIL
+ *   E2E_CLERK_TEST_ADMIN_PASSWORD (stored, not consumed by current helpers — kept for future flexibility)
+ *   E2E_CLERK_TEST_USER_PASSWORD  (stored, not consumed by current helpers — kept for future flexibility)
  *
  * Each helper validates the vars it needs on first invocation. Missing
  * vars throw a fail-fast error naming exactly which one is absent —
@@ -33,21 +35,20 @@ function requireEnv(name: string): string {
 
 export async function signInAsAdmin(page: Page): Promise<void> {
   const emailAddress = requireEnv("E2E_CLERK_TEST_ADMIN_EMAIL");
-  // setupClerkTestingToken installs the rate-limit-bypass token. clerk.signIn
-  // with `emailAddress` (no password) uses Clerk's backend SDK to mint a
-  // sign-in TICKET for the user, then evaluates a ticket-strategy signIn
-  // on the page. Per @clerk/testing's source, this branch waits for
+  // clerk.signIn with `emailAddress` (no password) uses Clerk's backend SDK
+  // to mint a sign-in TICKET for the user, then evaluates a ticket-strategy
+  // signIn on the page. Per @clerk/testing's source, this branch waits for
   // window.Clerk.user to populate before returning — unlike the password
-  // branch, which races. The password env vars (E2E_CLERK_TEST_*_PASSWORD)
-  // are no longer consulted by this helper.
-  await setupClerkTestingToken({ page });
+  // branch, which races. clerk.signIn invokes setupClerkTestingToken
+  // internally before the email-ticket branch, so we don't call it here.
+  // The password env vars (E2E_CLERK_TEST_*_PASSWORD) are no longer
+  // consulted by this helper.
   await page.goto("/");
   await clerk.signIn({ page, emailAddress });
 }
 
 export async function signInAsUser(page: Page): Promise<void> {
   const emailAddress = requireEnv("E2E_CLERK_TEST_USER_EMAIL");
-  await setupClerkTestingToken({ page });
   await page.goto("/");
   await clerk.signIn({ page, emailAddress });
 }

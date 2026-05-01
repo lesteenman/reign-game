@@ -29,8 +29,9 @@ import { readCombo } from "../test-helpers/admin-pool";
  * file in case more cases get added later.
  *
  * Env vars required (per design D11):
- *   E2E_CLERK_TEST_ADMIN_EMAIL, E2E_CLERK_TEST_ADMIN_PASSWORD —
- *   admin tenant credentials wired into the e2e Clerk dev tenant.
+ *   E2E_CLERK_TEST_ADMIN_EMAIL — admin email wired into the e2e Clerk dev
+ *   tenant. (E2E_CLERK_TEST_ADMIN_PASSWORD is stored in CI secrets for
+ *   future flexibility but not consumed by the email-ticket sign-in helper.)
  */
 
 const COMBO_SIZE = 9;

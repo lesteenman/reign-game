@@ -36,7 +36,7 @@ import {
  * test.describe.serial so future additions in this file inherit
  * single-in-flight semantics.
  *
- * Env vars: E2E_CLERK_TEST_ADMIN_EMAIL, E2E_CLERK_TEST_ADMIN_PASSWORD.
+ * Env vars: E2E_CLERK_TEST_ADMIN_EMAIL.
  */
 
 const TOGGLE_SIZE = 7;

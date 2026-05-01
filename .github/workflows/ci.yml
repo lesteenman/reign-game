@@ -252,6 +252,12 @@ jobs:
         env:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
           E2E_CLERK_TEST_USER_EMAIL: ${{ secrets.E2E_CLERK_TEST_USER_EMAIL }}
+          # E2E_CLERK_TEST_*_PASSWORD: stored and step-scoped here for future
+          # test flexibility (e.g. password-strategy admin sign-in via Clerk's
+          # hosted UI). The current Playwright sign-in helpers use the
+          # email-ticket strategy and do not read these values — see
+          # frontend/playwright/test-helpers/clerk.ts. Wiring intact so a
+          # future password-strategy spec doesn't need a CI change.
           E2E_CLERK_TEST_USER_PASSWORD: ${{ secrets.E2E_CLERK_TEST_USER_PASSWORD }}
           E2E_CLERK_TEST_ADMIN_EMAIL: ${{ secrets.E2E_CLERK_TEST_ADMIN_EMAIL }}
           E2E_CLERK_TEST_ADMIN_PASSWORD: ${{ secrets.E2E_CLERK_TEST_ADMIN_PASSWORD }}

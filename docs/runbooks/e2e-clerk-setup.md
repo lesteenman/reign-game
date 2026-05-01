@@ -40,14 +40,16 @@ Rotate both passwords quarterly per general security hygiene. Section 4 covers t
 
 Six secrets in total. Two are already wired (PR #89); four are new for this slice.
 
+> **Note on the two `_PASSWORD` secrets.** The current Playwright helpers (`signInAsAdmin` / `signInAsUser` in `frontend/playwright/test-helpers/clerk.ts`) use Clerk's email-ticket sign-in strategy and do **not** read either `_PASSWORD` value. They are kept in the secret set for future flexibility — e.g. password-strategy admin sign-in tests via Clerk's hosted UI, or human-driven dashboard tasks that need a known password. Treat them as stored-but-currently-unused; rotate them on the same cadence as the rest, but don't be surprised if the e2e job runs green without them.
+
 | Secret | New? | What it is |
 |---|---|---|
 | `CLERK_PUBLISHABLE_KEY` | existing | Dev tenant `pk_test_*`. The `frontend-e2e` job reads this so `@clerk/clerk-react` can boot. |
 | `CLERK_SECRET_KEY` | existing | Dev tenant `sk_test_*`. Backend's auth middleware verifies JWTs against this. |
 | `E2E_CLERK_TEST_USER_EMAIL` | NEW | Email of the regular test user from §1b. |
-| `E2E_CLERK_TEST_USER_PASSWORD` | NEW | Password for the regular test user. |
+| `E2E_CLERK_TEST_USER_PASSWORD` | NEW | Password for the regular test user. (Stored for future flexibility — current helpers do not consume it; see note above.) |
 | `E2E_CLERK_TEST_ADMIN_EMAIL` | NEW | Email of the admin test user from §1a. |
-| `E2E_CLERK_TEST_ADMIN_PASSWORD` | NEW | Password for the admin test user. |
+| `E2E_CLERK_TEST_ADMIN_PASSWORD` | NEW | Password for the admin test user. (Stored for future flexibility — current helpers do not consume it; see note above.) |
 
 The exact secret names are the **source of truth** that `.github/workflows/ci.yml`, `frontend/playwright.config.ts`, and `frontend/playwright/global-setup.ts` cross-check against. Renaming a secret requires a sweep of all three files (CLAUDE.md lesson 14).
 
@@ -69,7 +71,7 @@ After all six are added in both scopes you should see 6 entries in the Actions t
 Run this every quarter, or immediately if a credential leaks.
 
 1. Clerk dashboard → user detail page for each test user → reset password. Record the new password.
-2. Update `E2E_CLERK_TEST_USER_PASSWORD` and / or `E2E_CLERK_TEST_ADMIN_PASSWORD` in **both** `Actions` and `Dependabot` scopes (same as §3 — both scopes always change together).
+2. Update `E2E_CLERK_TEST_USER_PASSWORD` and / or `E2E_CLERK_TEST_ADMIN_PASSWORD` in **both** `Actions` and `Dependabot` scopes (same as §3 — both scopes always change together). Note: per §2, these `_PASSWORD` secrets are stored for future flexibility and aren't read by the current Playwright helpers, so the e2e job will not regress if rotation is briefly out of sync.
 3. If rotating `CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` (rare for the dev tenant): same dual-scope update. Note that in production these keys are stored in SSM and the SSM parameter is the source of truth (see `admin-auth-setup.md` §8).
 4. Trigger a CI run on a throwaway commit to confirm the e2e job still passes.
 5. Append a row to the **History** section at the bottom of this file with the rotation date and which secrets were rotated.
@@ -99,7 +101,7 @@ E2E_CLERK_TEST_USER_EMAIL=...
 E2E_CLERK_TEST_USER_PASSWORD=...
 ```
 
-`VITE_CLERK_PUBLISHABLE_KEY` is read by Vite at server start (when `task dev:up:frontend` or `task e2e:up:frontend` boots Vite). The 4 `E2E_CLERK_TEST_*` vars are read by Playwright's globalSetup when `task test:e2e` runs.
+`VITE_CLERK_PUBLISHABLE_KEY` is read by Vite at server start (when `task dev:up:frontend` or `task e2e:up:frontend` boots Vite). `E2E_CLERK_TEST_ADMIN_EMAIL` and `E2E_CLERK_TEST_USER_EMAIL` are read by the Playwright sign-in helpers when `task test:e2e` runs. The two `_PASSWORD` entries are kept in the local file (and CI) for future flexibility but the current email-ticket helpers do not consume them — see §2.
 
 ### `backend/.env.local` — Backend (1 var, alongside existing dev secrets)
 
