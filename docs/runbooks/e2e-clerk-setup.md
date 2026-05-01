@@ -85,6 +85,46 @@ After §3, push a trivial commit and observe the `frontend-e2e` job in the Actio
 - Test user's `publicMetadata.role` not set to `'admin'` — admin specs will hit the forbidden state.
 - Clerk dev-tier rate limit — the dev tenant rate-limits sign-in attempts per IP. If many parallel CI jobs run against the same tenant in quick succession, some will 429. Mitigation: re-run the failed job; long-term, the slice's `workers: 1` for serial pool-mutating specs already reduces concurrent sign-ins.
 
+## 6. Local development
+
+To run the e2e suite locally (`task e2e:up && task test:e2e`), the same 6 Clerk vars need to be in your env-files. Two files split per the existing convention:
+
+### `frontend/.env.local` — Vite + Playwright (5 vars)
+
+```
+VITE_CLERK_PUBLISHABLE_KEY=pk_test_...
+E2E_CLERK_TEST_ADMIN_EMAIL=...
+E2E_CLERK_TEST_ADMIN_PASSWORD=...
+E2E_CLERK_TEST_USER_EMAIL=...
+E2E_CLERK_TEST_USER_PASSWORD=...
+```
+
+`VITE_CLERK_PUBLISHABLE_KEY` is read by Vite at server start (when `task dev:up:frontend` or `task e2e:up:frontend` boots Vite). The 4 `E2E_CLERK_TEST_*` vars are read by Playwright's globalSetup when `task test:e2e` runs.
+
+### `backend/.env.local` — Backend (1 var, alongside existing dev secrets)
+
+Add alongside the existing dev Clerk secret:
+
+```
+CLERK_SECRET_KEY=sk_test_...
+```
+
+`CLERK_SECRET_KEY` is read by the e2e backend (started by `task e2e:up:backend`) for Clerk JWT verification.
+
+### Test users
+
+The same two Clerk dev-tenant test users described in the CI section above are reused. There's no separate "local" tenant — the same dev-tenant test users authenticate both CI and local runs. Be aware: if multiple developers run e2e simultaneously against the same dev tenant, sign-in rate limits may surface. Clerk dev tenants have generous but not unlimited rate limits.
+
+### Verifying the local setup
+
+```bash
+task e2e:up           # boots LocalStack + e2e backend + e2e frontend + e2e generator
+task test:e2e         # runs Playwright with env vars loaded from .env.local files
+task e2e:down         # tears down
+```
+
+If `task test:e2e` fails with "missing required env vars", check that all 6 are present in the right files (frontend's 5 + backend's 1).
+
 ## Out of scope
 
 - Production Clerk tenant rotation (post-launch operational task, not a tracked slice — D17).

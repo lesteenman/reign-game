@@ -113,6 +113,19 @@ tasks:
     cmds:
       - npm test
 
+  test:e2e:
+    desc: Run the Playwright e2e project against the locally-running e2e stack. Loads Clerk creds from frontend/.env.local + backend/.env.local. Assumes `task e2e:up` already ran.
+    dotenv: ['frontend/.env.local', 'backend/.env.local']
+    dir: frontend
+    cmds:
+      - npm run test:e2e
+
+  test:integration:
+    desc: Run the Playwright integration project (mocked APIs, no backend stack).
+    dir: frontend
+    cmds:
+      - npm run test:integration
+
   dev:frontend:
     desc: Start frontend dev server (port 5180, network accessible)
     dir: frontend
