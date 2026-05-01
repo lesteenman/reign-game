@@ -31,9 +31,9 @@ Lifecycle additions, LocalStack init, fixture seeds, and CI wiring. Test asserti
 
 - **ES-11** New fixtures live under `backend/testdata/fixtures/e2e/`:
   - `9_double_seed1_000001.json` — 1 puzzle for the `9#double` shape (seeds EC-05's low-count starting state).
-  - `7_standard_seed1_000003.json` — 3 puzzles for the `7#standard` shape (seeds EC-06's served-marking baseline).
-  - `7_double_seed1_000001.json` — 1 puzzle for `7#double`, used as the disabled-sentinel reference fixture (EC-04 reads it indirectly via the CONFIG flag, not the puzzle row itself).
-- **ES-12** `backend/cmd/genfixtures/main.go` is extended to produce the three fixtures above deterministically from a seed. Re-running the generator with the same seed produces byte-identical JSON.
+  - `7_standard_seed2_000003.json` — 3 puzzles for the `7#standard` shape (seeds EC-06's served-marking baseline).
+  - No fixture for `7#double` — KI-007 documents that 7×7 Double has 0 solutions under our adjacency rules, so the generator cannot produce a puzzle for that shape. EC-04 reads the `7#double=false` CONFIG sentinel directly (CONFIG-only, no puzzle row required).
+- **ES-12** `backend/cmd/genfixtures/main.go` is extended to produce the two fixtures above deterministically from a seed. Re-running the generator with the same seed produces byte-identical JSON.
 - **ES-13** `task e2e:seed:pool` (new task) loads the fixture path passed as an argument, truncates `puzzle-pool-e2e`, and inserts the fixture rows. Used by each serial spec's `beforeAll`. Truncation is a `Scan` + `BatchWriteItem` delete; e2e table size is bounded by fixture size so this is fast.
 
 ## Acceptance criteria — CI wiring
