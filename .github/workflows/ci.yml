@@ -232,8 +232,21 @@ jobs:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
         run: task e2e:up
 
+      # Step-level env: test-user credentials are consumed by Playwright's
+      # globalSetup / sign-in flows (auth.spec.ts admin-route gate,
+      # admin-config-flow, pool-replenishment, dynamic-modes), not by Vite,
+      # not by the bundle. Scope to this step only — same supply-chain
+      # discipline as CLERK_SECRET_KEY above (a malicious npm postinstall
+      # earlier in the job cannot read these). Dev-tenant credentials ONLY
+      # (D2 / D11). Mirror these in BOTH Actions and Dependabot secret
+      # scopes per D12 — see docs/runbooks/e2e-clerk-setup.md.
       - name: Run e2e project
         working-directory: frontend
+        env:
+          E2E_CLERK_TEST_USER_EMAIL: ${{ secrets.E2E_CLERK_TEST_USER_EMAIL }}
+          E2E_CLERK_TEST_USER_PASSWORD: ${{ secrets.E2E_CLERK_TEST_USER_PASSWORD }}
+          E2E_CLERK_TEST_ADMIN_EMAIL: ${{ secrets.E2E_CLERK_TEST_ADMIN_EMAIL }}
+          E2E_CLERK_TEST_ADMIN_PASSWORD: ${{ secrets.E2E_CLERK_TEST_ADMIN_PASSWORD }}
         run: npm run test:e2e
 
       # Always-run cleanup. Runner is ephemeral so cleanup is mostly
