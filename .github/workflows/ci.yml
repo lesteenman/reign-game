@@ -376,6 +376,34 @@ jobs:
             }
 
             const body = `#### Terraform Plan\n\`\`\`\n${planOutput}\n\`\`\`\n\n*Result: \`${planResult}\`*`;
+
+            // Dedupe against the most recent identical github-actions tf-plan
+            // comment on this PR. Multiple pushes whose plan output is byte-
+            // identical to the previous comment skip — no point posting the
+            // same diff over and over. Keeps PR conversation clean while still
+            // posting on every genuinely-different plan (and on every failure,
+            // since failures don't reach this branch).
+            const { data: existingComments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            });
+            const previousPlanComment = [...existingComments]
+              .reverse()
+              .find(
+                (c) =>
+                  c.user?.login === 'github-actions[bot]' &&
+                  typeof c.body === 'string' &&
+                  c.body.startsWith('#### Terraform Plan'),
+              );
+            if (previousPlanComment && previousPlanComment.body === body) {
+              console.log(
+                'Terraform plan output identical to previous PR comment; skipping post.',
+              );
+              return;
+            }
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
