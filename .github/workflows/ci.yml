@@ -358,12 +358,29 @@ jobs:
           PLAN_RESULT: ${{ steps.plan.outcome }}
         with:
           script: |
-            const output = `#### Terraform Plan\n\`\`\`\n${process.env.PLAN_OUTPUT}\n\`\`\`\n\n*Result: \`${process.env.PLAN_RESULT}\`*`;
+            const planOutput = process.env.PLAN_OUTPUT || '';
+            const planResult = process.env.PLAN_RESULT || 'success';
+
+            // Suppress empty-plan comments to keep PRs that don't touch infra clean.
+            // Heuristic markers (any one is sufficient): "No changes." or
+            // "Plan: 0 to add, 0 to change, 0 to destroy.". A failed plan
+            // (planResult !== 'success') ALWAYS comments so the failure is visible.
+            const isClean =
+              planResult === 'success' &&
+              (planOutput.includes('No changes.') ||
+               /Plan: 0 to add, 0 to change, 0 to destroy\./.test(planOutput));
+
+            if (isClean) {
+              console.log('Terraform plan shows no infra changes; skipping PR comment.');
+              return;
+            }
+
+            const body = `#### Terraform Plan\n\`\`\`\n${planOutput}\n\`\`\`\n\n*Result: \`${planResult}\`*`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: output
+              body
             });
 
       - name: Fail on plan error
