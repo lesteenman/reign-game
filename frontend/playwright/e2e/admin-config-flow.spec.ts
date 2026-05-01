@@ -90,8 +90,12 @@ async function setEnabled(
 test.describe.serial("Admin CONFIG-mutation flow", () => {
   test("admin toggles 7#double enabled flag and public modes list reflects the change", async ({
     page,
-    request,
   }) => {
+    // Use `page.request` (NOT the standalone `request` fixture) so admin
+    // API calls share the page's cookie jar — clerk.signIn sets the session
+    // cookie on the page's BrowserContext; the standalone `request` has its
+    // own cookie jar and would 401 on /api/admin/*.
+    const request = page.request;
     // Pre-flight: seed contract intact before any sign-in. Public
     // endpoint, no admin session needed; fails fast on fixture drift.
     const baseline = (

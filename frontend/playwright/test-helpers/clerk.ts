@@ -1,4 +1,4 @@
-import { clerk } from "@clerk/testing/playwright";
+import { clerk, setupClerkTestingToken } from "@clerk/testing/playwright";
 import type { Page } from "@playwright/test";
 
 /**
@@ -32,29 +32,22 @@ function requireEnv(name: string): string {
 }
 
 export async function signInAsAdmin(page: Page): Promise<void> {
-  const identifier = requireEnv("E2E_CLERK_TEST_ADMIN_EMAIL");
-  const password = requireEnv("E2E_CLERK_TEST_ADMIN_PASSWORD");
+  const emailAddress = requireEnv("E2E_CLERK_TEST_ADMIN_EMAIL");
+  // setupClerkTestingToken installs the rate-limit-bypass token. clerk.signIn
+  // with `emailAddress` (no password) uses Clerk's backend SDK to mint a
+  // sign-in TICKET for the user, then evaluates a ticket-strategy signIn
+  // on the page. Per @clerk/testing's source, this branch waits for
+  // window.Clerk.user to populate before returning — unlike the password
+  // branch, which races. The password env vars (E2E_CLERK_TEST_*_PASSWORD)
+  // are no longer consulted by this helper.
+  await setupClerkTestingToken({ page });
   await page.goto("/");
-  await clerk.signIn({
-    page,
-    signInParams: {
-      strategy: "password",
-      identifier,
-      password,
-    },
-  });
+  await clerk.signIn({ page, emailAddress });
 }
 
 export async function signInAsUser(page: Page): Promise<void> {
-  const identifier = requireEnv("E2E_CLERK_TEST_USER_EMAIL");
-  const password = requireEnv("E2E_CLERK_TEST_USER_PASSWORD");
+  const emailAddress = requireEnv("E2E_CLERK_TEST_USER_EMAIL");
+  await setupClerkTestingToken({ page });
   await page.goto("/");
-  await clerk.signIn({
-    page,
-    signInParams: {
-      strategy: "password",
-      identifier,
-      password,
-    },
-  });
+  await clerk.signIn({ page, emailAddress });
 }

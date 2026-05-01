@@ -115,7 +115,12 @@ tasks:
 
   test:e2e:
     desc: Run the Playwright e2e project against the locally-running e2e stack. Loads Clerk creds from frontend/.env.local + backend/.env.local. Assumes `task e2e:up` already ran.
-    dotenv: ['frontend/.env.local', 'backend/.env.local']
+    # dotenv paths resolve relative to `dir:`, NOT the Taskfile's location.
+    # With `dir: frontend`, the frontend env-file is `.env.local` and the
+    # backend's is `../backend/.env.local`. (Other tasks in this file follow
+    # the same convention — see e.g. dev:up:backend's `dotenv: ['.env.local']`
+    # paired with `dir: backend`.)
+    dotenv: ['.env.local', '../backend/.env.local']
     dir: frontend
     cmds:
       - npm run test:e2e
@@ -589,7 +594,11 @@ tasks:
       PORT: "5182"
       DYNAMODB_ENDPOINT: http://127.0.0.1:4566
       SQS_ENDPOINT: http://127.0.0.1:4566
-      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
+      # Publish replenish messages to the e2e queue so e2e:up:generator
+      # (which polls puzzle-generation-e2e) can pick them up. Using the
+      # dev `puzzle-generation` queue here would route messages to the
+      # dev generator and starve the e2e generator — silent test break.
+      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation-e2e
       AWS_REGION: us-east-1
       PUZZLE_TABLE_NAME: puzzle-pool-e2e
       AWS_ACCESS_KEY_ID: test

@@ -39,8 +39,12 @@ const COMBO_MODE = "double";
 test.describe.serial("Pool replenishment", () => {
   test("admin replenish triggers fan-out and pool ready count rises", async ({
     page,
-    request,
   }) => {
+    // Use `page.request` (NOT the standalone `request` fixture) so admin
+    // API calls share the page's cookie jar — clerk.signIn sets the session
+    // cookie on the page's BrowserContext; the standalone `request` has its
+    // own cookie jar and would 401 on /api/admin/*.
+    const request = page.request;
     // Sign in as admin so /api/admin/* requests carry a Clerk JWT with
     // role=admin. Pattern mirrors auth.spec.ts.
     await signInAsAdmin(page);
