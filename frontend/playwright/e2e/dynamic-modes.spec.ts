@@ -1,4 +1,8 @@
 import { test, expect } from "@playwright/test";
+import {
+  containsCombo,
+  type ModesResponse,
+} from "../test-helpers/modes";
 
 /**
  * Asserts the public dynamic mode list reflects CONFIG enabled flags.
@@ -17,12 +21,6 @@ import { test, expect } from "@playwright/test";
  *
  * No Clerk session needed — this hits a public endpoint.
  */
-
-type Mode = { size: number; mode: string };
-type ModesResponse = { modes: Mode[] };
-
-const containsCombo = (modes: Mode[], size: number, mode: string): boolean =>
-  modes.some((m) => m.size === size && m.mode === mode);
 
 test.describe("e2e: dynamic mode buttons", () => {
   test("public modes list includes 9#double (enabled) and excludes 7#double (disabled sentinel)", async ({

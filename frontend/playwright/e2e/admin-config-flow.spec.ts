@@ -1,5 +1,13 @@
 import { test, expect, type APIRequestContext } from "@playwright/test";
-import { clerk } from "@clerk/testing/playwright";
+import { signInAsAdmin } from "../test-helpers/clerk";
+import {
+  readCombo,
+  type ConfigBody,
+} from "../test-helpers/admin-pool";
+import {
+  containsCombo,
+  type ModesResponse,
+} from "../test-helpers/modes";
 
 /**
  * Admin CONFIG-mutation flow e2e (slice e2e-coverage-and-clerk-injection,
@@ -34,51 +42,22 @@ import { clerk } from "@clerk/testing/playwright";
 const TOGGLE_SIZE = 7;
 const TOGGLE_MODE = "double";
 
-type ConfigBody = {
-  threshold: number;
-  enabled: boolean;
-  maxAttempts?: number;
-};
-
 type ConfigView = ConfigBody & {
   size: number;
   mode: string;
 };
 
-type Mode = { size: number; mode: string };
-type ModesResponse = { modes: Mode[] };
-
-type ComboStatus = {
-  size: number;
-  mode: string;
-  config: ConfigBody;
-  readyCount: number;
-};
-type AdminPoolResponse = { combos: ComboStatus[] };
-
-const containsCombo = (modes: Mode[], size: number, mode: string): boolean =>
-  modes.some((m) => m.size === size && m.mode === mode);
-
 /**
  * Fetch the current CONFIG body for `size#mode` via the admin pool
  * endpoint (no GET-by-combo route exists today; the pool listing
- * carries every combo's config).
+ * carries every combo's config). Wraps the shared `readCombo` helper.
  */
 async function readConfig(
   request: APIRequestContext,
   size: number,
   mode: string,
 ): Promise<ConfigBody> {
-  const res = await request.get("/api/admin/pool");
-  expect(res.ok(), `GET /api/admin/pool failed: ${res.status()}`).toBe(true);
-  const body = (await res.json()) as AdminPoolResponse;
-  const combo = body.combos.find((c) => c.size === size && c.mode === mode);
-  if (!combo) {
-    throw new Error(
-      `combo ${size}#${mode} missing from /api/admin/pool — seed/CONFIG ` +
-        `fixture not loaded`,
-    );
-  }
+  const combo = await readCombo(request, size, mode);
   return combo.config;
 }
 
@@ -124,15 +103,7 @@ test.describe.serial("Admin CONFIG-mutation flow", () => {
     ).toBe(false);
 
     // Sign in as admin (mirrors pool-replenishment.spec.ts pattern).
-    await page.goto("/");
-    await clerk.signIn({
-      page,
-      signInParams: {
-        strategy: "password",
-        identifier: process.env.E2E_CLERK_TEST_ADMIN_EMAIL!,
-        password: process.env.E2E_CLERK_TEST_ADMIN_PASSWORD!,
-      },
-    });
+    await signInAsAdmin(page);
 
     // Snapshot config so cleanup restores exactly and the PUT body
     // preserves threshold + maxAttempts (required by validateConfigBody).

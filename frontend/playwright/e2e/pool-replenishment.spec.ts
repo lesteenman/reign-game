@@ -1,5 +1,6 @@
-import { test, expect, type APIRequestContext } from "@playwright/test";
-import { clerk } from "@clerk/testing/playwright";
+import { test, expect } from "@playwright/test";
+import { signInAsAdmin } from "../test-helpers/clerk";
+import { readCombo } from "../test-helpers/admin-pool";
 
 /**
  * Pool replenishment e2e (slice e2e-coverage-and-clerk-injection, EC-05).
@@ -35,49 +36,6 @@ import { clerk } from "@clerk/testing/playwright";
 const COMBO_SIZE = 9;
 const COMBO_MODE = "double";
 
-type ConfigBody = {
-  threshold: number;
-  enabled: boolean;
-  maxAttempts: number;
-};
-
-type ComboStatus = {
-  size: number;
-  mode: string;
-  config: ConfigBody;
-  readyCount: number;
-};
-
-type AdminPoolResponse = {
-  combos: ComboStatus[];
-};
-
-/**
- * Read the ready count + configured threshold for the `size#mode` combo from
- * GET /api/admin/pool. The pool endpoint is the source of truth — using it
- * here avoids any direct DDB shell-out and keeps the spec a pure HTTP client.
- *
- * Throws if the combo is missing from the response so the test fails loud
- * instead of silently treating an absent combo as `readyCount = 0`.
- */
-async function readCombo(
-  request: APIRequestContext,
-  size: number,
-  mode: string,
-): Promise<ComboStatus> {
-  const res = await request.get("/api/admin/pool");
-  expect(res.ok(), `GET /api/admin/pool failed: ${res.status()}`).toBe(true);
-  const body = (await res.json()) as AdminPoolResponse;
-  const combo = body.combos.find((c) => c.size === size && c.mode === mode);
-  if (!combo) {
-    throw new Error(
-      `combo ${size}#${mode} missing from /api/admin/pool response — ` +
-        `seed/CONFIG fixture likely not loaded`,
-    );
-  }
-  return combo;
-}
-
 test.describe.serial("Pool replenishment", () => {
   test("admin replenish triggers fan-out and pool ready count rises", async ({
     page,
@@ -85,15 +43,7 @@ test.describe.serial("Pool replenishment", () => {
   }) => {
     // Sign in as admin so /api/admin/* requests carry a Clerk JWT with
     // role=admin. Pattern mirrors auth.spec.ts.
-    await page.goto("/");
-    await clerk.signIn({
-      page,
-      signInParams: {
-        strategy: "password",
-        identifier: process.env.E2E_CLERK_TEST_ADMIN_EMAIL!,
-        password: process.env.E2E_CLERK_TEST_ADMIN_PASSWORD!,
-      },
-    });
+    await signInAsAdmin(page);
 
     // Snapshot the pre-replenish state for the 9#double combo.
     // EC-05.1 puts the seed fixture at count=1 below threshold; we read

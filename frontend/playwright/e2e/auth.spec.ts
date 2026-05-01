@@ -1,5 +1,9 @@
 import { test, expect } from "@playwright/test";
 import { clerk } from "@clerk/testing/playwright";
+import {
+  signInAsAdmin,
+  signInAsUser,
+} from "../test-helpers/clerk";
 
 /**
  * Auth-flow e2e (Phase 6 R-08B + slice e2e-coverage-and-clerk-injection).
@@ -68,15 +72,7 @@ test.describe("Auth: admin access at /admin", () => {
     // Branch 1: non-admin → forbidden landing.
     const userContext = await browser.newContext();
     const userPage = await userContext.newPage();
-    await userPage.goto("/");
-    await clerk.signIn({
-      page: userPage,
-      signInParams: {
-        strategy: "password",
-        identifier: process.env.E2E_CLERK_TEST_USER_EMAIL!,
-        password: process.env.E2E_CLERK_TEST_USER_PASSWORD!,
-      },
-    });
+    await signInAsUser(userPage);
     await userPage.goto("/admin");
     await expect(
       userPage.getByTestId("admin-landing-forbidden"),
@@ -86,15 +82,7 @@ test.describe("Auth: admin access at /admin", () => {
     // Branch 2: admin → pool widget.
     const adminContext = await browser.newContext();
     const adminPage = await adminContext.newPage();
-    await adminPage.goto("/");
-    await clerk.signIn({
-      page: adminPage,
-      signInParams: {
-        strategy: "password",
-        identifier: process.env.E2E_CLERK_TEST_ADMIN_EMAIL!,
-        password: process.env.E2E_CLERK_TEST_ADMIN_PASSWORD!,
-      },
-    });
+    await signInAsAdmin(adminPage);
     await adminPage.goto("/admin");
     await expect(adminPage.getByTestId("pool-table")).toBeVisible();
     await adminContext.close();
@@ -103,15 +91,7 @@ test.describe("Auth: admin access at /admin", () => {
   // EC-02: sign-out clears the Clerk session and a subsequent /admin
   // navigation falls back to the unauthenticated path.
   test("user can sign out", async ({ page }) => {
-    await page.goto("/");
-    await clerk.signIn({
-      page,
-      signInParams: {
-        strategy: "password",
-        identifier: process.env.E2E_CLERK_TEST_ADMIN_EMAIL!,
-        password: process.env.E2E_CLERK_TEST_ADMIN_PASSWORD!,
-      },
-    });
+    await signInAsAdmin(page);
     await page.goto("/admin");
     await expect(page.getByTestId("pool-table")).toBeVisible();
 
@@ -129,15 +109,7 @@ test.describe("Auth: admin access at /admin", () => {
   // EC-03: admin session persists across reload (storage-state survives
   // without re-auth).
   test("admin session persists across reload", async ({ page }) => {
-    await page.goto("/");
-    await clerk.signIn({
-      page,
-      signInParams: {
-        strategy: "password",
-        identifier: process.env.E2E_CLERK_TEST_ADMIN_EMAIL!,
-        password: process.env.E2E_CLERK_TEST_ADMIN_PASSWORD!,
-      },
-    });
+    await signInAsAdmin(page);
 
     await page.goto("/admin");
     await expect(page.getByTestId("pool-table")).toBeVisible();
