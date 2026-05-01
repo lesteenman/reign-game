@@ -4,7 +4,7 @@
 
 | ID | Title | Status |
 |----|-------|--------|
-| — | E2E coverage expansion + Clerk admin session injection | [ ] |
+| — | E2E coverage expansion + Clerk admin session injection | [x] |
 
 ## Work breakdown
 

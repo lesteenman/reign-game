@@ -43,24 +43,24 @@ For each test below, the previous `test.skip` predicate was "no Clerk session in
 
 ### EC-06 — `served-marking.spec.ts` (serial, includes Q-A 404 retry assertion)
 
-- **EC-06.1** `beforeAll` seeds 3 puzzles into `puzzle-pool-e2e` for the `7#standard` shape (`7_standard_seed1_000003.json`).
-- **EC-06.2** Spec serves a puzzle via `GET /api/puzzle?mode=standard&difficulty=7`, captures the returned puzzle's index.
+- **EC-06.1** `beforeAll` seeds 2 puzzles into `puzzle-pool-e2e` for the `7#standard` shape (`7_standard_seed1_000001.json` + `7_standard_seed2_000003.json`).
+- **EC-06.2** Spec serves a puzzle via `GET /api/puzzles/next?size=7&mode=standard`, captures the returned puzzle's index.
 - **EC-06.3** Spec asserts the served puzzle's row is updated to `served=true` by hitting `GET /api/admin/pool` and inspecting the count breakdown — the served-status delta must be exactly +1.
 - **EC-06.4** `expect.poll` confirms the generator replenishes back to baseline (`count >= 3` for `7#standard`) within the 30 s polling budget.
-- **EC-06.5 (Q-A 404 retry)** After EC-06.2, the spec deliberately re-requests `GET /api/puzzle?mode=standard&difficulty=7` with the same client state to provoke the stale served-list code path. Assertion: response is **NOT** 404 (the retry-on-stale path executed and returned a fresh puzzle). If the backend currently emits `WARN: served-list stale, retrying`, the spec also tails the backend log for that line — but the HTTP-level assertion is the load-bearing one (per `../design.md` §8 risk #1).
+- **EC-06.5 (Q-A 404 retry)** After EC-06.2, the spec deliberately re-requests `GET /api/puzzles/next?size=7&mode=standard` with the same client state to provoke the stale served-list code path. Assertion: response is **NOT** 404 (the retry-on-stale path executed and returned a fresh puzzle). If the backend currently emits `WARN: served-list stale, retrying`, the spec also tails the backend log for that line — but the HTTP-level assertion is the load-bearing one (per `../design.md` §8 risk #1).
 
 ### EC-07 — `pool-empty-fallback.spec.ts` (serial)
 
 - **EC-07.1** `beforeAll` truncates `puzzle-pool-e2e` to empty (no fixture seed).
-- **EC-07.2** Spec navigates to a puzzle page (`/play?mode=standard&difficulty=7`).
+- **EC-07.2** Spec navigates to a puzzle page (`/play?flow=curation&size=9&mode=double`).
 - **EC-07.3** Spec asserts a non-blank user-readable text element is rendered. Per D12, this is text-only — no screenshot. Acceptable selectors: `[data-testid="empty-pool-message"]`, or text matching `/preparing|please retry|temporarily unavailable/i`. Implementation agent picks the exact selector based on what the UI ships.
-- **EC-07.4** Spec asserts `GET /api/puzzle?mode=standard&difficulty=7` returns the documented empty-pool surface — currently expected to be HTTP `503` or `409` with a JSON body containing `{ "error": "pool_empty" }`. If R-7-03's actual surface differs, the spec adapts to the real response shape (verify against `backend/internal/handler/puzzle.go` at implementation time).
+- **EC-07.4** Spec asserts `GET /api/puzzles/next?size=7&mode=standard` returns the documented empty-pool surface — HTTP `404` with a JSON body containing `{ "error": "no_puzzles_available" }` (verified against `backend/internal/httperr/httperr.go` and the `served-marking.spec.ts` assertion landed in chunk 3).
 
 ### EC-08 — `admin-config-flow.spec.ts` (parallel)
 
 - **EC-08.1** Spec uses admin `storageState` from `frontend/test-results/.clerk/admin.json`.
 - **EC-08.2** Spec navigates to `/admin`, clicks into the modes/config widget, flips a non-load-bearing toggle (NOT `7#double`, which is the disabled sentinel), saves.
-- **EC-08.3** Spec asserts `GET /api/admin/modes` reflects the new value.
+- **EC-08.3** Spec asserts `GET /api/config/modes` reflects the new value.
 - **EC-08.4** Spec asserts the player-side effect: a public puzzle endpoint either serves or refuses the toggled mode according to the new flag. Concrete assertion shape: `GET /api/puzzle?mode=<toggled>` returns 200 if enabled, 404 if disabled.
 - **EC-08.5** Cleanup in `afterAll`: flip the toggle back to its original value to keep the parallel-safe contract intact.
 
