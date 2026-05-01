@@ -294,7 +294,7 @@ func main() {
 			port = "5181"
 		}
 		addr := fmt.Sprintf("127.0.0.1:%s", port)
-		log.Printf("starting local server on %s", addr)
+		log.Printf("api: starting local server on %s", addr)
 		if err := http.ListenAndServe(addr, r); err != nil {
 			log.Fatalf("server failed: %v", err)
 		}

@@ -358,12 +358,74 @@ jobs:
           PLAN_RESULT: ${{ steps.plan.outcome }}
         with:
           script: |
-            const output = `#### Terraform Plan\n\`\`\`\n${process.env.PLAN_OUTPUT}\n\`\`\`\n\n*Result: \`${process.env.PLAN_RESULT}\`*`;
+            const planOutput = process.env.PLAN_OUTPUT || '';
+            const planResult = process.env.PLAN_RESULT || 'success';
+
+            // Suppress empty-plan comments to keep PRs that don't touch infra clean.
+            // Heuristic markers (any one is sufficient): "No changes." or
+            // "Plan: 0 to add, 0 to change, 0 to destroy.". A failed plan
+            // (planResult !== 'success') ALWAYS comments so the failure is visible.
+            const isClean =
+              planResult === 'success' &&
+              (planOutput.includes('No changes.') ||
+               /Plan: 0 to add, 0 to change, 0 to destroy\./.test(planOutput));
+
+            if (isClean) {
+              console.log('Terraform plan shows no infra changes; skipping PR comment.');
+              return;
+            }
+
+            const body = `#### Terraform Plan\n\`\`\`\n${planOutput}\n\`\`\`\n\n*Result: \`${planResult}\`*`;
+
+            // Dedupe against the most recent identical github-actions tf-plan
+            // comment on this PR. Multiple pushes whose plan output is byte-
+            // identical to the previous comment skip — no point posting the
+            // same diff over and over. Keeps PR conversation clean while still
+            // posting on every genuinely-different plan (and on every failure,
+            // since failures don't reach this branch).
+            const { data: existingComments } = await github.rest.issues.listComments({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 100,
+            });
+            const previousPlanComment = [...existingComments]
+              .reverse()
+              .find(
+                (c) =>
+                  c.user?.login === 'github-actions[bot]' &&
+                  typeof c.body === 'string' &&
+                  c.body.startsWith('#### Terraform Plan'),
+              );
+            // Terraform parallelizes state refreshes, so the ordering of
+            // "Refreshing state..." / "Reading..." lines in the plan output
+            // is non-deterministic. Strip the refresh preamble and compare
+            // only what comes after the deterministic marker — the real
+            // plan content (resource changes + "Plan: ..." summary) is what
+            // reviewers actually care about.
+            const normalize = (planBody) => {
+              const markerIdx = planBody.search(
+                /Terraform used the selected providers|No changes\./,
+              );
+              return markerIdx >= 0 ? planBody.slice(markerIdx) : planBody;
+            };
+
+            if (
+              previousPlanComment &&
+              normalize(previousPlanComment.body) === normalize(body)
+            ) {
+              console.log(
+                'Terraform plan output identical to previous PR comment ' +
+                  '(after refresh-order normalization); skipping post.',
+              );
+              return;
+            }
+
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: output
+              body
             });
 
       - name: Fail on plan error

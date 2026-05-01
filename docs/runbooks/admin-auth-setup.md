@@ -179,3 +179,6 @@ If the project shuts down or moves off Clerk:
 - Backend secret loader contract: `backend/internal/auth/secret.go` (created in slice R-08A)
 - Terraform: `infra/modules/api/ssm.tf`, `infra/modules/api/iam.tf`
 - CD workflow Clerk steps: `.github/workflows/cd.yml`
+
+<!-- validation push 2/2 — see PR #92 -->
+
