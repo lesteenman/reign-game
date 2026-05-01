@@ -75,13 +75,13 @@ create_queue_if_missing puzzle-generation-e2e \
 # E2E table:
 #   7#standard, 9#standard, 9#double = enabled (9#double flipped on
 #     so the new 9x9 Double fixture is playable end-to-end in
-#     pool-replenishment.spec.ts — per ES-04 / ES-08).
+#     pool-replenishment.spec.ts — per ES-09).
 #   7#double = disabled. 7x7 Double is infeasible (N=7 k=2 has 0
 #     solutions under 8-neighbor adjacency + 2 marks/row — see
 #     bench/n-feasibility.md / KI-007), so it never gets ready rows.
 #     Seeded only as the "always disabled" sentinel that
 #     dynamic-modes.spec.ts asserts the landing page filters out
-#     by `enabled` (per ES-06 / D6).
+#     by `enabled` (per ES-09).
 seed_config() {
   local table=$1 sk=$2 enabled=$3
   awslocal dynamodb put-item --table-name "$table" --item "{

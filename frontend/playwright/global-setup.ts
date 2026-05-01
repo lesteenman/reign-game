@@ -2,7 +2,7 @@ import { clerkSetup } from "@clerk/testing/playwright";
 
 /**
  * Playwright globalSetup hook for the e2e Clerk session-injection scaffolding
- * (slice e2e-coverage-and-clerk-injection, D9 + D10).
+ * (slice e2e-coverage-and-clerk-injection, D4).
  *
  * `clerkSetup()` exchanges the dev-tenant publishable + secret keys for a
  * long-lived testing token that bypasses Clerk's dev-instance rate limits.

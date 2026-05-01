@@ -36,7 +36,7 @@ For each test below, the previous `test.skip` predicate was "no Clerk session in
 
 ### EC-05 — `pool-replenishment.spec.ts` (serial)
 
-- **EC-05.1** `beforeAll` calls `task e2e:seed:pool` with the low-count fixture (`9_double_seed1_000001.json`) so `puzzle-pool-e2e` starts at `count=1` for the `9#double` shape.
+- **EC-05.1** `beforeAll` calls `task e2e:seed` with the low-count fixture (`9_double_seed1_000001.json`) so `puzzle-pool-e2e` starts at `count=1` for the `9#double` shape.
 - **EC-05.2** Spec POSTs `POST /api/admin/replenish` (verified route per `backend/internal/handler/replenish_test.go` and `backend/cmd/api/main.go:78`) as the authenticated admin.
 - **EC-05.3** Spec then asserts: `expect.poll(() => fetch('/api/admin/pool').then(r => r.json()).count, { timeout: 30_000, intervals: [500, 1000, 2000] }).toBeGreaterThanOrEqual(targetCount)` where `targetCount` is the configured replenishment target for `9#double`.
 - **EC-05.4** Spec tails `./logs/e2e-generator.log` and asserts at least one line matching `/generator: produced puzzle X.*9#double/` was emitted during the polling window. This proves the SQS path was exercised, not just the DDB count.
@@ -58,8 +58,8 @@ For each test below, the previous `test.skip` predicate was "no Clerk session in
 
 ### EC-08 — `admin-config-flow.spec.ts` (parallel)
 
-- **EC-08.1** Spec uses admin `storageState` from `frontend/test-results/.clerk/admin.json`.
-- **EC-08.2** Spec navigates to `/admin`, clicks into the modes/config widget, flips a non-load-bearing toggle (NOT `7#double`, which is the disabled sentinel), saves.
+- **EC-08.1** Spec authenticates the admin via per-test `clerk.signIn` against `page.context()` (D4) — no shared `storageState` file. Per-test sign-in keeps the spec independent of JWT-lifetime drift across long suites; rationale documented in `admin-config-flow.spec.ts`'s file-header comment.
+- **EC-08.2** Spec navigates to `/admin`, clicks into the modes/config widget, and flips a toggle. `7#double` (the disabled sentinel for the infeasible 7×7 Double combo, per KI-007) is acceptable as the toggle target IF the spec restores the original value in `try`/`finally` cleanup so the sentinel state is preserved for downstream specs. Targeting `7#double` is in fact preferred because the spec only asserts the CONFIG round-trip — not generation — so the infeasibility never matters.
 - **EC-08.3** Spec asserts `GET /api/config/modes` reflects the new value.
 - **EC-08.4** Spec asserts the player-side effect: a public puzzle endpoint either serves or refuses the toggled mode according to the new flag. Concrete assertion shape: `GET /api/puzzle?mode=<toggled>` returns 200 if enabled, 404 if disabled.
 - **EC-08.5** Cleanup in `afterAll`: flip the toggle back to its original value to keep the parallel-safe contract intact.

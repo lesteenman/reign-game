@@ -22,6 +22,8 @@ A second-pass stress test of the 14 locked decisions and the 4 new specs. Each f
 **The grill.** Three new repo secrets land: `E2E_CLERK_PUBLISHABLE_KEY`, `E2E_CLERK_TEST_ADMIN_EMAIL`, `E2E_CLERK_TEST_ADMIN_PASSWORD`. GitHub by default does NOT expose secrets to PRs from forks, but Dependabot PRs run with a separate `dependabot` secret scope. If the e2e job is configured to run on Dependabot PRs and we forget to mirror the secrets to that scope, Dependabot e2e runs will fail mysteriously. Conversely, if we DO mirror, the credentials are slightly more exposed than necessary.
 **Resolution:** accept (with explicit choice). The runbook (`docs/runbooks/e2e-clerk-setup.md`) names this trade-off and recommends NOT mirroring to Dependabot — Dependabot PRs run the unit suite but the e2e job is configured to skip on `actor == 'dependabot[bot]'`. Blast radius of credential exposure is dev-tenant-only (separate Clerk instance from prod), but smaller surface is still better. Manual e2e re-run on a Dependabot PR is a one-click "Re-run jobs" by a maintainer if needed.
 
+**Superseded by design D3** (chunk-2 lock-in): secrets ARE mirrored to both Actions and Dependabot scopes. The blast-radius argument lost to the "Dependabot PRs must run the same coverage as branch PRs" argument once the e2e job became a merge gate. F3's recommendation is preserved here for historical context only — the implementation follows D3, not F3.
+
 ### F4. 30 s polling timeout vs CI generation latency
 
 **Severity:** risk.

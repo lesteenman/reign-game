@@ -12,7 +12,7 @@ Lifecycle additions, LocalStack init, fixture seeds, and CI wiring. Test asserti
 
 - **ES-01** `task e2e:up:generator` exists and starts the same `cmd/generator/main.go` binary as dev, with env overrides `SQS_QUEUE_URL=http://localhost:4566/000000000000/puzzle-generation-e2e` and `PUZZLE_TABLE_NAME=puzzle-pool-e2e`. PID written to `./logs/e2e-generator.pid`; stdout+stderr to `./logs/e2e-generator.log`.
 - **ES-02** `task e2e:down:generator` stops the e2e generator process by reading `./logs/e2e-generator.pid`, sending SIGTERM, waiting up to 5 s, then SIGKILL on timeout. PID file is removed on success.
-- **ES-03** `task e2e:up` includes `e2e:up:generator` in its dependency chain in this order: `e2e:up:localstack` → `e2e:up:backend` → `e2e:up:frontend` → `e2e:up:generator` → `e2e:seed:pool` (per D7). Each step blocks on a readiness check before the next runs.
+- **ES-03** `task e2e:up` includes `e2e:up:generator` in its dependency chain in this order: `e2e:up:localstack` → `e2e:up:backend` → `e2e:up:frontend` → `e2e:up:generator` → `e2e:seed` (per D7). Each step blocks on a readiness check before the next runs.
 - **ES-04** Generator readiness probe: `e2e:up:generator` polls `./logs/e2e-generator.log` for the literal substring `starting local SQS poller` with a 30 s timeout. Same readiness contract as `dev:up:generator`.
 - **ES-05** `task e2e:down` includes `e2e:down:generator`. After `e2e:down`, `lsof -ti:5180`, `lsof -ti:5181`, `lsof -ti:4566` are all empty AND `./logs/e2e-generator.pid` does not exist.
 - **ES-06** Per CLAUDE.md Taskfile-shell pitfall guidance: the e2e generator lifecycle wraps its `nohup ... &` + `echo $! > pid` logic inside a `bash <<'BASH' ... BASH` heredoc, since Task's built-in shell returns goroutine handles for `$!` rather than OS PIDs.
@@ -29,12 +29,12 @@ Lifecycle additions, LocalStack init, fixture seeds, and CI wiring. Test asserti
 
 ## Acceptance criteria — fixtures
 
-- **ES-11** New fixtures live under `backend/testdata/fixtures/e2e/`:
+- **ES-11** New fixtures live under `frontend/playwright/e2e/fixtures/puzzles/`:
   - `9_double_seed1_000001.json` — 1 puzzle for the `9#double` shape (seeds EC-05's low-count starting state).
   - `7_standard_seed2_000003.json` — 3 puzzles for the `7#standard` shape (seeds EC-06's served-marking baseline).
   - No fixture for `7#double` — KI-007 documents that 7×7 Double has 0 solutions under our adjacency rules, so the generator cannot produce a puzzle for that shape. EC-04 reads the `7#double=false` CONFIG sentinel directly (CONFIG-only, no puzzle row required).
 - **ES-12** `backend/cmd/genfixtures/main.go` is extended to produce the two fixtures above deterministically from a seed. Re-running the generator with the same seed produces byte-identical JSON.
-- **ES-13** `task e2e:seed:pool` (new task) loads the fixture path passed as an argument, truncates `puzzle-pool-e2e`, and inserts the fixture rows. Used by each serial spec's `beforeAll`. Truncation is a `Scan` + `BatchWriteItem` delete; e2e table size is bounded by fixture size so this is fast.
+- **ES-13** `task e2e:seed` (new task) loads the fixture path passed as an argument, truncates `puzzle-pool-e2e`, and inserts the fixture rows. Used by each serial spec's `beforeAll`. Truncation is a `Scan` + `BatchWriteItem` delete; e2e table size is bounded by fixture size so this is fast.
 
 ## Acceptance criteria — CI wiring
 

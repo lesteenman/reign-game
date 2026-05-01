@@ -17,7 +17,7 @@ Eighteen decisions: 14 from chunk 2's grill + 4 follow-ups from chunk 3.
 | D5 | Run a generator process inside e2e via `task e2e:up:generator`. | The replenish + served-marking + pool-empty specs require real SQS message processing; mocking the pool defeats the test. Mirrors `task dev:up:generator`. |
 | D6 | Isolated SQS queue `puzzle-generation-e2e` and DDB table `puzzle-pool-e2e`. | Prevents cross-talk with `task dev:up` if both stacks ever co-exist on the same LocalStack. |
 | D7 | Startup ordering: LocalStack → init script → backend → frontend → generator → seed. | Backend must be up before generator (shared DDB writers don't race); seed runs last so initial pool state is deterministic per spec. |
-| D8 | `task e2e:seed:pool` script seeds `puzzle-pool-e2e` from a JSON fixture before each suite. | Eliminates flake from "is there a puzzle?" preconditions; `beforeAll` truncates + reseeds. |
+| D8 | `task e2e:seed` script seeds `puzzle-pool-e2e` from a JSON fixture before each suite. | Eliminates flake from "is there a puzzle?" preconditions; `beforeAll` truncates + reseeds. |
 | D9 | Polling-loop assertion shape: `expect.poll(() => fetch(...).then(r => r.json().poolCount), { timeout: 30_000, intervals: [500, 1000, 2000] })`. | 30 s budget chosen to match the slowest observed generator latency under CI; 500 ms first poll catches fast cases without burning CPU. |
 | D10 | Flat 30 s polling budget in both local and CI (per chunk 3 follow-up #1). | Single timing constant is simpler than env-split and avoids "passes locally, flakes in CI" surprises; F4 in grill summary stays at "accept". |
 | D11 | Pool-mutating specs (replenish, served-marking, pool-empty-fallback) run in `test.describe.serial` with `workers: 1` (per chunk 3 follow-up #2). | Three specs all mutate `puzzle-pool-e2e` rows; parallel execution would race. Other specs stay parallel. |
@@ -59,7 +59,7 @@ The generator is the same Go binary that runs in dev (`cmd/generator/main.go`). 
 2. Backend ready (`/api/health` 200, `PUZZLE_TABLE_NAME=puzzle-pool-e2e`).
 3. Frontend ready (port 5180 listening).
 4. Generator ready (`logs/e2e-generator.log` shows "starting local SQS poller", `SQS_QUEUE_URL=...puzzle-generation-e2e`).
-5. Seed runs (`task e2e:seed:pool`) — truncates `puzzle-pool-e2e` and inserts the JSON fixture.
+5. Seed runs (`task e2e:seed`) — truncates `puzzle-pool-e2e` and inserts the JSON fixture.
 
 **Polling-loop assertion shape** (used by replenish + served-marking specs):
 ```ts
@@ -144,9 +144,9 @@ Per CLAUDE.md lesson 14, every new path/queue/table/task/env-var name introduced
 | Exact string | Files that should reference it |
 |---|---|
 | `puzzle-generation-e2e` | `Taskfile.yml` (`e2e:up:generator`, env override), `.localstack/init-aws.sh` (queue creation), `docker-compose.yml` (no change expected — LocalStack already mounts init-aws.sh), `.github/workflows/ci.yml` (e2e job env), `docs/runbooks/e2e-clerk-setup.md` (queue listing), `frontend/playwright.config.ts` (none — backend-side only), the 3 serial specs (none — they call backend APIs not SQS directly). |
-| `puzzle-pool-e2e` | `Taskfile.yml` (`e2e:up:backend`, `e2e:up:generator`, `e2e:seed:pool`), `.localstack/init-aws.sh` (table creation), `.github/workflows/ci.yml`, `docs/runbooks/e2e-clerk-setup.md`, the 3 serial specs (via the seed task, not direct DDB calls). |
+| `puzzle-pool-e2e` | `Taskfile.yml` (`e2e:up:backend`, `e2e:up:generator`, `e2e:seed`), `.localstack/init-aws.sh` (table creation), `.github/workflows/ci.yml`, `docs/runbooks/e2e-clerk-setup.md`, the 3 serial specs (via the seed task, not direct DDB calls). |
 | `e2e:up:generator` | `Taskfile.yml` (definition + `e2e:up` deps), `.github/workflows/ci.yml` (CI job step), `docs/runbooks/e2e-clerk-setup.md` (developer instructions), `PROJECT_STRUCTURE.md` (task listing). |
-| `e2e:up:backend`, `e2e:up:frontend`, `e2e:up:localstack`, `e2e:up`, `e2e:down`, `e2e:seed:pool` | Same set as above; `e2e:seed:pool` also referenced by the 3 serial specs' `beforeAll`. |
+| `e2e:up:backend`, `e2e:up:frontend`, `e2e:up:localstack`, `e2e:up`, `e2e:down`, `e2e:seed` | Same set as above; `e2e:seed` also referenced by the 3 serial specs' `beforeAll`. |
 | `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `E2E_CLERK_TEST_USER_EMAIL`, `E2E_CLERK_TEST_USER_PASSWORD`, `E2E_CLERK_TEST_ADMIN_EMAIL`, `E2E_CLERK_TEST_ADMIN_PASSWORD` | `frontend/playwright.config.ts` (env consumption), `.github/workflows/ci.yml` (secret references — both Actions and Dependabot scopes per D3), `docs/runbooks/e2e-clerk-setup.md` (setup instructions), `auth.spec.ts` + `dynamic-modes.spec.ts` (sign-in calls). |
 | `logs/e2e-generator.log`, `logs/e2e-generator.pid` | `Taskfile.yml` (`e2e:up:generator`, `e2e:down:generator`, `e2e:logs:generator`), `.gitignore` (already covers `logs/` — verify), `served-marking.spec.ts` + `replenish.spec.ts` (log-tail assertion). |
 | `frontend/test-results/.clerk/` | `.gitignore` (must be added), `playwright.config.ts` (`globalSetup` writes here, `storageState` reads here). |

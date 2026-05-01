@@ -6,7 +6,7 @@ import { clerk } from "@clerk/testing/playwright";
  *
  * Clerk session injection is wired via `globalSetup` (see
  * `playwright/global-setup.ts`). Each admin/user-gated test below calls
- * `clerk.signIn(...)` against its own browser context, per design D4 + D10
+ * `clerk.signIn(...)` against its own browser context, per design D4
  * (per-spec sign-in beats long-lived storageState because Clerk JWTs expire
  * after ~1 h and we'd rather pay the sign-in cost than debug late-run
  * auth flakes).

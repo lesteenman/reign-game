@@ -49,7 +49,7 @@ Six secrets in total. Two are already wired (PR #89); four are new for this slic
 | `E2E_CLERK_TEST_ADMIN_EMAIL` | NEW | Email of the admin test user from §1a. |
 | `E2E_CLERK_TEST_ADMIN_PASSWORD` | NEW | Password for the admin test user. |
 
-The exact secret names are the **source of truth** that `.github/workflows/ci.yml`, `frontend/playwright.config.ts`, and `frontend/e2e/globalSetup.ts` cross-check against. Renaming a secret requires a sweep of all three files (CLAUDE.md lesson 14).
+The exact secret names are the **source of truth** that `.github/workflows/ci.yml`, `frontend/playwright.config.ts`, and `frontend/playwright/global-setup.ts` cross-check against. Renaming a secret requires a sweep of all three files (CLAUDE.md lesson 14).
 
 Distinct admin and user passwords keep the admin credential's blast-radius contained if a non-admin spec ever logs the user password (D3).
 

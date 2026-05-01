@@ -238,8 +238,8 @@ jobs:
       # not by the bundle. Scope to this step only — same supply-chain
       # discipline as CLERK_SECRET_KEY above (a malicious npm postinstall
       # earlier in the job cannot read these). Dev-tenant credentials ONLY
-      # (D2 / D11). Mirror these in BOTH Actions and Dependabot secret
-      # scopes per D12 — see docs/runbooks/e2e-clerk-setup.md.
+      # (D2). Mirror these in BOTH Actions and Dependabot secret scopes
+      # per D3 — see docs/runbooks/e2e-clerk-setup.md.
       - name: Run e2e project
         working-directory: frontend
         env:
