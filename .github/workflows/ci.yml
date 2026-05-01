@@ -397,9 +397,26 @@ jobs:
                   typeof c.body === 'string' &&
                   c.body.startsWith('#### Terraform Plan'),
               );
-            if (previousPlanComment && previousPlanComment.body === body) {
+            // Terraform parallelizes state refreshes, so the ordering of
+            // "Refreshing state..." / "Reading..." lines in the plan output
+            // is non-deterministic. Strip the refresh preamble and compare
+            // only what comes after the deterministic marker — the real
+            // plan content (resource changes + "Plan: ..." summary) is what
+            // reviewers actually care about.
+            const normalize = (planBody) => {
+              const markerIdx = planBody.search(
+                /Terraform used the selected providers|No changes\./,
+              );
+              return markerIdx >= 0 ? planBody.slice(markerIdx) : planBody;
+            };
+
+            if (
+              previousPlanComment &&
+              normalize(previousPlanComment.body) === normalize(body)
+            ) {
               console.log(
-                'Terraform plan output identical to previous PR comment; skipping post.',
+                'Terraform plan output identical to previous PR comment ' +
+                  '(after refresh-order normalization); skipping post.',
               );
               return;
             }
