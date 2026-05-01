@@ -17,7 +17,7 @@ import {
  *
  * Assertions reflect AS-09 (three rendered states at /admin), AS-10
  * (admin link only for admins), and EC-01..03 from
- * `openspec/changes/e2e-coverage-and-clerk-injection/specs/e2e-coverage.md`.
+ * `openspec/archive/e2e-coverage-and-clerk-injection/specs/e2e-coverage.md`.
  *
  * Note: the first test (anonymous header smoke) runs even without keys —
  * when the publishable key is missing we boot the SPA in a Clerk-less mode
