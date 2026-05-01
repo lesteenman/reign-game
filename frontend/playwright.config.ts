@@ -33,6 +33,10 @@ const skipWebServer = !!process.env.PLAYWRIGHT_SKIP_WEBSERVER;
 
 export default defineConfig({
   testDir: "./playwright",
+  // Clerk session injection scaffolding (slice
+  // e2e-coverage-and-clerk-injection, D9). `clerkSetup()` runs once per
+  // test process and exchanges the dev-tenant keys for a testing token.
+  globalSetup: "./playwright/global-setup.ts",
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
