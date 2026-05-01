@@ -38,6 +38,8 @@ task e2e:down            # Tear down the e2e stack (LocalStack stays up — shar
 task e2e:seed            # Re-seed committed fixture puzzles into puzzle-pool-e2e (idempotent)
 task e2e:status          # Show e2e backend status + fixture count
 task e2e:genfixtures     # Regenerate committed fixture puzzles (deterministic from fixed seeds)
+task e2e:up:generator    # Start the e2e generator worker (reads puzzle-generation-e2e queue, writes to puzzle-pool-e2e)
+task e2e:down:generator  # Stop the e2e generator worker
 ```
 
 ## Running the Dev Stack (STANDARD — always use these)
@@ -132,6 +134,7 @@ Configure with: `git config core.hooksPath .githooks`
 | E2E Backend  | 5182 | `task e2e:up:backend`      |
 | E2E Frontend | 5183 | `task e2e:up:frontend`     |
 | Generator    | —    | `task dev:up:generator` (SQS consumer, no HTTP port; PID in `logs/generator.pid`) |
+| E2E Generator | —   | `task e2e:up:generator` (no port; PID at `logs/e2e-generator.pid`) |
 | LocalStack   | 4566 | `task dev:up:localstack`   |
 
 Frontend already binds `--host 0.0.0.0` (for mobile testing over LAN) and the Vite proxy forwards `/api/*` to `localhost:5181`. All backend routes live under `/api/` — SPA routes (e.g., `/admin` page) stay on the frontend. Do not start services with raw `go run`/`npm run dev` — always go through `task dev:up` (see "Running the Dev Stack" above).

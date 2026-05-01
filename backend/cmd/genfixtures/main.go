@@ -69,6 +69,27 @@ var fixtures = []fixture{
 		Mode: "standard",
 		Seed: 1,
 	},
+	{
+		// Seed=2 => DIFFERENT puzzle content from seeds 1+2 above.
+		// served-marking.spec.ts asserts that two consecutive
+		// /api/puzzles/next calls return DIFFERENT puzzles, which
+		// can't be done with the StrictMode-workaround duplicates.
+		ID:   "e2e0000-0000-4000-a000-000000000003",
+		Size: 7,
+		K:    1,
+		Mode: "standard",
+		Seed: 2,
+	},
+	{
+		// 9x9 Double, playable now that chunk 1 flipped 9#double=true
+		// on the e2e CONFIG. Used by pool-replenishment.spec.ts and
+		// admin-config-flow.spec.ts.
+		ID:   "e2e0000-0000-4000-a000-000000000001",
+		Size: 9,
+		K:    2,
+		Mode: "double",
+		Seed: 1,
+	},
 }
 
 func main() {

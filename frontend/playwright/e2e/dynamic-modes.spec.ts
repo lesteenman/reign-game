@@ -1,33 +1,46 @@
 import { test, expect } from "@playwright/test";
+import {
+  containsCombo,
+  type ModesResponse,
+} from "../test-helpers/modes";
 
 /**
- * Asserts the dynamic mode-button list matches CONFIG rows with
- * enabled=true. The e2e fixture pool is seeded (by .localstack/
- * init-aws.sh) with:
+ * Asserts the public dynamic mode list reflects CONFIG enabled flags.
  *
+ * Sentinels (post slice e2e-coverage-and-clerk-injection devops chunk 1):
  *   7#standard enabled
  *   9#standard enabled
- *   9#double   DISABLED  ← the interesting case
+ *   9#double   enabled  ← previously the disabled sentinel; flipped on
+ *   7#double   DISABLED ← the new disabled sentinel (KI-007 still infeasible)
  *
- * The disabled combo lets us assert the filter works end-to-end:
- * it is visible in admin pool listings but absent from the public
- * /api/config/modes response and therefore absent from the UI.
+ * `/api/config/modes` is the public, unauthenticated surface that drives
+ * landing-page mode buttons for non-admin players. The disabled combo
+ * lets us assert the filter works end-to-end: it MUST be present in
+ * admin pool listings (not asserted here) but absent from this public
+ * response. Per spec EC-04 and design D6.
  *
- * Post-R-7-02 the preset buttons live on /curation (admin-only) via
- * <ProtectedAdminRoute>. Driving this test requires a Clerk admin
- * session injected from the test harness — the same scaffolding the
- * three skipped admin tests in auth.spec.ts are waiting on. Once
- * `@clerk/testing`'s session-injection helper is wired up there,
- * delete the skip below and route this test through /curation.
+ * No Clerk session needed — this hits a public endpoint.
  */
 
-const needsClerkAdminSession = true;
-
 test.describe("e2e: dynamic mode buttons", () => {
-  test("renders only enabled combos; disabled 9×9 Double is absent", async () => {
-    test.skip(
-      needsClerkAdminSession,
-      "preset buttons moved to admin-gated /curation; needs Clerk admin session injection (see auth.spec.ts)",
-    );
+  test("public modes list includes 9#double (enabled) and excludes 7#double (disabled sentinel)", async ({
+    request,
+  }) => {
+    const response = await request.get("/api/config/modes");
+    expect(response.ok()).toBe(true);
+
+    const body = (await response.json()) as ModesResponse;
+    expect(Array.isArray(body.modes)).toBe(true);
+
+    // 9#double is enabled post-devops chunk 1 — must surface to players.
+    expect(containsCombo(body.modes, 9, "double")).toBe(true);
+
+    // 7#double is the new disabled sentinel — must be filtered out by
+    // the public endpoint even though the row exists in CONFIG.
+    expect(containsCombo(body.modes, 7, "double")).toBe(false);
+
+    // Sanity: the always-on combos remain visible.
+    expect(containsCombo(body.modes, 7, "standard")).toBe(true);
+    expect(containsCombo(body.modes, 9, "standard")).toBe(true);
   });
 });

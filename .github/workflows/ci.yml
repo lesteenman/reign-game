@@ -232,8 +232,35 @@ jobs:
           CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
         run: task e2e:up
 
+      # Step-level env: test-user credentials are consumed by Playwright's
+      # sign-in helpers (auth.spec.ts admin-route gate, admin-config-flow,
+      # pool-replenishment, dynamic-modes), not by Vite, not by the bundle.
+      # Scope to this step only — same supply-chain discipline as
+      # CLERK_SECRET_KEY above (a malicious npm postinstall earlier in the
+      # job cannot read these). Dev-tenant credentials ONLY (D2). Mirror
+      # these in BOTH Actions and Dependabot secret scopes per D3 — see
+      # docs/runbooks/e2e-clerk-setup.md.
+      #
+      # CLERK_SECRET_KEY is also re-scoped to this step (in addition to
+      # `Bring up e2e stack`) because Playwright's globalSetup invokes
+      # `clerkSetup({ publishableKey, secretKey })` to fetch the testing
+      # token — `clerkSetup` requires both keys per @clerk/testing's API.
+      # Keeping it step-scoped (rather than hoisting to job level) preserves
+      # the npm-postinstall-can't-read-it guarantee.
       - name: Run e2e project
         working-directory: frontend
+        env:
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          E2E_CLERK_TEST_USER_EMAIL: ${{ secrets.E2E_CLERK_TEST_USER_EMAIL }}
+          # E2E_CLERK_TEST_*_PASSWORD: stored and step-scoped here for future
+          # test flexibility (e.g. password-strategy admin sign-in via Clerk's
+          # hosted UI). The current Playwright sign-in helpers use the
+          # email-ticket strategy and do not read these values — see
+          # frontend/playwright/test-helpers/clerk.ts. Wiring intact so a
+          # future password-strategy spec doesn't need a CI change.
+          E2E_CLERK_TEST_USER_PASSWORD: ${{ secrets.E2E_CLERK_TEST_USER_PASSWORD }}
+          E2E_CLERK_TEST_ADMIN_EMAIL: ${{ secrets.E2E_CLERK_TEST_ADMIN_EMAIL }}
+          E2E_CLERK_TEST_ADMIN_PASSWORD: ${{ secrets.E2E_CLERK_TEST_ADMIN_PASSWORD }}
         run: npm run test:e2e
 
       # Always-run cleanup. Runner is ephemeral so cleanup is mostly

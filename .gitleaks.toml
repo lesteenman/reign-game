@@ -1,0 +1,26 @@
+# Gitleaks config — extends defaults with allowlist for env-var name patterns
+# in documentation prose. The default `generic-api-key` rule fires on any
+# high-entropy uppercase identifier, which is a common false-positive pattern
+# for env-var-naming-discussion in design docs / runbooks.
+#
+# This config preserves the default ruleset (no rules disabled) and only
+# adds an allowlist of paths × regex combinations that are known-safe.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Env var names in markdown docs are not credentials"
+paths = [
+  '''.+\.md$''',
+]
+regexes = [
+  # Clerk-related env var names (CI, Vite, runbook prose)
+  '''(VITE_)?CLERK_[A-Z_]+''',
+  '''E2E_CLERK_[A-Z_]+''',
+  # Other legitimate env var name patterns referenced in docs
+  '''AWS_[A-Z_]+''',
+  '''DYNAMODB_[A-Z_]+''',
+  '''SQS_[A-Z_]+''',
+  '''PUZZLE_[A-Z_]+''',
+]
