@@ -27,7 +27,7 @@ import { defineConfig } from "@playwright/test";
  * because `task e2e:up` already provides Vite on :5183. Without the gate the
  * e2e job in CI would launch a wasted `npm run dev` on :5180 that no test
  * actually uses (e2e baseURL is :5183). See design-grill-summary Finding 2 #3
- * in openspec/changes/e2e-in-ci/.
+ * in openspec/archive/e2e-in-ci/.
  */
 const skipWebServer = !!process.env.PLAYWRIGHT_SKIP_WEBSERVER;
 

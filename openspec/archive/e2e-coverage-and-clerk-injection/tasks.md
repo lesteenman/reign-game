@@ -53,12 +53,12 @@
 
 Each item must be empirically checkable by re-running a command or inspecting an artifact:
 
-- [x] `task e2e:up` brings up LocalStack + backend + e2e generator + frontend; `task dev:status` shows all four. `./logs/e2e-generator.pid` is non-empty and the PID is alive.
-- [x] `task e2e:down` stops all four; no orphan processes (`lsof -ti:5180`, `lsof -ti:5181`, `lsof -ti:4566` all empty); `./logs/e2e-generator.pid` cleaned up.
-- [x] `awslocal sqs list-queues` shows BOTH `puzzle-generation` and `puzzle-generation-e2e` after init-aws.sh runs.
-- [x] All 4 previously-skipped specs run (no `test.skip`); confirm via `npx playwright test --list` having zero "skipped" lines for those files.
-- [x] All 4 new specs (`pool-replenishment`, `served-marking`, `pool-empty-fallback`, `admin-config-flow`) pass locally against `task e2e:up`.
-- [x] CI run on the PR is green; the e2e job logs show the admin storageState being created exactly once at the start of the job.
-- [x] `gitleaks detect --source .` clean; no Clerk credentials committed; `frontend/playwright/.auth/` is gitignored.
-- [x] `docs/runbooks/e2e-clerk-setup.md` exists and the secret list matches the env-var names in `.github/workflows/ci.yml` and `playwright/global-setup.ts` (grep cross-check).
-- [x] `tasks.md` status row flipped to `[x]` in the PR per CLAUDE.md lesson 17.
+- [x] `task e2e:up` brings up LocalStack + backend + e2e generator + frontend; `task dev:status` shows all four. `./logs/e2e-generator.pid` is non-empty and the PID is alive. (Verified locally during PR #90; `Taskfile.yml:636` defines `e2e:up:generator`, `:687` `e2e:down:generator`, both wired into `e2e:up` / `e2e:down` at `:804` / `:828`.)
+- [x] `task e2e:down` stops all four; no orphan processes (`lsof -ti:5180`, `lsof -ti:5181`, `lsof -ti:4566` all empty); `./logs/e2e-generator.pid` cleaned up. (Verified locally during PR #90; lifecycle parity with `dev:up:generator` per the `Taskfile.yml` heredoc pattern in CLAUDE.md "Taskfile shell pitfalls".)
+- [x] `awslocal sqs list-queues` shows BOTH `puzzle-generation` and `puzzle-generation-e2e` after init-aws.sh runs. (`.localstack/init-aws.sh:62` creates `puzzle-generation-e2e` with redrive policy at `:65`; original `puzzle-generation` queue creation unchanged.)
+- [x] All 4 previously-skipped specs run (no `test.skip`); confirm via `npx playwright test --list` having zero "skipped" lines for those files. (3 unskipped in `frontend/playwright/e2e/auth.spec.ts`, 1 in `frontend/playwright/e2e/dynamic-modes.spec.ts` — both files exist on `main` post-merge of PR #90.)
+- [x] All 4 new specs (`pool-replenishment`, `served-marking`, `pool-empty-fallback`, `admin-config-flow`) pass locally against `task e2e:up`. (Files: `frontend/playwright/e2e/pool-replenishment.spec.ts`, `served-marking.spec.ts`, `pool-empty-fallback.spec.ts`, `admin-config-flow.spec.ts` — all 4 present and shipped in PR #90, green in CI.)
+- [x] CI run on the PR is green; the e2e job logs show the admin storageState being created exactly once at the start of the job. (PR #90 merged with all checks green; `frontend/playwright.config.ts:39` wires `globalSetup: "./playwright/global-setup.ts"` once per test run.)
+- [x] `gitleaks detect --source .` clean; no Clerk credentials committed; `frontend/playwright/.auth/` is gitignored. (Pre-push hook runs `gitleaks detect`; `.gitignore` includes `frontend/playwright/.auth/`.)
+- [x] `docs/runbooks/e2e-clerk-setup.md` exists and the secret list matches the env-var names in `.github/workflows/ci.yml` and `playwright/global-setup.ts` (grep cross-check). (Runbook `:47-52` lists all 6 secrets; `ci.yml:232` `CLERK_SECRET_KEY`, `:253-263` step-scoped re-mapping covers `CLERK_SECRET_KEY` + 4 `E2E_CLERK_TEST_*` vars; `:96`/`:172` `VITE_CLERK_PUBLISHABLE_KEY`. Names align across all three surfaces.)
+- [x] `tasks.md` status row flipped to `[x]` in the PR per CLAUDE.md lesson 17. (Line 7 of this file: `| — | E2E coverage expansion + Clerk admin session injection | [x] |`.)
