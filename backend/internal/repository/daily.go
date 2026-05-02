@@ -761,3 +761,45 @@ func isConditionalCheckFailureOnLeg(err error, legIndex int) bool {
 	reason := tce.CancellationReasons[legIndex]
 	return reason.Code != nil && strings.EqualFold(*reason.Code, "ConditionalCheckFailed")
 }
+
+// LeaderboardRank returns the player's 1-based rank on the daily
+// leaderboard for `date`. Rank N means N-1 strictly faster times are
+// ahead of the player.
+//
+// Implementation: single DDB Query against PK = DAILY-LEADERBOARD#date
+// with KeyConditionExpression "PK = :pk AND SK <= :playerSK",
+// Select=COUNT. The leaderboard SK is padded so lex order matches
+// numeric order — see buildLeaderboardSK.
+//
+// Pagination: NOT handled. The Phase 8 leaderboard is bounded well
+// under DDB's 1MB Query result cap (worst case ~10K entries × ~30
+// bytes of metadata per entry). If Phase 9 adds growth, swap in a
+// paginator here.
+//
+// Returns (1, nil) when the player's row is the fastest. On any DDB
+// error returns (0, wrapped-error).
+func (r *PuzzleRepository) LeaderboardRank(
+	ctx context.Context,
+	date string,
+	elapsedMs int64,
+	userID string,
+) (int, error) {
+	playerSK := buildLeaderboardSK(elapsedMs, userID)
+	output, err := r.client.Query(ctx, &dynamodb.QueryInput{
+		TableName:              aws.String(r.tableName),
+		KeyConditionExpression: aws.String("#pk = :pk AND #sk <= :playerSK"),
+		ExpressionAttributeNames: map[string]string{
+			"#pk": "PK",
+			"#sk": "SK",
+		},
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":pk":       &types.AttributeValueMemberS{Value: buildDailyLeaderboardPK(date)},
+			":playerSK": &types.AttributeValueMemberS{Value: playerSK},
+		},
+		Select: types.SelectCount,
+	})
+	if err != nil {
+		return 0, fmt.Errorf("leaderboard rank for %s player=%s: %w", date, userID, err)
+	}
+	return int(output.Count), nil
+}
