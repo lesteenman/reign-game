@@ -56,8 +56,8 @@ test('renders the three top-level tiles container', () => {
   expect(screen.getByTestId('tile-packs')).toBeInTheDocument();
 });
 
-test('Daily and Packs tiles are disabled placeholders', () => {
+test('Packs tile remains a disabled placeholder; Daily is active (R-8-02)', () => {
   renderLanding();
-  expect(screen.getByTestId('tile-daily')).toBeDisabled();
+  expect(screen.getByTestId('tile-daily')).not.toBeDisabled();
   expect(screen.getByTestId('tile-packs')).toBeDisabled();
 });
