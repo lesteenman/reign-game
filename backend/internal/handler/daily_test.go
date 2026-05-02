@@ -158,30 +158,36 @@ func TestDailyGetHandler_AuthMatrix(t *testing.T) {
 			wantError:  "unauthenticated",
 		},
 		{
-			name:       "device header alone passes auth (501 stub)",
+			name:       "device header alone passes auth (200)",
 			userID:     "",
 			deviceID:   "dev_abc",
-			wantStatus: http.StatusNotImplemented,
+			wantStatus: http.StatusOK,
 		},
 		{
-			name:       "userID alone passes auth (501 stub)",
+			name:       "userID alone passes auth (200)",
 			userID:     "user_xyz",
 			deviceID:   "",
-			wantStatus: http.StatusNotImplemented,
+			wantStatus: http.StatusOK,
 		},
 		{
-			name:       "userID wins when both present (501 stub)",
+			name:       "userID wins when both present (200)",
 			userID:     "user_xyz",
 			deviceID:   "dev_abc",
-			wantStatus: http.StatusNotImplemented,
+			wantStatus: http.StatusOK,
 		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			// Arrange
-			router := mountDaily()
-			req := httptest.NewRequest(http.MethodGet, "/api/daily/2026-05-02", nil)
+			puzzleID := "puzzle-auth"
+			date := "2026-05-02"
+			repo := &fakeDailyRepo{
+				scheduleByDate: map[string]*repository.ScheduleRecord{date: scheduleFixture(date, puzzleID)},
+				puzzleByID:     map[string]*repository.PuzzleRecord{puzzleID: puzzleFixture(puzzleID)},
+			}
+			router := mountDailyWithRepo(repo)
+			req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, nil)
 			if tc.userID != "" {
 				req = withUserID(req, tc.userID)
 			}
@@ -523,14 +529,17 @@ func TestDailyGetHandler_SourcePartitionMalformed_500(t *testing.T) {
 func TestDailyGetHandler_DateMatrix(t *testing.T) {
 	// Auth is satisfied via X-Device-Id for every row so we exercise
 	// the date branch alone. Today (per fixedClock) is 2026-05-02.
+	// In-window dates land on a 200 once the schedule + puzzle fakes
+	// are seeded; out-of-window short-circuits before the repo is
+	// touched (404), and malformed dates short-circuit at parse (400).
 	cases := []struct {
 		name       string
 		date       string
 		wantStatus int
 		wantError  string
 	}{
-		{name: "today returns 501 stub", date: "2026-05-02", wantStatus: http.StatusNotImplemented},
-		{name: "yesterday returns 501 stub", date: "2026-05-01", wantStatus: http.StatusNotImplemented},
+		{name: "today returns 200", date: "2026-05-02", wantStatus: http.StatusOK},
+		{name: "yesterday returns 200", date: "2026-05-01", wantStatus: http.StatusOK},
 		{name: "tomorrow returns 404 out-of-window", date: "2026-05-03", wantStatus: http.StatusNotFound, wantError: "out of window"},
 		{name: "two days ago returns 404 out-of-window", date: "2026-04-30", wantStatus: http.StatusNotFound, wantError: "out of window"},
 		{name: "calendar-impossible date returns 400", date: "2026-13-99", wantStatus: http.StatusBadRequest, wantError: "invalid date"},
@@ -539,8 +548,17 @@ func TestDailyGetHandler_DateMatrix(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Arrange
-			router := mountDaily()
+			// Arrange — seed schedule+puzzle for both in-window dates
+			// so the success-path rows can reach 200.
+			puzzleID := "puzzle-date"
+			repo := &fakeDailyRepo{
+				scheduleByDate: map[string]*repository.ScheduleRecord{
+					"2026-05-02": scheduleFixture("2026-05-02", puzzleID),
+					"2026-05-01": scheduleFixture("2026-05-01", puzzleID),
+				},
+				puzzleByID: map[string]*repository.PuzzleRecord{puzzleID: puzzleFixture(puzzleID)},
+			}
+			router := mountDailyWithRepo(repo)
 			req := httptest.NewRequest(http.MethodGet, "/api/daily/"+tc.date, nil)
 			req.Header.Set("X-Device-Id", "dev_abc")
 			rec := httptest.NewRecorder()
