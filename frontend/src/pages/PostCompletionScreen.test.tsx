@@ -113,30 +113,38 @@ describe('PostCompletionScreen', () => {
   });
 
   it('countdown updates every second', () => {
-    // Arrange
-    vi.useFakeTimers();
+    // Arrange — pin fake timers + wall-clock to a fixed `fixedNow`.
+    // `vi.advanceTimersByTime(N)` advances both the fake timer queue
+    // AND the fake `Date` simultaneously, so the interval callback's
+    // `new Date()` (drift fix) sees the post-advance wall-clock time.
     const fixedNow = new Date('2026-05-02T22:30:00Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
     renderScreen({ ...BASE_PROPS, now: fixedNow });
     expect(screen.getByTestId('daily-countdown')).toHaveTextContent('01:30:00');
 
-    // Act — advance 1 second
+    // Act — advance the fake clock by 5 seconds. `advanceTimersByTime`
+    // also moves `Date.now()` forward in lockstep.
     act(() => {
-      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(5000);
     });
 
-    // Assert — decremented by 1 second
-    expect(screen.getByTestId('daily-countdown')).toHaveTextContent('01:29:59');
+    // Assert — decremented by 5 seconds. The countdown reads `new
+    // Date()` on each tick, which now returns fixedNow + 5s.
+    expect(screen.getByTestId('daily-countdown')).toHaveTextContent('01:29:55');
   });
 
   it('countdown handles boundary (rolls past UTC midnight)', () => {
     // Arrange
-    vi.useFakeTimers();
     const fixedNow = new Date('2026-05-02T23:59:59Z');
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedNow);
     renderScreen({ ...BASE_PROPS, now: fixedNow });
     expect(screen.getByTestId('daily-countdown')).toHaveTextContent('00:00:01');
 
     // Act — advance past midnight; countdown should re-anchor to the
-    // following day rather than going negative.
+    // following day rather than going negative. `advanceTimersByTime`
+    // moves the fake `Date` forward in lockstep.
     act(() => {
       vi.advanceTimersByTime(2000);
     });

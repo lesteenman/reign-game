@@ -97,7 +97,13 @@ export function PostCompletionScreen({
   useEffect(() => {
     setCurrentTime(initialNow);
     const interval = setInterval(() => {
-      setCurrentTime((prev) => new Date(prev.getTime() + 1000));
+      // Read wall-clock time directly instead of incrementing the
+      // previous value by 1000ms. Browsers throttle setInterval on
+      // backgrounded tabs, so a `prev + 1000` loop accumulates drift
+      // (the countdown lags behind real time). `new Date()` resyncs
+      // every tick so the display catches up immediately when the
+      // tab refocuses.
+      setCurrentTime(new Date());
     }, 1000);
     return () => clearInterval(interval);
   }, [initialNow]);

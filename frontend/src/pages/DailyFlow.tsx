@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageShell } from '../components/common/PageShell';
 import { PrimaryButton, SecondaryButton } from '../components/common/Button';
@@ -102,6 +102,16 @@ export function DailyFlow() {
   const [state, setState] = useState<FlowState>({ kind: 'loading' });
   const [fetchKey, setFetchKey] = useState(0);
 
+  // `handleSolved` reads the latest state via a ref so its identity
+  // stays stable across renders. Without this, `handleSolved` re-binds
+  // every state transition, which churns `DailyGameBoard`'s memoized
+  // `onSolveDetectedRef` and triggers redundant re-renders of the
+  // grid. Lesson: identity stability matters for downstream memos.
+  const stateRef = useRef<FlowState>(state);
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
   /** Re-runs the fetch effect (DP-30 retry affordance). */
   const retryFetch = useCallback(() => {
     setState({ kind: 'loading' });
@@ -163,14 +173,35 @@ export function DailyFlow() {
         const payload = await getDaily();
         if (cancelled) return;
         if (payload.outcome === 'solved') {
-          // chunk-3 short-circuit branch — chunk 7 will swap this for
-          // a PostCompletionScreen render with server-provided fields.
-          setState({ kind: 'loading' }); // transient — handled by render branch below
-          // The render path keys off `payload.outcome === 'solved'` via
-          // a dedicated 'solved' branch in render below; we just store
-          // the playing-shape state and the renderer handles the split.
-          setState({ kind: 'playing', payload });
-          return;
+          // GET-said-solved short-circuit. Server returned a payload
+          // with the canonical solve fields; render PostCompletionScreen
+          // straight away. The POST response shape (DailySubmitResponse)
+          // is reconstructed from the GET payload's solved fields —
+          // leaderboardRank is intentionally undefined here because GET
+          // /api/daily/* does not surface rank (only POST does).
+          if (
+            typeof payload.serverElapsedMs === 'number' &&
+            payload.submittedAt
+          ) {
+            setState({
+              kind: 'solved',
+              payload,
+              result: {
+                serverElapsedMs: payload.serverElapsedMs,
+                leaderboardRank: undefined,
+              },
+              submittedAt: payload.submittedAt,
+            });
+            return;
+          }
+          // Defensive: GET returned outcome=solved but the canonical
+          // fields are missing (older partial-response shape). Log and
+          // fall through to the playing branch so the gap is observable
+          // rather than silently rendering a broken post-completion
+          // screen.
+          console.warn(
+            'DailyFlow: getDaily returned outcome=solved without serverElapsedMs/submittedAt; falling back to playing',
+          );
         }
         setState({ kind: 'playing', payload });
       } catch (err) {
@@ -203,12 +234,13 @@ export function DailyFlow() {
    */
   const handleSolved = useCallback(
     async (solution: number[][], elapsedMs: number) => {
-      // Read the current state directly — only act when in `playing`.
-      // We deliberately avoid a functional updater here because the
-      // updater fires lazily (during the next render), but we need
-      // the captured payload synchronously to fire the POST.
-      if (state.kind !== 'playing') return;
-      const activePayload = state.payload;
+      // Read the current state via the ref so this callback's identity
+      // is stable across renders (no `state` in the dep list). The ref
+      // always carries the latest committed state value courtesy of the
+      // useEffect above.
+      const current = stateRef.current;
+      if (current.kind !== 'playing') return;
+      const activePayload = current.payload;
       setState({ kind: 'submitting', payload: activePayload });
 
       try {
@@ -291,7 +323,7 @@ export function DailyFlow() {
         });
       }
     },
-    [saveState, state],
+    [saveState],
   );
 
   const retrySubmit = useCallback(() => {
@@ -337,27 +369,6 @@ export function DailyFlow() {
           <SecondaryButton onClick={retryFetch} data-testid="daily-retry">
             Try again
           </SecondaryButton>
-        </div>
-      </PageShell>
-    );
-  }
-
-  if (state.kind === 'playing' && state.payload.outcome === 'solved') {
-    // chunk-3 short-circuit placeholder — chunk 7 swaps in a full
-    // PostCompletionScreen rendered from the GET payload's
-    // serverElapsedMs / submittedAt fields.
-    return (
-      <PageShell onBack={handleBack}>
-        <div
-          data-testid="daily-solved-placeholder"
-          style={{
-            padding: '48px 0',
-            fontFamily: '"Nunito Sans", system-ui, sans-serif',
-            color: 'var(--color-body)',
-            textAlign: 'center',
-          }}
-        >
-          Already solved (post-completion screen lands chunk 5)
         </div>
       </PageShell>
     );

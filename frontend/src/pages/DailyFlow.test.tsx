@@ -206,19 +206,55 @@ describe('DailyFlow', () => {
     expect(mockGetDaily).toHaveBeenCalledTimes(2);
   });
 
-  it('renders the chunk-3 placeholder when outcome is solved', async () => {
-    // Arrange — chunk 5 will replace this placeholder with the
-    // post-completion screen. The chunk-3 stub just proves the
-    // short-circuit branch renders.
-    mockGetDaily.mockResolvedValue({ ...MOCK_PAYLOAD, outcome: 'solved' });
+  it('transitions loading -> solved and renders PostCompletionScreen when GET returns outcome=solved with elapsedMs+submittedAt', async () => {
+    // Arrange — server-said-solved on the GET path. The flow must
+    // render PostCompletionScreen straight from the GET payload's
+    // canonical solve fields (no POST). The placeholder branch is gone.
+    mockGetDaily.mockResolvedValue({
+      ...MOCK_PAYLOAD,
+      outcome: 'solved',
+      serverElapsedMs: 14_000,
+      submittedAt: '2026-05-02T10:30:00Z',
+    });
+
+    // Act
+    renderDailyFlow();
+
+    // Assert — PostCompletionScreen renders with the GET payload's
+    // serverElapsedMs (14_000ms → 0:14). No POST is fired. The
+    // placeholder data-testid must NOT appear.
+    await waitFor(() => {
+      expect(screen.getByTestId('daily-post-completion')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('daily-solve-time')).toHaveTextContent('0:14');
+    expect(screen.queryByTestId('daily-solved-placeholder')).not.toBeInTheDocument();
+    expect(mockSubmitDailyResult).not.toHaveBeenCalled();
+  });
+
+  it('falls back to playing branch with a console.warn when GET returns outcome=solved but elapsedMs is missing', async () => {
+    // Arrange — defensive path. The server returned outcome=solved but
+    // omitted serverElapsedMs (older partial-response shape). The flow
+    // must NOT render a broken post-completion screen; it warns and
+    // falls through to playing.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    mockGetDaily.mockResolvedValue({
+      ...MOCK_PAYLOAD,
+      outcome: 'solved',
+      // serverElapsedMs intentionally absent
+      // submittedAt intentionally absent
+    });
 
     // Act
     renderDailyFlow();
 
     // Assert
     await waitFor(() => {
-      expect(screen.getByTestId('daily-solved-placeholder')).toBeInTheDocument();
+      expect(screen.getByTestId('daily-game-board-stub')).toBeInTheDocument();
     });
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('outcome=solved without serverElapsedMs/submittedAt'),
+    );
+    warnSpy.mockRestore();
   });
 
   // --- Chunk 6: submit wiring + state machine -------------------------
