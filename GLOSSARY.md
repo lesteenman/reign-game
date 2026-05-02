@@ -212,6 +212,15 @@ DynamoDB row at `PK = DAILY#YYYY-MM-DD` carrying the day's `puzzleId`, `assigned
 **Sync Fallback**
 On `GET /api/daily/{today}` with no schedule row, the handler runs the T=0 finalize algorithm itself so the endpoint never returns 404 for today's puzzle. Implemented in `backend/internal/daily/sync.go::SyncFinalizeForToday`; converges on the same row both crons would have written (design §4 sync-fallback contract; Finding 1).
 
+**Daily Tile**
+The LandingPage entry point that navigates to `/play?flow=daily` (DP-23). Activated in R-8-02; previously a placeholder under Phase 7's three-tile landing.
+
+**DP-27 short-circuit**
+On the second visit to the daily after solving, the frontend reads per-flow IndexedDB and renders the post-completion screen without calling `getDaily()`. Lives in `frontend/src/pages/DailyFlow.tsx`; verified by `frontend/playwright/e2e/daily-flow.spec.ts` (already-solved spec).
+
+**Post-completion screen**
+The daily-specific solved-state UI showing solve time, optional leaderboard rank, and a live countdown to the next UTC midnight (DP-25). Lives in `frontend/src/pages/PostCompletionScreen.tsx`; recycle-day copy is deferred until the backend response shape carries `isRecycle` metadata.
+
 ---
 
 ## Testing
