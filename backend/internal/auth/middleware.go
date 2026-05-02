@@ -212,19 +212,58 @@ func RequireAuth(verifier sessionVerifier) func(http.Handler) http.Handler {
 			}
 
 			log.Printf("auth: allow path=%s sub=%s verify_ms=%d get_user_ms=%d", r.URL.Path, u.ID, verifyMs, getUserMs)
-			ctx := context.WithValue(r.Context(), userContextKey{}, u)
-			next.ServeHTTP(w, r.WithContext(ctx))
+			next.ServeHTTP(w, r.WithContext(withUser(r.Context(), u)))
 		})
 	}
 }
 
-// OptionalAuth is the anon-or-user middleware (DP-14). Stubbed here
-// so the failing-test commit compiles; the real implementation lands
-// in the follow-up commit on this branch.
-func OptionalAuth(_ sessionVerifier) func(http.Handler) http.Handler {
+// withUser is the single point where the *clerk.User is written into
+// the request context under userContextKey{}. Both RequireAuth and
+// OptionalAuth call it on success so the key reference lives in
+// exactly one place — drift between middleware that store a user and
+// UserFromContext that reads it would be a silent auth bug.
+func withUser(ctx context.Context, u *clerk.User) context.Context {
+	return context.WithValue(ctx, userContextKey{}, u)
+}
+
+// OptionalAuth verifies a Clerk session token if one is present and
+// populates the request context with the resolved *clerk.User on
+// success. On missing token, malformed header, or any verifier error,
+// it passes the request through unchanged — the downstream handler
+// decides whether the missing identity is acceptable (e.g. by reading
+// an X-Device-Id header for an anonymous fallback).
+//
+// This middleware is the entry point for routes that allow both User
+// and Anonymous access (the daily-puzzle GET / POST under
+// /api/daily/{date}, per DP-14). RequireAuth still owns the
+// must-be-signed-in path (e.g. /api/admin/*).
+//
+// Failure modes: every failure path is silent — no logs, no metrics —
+// because this middleware sits in front of public traffic where
+// missing/invalid tokens are routine. Downstream handlers that care
+// (e.g. require X-Device-Id) emit their own 401 with a clear body.
+func OptionalAuth(verifier sessionVerifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			next.ServeHTTP(w, r)
+			cookie, err := r.Cookie(sessionCookieName)
+			if err != nil || cookie.Value == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			claims, err := verifier.Verify(r.Context(), cookie.Value)
+			if err != nil || claims == nil || claims.Subject == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			u, err := verifier.GetUser(r.Context(), claims.Subject)
+			if err != nil || u == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			next.ServeHTTP(w, r.WithContext(withUser(r.Context(), u)))
 		})
 	}
 }
