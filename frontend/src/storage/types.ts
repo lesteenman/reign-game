@@ -63,6 +63,25 @@ export interface GameState {
   status: 'in-progress' | 'solved';
   startedAt: number;
   history?: GameHistory;
+  /**
+   * Server-canonical solve time in milliseconds. Optional and only
+   * populated for solved daily rows (R-8-02 chunk 7) so the DP-27
+   * short-circuit can render PostCompletionScreen without re-fetching
+   * `getDaily()`. Other flows ignore this field.
+   */
+  serverElapsedMs?: number;
+  /**
+   * RFC3339 timestamp of the daily submit. Only populated for solved
+   * daily rows. Drives the "Submitted at HH:MM" line in
+   * PostCompletionScreen on the short-circuit render.
+   */
+  submittedAt?: string;
+  /**
+   * Player's leaderboard rank from the daily POST response, if the
+   * server returned one (signed-in identities only per DP-13).
+   * Optional and only populated for solved daily rows.
+   */
+  leaderboardRank?: number;
 }
 
 /** Record of a completed puzzle for history/stats. */

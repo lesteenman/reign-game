@@ -83,9 +83,22 @@ function makeEmptyCells(size: number): CellState[][] {
   );
 }
 
+/** Today's date as YYYY-MM-DD in UTC. The player's daily flowId
+ *  is derived from server-provided `assignedAt`, but at mount time
+ *  (before the GET) we don't have the server's view yet. Using
+ *  today's UTC date here is the standard short-circuit path: a
+ *  player who solved today's daily and revisits the same UTC day
+ *  hits the persisted row directly without re-fetching. Cross-
+ *  midnight edge cases (player solved 23:55 UTC, revisits at
+ *  00:01 UTC) fall through to `getDaily()` and pick up the new
+ *  day's puzzle naturally. */
+function todayUtcDate(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 export function DailyFlow() {
   const navigate = useNavigate();
-  const { saveState } = useGameStorage();
+  const { saveState, loadState } = useGameStorage();
   const [state, setState] = useState<FlowState>({ kind: 'loading' });
   const [fetchKey, setFetchKey] = useState(0);
 
@@ -102,6 +115,50 @@ export function DailyFlow() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      // DP-27 short-circuit. Read the per-flow IDB row for today's
+      // UTC date BEFORE the GET. If we have a solved row with a
+      // canonical `serverElapsedMs`, render PostCompletionScreen
+      // straight from persisted state — no network round-trip,
+      // observable as a missing /api/daily/* request in Playwright.
+      // A solved row missing `serverElapsedMs` (older partial write
+      // shape) falls through to `getDaily()` so the server's solved
+      // payload drives the post-completion render.
+      try {
+        const persisted = await loadState('daily', todayUtcDate());
+        if (cancelled) return;
+        if (
+          persisted &&
+          persisted.status === 'solved' &&
+          typeof persisted.serverElapsedMs === 'number' &&
+          persisted.serverElapsedMs > 0
+        ) {
+          // Synthesize a minimal payload + result so the existing
+          // 'solved' render branch works without a special case.
+          const payload: DailyPuzzlePayload = {
+            puzzleId: persisted.puzzle.puzzleId,
+            grid: persisted.puzzle.gridSize,
+            regions: persisted.puzzle.regionMap,
+            assignedAt: `${persisted.flowId}T00:00:00Z`,
+            outcome: 'solved',
+          };
+          setState({
+            kind: 'solved',
+            payload,
+            result: {
+              serverElapsedMs: persisted.serverElapsedMs,
+              leaderboardRank: persisted.leaderboardRank,
+            },
+            submittedAt:
+              persisted.submittedAt ?? new Date().toISOString(),
+          });
+          return;
+        }
+      } catch {
+        // Storage read failed — fall through to the network path.
+        // Better to fetch (and retry on next visit) than to surface
+        // a phantom error UI for a transient IDB hiccup.
+      }
+
       try {
         const payload = await getDaily();
         if (cancelled) return;
@@ -133,7 +190,9 @@ export function DailyFlow() {
     return () => {
       cancelled = true;
     };
-  }, [fetchKey]);
+    // loadState is stable from useGameStorage's useMemo, but list it
+    // explicitly so exhaustive-deps stays clean.
+  }, [fetchKey, loadState]);
 
   /**
    * Submit handler — fired by `<DailyGameBoard onSolved>`. Drives the
@@ -184,6 +243,13 @@ export function DailyFlow() {
           },
           status: 'solved',
           startedAt: Date.now() - result.serverElapsedMs,
+          // R-8-02 chunk 7: persist the canonical solve fields so a
+          // subsequent visit short-circuits via DP-27 with the same
+          // PostCompletionScreen content (no second GET, no second
+          // POST).
+          serverElapsedMs: result.serverElapsedMs,
+          submittedAt,
+          leaderboardRank: result.leaderboardRank,
         };
         await saveState(persistedState);
 

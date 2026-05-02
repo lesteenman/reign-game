@@ -28,8 +28,9 @@ vi.mock('../services/dailyService', async () => {
 // Mock storage so the per-flow IndexedDB write is observable without
 // needing fake-indexeddb here. Lesson 16 drove the choice to keep the
 // shape inside storage/ — the mock asserts call shape, not row layout.
+import type { GameState } from '../storage/types';
 const mockSaveState = vi.fn(async () => {});
-const mockLoadState = vi.fn(async () => null);
+const mockLoadState = vi.fn<(...args: [unknown, unknown]) => Promise<GameState | null>>(async () => null);
 const mockClearState = vi.fn(async () => {});
 const mockAddCompletion = vi.fn(async () => {});
 vi.mock('../hooks/useGameStorage', () => ({
@@ -338,6 +339,80 @@ describe('DailyFlow', () => {
         status: 'solved',
       }),
     );
+  });
+
+  // --- Chunk 7: DP-27 short-circuit on persisted solved state -----------
+
+  it('short-circuits to PostCompletionScreen from persisted solved state without calling getDaily', async () => {
+    // Arrange — seed the storage mock with a solved daily row that
+    // carries a canonical serverElapsedMs. The DP-27 path reads this
+    // on mount and renders PostCompletionScreen straight from
+    // persisted state.
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    mockLoadState.mockResolvedValue({
+      id: `daily:${todayUtc}`,
+      flowType: 'daily',
+      flowId: todayUtc,
+      puzzle: {
+        puzzleId: 'persisted-puzzle',
+        gridSize: 9,
+        mode: 'standard',
+        regionMap: MOCK_PAYLOAD.regions,
+      },
+      cells: [],
+      timer: { elapsedAtLastPause: 9_876, lastResumedAt: null },
+      status: 'solved',
+      startedAt: Date.now() - 9_876,
+      serverElapsedMs: 9_876,
+      submittedAt: '2026-05-02T10:30:00Z',
+      leaderboardRank: 7,
+    });
+
+    // Act
+    renderDailyFlow();
+
+    // Assert — PostCompletionScreen renders straight away with the
+    // persisted serverElapsedMs, and getDaily() is never called.
+    await waitFor(() => {
+      expect(screen.getByTestId('daily-post-completion')).toBeInTheDocument();
+    });
+    expect(mockGetDaily).not.toHaveBeenCalled();
+    // 9876 ms → 0:09 (rounded down to whole seconds).
+    expect(screen.getByTestId('daily-solve-time')).toHaveTextContent('0:09');
+  });
+
+  it('falls back to getDaily when persisted solved row lacks serverElapsedMs', async () => {
+    // Arrange — partial-write shape: status=solved but
+    // serverElapsedMs is undefined. The short-circuit must not
+    // engage; the network path runs as if the persisted row didn't
+    // exist.
+    const todayUtc = new Date().toISOString().slice(0, 10);
+    mockLoadState.mockResolvedValue({
+      id: `daily:${todayUtc}`,
+      flowType: 'daily',
+      flowId: todayUtc,
+      puzzle: {
+        puzzleId: 'persisted-puzzle',
+        gridSize: 9,
+        mode: 'standard',
+        regionMap: MOCK_PAYLOAD.regions,
+      },
+      cells: [],
+      timer: { elapsedAtLastPause: 0, lastResumedAt: null },
+      status: 'solved',
+      startedAt: Date.now(),
+      // serverElapsedMs intentionally absent.
+    });
+    mockGetDaily.mockResolvedValue(MOCK_PAYLOAD);
+
+    // Act
+    renderDailyFlow();
+
+    // Assert — getDaily() IS called and the playing branch renders.
+    await waitFor(() => {
+      expect(screen.getByTestId('daily-game-board-stub')).toBeInTheDocument();
+    });
+    expect(mockGetDaily).toHaveBeenCalledTimes(1);
   });
 
   it('shows a "Submitting…" indicator while the submit is in flight', async () => {
