@@ -22,6 +22,8 @@ type DynamoDBAPI interface {
 	Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 	UpdateItem(ctx context.Context, params *dynamodb.UpdateItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
 	GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+	DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
+	TransactWriteItems(ctx context.Context, params *dynamodb.TransactWriteItemsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error)
 }
 
 // ConfigRecord represents a generation config stored in the puzzle-pool DynamoDB table.
@@ -114,6 +116,12 @@ type PuzzleRecord struct {
 	// counts. Recomputed by RecomputeVerdictSummary on every PUT. The
 	// row family at PK="VERDICT#..." is canonical; this is a cache.
 	VerdictSummary VerdictSummary `dynamodbav:"verdictSummary"`
+	// LastDailyDate is the most recent UTC date (YYYY-MM-DD) on which
+	// this puzzle was assigned as the daily puzzle. Set atomically by
+	// the T=0 daily-puzzle finalize transaction (DP-17, DP-18). Empty
+	// or absent on puzzles that have never been a daily. Single date,
+	// not an array (D11) — sufficient for cross-feature exclusion.
+	LastDailyDate string `dynamodbav:"lastDailyDate,omitempty" json:"lastDailyDate,omitempty"`
 	// RegionMap is a 2D array of region IDs defining which region each cell belongs to.
 	RegionMap [][]int `dynamodbav:"regionMap"`
 	// Solution is a 2D boolean array indicating correct marker placements.
