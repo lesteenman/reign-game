@@ -22,17 +22,13 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"time"
 
 	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
+	"github.com/eriksteenman/reign-game/backend/internal/awsclient"
 	"github.com/eriksteenman/reign-game/backend/internal/daily"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
@@ -117,50 +113,14 @@ func handle(ctx context.Context, event EventBridgeScheduledEvent, svc dailyServi
 	}
 }
 
-// loadAWSConfig mirrors backend/cmd/api/main.go's loadAWSConfig.
-// See that file for the full rationale on http.DefaultTransport.Clone();
-// even though this Lambda only uses the AWS SDK today, mirroring the
-// pattern keeps the two entry points aligned and future-proof.
-func loadAWSConfig(ctx context.Context) (aws.Config, error) {
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		region = "us-east-1"
-	}
-
-	httpClient := &http.Client{
-		Transport: http.DefaultTransport.(*http.Transport).Clone(),
-	}
-
-	cfg, err := config.LoadDefaultConfig(
-		ctx,
-		config.WithRegion(region),
-		config.WithHTTPClient(httpClient),
-	)
-	if err != nil {
-		return aws.Config{}, fmt.Errorf("loading AWS config: %w", err)
-	}
-	return cfg, nil
-}
-
-// newDynamoDBClient creates a DynamoDB client, optionally with a
-// LocalStack endpoint via DYNAMODB_ENDPOINT (matches cmd/api).
-func newDynamoDBClient(cfg *aws.Config) *dynamodb.Client {
-	if endpoint := os.Getenv("DYNAMODB_ENDPOINT"); endpoint != "" {
-		return dynamodb.NewFromConfig(*cfg, func(o *dynamodb.Options) {
-			o.BaseEndpoint = aws.String(endpoint)
-		})
-	}
-	return dynamodb.NewFromConfig(*cfg)
-}
-
 func main() {
 	ctx := context.Background()
 
-	cfg, err := loadAWSConfig(ctx)
+	cfg, err := awsclient.LoadAWSConfig(ctx)
 	if err != nil {
 		log.Fatalf("daily cron: aws config: %v", err)
 	}
-	ddb := newDynamoDBClient(&cfg)
+	ddb := awsclient.NewDynamoDBClient(cfg)
 
 	tableName := os.Getenv("PUZZLE_POOL_TABLE")
 	if tableName == "" {
