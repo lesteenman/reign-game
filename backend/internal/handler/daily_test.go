@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -78,6 +79,33 @@ type fakeDailyRepo struct {
 		sourcePartition string
 		mode            repository.FinalizeMode
 	}
+
+	// submitErr controls SubmitPlayTransactionally; nil is success.
+	submitErr   error
+	submitCalls int
+
+	// submitCaptured records the playerID, date, and SubmitInput passed
+	// to SubmitPlayTransactionally so the test can assert auth-derived
+	// flags (IsAnonymous, UserID) and the timestamps line up with what
+	// the handler computed from the PLAY row + clock.
+	submitCaptured struct {
+		playerID string
+		date     string
+		input    repository.SubmitInput
+	}
+
+	// rankResult / rankErr control LeaderboardRank. The handler omits
+	// the field on error and returns 200 anyway — submission is the
+	// authoritative write; rank is best-effort.
+	rankResult int
+	rankErr    error
+	rankCalls  int
+
+	rankCaptured struct {
+		date      string
+		elapsedMs int64
+		userID    string
+	}
 }
 
 func (f *fakeDailyRepo) GetSchedule(_ context.Context, date string) (*repository.ScheduleRecord, error) {
@@ -132,6 +160,30 @@ func (f *fakeDailyRepo) FinalizeDailyTransaction(_ context.Context, date, puzzle
 	f.finalizeCaptured.sourcePartition = sourcePartition
 	f.finalizeCaptured.mode = mode
 	return f.finalizeErr
+}
+
+// submitErr is returned by SubmitPlayTransactionally. Nil means success.
+// repository.ErrPlayNotInStartedState exercises the race-loser 409 path.
+func (f *fakeDailyRepo) SubmitPlayTransactionally(_ context.Context, playerID, date string, submission repository.SubmitInput) error {
+	f.submitCalls++
+	f.submitCaptured.playerID = playerID
+	f.submitCaptured.date = date
+	f.submitCaptured.input = submission
+	return f.submitErr
+}
+
+// LeaderboardRank returns rankResult, rankErr. Default zero values mean
+// rank=0, err=nil — fine for anonymous tests where the handler MUST NOT
+// call this method anyway.
+func (f *fakeDailyRepo) LeaderboardRank(_ context.Context, date string, elapsedMs int64, userID string) (int, error) {
+	f.rankCalls++
+	f.rankCaptured.date = date
+	f.rankCaptured.elapsedMs = elapsedMs
+	f.rankCaptured.userID = userID
+	if f.rankErr != nil {
+		return 0, f.rankErr
+	}
+	return f.rankResult, nil
 }
 
 // mountDailyWithRepo mounts the daily GET handler at /api/daily/{date}
@@ -877,3 +929,473 @@ func TestDailyGetHandler_DateMatrix(t *testing.T) {
 		})
 	}
 }
+
+// ------------------------------------------------------------------
+// POST /api/daily/{date}/result — DailySubmitHandler tests
+// ------------------------------------------------------------------
+
+// solvedPuzzleFixture builds a 3x3 puzzle with a deterministic, valid
+// solution layout — diagonal-style queen placement so the [][]bool
+// pattern is unambiguous: cell(0,0), cell(1,1), cell(2,2) are true.
+// 3x3 keeps body fixtures terse without losing rectangular shape.
+func solvedPuzzleFixture(puzzleID string) *repository.PuzzleRecord {
+	regions := [][]int{
+		{0, 0, 0},
+		{0, 0, 0},
+		{0, 0, 0},
+	}
+	solution := [][]bool{
+		{true, false, false},
+		{false, true, false},
+		{false, false, true},
+	}
+	return &repository.PuzzleRecord{
+		ID:        puzzleID,
+		GridSize:  3,
+		Mode:      "standard",
+		RegionMap: regions,
+		Solution:  solution,
+	}
+}
+
+// solved3x3Schedule mirrors scheduleFixture but returns a 3#standard
+// partition matching solvedPuzzleFixture.
+func solved3x3Schedule(date, puzzleID string) *repository.ScheduleRecord {
+	return &repository.ScheduleRecord{
+		Date:            date,
+		PuzzleID:        puzzleID,
+		AssignedAt:      "2026-05-02T00:00:00Z",
+		SourcePartition: "3#standard",
+	}
+}
+
+// startedPlayRow is the canonical "ready to submit" PLAY-row fixture.
+// AssignedAt is set 30 seconds before the fixedClock instant so
+// serverElapsedMs ends up at exactly 30000 — easy to assert.
+func startedPlayRow(playerID, date, puzzleID string) *repository.PlayRecord {
+	return &repository.PlayRecord{
+		PlayerID:   playerID,
+		Date:       date,
+		Outcome:    "started",
+		AssignedAt: "2026-05-02T11:59:30Z",
+		PuzzleID:   puzzleID,
+	}
+}
+
+// validSolvedBody is the JSON body for a valid 3x3 submission matching
+// solvedPuzzleFixture's expected solution.
+const validSolvedBody = `{"outcome":"solved","playTimeMs":29800,"solution":[[1,0,0],[0,1,0],[0,0,1]]}`
+
+// mountDailySubmit mounts the submit handler at POST
+// /api/daily/{date}/result against the supplied repo.
+func mountDailySubmit(repo handler.DailyRepo) *chi.Mux {
+	r := chi.NewRouter()
+	r.Post("/api/daily/{date}/result", handler.DailySubmitHandler(repo, fixedClock()).ServeHTTP)
+	return r
+}
+
+// dailySubmitOKBody is the POST 200 response shape. leaderboardRank is
+// pointer-typed so omitempty distinguishes anonymous (nil) from
+// signed-in (set, even if 0 from a degenerate fake).
+type dailySubmitOKBody struct {
+	ServerElapsedMs int64 `json:"serverElapsedMs"`
+	LeaderboardRank *int  `json:"leaderboardRank,omitempty"`
+}
+
+func TestDailySubmitHandler_AuthMatrix(t *testing.T) {
+	// Arrange — same shape as the GET auth matrix; only the no-auth
+	// row matters here because every authenticated row has its own
+	// dedicated test below. The unauth row exists to lock in DP-14.
+	repo := &fakeDailyRepo{}
+	router := mountDailySubmit(repo)
+	req := httptest.NewRequest(http.MethodPost, "/api/daily/2026-05-02/result", strings.NewReader(validSolvedBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("status: got %d want 401 (body=%q)", rec.Code, rec.Body.String())
+	}
+	if got := readErrorBody(t, rec); got != "unauthenticated" {
+		t.Fatalf("error body: got %q want %q", got, "unauthenticated")
+	}
+	if repo.submitCalls != 0 {
+		t.Fatalf("SubmitPlayTransactionally must NOT be called when unauth (calls=%d)", repo.submitCalls)
+	}
+}
+
+func TestDailySubmitHandler_DateMatrix(t *testing.T) {
+	cases := []struct {
+		name       string
+		date       string
+		wantStatus int
+		wantError  string
+	}{
+		{name: "tomorrow returns 404 out-of-window", date: "2026-05-03", wantStatus: http.StatusNotFound, wantError: "out of window"},
+		{name: "two days ago returns 404", date: "2026-04-30", wantStatus: http.StatusNotFound, wantError: "out of window"},
+		{name: "calendar-impossible date returns 400", date: "2026-13-99", wantStatus: http.StatusBadRequest, wantError: "invalid date"},
+		{name: "non-date string returns 400", date: "not-a-date", wantStatus: http.StatusBadRequest, wantError: "invalid date"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Arrange
+			repo := &fakeDailyRepo{}
+			router := mountDailySubmit(repo)
+			req := httptest.NewRequest(http.MethodPost, "/api/daily/"+tc.date+"/result", strings.NewReader(validSolvedBody))
+			req.Header.Set("X-Device-Id", "dev_abc")
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			// Act
+			router.ServeHTTP(rec, req)
+
+			// Assert
+			if rec.Code != tc.wantStatus {
+				t.Fatalf("status: got %d want %d (body=%q)", rec.Code, tc.wantStatus, rec.Body.String())
+			}
+			if got := readErrorBody(t, rec); got != tc.wantError {
+				t.Fatalf("error body: got %q want %q", got, tc.wantError)
+			}
+			if repo.submitCalls != 0 {
+				t.Fatalf("SubmitPlayTransactionally must NOT be called for invalid date (calls=%d)", repo.submitCalls)
+			}
+		})
+	}
+}
+
+func TestDailySubmitHandler_BodyValidation(t *testing.T) {
+	cases := []struct {
+		name      string
+		body      string
+		wantError string
+	}{
+		{name: "empty body", body: ``, wantError: "invalid body"},
+		{name: "wrong outcome", body: `{"outcome":"skipped","playTimeMs":1000,"solution":[[1,0,0],[0,1,0],[0,0,1]]}`, wantError: "invalid outcome"},
+		{name: "missing outcome", body: `{"playTimeMs":1000,"solution":[[1,0,0],[0,1,0],[0,0,1]]}`, wantError: "invalid outcome"},
+		{name: "negative playTimeMs", body: `{"outcome":"solved","playTimeMs":-5,"solution":[[1,0,0],[0,1,0],[0,0,1]]}`, wantError: "invalid playTimeMs"},
+		{name: "non-rectangular solution", body: `{"outcome":"solved","playTimeMs":1000,"solution":[[1,0,0],[0,1],[0,0,1]]}`, wantError: "invalid solution"},
+		{name: "cell value 2", body: `{"outcome":"solved","playTimeMs":1000,"solution":[[1,0,0],[0,2,0],[0,0,1]]}`, wantError: "invalid solution"},
+		{name: "empty solution", body: `{"outcome":"solved","playTimeMs":1000,"solution":[]}`, wantError: "invalid solution"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Arrange — auth + date + repo all good; only the body is malformed.
+			puzzleID := "puzzle-body"
+			date := "2026-05-02"
+			player := "dev_abc"
+			repo := &fakeDailyRepo{
+				scheduleByDate: map[string]*repository.ScheduleRecord{date: solved3x3Schedule(date, puzzleID)},
+				puzzleByID:     map[string]*repository.PuzzleRecord{puzzleID: solvedPuzzleFixture(puzzleID)},
+				playSequence:   []*repository.PlayRecord{startedPlayRow(player, date, puzzleID)},
+			}
+			router := mountDailySubmit(repo)
+			req := httptest.NewRequest(http.MethodPost, "/api/daily/"+date+"/result", strings.NewReader(tc.body))
+			req.Header.Set("X-Device-Id", player)
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+
+			// Act
+			router.ServeHTTP(rec, req)
+
+			// Assert
+			if rec.Code != http.StatusBadRequest {
+				t.Fatalf("status: got %d want 400 (body=%q)", rec.Code, rec.Body.String())
+			}
+			if got := readErrorBody(t, rec); got != tc.wantError {
+				t.Fatalf("error body: got %q want %q", got, tc.wantError)
+			}
+			if repo.submitCalls != 0 {
+				t.Fatalf("SubmitPlayTransactionally must NOT be called on body validation failure (calls=%d)", repo.submitCalls)
+			}
+		})
+	}
+}
+
+func TestDailySubmitHandler_PlayNotStarted_400(t *testing.T) {
+	// Arrange — GetPlay returns (nil, nil). Player must GET first; we
+	// reject the submit before touching the transaction.
+	puzzleID := "puzzle-no-play"
+	date := "2026-05-02"
+	repo := &fakeDailyRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{date: solved3x3Schedule(date, puzzleID)},
+		puzzleByID:     map[string]*repository.PuzzleRecord{puzzleID: solvedPuzzleFixture(puzzleID)},
+		// playSequence empty → GetPlay returns nil
+	}
+	router := mountDailySubmit(repo)
+	req := httptest.NewRequest(http.MethodPost, "/api/daily/"+date+"/result", strings.NewReader(validSolvedBody))
+	req.Header.Set("X-Device-Id", "dev_abc")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: got %d want 400 (body=%q)", rec.Code, rec.Body.String())
+	}
+	if got := readErrorBody(t, rec); got != "play not started" {
+		t.Fatalf("error body: got %q want %q", got, "play not started")
+	}
+	if repo.submitCalls != 0 {
+		t.Fatalf("SubmitPlayTransactionally must NOT be called when play not started (calls=%d)", repo.submitCalls)
+	}
+}
+
+func TestDailySubmitHandler_AlreadySolved_409(t *testing.T) {
+	// Arrange — PLAY row already solved. Idempotency without round-trip.
+	puzzleID := "puzzle-solved"
+	date := "2026-05-02"
+	player := "dev_abc"
+	solved := &repository.PlayRecord{
+		PlayerID:        player,
+		Date:            date,
+		Outcome:         "solved",
+		AssignedAt:      "2026-05-02T11:00:00Z",
+		SubmittedAt:     "2026-05-02T11:00:42Z",
+		PuzzleID:        puzzleID,
+		ServerElapsedMs: 42000,
+	}
+	repo := &fakeDailyRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{date: solved3x3Schedule(date, puzzleID)},
+		puzzleByID:     map[string]*repository.PuzzleRecord{puzzleID: solvedPuzzleFixture(puzzleID)},
+		playSequence:   []*repository.PlayRecord{solved},
+	}
+	router := mountDailySubmit(repo)
+	req := httptest.NewRequest(http.MethodPost, "/api/daily/"+date+"/result", strings.NewReader(validSolvedBody))
+	req.Header.Set("X-Device-Id", player)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status: got %d want 409 (body=%q)", rec.Code, rec.Body.String())
+	}
+	if got := readErrorBody(t, rec); got != "already solved" {
+		t.Fatalf("error body: got %q want %q", got, "already solved")
+	}
+	if repo.submitCalls != 0 {
+		t.Fatalf("SubmitPlayTransactionally must NOT be called when already solved (calls=%d)", repo.submitCalls)
+	}
+}
+
+func TestDailySubmitHandler_InvalidSolution_400(t *testing.T) {
+	// Arrange — submitted grid does not match puzzle.Solution (cell flipped).
+	puzzleID := "puzzle-mismatch"
+	date := "2026-05-02"
+	player := "dev_abc"
+	repo := &fakeDailyRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{date: solved3x3Schedule(date, puzzleID)},
+		puzzleByID:     map[string]*repository.PuzzleRecord{puzzleID: solvedPuzzleFixture(puzzleID)},
+		playSequence:   []*repository.PlayRecord{startedPlayRow(player, date, puzzleID)},
+	}
+	router := mountDailySubmit(repo)
+	wrongBody := `{"outcome":"solved","playTimeMs":1000,"solution":[[0,1,0],[0,1,0],[0,0,1]]}`
+	req := httptest.NewRequest(http.MethodPost, "/api/daily/"+date+"/result", strings.NewReader(wrongBody))
+	req.Header.Set("X-Device-Id", player)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status: got %d want 400 (body=%q)", rec.Code, rec.Body.String())
+	}
+	if got := readErrorBody(t, rec); got != "invalid solution" {
+		t.Fatalf("error body: got %q want %q", got, "invalid solution")
+	}
+	if repo.submitCalls != 0 {
+		t.Fatalf("SubmitPlayTransactionally must NOT be called on invalid solution (calls=%d)", repo.submitCalls)
+	}
+}
+
+func TestDailySubmitHandler_HappyPath_Anonymous(t *testing.T) {
+	// Arrange
+	puzzleID := "puzzle-anon"
+	date := "2026-05-02"
+	player := "dev_abc"
+	repo := &fakeDailyRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{date: solved3x3Schedule(date, puzzleID)},
+		puzzleByID:     map[string]*repository.PuzzleRecord{puzzleID: solvedPuzzleFixture(puzzleID)},
+		playSequence:   []*repository.PlayRecord{startedPlayRow(player, date, puzzleID)},
+	}
+	router := mountDailySubmit(repo)
+	req := httptest.NewRequest(http.MethodPost, "/api/daily/"+date+"/result", strings.NewReader(validSolvedBody))
+	req.Header.Set("X-Device-Id", player)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d want 200 (body=%q)", rec.Code, rec.Body.String())
+	}
+	var body dailySubmitOKBody
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.ServerElapsedMs != 30000 {
+		t.Fatalf("serverElapsedMs: got %d want 30000 (now - assignedAt)", body.ServerElapsedMs)
+	}
+	if body.LeaderboardRank != nil {
+		t.Fatalf("leaderboardRank must be omitted for anonymous (got %d)", *body.LeaderboardRank)
+	}
+	if repo.submitCalls != 1 {
+		t.Fatalf("SubmitPlayTransactionally calls: got %d want 1", repo.submitCalls)
+	}
+	if !repo.submitCaptured.input.IsAnonymous {
+		t.Fatalf("SubmitInput.IsAnonymous: got false want true")
+	}
+	if repo.submitCaptured.input.UserID != "" {
+		t.Fatalf("SubmitInput.UserID: got %q want empty (anonymous)", repo.submitCaptured.input.UserID)
+	}
+	if repo.submitCaptured.input.ClientMs != 29800 {
+		t.Fatalf("SubmitInput.ClientMs: got %d want 29800", repo.submitCaptured.input.ClientMs)
+	}
+	if repo.submitCaptured.input.PuzzleID != puzzleID {
+		t.Fatalf("SubmitInput.PuzzleID: got %q want %q", repo.submitCaptured.input.PuzzleID, puzzleID)
+	}
+	if repo.rankCalls != 0 {
+		t.Fatalf("LeaderboardRank must NOT be called for anonymous (calls=%d)", repo.rankCalls)
+	}
+}
+
+func TestDailySubmitHandler_HappyPath_SignedIn(t *testing.T) {
+	// Arrange
+	puzzleID := "puzzle-signed-in"
+	date := "2026-05-02"
+	userID := "user_xyz"
+	repo := &fakeDailyRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{date: solved3x3Schedule(date, puzzleID)},
+		puzzleByID:     map[string]*repository.PuzzleRecord{puzzleID: solvedPuzzleFixture(puzzleID)},
+		playSequence:   []*repository.PlayRecord{startedPlayRow(userID, date, puzzleID)},
+		rankResult:     7,
+	}
+	router := mountDailySubmit(repo)
+	req := httptest.NewRequest(http.MethodPost, "/api/daily/"+date+"/result", strings.NewReader(validSolvedBody))
+	req = withUserID(req, userID)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d want 200 (body=%q)", rec.Code, rec.Body.String())
+	}
+	var body dailySubmitOKBody
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.ServerElapsedMs != 30000 {
+		t.Fatalf("serverElapsedMs: got %d want 30000", body.ServerElapsedMs)
+	}
+	if body.LeaderboardRank == nil || *body.LeaderboardRank != 7 {
+		t.Fatalf("leaderboardRank: got %v want 7", body.LeaderboardRank)
+	}
+	if repo.submitCaptured.input.IsAnonymous {
+		t.Fatalf("SubmitInput.IsAnonymous: got true want false")
+	}
+	if repo.submitCaptured.input.UserID != userID {
+		t.Fatalf("SubmitInput.UserID: got %q want %q", repo.submitCaptured.input.UserID, userID)
+	}
+	if repo.rankCalls != 1 {
+		t.Fatalf("LeaderboardRank calls: got %d want 1", repo.rankCalls)
+	}
+	if repo.rankCaptured.elapsedMs != 30000 {
+		t.Fatalf("LeaderboardRank elapsedMs: got %d want 30000", repo.rankCaptured.elapsedMs)
+	}
+	if repo.rankCaptured.userID != userID {
+		t.Fatalf("LeaderboardRank userID: got %q want %q", repo.rankCaptured.userID, userID)
+	}
+}
+
+func TestDailySubmitHandler_RaceLoser_409(t *testing.T) {
+	// Arrange — concurrent submit won; transaction returns the sentinel.
+	puzzleID := "puzzle-race"
+	date := "2026-05-02"
+	player := "dev_abc"
+	repo := &fakeDailyRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{date: solved3x3Schedule(date, puzzleID)},
+		puzzleByID:     map[string]*repository.PuzzleRecord{puzzleID: solvedPuzzleFixture(puzzleID)},
+		playSequence:   []*repository.PlayRecord{startedPlayRow(player, date, puzzleID)},
+		submitErr:      repository.ErrPlayNotInStartedState,
+	}
+	router := mountDailySubmit(repo)
+	req := httptest.NewRequest(http.MethodPost, "/api/daily/"+date+"/result", strings.NewReader(validSolvedBody))
+	req.Header.Set("X-Device-Id", player)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status: got %d want 409 (body=%q)", rec.Code, rec.Body.String())
+	}
+	if got := readErrorBody(t, rec); got != "already solved" {
+		t.Fatalf("error body: got %q want %q", got, "already solved")
+	}
+}
+
+func TestDailySubmitHandler_RankFetchFailure_StillReturns200(t *testing.T) {
+	// Arrange — submit succeeds; LeaderboardRank fails. The row is
+	// already written; the handler must return 200 and omit the rank.
+	puzzleID := "puzzle-rank-err"
+	date := "2026-05-02"
+	userID := "user_rank_err"
+	repo := &fakeDailyRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{date: solved3x3Schedule(date, puzzleID)},
+		puzzleByID:     map[string]*repository.PuzzleRecord{puzzleID: solvedPuzzleFixture(puzzleID)},
+		playSequence:   []*repository.PlayRecord{startedPlayRow(userID, date, puzzleID)},
+		rankErr:        errBoom,
+	}
+	router := mountDailySubmit(repo)
+	req := httptest.NewRequest(http.MethodPost, "/api/daily/"+date+"/result", strings.NewReader(validSolvedBody))
+	req = withUserID(req, userID)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d want 200 (body=%q)", rec.Code, rec.Body.String())
+	}
+	var body dailySubmitOKBody
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.ServerElapsedMs != 30000 {
+		t.Fatalf("serverElapsedMs: got %d want 30000", body.ServerElapsedMs)
+	}
+	if body.LeaderboardRank != nil {
+		t.Fatalf("leaderboardRank must be omitted on rank error (got %d)", *body.LeaderboardRank)
+	}
+	if repo.submitCalls != 1 {
+		t.Fatalf("submit must have been called once (got %d)", repo.submitCalls)
+	}
+}
+
+// errBoom is a sentinel test-only error used to exercise repo error
+// paths without crafting a real DDB error.
+var errBoom = errSentinel("boom")
+
+type errSentinel string
+
+func (e errSentinel) Error() string { return string(e) }
