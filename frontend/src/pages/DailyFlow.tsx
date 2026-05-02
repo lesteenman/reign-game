@@ -1,46 +1,97 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageShell } from '../components/common/PageShell';
-import { SecondaryButton } from '../components/common/Button';
+import { PrimaryButton, SecondaryButton } from '../components/common/Button';
 import {
   DailyApiError,
   getDaily,
+  submitDailyResult,
   type DailyPuzzlePayload,
+  type DailySubmitResponse,
 } from '../services/dailyService';
+import { DailyGameBoard } from './DailyGameBoard';
+import { PostCompletionScreen } from './PostCompletionScreen';
+import { useGameStorage } from '../hooks/useGameStorage';
+import type { GameState } from '../storage/types';
+import type { CellState } from '../engine/types';
 
 /**
- * Daily Puzzle flow chrome (R-8-02 chunk 3).
+ * Daily Puzzle flow chrome (R-8-02 chunks 3 + 6).
  *
- * Owns the GET-side state machine per DP-31:
- *   loading → data (started)   → renders the chunk-3 daily-loaded stub
- *   loading → data (solved)    → renders the chunk-5 placeholder
- *   loading → error            → renders status-aware error UI per DP-30
+ * Owns the daily-flow state machine per DP-31:
+ *   loading      → playing                 on getDaily() success
+ *   loading      → solved (chunk-3 stub)   on getDaily() returning outcome=solved
+ *   loading      → error                   on getDaily() failure (DP-30)
+ *   playing      → submitting              on the GameBoard's onSolved event
+ *   submitting   → solved                  on POST 200 (DailySubmitResponse)
+ *   submitting   → solved                  on POST 409 (server has canonical state)
+ *   submitting   → submit-error            on other POST failure
+ *   submit-error → playing                 on retry (player solution preserved)
  *
- * Submission wiring (chunk 6) and the real post-completion screen
- * (chunk 5) replace the placeholders without changing this component's
- * outer state machine.
+ * The `solved` state renders <PostCompletionScreen /> with the server
+ * response's serverElapsedMs, submittedAt, and leaderboardRank.
  */
 
-type State =
-  | { status: 'loading' }
-  | { status: 'data'; payload: DailyPuzzlePayload }
-  | { status: 'error'; httpStatus: number | null; message: string };
+type FlowState =
+  | { kind: 'loading' }
+  | {
+      kind: 'error';
+      httpStatus: number | null;
+      message: string;
+    }
+  | { kind: 'playing'; payload: DailyPuzzlePayload }
+  | { kind: 'submitting'; payload: DailyPuzzlePayload }
+  | {
+      kind: 'solved';
+      payload: DailyPuzzlePayload;
+      result: DailySubmitResponse;
+      submittedAt: string;
+    }
+  | {
+      kind: 'submit-error';
+      payload: DailyPuzzlePayload;
+      httpStatus: number | null;
+      message: string;
+    };
 
 /** Maps a thrown error to user-facing copy per DP-30. */
-function errorCopy(state: { httpStatus: number | null }): string {
+function loadErrorCopy(state: { httpStatus: number | null }): string {
   if (state.httpStatus === 404) return 'No daily available right now';
   if (state.httpStatus === 500) return 'Something went wrong, try again';
   return "Could not load today's daily";
 }
 
+/** Maps a thrown submit error to user-facing copy. */
+function submitErrorCopy(state: { httpStatus: number | null }): string {
+  if (state.httpStatus === 500) return 'Something went wrong, try again';
+  if (state.httpStatus === 400) return "That doesn't match — keep trying";
+  return 'Could not submit your result';
+}
+
+/** Extracts YYYY-MM-DD from an RFC3339 timestamp's UTC date component. */
+function dateFromAssignedAt(assignedAt: string): string {
+  return new Date(assignedAt).toISOString().slice(0, 10);
+}
+
+/** Empty cells grid sized to the payload's grid dimension — minimal
+ *  placeholder so the persisted GameState row carries a coherent
+ *  shape for the daily flow. The follow-up chunk that wires the real
+ *  GameBoard replaces this with the live cells reference. */
+function makeEmptyCells(size: number): CellState[][] {
+  return Array.from({ length: size }, () =>
+    Array.from({ length: size }, () => 'empty' as const),
+  );
+}
+
 export function DailyFlow() {
   const navigate = useNavigate();
-  const [state, setState] = useState<State>({ status: 'loading' });
+  const { saveState } = useGameStorage();
+  const [state, setState] = useState<FlowState>({ kind: 'loading' });
   const [fetchKey, setFetchKey] = useState(0);
 
   /** Re-runs the fetch effect (DP-30 retry affordance). */
-  const retry = useCallback(() => {
-    setState({ status: 'loading' });
+  const retryFetch = useCallback(() => {
+    setState({ kind: 'loading' });
     setFetchKey((k) => k + 1);
   }, []);
 
@@ -54,19 +105,29 @@ export function DailyFlow() {
       try {
         const payload = await getDaily();
         if (cancelled) return;
-        setState({ status: 'data', payload });
+        if (payload.outcome === 'solved') {
+          // chunk-3 short-circuit branch — chunk 7 will swap this for
+          // a PostCompletionScreen render with server-provided fields.
+          setState({ kind: 'loading' }); // transient — handled by render branch below
+          // The render path keys off `payload.outcome === 'solved'` via
+          // a dedicated 'solved' branch in render below; we just store
+          // the playing-shape state and the renderer handles the split.
+          setState({ kind: 'playing', payload });
+          return;
+        }
+        setState({ kind: 'playing', payload });
       } catch (err) {
         if (cancelled) return;
         if (err instanceof DailyApiError) {
           setState({
-            status: 'error',
+            kind: 'error',
             httpStatus: err.status,
             message: err.message,
           });
           return;
         }
         const message = err instanceof Error ? err.message : 'Unknown error';
-        setState({ status: 'error', httpStatus: null, message });
+        setState({ kind: 'error', httpStatus: null, message });
       }
     })();
     return () => {
@@ -74,7 +135,109 @@ export function DailyFlow() {
     };
   }, [fetchKey]);
 
-  if (state.status === 'loading') {
+  /**
+   * Submit handler — fired by `<DailyGameBoard onSolved>`. Drives the
+   * playing → submitting → (solved | submit-error) transition. On
+   * success persists the solved row to the per-flow IDB slot
+   * `(daily, YYYY-MM-DD)` so a subsequent visit short-circuits via
+   * DP-27 (chunk 7).
+   */
+  const handleSolved = useCallback(
+    async (solution: number[][], elapsedMs: number) => {
+      // Read the current state directly — only act when in `playing`.
+      // We deliberately avoid a functional updater here because the
+      // updater fires lazily (during the next render), but we need
+      // the captured payload synchronously to fire the POST.
+      if (state.kind !== 'playing') return;
+      const activePayload = state.payload;
+      setState({ kind: 'submitting', payload: activePayload });
+
+      try {
+        const result = await submitDailyResult({
+          assignedAt: activePayload.assignedAt,
+          outcome: 'solved',
+          playTimeMs: elapsedMs,
+          solution,
+        });
+        const submittedAt = new Date().toISOString();
+
+        // Persist the solved row to the per-flow store. Lesson 16:
+        // the persisted shape lives in storage/, so we route through
+        // useGameStorage's saveState rather than redeclaring a daily
+        // row layout here. The minimal GameState shape is enough to
+        // satisfy DP-27's short-circuit read on the next visit.
+        const flowId = dateFromAssignedAt(activePayload.assignedAt);
+        const persistedState: GameState = {
+          id: `daily:${flowId}`,
+          flowType: 'daily',
+          flowId,
+          puzzle: {
+            puzzleId: activePayload.puzzleId,
+            gridSize: activePayload.grid,
+            mode: 'standard',
+            regionMap: activePayload.regions,
+          },
+          cells: makeEmptyCells(activePayload.grid),
+          timer: {
+            elapsedAtLastPause: result.serverElapsedMs,
+            lastResumedAt: null,
+          },
+          status: 'solved',
+          startedAt: Date.now() - result.serverElapsedMs,
+        };
+        await saveState(persistedState);
+
+        setState({
+          kind: 'solved',
+          payload: activePayload,
+          result,
+          submittedAt,
+        });
+      } catch (err) {
+        if (err instanceof DailyApiError && err.status === 409) {
+          // 409 = server says already solved. Treat as terminal solved
+          // state per DP-30. Server didn't return a fresh body shape,
+          // so use sensible defaults; chunk 7 will read the canonical
+          // solved row back from the GET endpoint on the next visit.
+          setState({
+            kind: 'solved',
+            payload: activePayload,
+            result: { serverElapsedMs: 0 },
+            submittedAt: new Date().toISOString(),
+          });
+          return;
+        }
+        if (err instanceof DailyApiError) {
+          setState({
+            kind: 'submit-error',
+            payload: activePayload,
+            httpStatus: err.status,
+            message: err.message,
+          });
+          return;
+        }
+        const message = err instanceof Error ? err.message : 'Unknown error';
+        setState({
+          kind: 'submit-error',
+          payload: activePayload,
+          httpStatus: null,
+          message,
+        });
+      }
+    },
+    [saveState, state],
+  );
+
+  const retrySubmit = useCallback(() => {
+    setState((current) => {
+      if (current.kind !== 'submit-error') return current;
+      return { kind: 'playing', payload: current.payload };
+    });
+  }, []);
+
+  // --- Render branches --------------------------------------------------
+
+  if (state.kind === 'loading') {
     return (
       <PageShell onBack={handleBack}>
         <div
@@ -97,41 +260,15 @@ export function DailyFlow() {
     );
   }
 
-  if (state.status === 'error') {
+  if (state.kind === 'error') {
     return (
       <PageShell onBack={handleBack}>
         <div
           data-testid="daily-error"
-          // BRAND_GUIDELINES §5.5 card pattern: surface bg, 2px ink
-          // border, layered offset shadow, 24px padding. Inline because
-          // no shared <ErrorCard /> primitive exists yet — falling back
-          // to guideline values directly.
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '16px',
-            backgroundColor: 'var(--color-surface)',
-            border: '2px solid var(--color-ink)',
-            borderRadius: 'var(--radius)',
-            boxShadow: '0 3px 0 var(--color-ink)',
-            padding: '24px',
-            maxWidth: 480,
-            width: '100%',
-            fontFamily: '"Nunito Sans", system-ui, sans-serif',
-          }}
+          style={errorCardStyle}
         >
-          <p
-            style={{
-              margin: 0,
-              color: 'var(--color-destructive)',
-              fontWeight: 700,
-              fontSize: '1.125rem',
-            }}
-          >
-            {errorCopy(state)}
-          </p>
-          <SecondaryButton onClick={retry} data-testid="daily-retry">
+          <p style={errorTextStyle}>{loadErrorCopy(state)}</p>
+          <SecondaryButton onClick={retryFetch} data-testid="daily-retry">
             Try again
           </SecondaryButton>
         </div>
@@ -139,8 +276,10 @@ export function DailyFlow() {
     );
   }
 
-  // status === 'data'
-  if (state.payload.outcome === 'solved') {
+  if (state.kind === 'playing' && state.payload.outcome === 'solved') {
+    // chunk-3 short-circuit placeholder — chunk 7 swaps in a full
+    // PostCompletionScreen rendered from the GET payload's
+    // serverElapsedMs / submittedAt fields.
     return (
       <PageShell onBack={handleBack}>
         <div
@@ -158,22 +297,86 @@ export function DailyFlow() {
     );
   }
 
+  if (state.kind === 'playing') {
+    return (
+      <PageShell onBack={handleBack}>
+        <DailyGameBoard payload={state.payload} onSolved={handleSolved} />
+      </PageShell>
+    );
+  }
+
+  if (state.kind === 'submitting') {
+    return (
+      <PageShell onBack={handleBack}>
+        <div
+          data-testid="daily-submitting"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: '16px',
+            padding: '48px 0',
+            fontFamily: '"Nunito Sans", system-ui, sans-serif',
+            fontWeight: 600,
+            color: 'var(--color-body)',
+          }}
+        >
+          <Spinner />
+          <p style={{ margin: 0 }}>Submitting…</p>
+        </div>
+      </PageShell>
+    );
+  }
+
+  if (state.kind === 'submit-error') {
+    return (
+      <PageShell onBack={handleBack}>
+        <div data-testid="daily-submit-error" style={errorCardStyle}>
+          <p style={errorTextStyle}>{submitErrorCopy(state)}</p>
+          <PrimaryButton onClick={retrySubmit} data-testid="daily-submit-retry">
+            Try again
+          </PrimaryButton>
+        </div>
+      </PageShell>
+    );
+  }
+
+  // state.kind === 'solved'
   return (
-    <PageShell onBack={handleBack}>
-      <div
-        data-testid="daily-loaded"
-        style={{
-          padding: '48px 0',
-          fontFamily: '"Nunito Sans", system-ui, sans-serif',
-          color: 'var(--color-body)',
-          textAlign: 'center',
-        }}
-      >
-        Daily loaded: {state.payload.puzzleId} (grid renderer wires in chunk 6)
-      </div>
-    </PageShell>
+    <PostCompletionScreen
+      serverElapsedMs={state.result.serverElapsedMs}
+      submittedAt={state.submittedAt}
+      leaderboardRank={state.result.leaderboardRank}
+    />
   );
 }
+
+// --- Shared inline style tokens -----------------------------------------
+// BRAND_GUIDELINES §5.5 card pattern: surface bg, 2px ink border,
+// layered offset shadow, 24px padding. Inline because no shared
+// <ErrorCard /> primitive exists yet — falling back to guideline values.
+
+const errorCardStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '16px',
+  backgroundColor: 'var(--color-surface)',
+  border: '2px solid var(--color-ink)',
+  borderRadius: 'var(--radius)',
+  boxShadow: '0 3px 0 var(--color-ink)',
+  padding: '24px',
+  maxWidth: 480,
+  width: '100%',
+  fontFamily: '"Nunito Sans", system-ui, sans-serif',
+};
+
+const errorTextStyle: React.CSSProperties = {
+  margin: 0,
+  color: 'var(--color-destructive)',
+  fontWeight: 700,
+  fontSize: '1.125rem',
+};
 
 /**
  * Lightweight CSS spinner using brand colors. No shared <Spinner />
