@@ -55,6 +55,29 @@ type fakeDailyRepo struct {
 		puzzleID   string
 		assignedAt time.Time
 	}
+
+	// candidate is returned by GetCandidate; nil means "no candidate".
+	// candidateErr overrides the value when non-nil.
+	candidate    *repository.CandidateRecord
+	candidateErr error
+
+	// finalizeErr is returned by FinalizeDailyTransaction. Nil means
+	// success; repository.ErrScheduleAlreadyFinalized lets the test
+	// exercise the race-loser branch of SyncFinalizeForToday.
+	finalizeErr error
+
+	getCandidateCalls int
+	finalizeCalls     int
+
+	// finalizeCaptured holds the arguments of the last
+	// FinalizeDailyTransaction call so the test can assert mode +
+	// sourcePartition routing (confirm vs. recycle).
+	finalizeCaptured struct {
+		date            string
+		puzzleID        string
+		sourcePartition string
+		mode            repository.FinalizeMode
+	}
 }
 
 func (f *fakeDailyRepo) GetSchedule(_ context.Context, date string) (*repository.ScheduleRecord, error) {
@@ -92,6 +115,23 @@ func (f *fakeDailyRepo) PutPlayStartedIfAbsent(_ context.Context, playerID, date
 	f.putPlayCaptured.puzzleID = puzzleID
 	f.putPlayCaptured.assignedAt = assignedAt
 	return f.putPlayErr
+}
+
+func (f *fakeDailyRepo) GetCandidate(_ context.Context) (*repository.CandidateRecord, error) {
+	f.getCandidateCalls++
+	if f.candidateErr != nil {
+		return nil, f.candidateErr
+	}
+	return f.candidate, nil
+}
+
+func (f *fakeDailyRepo) FinalizeDailyTransaction(_ context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error {
+	f.finalizeCalls++
+	f.finalizeCaptured.date = date
+	f.finalizeCaptured.puzzleID = puzzleID
+	f.finalizeCaptured.sourcePartition = sourcePartition
+	f.finalizeCaptured.mode = mode
+	return f.finalizeErr
 }
 
 // mountDailyWithRepo mounts the daily GET handler at /api/daily/{date}
@@ -255,13 +295,178 @@ func puzzleFixture(puzzleID string) *repository.PuzzleRecord {
 	}
 }
 
-func TestDailyGetHandler_ScheduleAbsent(t *testing.T) {
-	// Arrange
+// poolExhaustedErrorBody is the canonical phrase the GET handler
+// returns in the 500 body when sync-fallback hits ErrPoolExhausted
+// (DP-16). Keep this exactly in sync with handler/daily.go's
+// poolExhaustedMessage constant.
+const poolExhaustedErrorBody = "pool exhausted"
+
+func TestDailyGetHandler_SyncFallback_Engaged_ConfirmPath(t *testing.T) {
+	// Arrange — today's schedule missing; yesterday solved>0 + candidate
+	// present means the decision tree picks confirm.
+	puzzleID := "puzzle-confirm"
+	yesterdayPuzzleID := "puzzle-yesterday"
+	today := "2026-05-02"
+	yesterday := "2026-05-01"
+	yesterdayRow := &repository.ScheduleRecord{
+		Date:            yesterday,
+		PuzzleID:        yesterdayPuzzleID,
+		AssignedAt:      "2026-05-01T00:00:00Z",
+		SourcePartition: "9#standard",
+		Counters:        repository.ScheduleCounters{Started: 5, Solved: 3},
+	}
+	finalizedToday := &repository.ScheduleRecord{
+		Date:            today,
+		PuzzleID:        puzzleID,
+		AssignedAt:      "2026-05-02T12:00:00Z",
+		SourcePartition: "9#standard",
+	}
+	repo := &fakeDailyRepo{
+		// today absent on first read; sync-fallback finalize must
+		// re-read it, so the fake materializes today's row only when
+		// FinalizeDailyTransaction is invoked.
+		scheduleByDate: map[string]*repository.ScheduleRecord{yesterday: yesterdayRow},
+		puzzleByID:     map[string]*repository.PuzzleRecord{puzzleID: puzzleFixture(puzzleID)},
+		candidate: &repository.CandidateRecord{
+			PuzzleID:        puzzleID,
+			QueuedAt:        "2026-05-01T18:00:00Z",
+			SourcePartition: "9#standard",
+		},
+	}
+	// Activate today's row inside FinalizeDailyTransaction so the
+	// sync-fallback re-read sees it. Wrapping the success path keeps
+	// the seeding co-located with the test for readability.
+	repo.finalizeErr = nil
+	origRepoMutator := repo // closure capture
+	finalizeOnce := func() {
+		origRepoMutator.scheduleByDate[today] = finalizedToday
+	}
+	wrapper := &finalizeWrapperRepo{fakeDailyRepo: repo, onFinalize: finalizeOnce}
+	router := mountDailyWithRepo(wrapper)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+today, nil)
+	req.Header.Set("X-Device-Id", "dev_abc")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d want 200 (body=%q)", rec.Code, rec.Body.String())
+	}
+	var body dailyOKBody
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.PuzzleID != puzzleID {
+		t.Fatalf("puzzleId: got %q want %q (confirm path returns candidate)", body.PuzzleID, puzzleID)
+	}
+	if body.AssignedAt != finalizedToday.AssignedAt {
+		t.Fatalf("assignedAt: got %q want %q (canonical from re-read)", body.AssignedAt, finalizedToday.AssignedAt)
+	}
+	if repo.getCandidateCalls != 1 {
+		t.Fatalf("GetCandidate calls: got %d want 1", repo.getCandidateCalls)
+	}
+	if repo.finalizeCalls != 1 {
+		t.Fatalf("FinalizeDailyTransaction calls: got %d want 1", repo.finalizeCalls)
+	}
+	if repo.finalizeCaptured.mode != repository.FinalizeModeConfirm {
+		t.Fatalf("FinalizeDailyTransaction mode: got %q want %q", repo.finalizeCaptured.mode, repository.FinalizeModeConfirm)
+	}
+	if repo.finalizeCaptured.puzzleID != puzzleID {
+		t.Fatalf("FinalizeDailyTransaction puzzleID: got %q want %q", repo.finalizeCaptured.puzzleID, puzzleID)
+	}
+	// GetSchedule(today) on entry, GetSchedule(yesterday) inside sync,
+	// then GetSchedule(today) again to fetch the canonical row = 3.
+	if repo.getScheduleCalls != 3 {
+		t.Fatalf("GetSchedule calls: got %d want 3 (entry + yesterday + canonical re-read)", repo.getScheduleCalls)
+	}
+}
+
+func TestDailyGetHandler_SyncFallback_Engaged_RecyclePath(t *testing.T) {
+	// Arrange — today missing, candidate absent, yesterday present.
+	// Decision tree picks recycle and reuses yesterday's puzzleID.
+	yesterdayPuzzleID := "puzzle-yesterday-recycle"
+	today := "2026-05-02"
+	yesterday := "2026-05-01"
+	yesterdayRow := &repository.ScheduleRecord{
+		Date:            yesterday,
+		PuzzleID:        yesterdayPuzzleID,
+		AssignedAt:      "2026-05-01T00:00:00Z",
+		SourcePartition: "9#standard",
+		Counters:        repository.ScheduleCounters{Started: 0, Solved: 0},
+	}
+	finalizedToday := &repository.ScheduleRecord{
+		Date:            today,
+		PuzzleID:        yesterdayPuzzleID,
+		AssignedAt:      "2026-05-02T12:00:00Z",
+		SourcePartition: "9#standard",
+	}
+	repo := &fakeDailyRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{yesterday: yesterdayRow},
+		puzzleByID:     map[string]*repository.PuzzleRecord{yesterdayPuzzleID: puzzleFixture(yesterdayPuzzleID)},
+		candidate:      nil, // pool empty
+	}
+	wrapper := &finalizeWrapperRepo{fakeDailyRepo: repo, onFinalize: func() {
+		repo.scheduleByDate[today] = finalizedToday
+	}}
+	router := mountDailyWithRepo(wrapper)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+today, nil)
+	req.Header.Set("X-Device-Id", "dev_abc")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d want 200 (body=%q)", rec.Code, rec.Body.String())
+	}
+	if repo.finalizeCaptured.mode != repository.FinalizeModeRecycle {
+		t.Fatalf("FinalizeDailyTransaction mode: got %q want %q", repo.finalizeCaptured.mode, repository.FinalizeModeRecycle)
+	}
+	if repo.finalizeCaptured.puzzleID != yesterdayPuzzleID {
+		t.Fatalf("recycle path must reuse yesterday's puzzleID: got %q want %q", repo.finalizeCaptured.puzzleID, yesterdayPuzzleID)
+	}
+}
+
+func TestDailyGetHandler_SyncFallback_PoolExhausted_500(t *testing.T) {
+	// Arrange — today missing, candidate empty, yesterday missing.
+	// Decision tree returns ErrPoolExhausted; handler must 500.
+	today := "2026-05-02"
+	repo := &fakeDailyRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{},
+		candidate:      nil,
+	}
+	router := mountDailyWithRepo(repo)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+today, nil)
+	req.Header.Set("X-Device-Id", "dev_abc")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status: got %d want 500 (body=%q)", rec.Code, rec.Body.String())
+	}
+	if got := readErrorBody(t, rec); got != poolExhaustedErrorBody {
+		t.Fatalf("error body: got %q want %q", got, poolExhaustedErrorBody)
+	}
+	if repo.finalizeCalls != 0 {
+		t.Fatalf("FinalizeDailyTransaction must NOT be called when pool exhausted (calls=%d)", repo.finalizeCalls)
+	}
+}
+
+func TestDailyGetHandler_SyncFallback_NotEngaged_Yesterday_404(t *testing.T) {
+	// Arrange — yesterday's schedule missing. Sync-fallback only runs
+	// for `today`; yesterday must 404 without engaging the algorithm.
+	yesterday := "2026-05-01"
 	repo := &fakeDailyRepo{
 		scheduleByDate: map[string]*repository.ScheduleRecord{},
 	}
 	router := mountDailyWithRepo(repo)
-	req := httptest.NewRequest(http.MethodGet, "/api/daily/2026-05-02", nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+yesterday, nil)
 	req.Header.Set("X-Device-Id", "dev_abc")
 	rec := httptest.NewRecorder()
 
@@ -275,9 +480,94 @@ func TestDailyGetHandler_ScheduleAbsent(t *testing.T) {
 	if got := readErrorBody(t, rec); got != "schedule not finalized" {
 		t.Fatalf("error body: got %q want %q", got, "schedule not finalized")
 	}
-	if repo.getPuzzleCalls != 0 {
-		t.Fatalf("getPuzzle should not be called when schedule absent (calls=%d)", repo.getPuzzleCalls)
+	// Critical: sync-fallback must NOT engage for non-today dates.
+	if repo.getCandidateCalls != 0 {
+		t.Fatalf("GetCandidate must NOT be called for yesterday (calls=%d)", repo.getCandidateCalls)
 	}
+	if repo.finalizeCalls != 0 {
+		t.Fatalf("FinalizeDailyTransaction must NOT be called for yesterday (calls=%d)", repo.finalizeCalls)
+	}
+	// Only the entry GetSchedule(yesterday) — no extra reads.
+	if repo.getScheduleCalls != 1 {
+		t.Fatalf("GetSchedule calls: got %d want 1 (no sync-fallback engagement)", repo.getScheduleCalls)
+	}
+}
+
+func TestDailyGetHandler_SyncFallback_RaceLoser(t *testing.T) {
+	// Arrange — today missing on entry; FinalizeDailyTransaction
+	// returns ErrScheduleAlreadyFinalized (another writer won); the
+	// final GetSchedule(today) returns the winner's row.
+	today := "2026-05-02"
+	yesterday := "2026-05-01"
+	winnerPuzzleID := "puzzle-winner"
+	winnerAssignedAt := "2026-05-02T11:59:00Z"
+	winnerRow := &repository.ScheduleRecord{
+		Date:            today,
+		PuzzleID:        winnerPuzzleID,
+		AssignedAt:      winnerAssignedAt,
+		SourcePartition: "9#standard",
+	}
+	yesterdayRow := &repository.ScheduleRecord{
+		Date:            yesterday,
+		PuzzleID:        "puzzle-y",
+		AssignedAt:      "2026-05-01T00:00:00Z",
+		SourcePartition: "9#standard",
+		Counters:        repository.ScheduleCounters{Started: 1, Solved: 1},
+	}
+	repo := &fakeDailyRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{yesterday: yesterdayRow},
+		puzzleByID:     map[string]*repository.PuzzleRecord{winnerPuzzleID: puzzleFixture(winnerPuzzleID)},
+		candidate: &repository.CandidateRecord{
+			PuzzleID:        "puzzle-loser",
+			QueuedAt:        "2026-05-01T18:00:00Z",
+			SourcePartition: "9#standard",
+		},
+		finalizeErr: repository.ErrScheduleAlreadyFinalized,
+	}
+	wrapper := &finalizeWrapperRepo{fakeDailyRepo: repo, onFinalize: func() {
+		// Winner's row materializes during the (failed-from-our-side)
+		// finalize attempt — sync's re-read must surface it.
+		repo.scheduleByDate[today] = winnerRow
+	}}
+	router := mountDailyWithRepo(wrapper)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+today, nil)
+	req.Header.Set("X-Device-Id", "dev_abc")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: got %d want 200 (body=%q)", rec.Code, rec.Body.String())
+	}
+	var body dailyOKBody
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if body.PuzzleID != winnerPuzzleID {
+		t.Fatalf("race loser must surface winner's puzzleId: got %q want %q", body.PuzzleID, winnerPuzzleID)
+	}
+	if body.AssignedAt != winnerAssignedAt {
+		t.Fatalf("race loser must surface winner's assignedAt: got %q want %q", body.AssignedAt, winnerAssignedAt)
+	}
+}
+
+// finalizeWrapperRepo decorates fakeDailyRepo so a test can mutate the
+// schedule map mid-call inside FinalizeDailyTransaction (success or
+// race-loser branches both need the canonical re-read of today to
+// succeed). Embedding fakeDailyRepo keeps every other method
+// identical so existing test fixtures continue to compile.
+type finalizeWrapperRepo struct {
+	*fakeDailyRepo
+	onFinalize func()
+}
+
+func (w *finalizeWrapperRepo) FinalizeDailyTransaction(ctx context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error {
+	if w.onFinalize != nil {
+		w.onFinalize()
+	}
+	return w.fakeDailyRepo.FinalizeDailyTransaction(ctx, date, puzzleID, sourcePartition, mode)
 }
 
 func TestDailyGetHandler_FirstGet_CreatesPlayRow(t *testing.T) {
