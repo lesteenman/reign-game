@@ -1417,6 +1417,253 @@ func TestSubmitPlayTransactionally(t *testing.T) {
 	}
 }
 
+func TestFinalizeDailyTransaction(t *testing.T) {
+	const (
+		date            = "2026-04-30"
+		puzzleID        = "puzzle-uuid-1"
+		sourcePartition = "9#standard"
+	)
+
+	t.Run("Confirm_Success — 3 legs in correct order", func(t *testing.T) {
+		// Arrange
+		var capturedInput *dynamodb.TransactWriteItemsInput
+		mock := &mockDynamoDBClient{
+			transactWriteItemsFunc: func(ctx context.Context, params *dynamodb.TransactWriteItemsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
+				capturedInput = params
+				return &dynamodb.TransactWriteItemsOutput{}, nil
+			},
+		}
+		repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+		// Act
+		err := repo.FinalizeDailyTransaction(context.Background(), date, puzzleID, sourcePartition, FinalizeModeConfirm)
+
+		// Assert
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if capturedInput == nil {
+			t.Fatal("TransactWriteItems was not called")
+		}
+		if got := len(capturedInput.TransactItems); got != 3 {
+			t.Fatalf("TransactItems len = %d, want 3", got)
+		}
+
+		// Leg 0 — Put schedule row, conditional on absence.
+		leg0 := capturedInput.TransactItems[0]
+		if leg0.Put == nil {
+			t.Fatal("leg 0 missing Put")
+		}
+		if pk := leg0.Put.Item["PK"].(*types.AttributeValueMemberS).Value; pk != "DAILY#"+date {
+			t.Errorf("leg 0 PK = %q, want %q", pk, "DAILY#"+date)
+		}
+		if sk := leg0.Put.Item["SK"].(*types.AttributeValueMemberS).Value; sk != dailySingletonSK {
+			t.Errorf("leg 0 SK = %q, want %q", sk, dailySingletonSK)
+		}
+		if pid := leg0.Put.Item["puzzleId"].(*types.AttributeValueMemberS).Value; pid != puzzleID {
+			t.Errorf("leg 0 puzzleId = %q, want %q", pid, puzzleID)
+		}
+		if sp := leg0.Put.Item["sourcePartition"].(*types.AttributeValueMemberS).Value; sp != sourcePartition {
+			t.Errorf("leg 0 sourcePartition = %q, want %q", sp, sourcePartition)
+		}
+		if assigned := leg0.Put.Item["assignedAt"].(*types.AttributeValueMemberS).Value; assigned == "" {
+			t.Error("leg 0 assignedAt should be stamped")
+		}
+		counters, ok := leg0.Put.Item["counters"].(*types.AttributeValueMemberM)
+		if !ok {
+			t.Fatal("leg 0 counters should be a map attribute")
+		}
+		if started := counters.Value["started"].(*types.AttributeValueMemberN).Value; started != "0" {
+			t.Errorf("leg 0 counters.started = %q, want 0", started)
+		}
+		if solved := counters.Value["solved"].(*types.AttributeValueMemberN).Value; solved != "0" {
+			t.Errorf("leg 0 counters.solved = %q, want 0", solved)
+		}
+		if leg0.Put.ConditionExpression == nil || *leg0.Put.ConditionExpression != "attribute_not_exists(PK)" {
+			got := "<nil>"
+			if leg0.Put.ConditionExpression != nil {
+				got = *leg0.Put.ConditionExpression
+			}
+			t.Errorf("leg 0 ConditionExpression = %q, want attribute_not_exists(PK)", got)
+		}
+
+		// Leg 1 — Update PuzzleRecord lastDailyDate (unconditional).
+		leg1 := capturedInput.TransactItems[1]
+		if leg1.Update == nil {
+			t.Fatal("leg 1 missing Update")
+		}
+		if pk := leg1.Update.Key["PK"].(*types.AttributeValueMemberS).Value; pk != sourcePartition {
+			t.Errorf("leg 1 PK = %q, want %q", pk, sourcePartition)
+		}
+		if sk := leg1.Update.Key["SK"].(*types.AttributeValueMemberS).Value; sk != puzzleID {
+			t.Errorf("leg 1 SK = %q, want %q", sk, puzzleID)
+		}
+		if expr := *leg1.Update.UpdateExpression; !strings.Contains(expr, "SET lastDailyDate = :date") {
+			t.Errorf("leg 1 UpdateExpression = %q, want SET lastDailyDate = :date", expr)
+		}
+		if leg1.Update.ConditionExpression != nil {
+			t.Errorf("leg 1 ConditionExpression should be nil (recycle must succeed even with stale lastDailyDate); got %q", *leg1.Update.ConditionExpression)
+		}
+		if d := leg1.Update.ExpressionAttributeValues[":date"].(*types.AttributeValueMemberS).Value; d != date {
+			t.Errorf("leg 1 :date = %q, want %q", d, date)
+		}
+
+		// Leg 2 — Delete candidate, conditional on puzzleId match.
+		leg2 := capturedInput.TransactItems[2]
+		if leg2.Delete == nil {
+			t.Fatal("leg 2 missing Delete")
+		}
+		if pk := leg2.Delete.Key["PK"].(*types.AttributeValueMemberS).Value; pk != dailyCandidatePK {
+			t.Errorf("leg 2 PK = %q, want %q", pk, dailyCandidatePK)
+		}
+		if sk := leg2.Delete.Key["SK"].(*types.AttributeValueMemberS).Value; sk != dailySingletonSK {
+			t.Errorf("leg 2 SK = %q, want %q", sk, dailySingletonSK)
+		}
+		if leg2.Delete.ConditionExpression == nil {
+			t.Fatal("leg 2 ConditionExpression must guard against candidate-swap race")
+		}
+		if !strings.Contains(*leg2.Delete.ConditionExpression, "puzzleId") {
+			t.Errorf("leg 2 ConditionExpression = %q, want it to reference puzzleId", *leg2.Delete.ConditionExpression)
+		}
+		if pid := leg2.Delete.ExpressionAttributeValues[":pid"].(*types.AttributeValueMemberS).Value; pid != puzzleID {
+			t.Errorf("leg 2 :pid = %q, want %q", pid, puzzleID)
+		}
+	})
+
+	t.Run("Recycle_Success — 2 legs (no candidate delete)", func(t *testing.T) {
+		// Arrange
+		var capturedInput *dynamodb.TransactWriteItemsInput
+		mock := &mockDynamoDBClient{
+			transactWriteItemsFunc: func(ctx context.Context, params *dynamodb.TransactWriteItemsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
+				capturedInput = params
+				return &dynamodb.TransactWriteItemsOutput{}, nil
+			},
+		}
+		repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+		// Act
+		err := repo.FinalizeDailyTransaction(context.Background(), date, puzzleID, sourcePartition, FinalizeModeRecycle)
+
+		// Assert
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if capturedInput == nil {
+			t.Fatal("TransactWriteItems was not called")
+		}
+		if got := len(capturedInput.TransactItems); got != 2 {
+			t.Fatalf("TransactItems len = %d, want 2 (recycle has no candidate-delete leg)", got)
+		}
+		if capturedInput.TransactItems[0].Put == nil {
+			t.Error("recycle leg 0 should be Put (schedule row)")
+		}
+		if capturedInput.TransactItems[1].Update == nil {
+			t.Error("recycle leg 1 should be Update (PuzzleRecord lastDailyDate)")
+		}
+	})
+
+	t.Run("AlreadyFinalized — leg-0 ConditionalCheckFailed maps to ErrScheduleAlreadyFinalized", func(t *testing.T) {
+		// Arrange
+		mock := &mockDynamoDBClient{
+			transactWriteItemsFunc: func(ctx context.Context, params *dynamodb.TransactWriteItemsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
+				return nil, &types.TransactionCanceledException{
+					CancellationReasons: []types.CancellationReason{
+						{Code: strPtr("ConditionalCheckFailed")},
+						{Code: strPtr("None")},
+						{Code: strPtr("None")},
+					},
+				}
+			},
+		}
+		repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+		// Act
+		err := repo.FinalizeDailyTransaction(context.Background(), date, puzzleID, sourcePartition, FinalizeModeConfirm)
+
+		// Assert
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !errors.Is(err, ErrScheduleAlreadyFinalized) {
+			t.Fatalf("error = %v, want ErrScheduleAlreadyFinalized", err)
+		}
+	})
+
+	t.Run("CandidateMismatch — leg-2 ConditionalCheckFailed wraps non-sentinel", func(t *testing.T) {
+		// Arrange
+		mock := &mockDynamoDBClient{
+			transactWriteItemsFunc: func(ctx context.Context, params *dynamodb.TransactWriteItemsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
+				return nil, &types.TransactionCanceledException{
+					CancellationReasons: []types.CancellationReason{
+						{Code: strPtr("None")},
+						{Code: strPtr("None")},
+						{Code: strPtr("ConditionalCheckFailed")},
+					},
+				}
+			},
+		}
+		repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+		// Act
+		err := repo.FinalizeDailyTransaction(context.Background(), date, puzzleID, sourcePartition, FinalizeModeConfirm)
+
+		// Assert
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if errors.Is(err, ErrScheduleAlreadyFinalized) {
+			t.Fatalf("candidate-mismatch must NOT map to ErrScheduleAlreadyFinalized; got %v", err)
+		}
+	})
+
+	t.Run("InvalidMode — synchronous reject, no DDB call", func(t *testing.T) {
+		// Arrange
+		calls := 0
+		mock := &mockDynamoDBClient{
+			transactWriteItemsFunc: func(ctx context.Context, params *dynamodb.TransactWriteItemsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
+				calls++
+				return &dynamodb.TransactWriteItemsOutput{}, nil
+			},
+		}
+		repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+		// Act
+		err := repo.FinalizeDailyTransaction(context.Background(), date, puzzleID, sourcePartition, FinalizeMode("bogus"))
+
+		// Assert
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if calls != 0 {
+			t.Errorf("TransactWriteItems should not be called for invalid mode; got %d calls", calls)
+		}
+	})
+
+	t.Run("GenericFailure — non-tx error wrapped", func(t *testing.T) {
+		// Arrange
+		mock := &mockDynamoDBClient{
+			transactWriteItemsFunc: func(ctx context.Context, params *dynamodb.TransactWriteItemsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
+				return nil, errors.New("some ddb error")
+			},
+		}
+		repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+		// Act
+		err := repo.FinalizeDailyTransaction(context.Background(), date, puzzleID, sourcePartition, FinalizeModeConfirm)
+
+		// Assert
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if errors.Is(err, ErrScheduleAlreadyFinalized) {
+			t.Fatalf("generic failure must NOT map to ErrScheduleAlreadyFinalized; got %v", err)
+		}
+		if !strings.Contains(err.Error(), "some ddb error") {
+			t.Errorf("error should wrap underlying cause; got %v", err)
+		}
+	})
+}
+
 // itoa is a tiny shim so the table fixtures stay readable.
 func itoa(n int) string {
 	if n == 0 {
