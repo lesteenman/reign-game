@@ -162,6 +162,19 @@ func (f *fakeDailyRepo) FinalizeDailyTransaction(_ context.Context, date, puzzle
 	return f.finalizeErr
 }
 
+// ListApprovedPool + PutCandidateIfAbsent are stubs to satisfy the
+// DailyRepo interface (which is a structural superset of daily.Repo).
+// The GET handler's sync-fallback path is not exercised by these tests
+// — schedule presence is set up explicitly per test — so these stubs
+// return zero values and never fire in practice.
+func (f *fakeDailyRepo) ListApprovedPool(_ context.Context, _ int, _ string, _ bool, _ time.Time) ([]repository.PuzzleRecord, error) {
+	return nil, nil
+}
+
+func (f *fakeDailyRepo) PutCandidateIfAbsent(_ context.Context, _, _ string) error {
+	return nil
+}
+
 // submitErr is returned by SubmitPlayTransactionally. Nil means success.
 // repository.ErrPlayNotInStartedState exercises the race-loser 409 path.
 func (f *fakeDailyRepo) SubmitPlayTransactionally(_ context.Context, playerID, date string, submission repository.SubmitInput) error {

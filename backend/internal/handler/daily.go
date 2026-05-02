@@ -42,12 +42,15 @@ type DailyRepo interface {
 	GetPlay(ctx context.Context, playerID, date string) (*repository.PlayRecord, error)
 	PutPlayStartedIfAbsent(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error
 
-	// GetCandidate + FinalizeDailyTransaction are required by the
-	// sync-fallback path (DP-05). DailyRepo is a structural superset of
-	// daily.Repo so a *DailyRepo value can be passed straight into
-	// daily.SyncFinalizeForToday.
+	// GetCandidate + FinalizeDailyTransaction + ListApprovedPool +
+	// PutCandidateIfAbsent are required by the sync-fallback path
+	// (DP-05). DailyRepo is a structural superset of daily.Repo so a
+	// DailyRepo value can be passed straight into
+	// daily.SyncFinalizeForToday without an adapter.
 	GetCandidate(ctx context.Context) (*repository.CandidateRecord, error)
 	FinalizeDailyTransaction(ctx context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error
+	ListApprovedPool(ctx context.Context, size int, mode string, excludeRecentlyDailied bool, now time.Time) ([]repository.PuzzleRecord, error)
+	PutCandidateIfAbsent(ctx context.Context, puzzleID, sourcePartition string) error
 
 	// SubmitPlayTransactionally + LeaderboardRank power POST
 	// /api/daily/{date}/result (DP-12). The submit method commits the

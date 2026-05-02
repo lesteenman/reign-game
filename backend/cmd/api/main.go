@@ -62,6 +62,17 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 			// /admin/pool — no thresholds, ready counts, or maxAttempts.
 			r.Get("/config/modes", handler.ConfigModesHandler(repo))
 
+			// Daily challenge routes. Anonymous-or-user via OptionalAuth:
+			// the handlers branch on auth.UserIDFromContext to scope
+			// per-flow storage (anon device-linked vs. signed-in user).
+			// r.Method is used (not r.Get / r.Post) because the daily
+			// handler factories return http.Handler, not http.HandlerFunc.
+			r.Route("/daily", func(r chi.Router) {
+				r.Use(auth.OptionalAuth(auth.NewClerkSessionVerifier()))
+				r.Method(http.MethodGet, "/{date}", handler.DailyGetHandler(repo, time.Now))
+				r.Method(http.MethodPost, "/{date}/result", handler.DailySubmitHandler(repo, time.Now))
+			})
+
 			// Admin routes live behind the Clerk auth middleware chain.
 			// Middleware order is (RequireAuth, RequireAdmin) per BM-03 —
 			// reversed or missing pieces panic on first admin request so
