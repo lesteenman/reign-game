@@ -37,3 +37,18 @@ module "frontend" {
   api_gateway_domain = module.api.api_gateway_domain
   api_gateway_stage  = module.api.api_gateway_stage
 }
+
+module "daily_cron" {
+  source = "./modules/daily-cron"
+
+  name_prefix            = "${var.project_name}-${var.environment}"
+  puzzle_pool_table_name = module.database.puzzle_table_name
+  puzzle_pool_table_arn  = module.database.puzzle_table_arn
+  lambda_zip_path        = var.daily_cron_lambda_zip_path
+  lambda_zip_hash        = var.daily_cron_lambda_zip_hash
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}

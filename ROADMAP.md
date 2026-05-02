@@ -122,6 +122,13 @@ Goal: Capture admin-only puzzle verdicts (up / down) so a curated corpus can gro
 - [x] **R-7-02** — Frontend verdict surface + landing reorg (Daily / Packs / Curation tiles) + curation route + explicit Skip button + glossary + close-out
 - [x] **R-7-03** — Per-flow IndexedDB storage (no implicit skips on mode switch)
 
+## Phase 8: Daily Puzzle
+
+Goal: Ship the Daily Puzzle flow — one canonical 9×9 Standard puzzle per UTC day for everyone, drawn from the Phase 7 verdict-approved pool. Stateless for anonymous players (deviceId-keyed), leaderboard row only for signed-in users. T-6h candidate cron + T=0 finalize cron + sync-fallback safety net so `GET /api/daily/{today}` never 404s. Design artifacts in `openspec/changes/phase-8-daily-puzzle/` until archived.
+
+- [x] **R-8-01** — Backend daily resolution + cron + submission (integration tests deferred — comprehensive unit coverage, R-8-02 Playwright will exercise end-to-end)
+- [ ] **R-8-02** — Frontend daily flow UX
+
 ## Backlog
 
 Items not committed to a phase. Each entry is roughly one phase's worth of work. We assign a phase number when we commit to starting one — until then, these are unranked beyond a rough priority order. Sub-bullets where the shape is already clear; otherwise a one-liner that gets fleshed out during that phase's design grill.

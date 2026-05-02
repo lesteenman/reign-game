@@ -14,14 +14,13 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	chiadapter "github.com/awslabs/aws-lambda-go-api-proxy/chi"
 	"github.com/clerk/clerk-sdk-go/v2"
 	"github.com/go-chi/chi/v5"
 
 	"github.com/eriksteenman/reign-game/backend/internal/auth"
+	"github.com/eriksteenman/reign-game/backend/internal/awsclient"
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
@@ -62,6 +61,17 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 			// /admin/pool — no thresholds, ready counts, or maxAttempts.
 			r.Get("/config/modes", handler.ConfigModesHandler(repo))
 
+			// Daily challenge routes. Anonymous-or-user via OptionalAuth:
+			// the handlers branch on auth.UserIDFromContext to scope
+			// per-flow storage (anon device-linked vs. signed-in user).
+			// r.Method is used (not r.Get / r.Post) because the daily
+			// handler factories return http.Handler, not http.HandlerFunc.
+			r.Route("/daily", func(r chi.Router) {
+				r.Use(auth.OptionalAuth(auth.NewClerkSessionVerifier()))
+				r.Method(http.MethodGet, "/{date}", handler.DailyGetHandler(repo, time.Now))
+				r.Method(http.MethodPost, "/{date}/result", handler.DailySubmitHandler(repo, time.Now))
+			})
+
 			// Admin routes live behind the Clerk auth middleware chain.
 			// Middleware order is (RequireAuth, RequireAdmin) per BM-03 —
 			// reversed or missing pieces panic on first admin request so
@@ -98,63 +108,6 @@ func initClerk(ctx context.Context) {
 	log.Printf("auth bootstrap: clerk SDK initialized")
 }
 
-// loadAWSConfig loads the default AWS SDK config with optional endpoint
-// overrides for local development.
-//
-// Why the http.DefaultTransport.Clone(): the Clerk Go SDK v2's
-// clerk.SetKey() wraps http.DefaultClient (or installs middleware
-// somewhere along that path). When the AWS SDK is allowed to inherit
-// the live default, its first DynamoDB Query against LocalStack jumps
-// from ~12 ms to ~1.8 s. Cloning the default Transport snapshots the
-// underlying TCP transport without Clerk's wrappers; the AWS SDK then
-// uses the snapshot. Measured: 9 ms cold with the clone, with
-// clerk.SetKey having been called.
-//
-// Strategies considered (standalone probe, with clerk.SetKey first):
-//
-//	(1) SDK default (no HTTPClient option):   1842 ms cold
-//	(2) awshttp.NewBuildableClient:            144 ms cold
-//	(3) hand-rolled Transport (no HTTP/2):       9 ms cold
-//	(4) http.DefaultTransport.Clone:             9 ms cold  ← chosen
-//
-// (4) is preferred over (3) because it inherits whatever Go's net/http
-// chooses for current platform / runtime defaults — fewer foot-guns
-// than hand-rolling. The Clone() must run AFTER the Clerk SDK has
-// initialized so the clone source is the wrapped state — but cloning
-// detaches us from any subsequent mutation, which is what matters.
-func loadAWSConfig(ctx context.Context) (aws.Config, error) {
-	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		region = "us-east-1"
-	}
-
-	httpClient := &http.Client{
-		Transport: http.DefaultTransport.(*http.Transport).Clone(),
-	}
-
-	cfg, err := config.LoadDefaultConfig(
-		ctx,
-		config.WithRegion(region),
-		config.WithHTTPClient(httpClient),
-	)
-	if err != nil {
-		return aws.Config{}, fmt.Errorf("loading AWS config: %w", err)
-	}
-	return cfg, nil
-}
-
-// newDynamoDBClient creates a DynamoDB client, optionally with a custom
-// endpoint for local development (e.g., LocalStack).
-func newDynamoDBClient(cfg *aws.Config) *dynamodb.Client {
-	endpoint := os.Getenv("DYNAMODB_ENDPOINT")
-	if endpoint != "" {
-		return dynamodb.NewFromConfig(*cfg, func(o *dynamodb.Options) {
-			o.BaseEndpoint = aws.String(endpoint)
-		})
-	}
-	return dynamodb.NewFromConfig(*cfg)
-}
-
 // newSQSClient creates an SQS client, optionally with a custom endpoint
 // for local development (e.g., LocalStack).
 func newSQSClient(cfg *aws.Config) *sqs.Client {
@@ -174,7 +127,7 @@ func main() {
 	switch {
 	case generatorMode == "sqs":
 		// SQS consumer mode: generate puzzles from queue messages.
-		cfg, err := loadAWSConfig(ctx)
+		cfg, err := awsclient.LoadAWSConfig(ctx)
 		if err != nil {
 			log.Fatalf("failed to load AWS config: %v", err)
 		}
@@ -184,7 +137,7 @@ func main() {
 			tableName = "puzzle-pool"
 		}
 
-		dynamoClient := newDynamoDBClient(&cfg)
+		dynamoClient := awsclient.NewDynamoDBClient(&cfg)
 		repo := repository.NewPuzzleRepository(dynamoClient, tableName)
 		w := worker.NewGeneratorWorker(repo, newUUIDv4)
 
@@ -204,7 +157,7 @@ func main() {
 		}
 	case os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "":
 		// Lambda API mode: HTTP routes via API Gateway proxy.
-		cfg, err := loadAWSConfig(ctx)
+		cfg, err := awsclient.LoadAWSConfig(ctx)
 		if err != nil {
 			log.Fatalf("failed to load AWS config: %v", err)
 		}
@@ -215,7 +168,7 @@ func main() {
 		}
 		queueURL := os.Getenv("SQS_QUEUE_URL")
 
-		dynamoClient := newDynamoDBClient(&cfg)
+		dynamoClient := awsclient.NewDynamoDBClient(&cfg)
 		repo := repository.NewPuzzleRepository(dynamoClient, tableName)
 
 		var pub *queue.Publisher
@@ -241,7 +194,7 @@ func main() {
 		sqsEndpoint := os.Getenv("SQS_ENDPOINT")
 
 		if dynamoEndpoint != "" || sqsEndpoint != "" {
-			cfg, err := loadAWSConfig(ctx)
+			cfg, err := awsclient.LoadAWSConfig(ctx)
 			if err != nil {
 				log.Fatalf("failed to load AWS config: %v", err)
 			}
@@ -251,7 +204,7 @@ func main() {
 				if tableName == "" {
 					tableName = "puzzle-pool"
 				}
-				dynamoClient := newDynamoDBClient(&cfg)
+				dynamoClient := awsclient.NewDynamoDBClient(&cfg)
 				repo = repository.NewPuzzleRepository(dynamoClient, tableName)
 			}
 

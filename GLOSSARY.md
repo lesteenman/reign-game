@@ -80,7 +80,7 @@ The denormalized verdict projection stored on `PuzzleRecord` as the `verdictSumm
 The frontend UI affordance through which a `Rater` submits a `Verdict` — two buttons ("Good puzzle" / "Bad puzzle") rendered after a play attempt ends (completion overlay or post-skip transient state). Cosmetically gated by `publicMetadata.role === 'admin'`; the source of truth is the backend `RequireAdmin` middleware. Lives inside `frontend/src/components/game/VerdictSurface.tsx`.
 
 **Daily Puzzle**
-A curated puzzle assigned to a specific date, mode, and difficulty level. The same puzzle for all players worldwide on that date.
+The single canonical 9×9 Standard puzzle for everyone, per UTC day; drawn from the Phase 7 verdict-approved pool (D1). Same puzzle for all players worldwide on that date. Detailed access patterns, row shapes, and cron contract live in the "Daily Puzzle (Phase 8)" section below.
 
 **Practice Puzzle**
 A curated puzzle available in the practice pool. Can be played at any time, without time pressure or leaderboard scoring.
@@ -184,6 +184,33 @@ A group of `k` marker positions (from the Sampler's solution) that the Region Gr
 
 **Expert (difficulty tier)**
 The top tier of the generator's `Difficulty` classification, assigned when `MaxTier == 4` in the Rule Trace (i.e., the puzzle requires the Deductive Solver's Tier 4 rule R8 — the k-parameterized X-wing analogue — to solve). Persisted on `PuzzleRecord.Difficulty`. **Not** surfaced to players in v1 — the difficulty field is computed and stored but the player-facing difficulty selector is R-034 (Phase 9). Sits above Easy (MaxTier ≤ 1), Medium (MaxTier == 2), and Hard (MaxTier == 3). Distinct from the existing "Hard" entry in the Difficulty section above, which describes a grid-size tier (9x9) for the player UI, not a rule-trace-based classification.
+
+---
+
+## Daily Puzzle (Phase 8)
+
+Terms internal to the Phase 8 Daily Puzzle slice (`backend/internal/daily`, `backend/internal/repository/daily.go`, `backend/internal/handler/daily.go`, `backend/cmd/daily-cron/`). Consult before writing or reviewing daily-flow code.
+
+**assignedAt**
+Server-stamped timestamp on the PLAY row, set on the player's first GET. Never overwritten — the source of truth for `serverElapsedMs` and the anti-cheat invariant (DP-19). On `attribute_not_exists` race the loser GETs the winner's row and uses the winner's `assignedAt`; refreshes and second devices must NOT reset it.
+
+**Candidate Slot**
+Singleton row at `PK = DAILY-CANDIDATE` holding the next candidate puzzle (puzzleId + sourcePartition + reservedAt), queued by the T-6h cron. The T=0 cron consumes it (confirm path) or ignores it (recycle path); the row persists untouched on recycle so the next T-6h run can re-evaluate.
+
+**playerId**
+Opaque identity used as a DDB partition prefix on the PLAY row: `userId` for signed-in players, `deviceId` (from the `X-Device-Id` request header) for anonymous (DP-10). The same `playerId` keyspace is shared by both — anonymous and signed-in PLAY rows live side by side; the leaderboard PutItem only fires for the signed-in case.
+
+**Recycle (daily)**
+When yesterday had zero `solved` plays, T=0 reuses yesterday's puzzle as today's daily; the candidate slot persists untouched. `lastDailyDate` is advanced to today on the recycled puzzle so the cooldown window (D11, design §4 T-6h step 2) tracks the latest exposure, not the original assignment (Finding 6).
+
+**Schedule Row**
+DynamoDB row at `PK = DAILY#YYYY-MM-DD` carrying the day's `puzzleId`, `assignedAt`, `sourcePartition`, and `{started, solved}` counters. Written atomically by `FinalizeSchedule` via `TransactWriteItems` with `attribute_not_exists(PK)` guard; counters are updated by `IncrementCounter` (`ADD <field> :one`).
+
+**serverElapsedMs**
+`submittedAt − assignedAt` in milliseconds. Source of truth for any future ranking surface (DP-20). The client's `playTimeMs` is captured for telemetry but never authoritative.
+
+**Sync Fallback**
+On `GET /api/daily/{today}` with no schedule row, the handler runs the T=0 finalize algorithm itself so the endpoint never returns 404 for today's puzzle. Implemented in `backend/internal/daily/sync.go::SyncFinalizeForToday`; converges on the same row both crons would have written (design §4 sync-fallback contract; Finding 1).
 
 ---
 

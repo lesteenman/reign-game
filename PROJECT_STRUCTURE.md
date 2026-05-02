@@ -41,15 +41,23 @@ backend/
 ├── cmd/
 │   ├── api/
 │   │   └── main.go              # Lambda entry + local dev entry (GENERATOR_MODE=sqs flips to consumer)
+│   ├── daily-cron/              # Daily Puzzle Lambda — T-6h candidate + T=0 finalize (Phase 8, R-8-01)
+│   │   ├── main.go              # Dispatch on event.DetailType (`t-6h-ensure` vs `t-0-finalize`)
+│   │   └── main_test.go
 │   ├── genfixtures/
 │   │   └── main.go              # Deterministic Playwright fixture generator (R-06B)
 │   └── reproduce/
 │       └── main.go              # Regenerate a puzzle from (seed, size, mode) for debugging (R-06C)
 ├── internal/
-│   ├── auth/                    # Clerk session middleware (Phase 6, R-08A)
+│   ├── auth/                    # Clerk session middleware (Phase 6, R-08A; OptionalAuth added in R-8-01)
 │   │   ├── doc.go               # Package doc: RequireAuth + RequireAdmin contract
-│   │   ├── middleware.go        # RequireAuth / RequireAdmin chi middleware + UserFromContext
+│   │   ├── middleware.go        # RequireAuth / RequireAdmin / OptionalAuth chi middleware + UserFromContext
 │   │   └── secret.go            # sync.Once CLERK_SECRET_KEY bootstrap (env var or SSM)
+│   ├── daily/                   # Daily Puzzle business logic (Phase 8, R-8-01)
+│   │   ├── cron.go              # EnsureCandidate (T-6h) + FinalizeForToday (T=0)
+│   │   ├── cron_test.go
+│   │   ├── sync.go              # SyncFinalizeForToday — sync-fallback path used by GET handler
+│   │   └── sync_test.go
 │   ├── httperr/                 # Shared JSON error-response writer (Phase 6, R-08A)
 │   │   └── httperr.go           # WriteError(w, status, code, message) — used by handler + auth
 │   ├── handler/                 # Chi-mux HTTP handlers, /api/* routes
@@ -58,6 +66,8 @@ backend/
 │   │   ├── auth_test.go         # Admin-route auth-matrix helpers (anonymous/user/admin)
 │   │   ├── config_dto.go        # ConfigBody + ConfigView + request DTOs (R-06A)
 │   │   ├── config_modes.go      # GET /api/config/modes (public, R-06A)
+│   │   ├── daily.go             # GET /api/daily/{date}, POST /api/daily/{date}/result (Phase 8, R-8-01)
+│   │   ├── daily_test.go
 │   │   ├── generate.go          # GET /api/puzzles/generate (legacy, slow)
 │   │   ├── health.go            # GET /api/health
 │   │   ├── params.go            # Shared handler helpers
@@ -68,7 +78,10 @@ backend/
 │   ├── model/                   # Legacy domain types (Phase 5 kept puzzle.go only)
 │   │   └── puzzle.go
 │   ├── repository/              # DynamoDB data access
-│   │   └── puzzle.go            # ConfigRecord + PuzzleRecord + CRUD (ErrPuzzleNotFound)
+│   │   ├── daily.go             # DailyRepository: schedule / candidate / play / leaderboard rows (Phase 8, R-8-01)
+│   │   ├── daily_test.go
+│   │   ├── puzzle.go            # ConfigRecord + PuzzleRecord (incl. LastDailyDate) + CRUD (ErrPuzzleNotFound)
+│   │   └── puzzle_test.go
 │   ├── queue/                   # SQS publisher
 │   │   └── publisher.go
 │   ├── worker/                  # SQS consumer — generates puzzles into the pool
@@ -195,6 +208,10 @@ infra/
 ├── modules/
 │   ├── frontend/                # S3 + CloudFront
 │   ├── api/                     # API Gateway + Lambda + Clerk SSM keys + IAM (Phase 6 admin auth lives here, R-089)
+│   ├── daily-cron/              # daily-cron Lambda + EventBridge schedules + IAM (Phase 8, R-8-01)
+│   │   ├── main.tf
+│   │   ├── outputs.tf
+│   │   └── variables.tf
 │   ├── database/                # DynamoDB tables
 │   └── generation/              # SQS puzzle-generation queue + DLQ (Phase 4)
 ├── environments/
@@ -236,6 +253,8 @@ design/
 | POST | /api/admin/config | Admin | Create a new combo config |
 | POST | /api/admin/replenish | Admin | Replenish pools (optional ?size=X&mode=Y filter) |
 | PUT | /api/admin/puzzles/{id}/verdict | Admin | Submit up/down verdict on a played puzzle (Phase 7, R-081) |
+| GET | /api/daily/{date} | Anonymous or User | Today's or yesterday's daily puzzle + player state (Phase 8, R-8-01) |
+| POST | /api/daily/{date}/result | Anonymous or User | Submit a daily-puzzle solve; signed-in players get a leaderboard row (Phase 8, R-8-01) |
 
 *Admin-marked endpoints sit behind `RequireAuth` + `RequireAdmin` (Phase 6, R-08A): anonymous → 401, signed-in non-admin → 403, signed-in with `publicMetadata.role === 'admin'` → 200. `/api/config/modes` is the public alternative the landing page calls so it never has to touch any admin endpoint.*
 
@@ -243,10 +262,8 @@ design/
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| GET | /api/puzzles/{id} | No | Load puzzle by ID for replay (Phase 8, R-085) |
-| GET | /api/daily | No | Get today's daily puzzles (Phase 9+) |
-| POST | /api/completions | Device ID | Submit puzzle completion (Phase 9+) |
-| GET | /api/leaderboard/{puzzleId} | No | Leaderboard for a daily puzzle (Phase 9+) |
+| GET | /api/puzzles/{id} | No | Load puzzle by ID for replay (backlog) |
+| GET | /api/leaderboard/{date} | No | Public leaderboard for a daily puzzle (backlog — depends on Username slice) |
 
 ---
 
