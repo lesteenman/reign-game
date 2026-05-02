@@ -340,7 +340,7 @@ func truncatePlayer(id string) string {
 // auth.RequireAuth) wins over the X-Device-Id header so users who
 // happen to send both end up with their stable user ID. Returns
 // ok=false when neither identifier is present — the caller emits 401.
-func resolveDailyPlayer(r *http.Request) (playerID string, isAnonymous bool, ok bool) {
+func resolveDailyPlayer(r *http.Request) (playerID string, isAnonymous, ok bool) {
 	if u, present := auth.UserFromContextOK(r.Context()); present && u != nil && u.ID != "" {
 		return u.ID, false, true
 	}

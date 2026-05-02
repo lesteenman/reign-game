@@ -55,11 +55,11 @@ func LoadAWSConfig(ctx context.Context) (aws.Config, error) {
 }
 
 // NewDynamoDBClient is documented at the package level.
-func NewDynamoDBClient(cfg aws.Config) *dynamodb.Client {
+func NewDynamoDBClient(cfg *aws.Config) *dynamodb.Client {
 	if endpoint := os.Getenv("DYNAMODB_ENDPOINT"); endpoint != "" {
-		return dynamodb.NewFromConfig(cfg, func(o *dynamodb.Options) {
+		return dynamodb.NewFromConfig(*cfg, func(o *dynamodb.Options) {
 			o.BaseEndpoint = aws.String(endpoint)
 		})
 	}
-	return dynamodb.NewFromConfig(cfg)
+	return dynamodb.NewFromConfig(*cfg)
 }

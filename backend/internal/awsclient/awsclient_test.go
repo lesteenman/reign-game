@@ -46,7 +46,7 @@ func TestNewDynamoDBClient_DoesNotPanic(t *testing.T) {
 	}
 
 	// Act
-	client := NewDynamoDBClient(cfg)
+	client := NewDynamoDBClient(&cfg)
 
 	// Assert
 	if client == nil {

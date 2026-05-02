@@ -137,7 +137,7 @@ func main() {
 			tableName = "puzzle-pool"
 		}
 
-		dynamoClient := awsclient.NewDynamoDBClient(cfg)
+		dynamoClient := awsclient.NewDynamoDBClient(&cfg)
 		repo := repository.NewPuzzleRepository(dynamoClient, tableName)
 		w := worker.NewGeneratorWorker(repo, newUUIDv4)
 
@@ -168,7 +168,7 @@ func main() {
 		}
 		queueURL := os.Getenv("SQS_QUEUE_URL")
 
-		dynamoClient := awsclient.NewDynamoDBClient(cfg)
+		dynamoClient := awsclient.NewDynamoDBClient(&cfg)
 		repo := repository.NewPuzzleRepository(dynamoClient, tableName)
 
 		var pub *queue.Publisher
@@ -204,7 +204,7 @@ func main() {
 				if tableName == "" {
 					tableName = "puzzle-pool"
 				}
-				dynamoClient := awsclient.NewDynamoDBClient(cfg)
+				dynamoClient := awsclient.NewDynamoDBClient(&cfg)
 				repo = repository.NewPuzzleRepository(dynamoClient, tableName)
 			}
 

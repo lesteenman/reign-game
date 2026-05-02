@@ -120,7 +120,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("daily cron: aws config: %v", err)
 	}
-	ddb := awsclient.NewDynamoDBClient(cfg)
+	ddb := awsclient.NewDynamoDBClient(&cfg)
 
 	tableName := os.Getenv("PUZZLE_POOL_TABLE")
 	if tableName == "" {

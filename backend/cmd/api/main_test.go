@@ -32,7 +32,7 @@ func TestDailyRoutesAreRegistered(t *testing.T) {
 			// (status != 404) only requires the chi mux to resolve.
 			repo := repository.NewPuzzleRepository(nil, "test")
 			r := newRouter(repo, nil)
-			req := httptest.NewRequest(tc.method, tc.path, nil)
+			req := httptest.NewRequest(tc.method, tc.path, http.NoBody)
 			rec := httptest.NewRecorder()
 
 			// Act
