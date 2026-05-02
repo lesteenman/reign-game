@@ -236,7 +236,7 @@ function RedirectToHome() {
   return null;
 }
 
-interface GameBoardProps {
+export interface GameBoardProps {
   puzzle: PuzzleData;
   flowType: FlowType;
   flowId: string;
@@ -251,6 +251,21 @@ interface GameBoardProps {
   addCompletion: (record: CompletionRecord) => Promise<void>;
   onBack: () => void;
   onPlayAgain: () => void;
+  /**
+   * Optional opt-in solve-event delegate. When provided, GameBoard
+   * skips its own post-solve actions (addCompletion / clearState /
+   * updatePuzzleStatus / completion overlay) and fires this callback
+   * instead — the caller takes ownership of the solve UX. The
+   * `solution` payload is a 0/1 marker grid (1 where the player
+   * placed a marker; 0 elsewhere) and `elapsedMs` is the timer's
+   * elapsed milliseconds at the moment of solve.
+   *
+   * R-8-02 chunk 7: the daily flow uses this hook so DailyFlow's
+   * state machine takes over (POST submit → PostCompletionScreen)
+   * instead of GameBoard's built-in completion overlay + completion
+   * record write, which is curation/practice-shaped.
+   */
+  onSolveDetected?: (solution: number[][], elapsedMs: number) => void;
 }
 
 /** Build the current GameState from refs, preserving the original startedAt. */
@@ -277,7 +292,7 @@ function buildCurrentState(
   };
 }
 
-function GameBoard({
+export function GameBoard({
   puzzle,
   flowType,
   flowId,
@@ -292,6 +307,7 @@ function GameBoard({
   addCompletion,
   onBack,
   onPlayAgain,
+  onSolveDetected,
 }: GameBoardProps) {
   const [ready, setReady] = useState(false);
   useLayoutEffect(() => { setReady(true); }, []);
@@ -390,19 +406,41 @@ function GameBoard({
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [puzzle, saveState]);
 
+  // Stable ref for the optional solve-event delegate so the solve
+  // effect's deps don't churn when the caller passes an inline arrow.
+  const onSolveDetectedRef = useRef(onSolveDetected);
+  onSolveDetectedRef.current = onSolveDetected;
+
   // Handle puzzle completion. Clear-on-solve (ST-07): the Flow Slot is
   // removed so the next visit to this `(flowType, flowId)` URL fetches
   // a fresh puzzle without a defensive read of a solved row.
+  //
+  // When the caller provides `onSolveDetected`, GameBoard delegates
+  // the solve UX entirely: no completion overlay, no addCompletion/
+  // clearState/updatePuzzleStatus side-effects. The caller (e.g.
+  // DailyFlow via DailyGameBoard) receives the solution + elapsed and
+  // owns the post-solve experience. R-8-02 chunk 7.
   useEffect(() => {
     if (isSolved && !completionHandledRef.current) {
       completionHandledRef.current = true;
       timer.stop();
-      const finalTime = timer.elapsed;
-      setCompletionTime(finalTime);
+      const finalTimeSeconds = timer.elapsed;
+      setCompletionTime(finalTimeSeconds);
+
+      const delegate = onSolveDetectedRef.current;
+      if (delegate) {
+        const solution = cellsRef.current.map((row) =>
+          row.map((cell) => (cell === 'marked' ? 1 : 0)),
+        );
+        const elapsedMs = finalTimeSeconds * 1000;
+        delegate(solution, elapsedMs);
+        return;
+      }
+
       setShowCompletion(true);
       void addCompletion({
         puzzleId: puzzle.puzzleId,
-        time: finalTime,
+        time: finalTimeSeconds,
         completedAt: Date.now(),
       });
       void clearState(flowType, flowId);
