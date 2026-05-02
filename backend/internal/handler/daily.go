@@ -13,8 +13,15 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/eriksteenman/reign-game/backend/internal/auth"
+	"github.com/eriksteenman/reign-game/backend/internal/daily"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
+
+// poolExhaustedMessage is the canonical 500 body phrase emitted when
+// sync-fallback hits daily.ErrPoolExhausted (DP-16). Stable phrase: a
+// future R-8-02 frontend will key off it for a "we're working on it"
+// graceful UI. Keep in sync with daily_test.go's poolExhaustedErrorBody.
+const poolExhaustedMessage = "pool exhausted"
 
 // dailyDateLayout is the canonical YYYY-MM-DD format expected by
 // GET /api/daily/{date}. Dates outside this layout are rejected with
@@ -34,6 +41,13 @@ type DailyRepo interface {
 	GetPuzzle(ctx context.Context, size int, mode, puzzleID string) (*repository.PuzzleRecord, error)
 	GetPlay(ctx context.Context, playerID, date string) (*repository.PlayRecord, error)
 	PutPlayStartedIfAbsent(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error
+
+	// GetCandidate + FinalizeDailyTransaction are required by the
+	// sync-fallback path (DP-05). DailyRepo is a structural superset of
+	// daily.Repo so a *DailyRepo value can be passed straight into
+	// daily.SyncFinalizeForToday.
+	GetCandidate(ctx context.Context) (*repository.CandidateRecord, error)
+	FinalizeDailyTransaction(ctx context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error
 }
 
 // dailyResponse is the GET 200 response shape (DP-09). ServerElapsedMs
@@ -86,6 +100,8 @@ func DailyGetHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 		now := clock().UTC()
 		todayUTC := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
 		yesterdayUTC := todayUTC.AddDate(0, 0, -1)
+		todayStr := todayUTC.Format(dailyDateLayout)
+		yesterdayStr := yesterdayUTC.Format(dailyDateLayout)
 
 		requested := time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC)
 		if requested.Before(yesterdayUTC) || requested.After(todayUTC) {
@@ -104,13 +120,33 @@ func DailyGetHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 			log.Printf("daily get: 500 schedule_read_failed date=%s err=%v", date, err)
 			return
 		}
+
+		var syncMs int64
 		if schedule == nil {
-			// Chunk 3 will engage the sync fallback here. Until then the
-			// response shape is the same — sync fallback exhaustion lands
-			// on this same 404.
-			writeDailyError(w, http.StatusNotFound, "schedule not finalized")
-			log.Printf("daily get: 404 schedule_absent date=%s player=%s", date, truncatePlayer(playerID))
-			return
+			// DP-05: sync-fallback engages ONLY for today. Yesterday's
+			// schedule should always exist by the time today is being
+			// requested — if it doesn't, the system is in an
+			// unrecoverable state and we 404 rather than attempt to
+			// retro-finalize a past day.
+			if date != todayStr {
+				writeDailyError(w, http.StatusNotFound, "schedule not finalized")
+				log.Printf("daily get: 404 schedule_absent date=%s player=%s", date, truncatePlayer(playerID))
+				return
+			}
+			syncStart := time.Now()
+			finalized, syncErr := daily.SyncFinalizeForToday(ctx, repo, todayStr, yesterdayStr, clock())
+			syncMs = time.Since(syncStart).Milliseconds()
+			if errors.Is(syncErr, daily.ErrPoolExhausted) {
+				writeDailyError(w, http.StatusInternalServerError, poolExhaustedMessage)
+				log.Printf("daily get: 500 pool_exhausted date=%s player=%s sync_ms=%d", date, truncatePlayer(playerID), syncMs)
+				return
+			}
+			if syncErr != nil {
+				writeDailyError(w, http.StatusInternalServerError, "internal error")
+				log.Printf("daily get: 500 sync_finalize_failed date=%s sync_ms=%d err=%v", date, syncMs, syncErr)
+				return
+			}
+			schedule = finalized
 		}
 
 		size, mode, err := parseSourcePartition(schedule.SourcePartition)
@@ -165,8 +201,8 @@ func DailyGetHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 		}
 
 		totalMs := time.Since(start).Milliseconds()
-		log.Printf("daily get: total_ms=%d schedule_ms=%d puzzle_ms=%d play_ms=%d path=%s player=%s",
-			totalMs, scheduleMs, puzzleMs, playMs, r.URL.Path, truncatePlayer(playerID))
+		log.Printf("daily get: total_ms=%d schedule_ms=%d sync_ms=%d puzzle_ms=%d play_ms=%d path=%s player=%s",
+			totalMs, scheduleMs, syncMs, puzzleMs, playMs, r.URL.Path, truncatePlayer(playerID))
 	})
 }
 

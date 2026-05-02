@@ -500,11 +500,10 @@ func TestDailyGetHandler_SyncFallback_RaceLoser(t *testing.T) {
 	today := "2026-05-02"
 	yesterday := "2026-05-01"
 	winnerPuzzleID := "puzzle-winner"
-	winnerAssignedAt := "2026-05-02T11:59:00Z"
 	winnerRow := &repository.ScheduleRecord{
 		Date:            today,
 		PuzzleID:        winnerPuzzleID,
-		AssignedAt:      winnerAssignedAt,
+		AssignedAt:      "2026-05-02T11:59:00Z",
 		SourcePartition: "9#standard",
 	}
 	yesterdayRow := &repository.ScheduleRecord{
@@ -548,8 +547,18 @@ func TestDailyGetHandler_SyncFallback_RaceLoser(t *testing.T) {
 	if body.PuzzleID != winnerPuzzleID {
 		t.Fatalf("race loser must surface winner's puzzleId: got %q want %q", body.PuzzleID, winnerPuzzleID)
 	}
-	if body.AssignedAt != winnerAssignedAt {
-		t.Fatalf("race loser must surface winner's assignedAt: got %q want %q", body.AssignedAt, winnerAssignedAt)
+	// Note: body.AssignedAt is the PLAY-row stamp (the per-player
+	// "first GET" instant), not the schedule's assignedAt — see DP-19
+	// and TestDailyGetHandler_FirstGet_RaceLoser for the play-row race
+	// invariant. The race tested here is on the schedule row, proven
+	// by puzzleId resolving to the winner's puzzle.
+	if repo.finalizeCalls != 1 {
+		t.Fatalf("FinalizeDailyTransaction must be attempted once: got %d", repo.finalizeCalls)
+	}
+	// Entry GetSchedule(today) -> sync GetSchedule(yesterday) -> sync
+	// re-read GetSchedule(today) after the race-loser branch.
+	if repo.getScheduleCalls != 3 {
+		t.Fatalf("GetSchedule calls: got %d want 3 (entry + yesterday + canonical re-read)", repo.getScheduleCalls)
 	}
 }
 
