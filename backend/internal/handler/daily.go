@@ -472,10 +472,17 @@ func DailySubmitHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 		}
 		serverElapsedMs := now.Sub(assignedAt).Milliseconds()
 		if serverElapsedMs < 0 {
-			// Defensive: clock skew between PLAY-row writer and submit
-			// handler. Clamp to 0 rather than reject — the player is
-			// already done; refusing would be hostile UX.
-			serverElapsedMs = 0
+			// Defense: assignedAt > now means clock skew between the PLAY-row
+			// writer and submit handler. Refuse the submission rather than
+			// clamp — clamping to 0 would silently push a clock-skewed solve
+			// to the top of the leaderboard SK, corrupting ranking. The repo
+			// also defends against this (see repository/daily.go), but
+			// catching here returns a clearer error code than letting the
+			// transaction fail.
+			writeDailyError(w, http.StatusInternalServerError, "internal error")
+			log.Printf("daily submit: 500 negative_clock_skew date=%s assignedAt=%s now=%s delta_ms=%d player=%s",
+				date, assignedAt.Format(time.RFC3339), now.Format(time.RFC3339), serverElapsedMs, truncatePlayer(playerID))
+			return
 		}
 
 		submitInput := repository.SubmitInput{

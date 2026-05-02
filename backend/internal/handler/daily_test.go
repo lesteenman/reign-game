@@ -1336,6 +1336,42 @@ func TestDailySubmitHandler_HappyPath_SignedIn(t *testing.T) {
 	}
 }
 
+func TestDailySubmitHandler_NegativeClockSkew_500(t *testing.T) {
+	// Arrange — PLAY row's AssignedAt is 30 minutes in the future
+	// relative to fixedClock() (2026-05-02 12:00:00 UTC). The handler
+	// must refuse the submission rather than clamp serverElapsedMs to
+	// 0, which would corrupt the leaderboard SK ordering.
+	puzzleID := "puzzle-skew"
+	date := "2026-05-02"
+	player := "dev_skew"
+	skewedPlay := startedPlayRow(player, date, puzzleID)
+	skewedPlay.AssignedAt = "2026-05-02T12:30:00Z"
+	repo := &fakeDailyRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{date: solved3x3Schedule(date, puzzleID)},
+		puzzleByID:     map[string]*repository.PuzzleRecord{puzzleID: solvedPuzzleFixture(puzzleID)},
+		playSequence:   []*repository.PlayRecord{skewedPlay},
+	}
+	router := mountDailySubmit(repo)
+	req := httptest.NewRequest(http.MethodPost, "/api/daily/"+date+"/result", strings.NewReader(validSolvedBody))
+	req.Header.Set("X-Device-Id", player)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+
+	// Act
+	router.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status: got %d want 500 (body=%q)", rec.Code, rec.Body.String())
+	}
+	if got := readErrorBody(t, rec); got != "internal error" {
+		t.Fatalf("error body: got %q want %q", got, "internal error")
+	}
+	if repo.submitCalls != 0 {
+		t.Fatalf("SubmitPlayTransactionally must NOT be called on negative clock skew (calls=%d)", repo.submitCalls)
+	}
+}
+
 func TestDailySubmitHandler_RaceLoser_409(t *testing.T) {
 	// Arrange — concurrent submit won; transaction returns the sentinel.
 	puzzleID := "puzzle-race"
