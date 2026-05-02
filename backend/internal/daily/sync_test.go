@@ -70,6 +70,17 @@ func (f *fakeRepo) FinalizeDailyTransaction(_ context.Context, date, puzzleID, s
 	return f.finalizeErr
 }
 
+// ListApprovedPool — sync tests don't exercise this method, but the
+// Repo interface grew in chunk 5 so the fake must satisfy it.
+func (f *fakeRepo) ListApprovedPool(_ context.Context, _ int, _ string, _ bool, _ time.Time) ([]repository.PuzzleRecord, error) {
+	return nil, nil
+}
+
+// PutCandidateIfAbsent — see ListApprovedPool.
+func (f *fakeRepo) PutCandidateIfAbsent(_ context.Context, _, _ string) error {
+	return nil
+}
+
 func TestSyncFinalizeForToday_ConfirmCandidate_YesterdayHasSolves(t *testing.T) {
 	// Arrange
 	today := "2026-05-02"
