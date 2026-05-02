@@ -29,12 +29,19 @@ import (
 
 // fixture describes one committed puzzle. The ID is the DynamoDB SK
 // and also the value the frontend sees in `puzzle.puzzleId`.
+//
+// Approved opts the fixture into a pre-populated verdictSummary block
+// ({up:1, down:0}) so daily-flow specs that filter on
+// "verdictSummary.up >= 1 AND verdictSummary.down == 0" (DP-15) can
+// pick the row up out of a fresh e2e pool. Defaults false; non-daily
+// fixtures stay summary-less and match the not-yet-rated default.
 type fixture struct {
-	ID   string
-	Size int
-	K    int
-	Mode string
-	Seed int64
+	ID       string
+	Size     int
+	K        int
+	Mode     string
+	Seed     int64
+	Approved bool
 }
 
 // fixtures enumerates every committed fixture. Keep this list short —
@@ -90,6 +97,19 @@ var fixtures = []fixture{
 		Mode: "double",
 		Seed: 1,
 	},
+	{
+		// 9x9 Standard, pre-approved for the daily flow. The daily
+		// pool selection filter requires verdictSummary.up >= 1 AND
+		// verdictSummary.down == 0 (DP-15); without an approved 9#
+		// standard fixture the e2e daily endpoint can't resolve a
+		// puzzle on a fresh LocalStack. Used by daily-flow.spec.ts.
+		ID:       "e2e0000-0000-4000-9000-000000000001",
+		Size:     9,
+		K:        1,
+		Mode:     "standard",
+		Seed:     11,
+		Approved: true,
+	},
 }
 
 func main() {
@@ -131,7 +151,7 @@ func writeFixture(dir string, f fixture) error {
 	}
 
 	pk := fmt.Sprintf("%d#%s", f.Size, f.Mode)
-	item := puzzleItem(pk, f.ID, f.Seed, &p, solution)
+	item := puzzleItem(pk, f.ID, f.Seed, &p, solution, f.Approved)
 
 	data, err := json.MarshalIndent(item, "", "  ")
 	if err != nil {
@@ -179,8 +199,15 @@ func writeFixture(dir string, f fixture) error {
 // aws-sdk-go-v2 attributevalue package) because it's only ~20 fields,
 // we control every one, and the resulting JSON is what a human reading
 // the committed fixture will see.
-func puzzleItem(pk, sk string, seed int64, p *generator.Puzzle, solution [][]bool) map[string]any {
-	return map[string]any{
+//
+// When approved is true the item carries a pre-populated
+// verdictSummary {up:1, down:0, lastUpdatedAt:""} block matching the
+// shape RecomputeVerdictSummary writes (M with N+S members). Daily
+// pool selection (DP-15) requires verdictSummary.up >= 1 AND
+// verdictSummary.down == 0; the fixed lastUpdatedAt keeps regeneration
+// deterministic.
+func puzzleItem(pk, sk string, seed int64, p *generator.Puzzle, solution [][]bool, approved bool) map[string]any {
+	item := map[string]any{
 		"PK":                   s(pk),
 		"SK":                   s(sk),
 		"status":               s("ready"),
@@ -194,6 +221,14 @@ func puzzleItem(pk, sk string, seed int64, p *generator.Puzzle, solution [][]boo
 		"createdAt":            s("2026-01-01T00:00:00Z"),
 		"seed":                 n64(seed),
 	}
+	if approved {
+		item["verdictSummary"] = mapOf(map[string]any{
+			"up":            n(1),
+			"down":          n(0),
+			"lastUpdatedAt": s("2026-01-01T00:00:00Z"),
+		})
+	}
+	return item
 }
 
 // DynamoDB-JSON helpers. Each value is wrapped in its type marker
@@ -201,6 +236,9 @@ func puzzleItem(pk, sk string, seed int64, p *generator.Puzzle, solution [][]boo
 
 func s(v string) map[string]string { return map[string]string{"S": v} }
 func n(v int) map[string]string    { return map[string]string{"N": strconv.Itoa(v)} }
+func mapOf(v map[string]any) map[string]any {
+	return map[string]any{"M": v}
+}
 func n64(v int64) map[string]string {
 	return map[string]string{"N": strconv.FormatInt(v, 10)}
 }

@@ -402,8 +402,5 @@
   },
   "traceLen": {
     "N": "16"
-  },
-  "verdict": {
-    "S": "none"
   }
 }
