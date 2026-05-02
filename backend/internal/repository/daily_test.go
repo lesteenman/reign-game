@@ -269,16 +269,16 @@ func TestDeleteCandidate(t *testing.T) {
 
 func TestFinalizeSchedule(t *testing.T) {
 	tests := []struct {
-		name              string
-		date              string
-		puzzleID          string
-		sourcePartition   string
-		putErr            error
-		wantErr           bool
-		wantAlreadyFinal  bool
-		wantPK            string
-		wantSK            string
-		wantCondition     string
+		name             string
+		date             string
+		puzzleID         string
+		sourcePartition  string
+		putErr           error
+		wantErr          bool
+		wantAlreadyFinal bool
+		wantPK           string
+		wantSK           string
+		wantCondition    string
 	}{
 		{
 			name:            "writes when no schedule for date",
@@ -1682,4 +1682,48 @@ func itoa(n int) string {
 		digits = append([]byte{'-'}, digits...)
 	}
 	return string(digits)
+}
+
+func TestLeaderboardRank_FirstPlace(t *testing.T) {
+	// Arrange — mock returns Count=1 (only the player's own row counts as
+	// at-or-faster, i.e. the player is alone at the top of the leaderboard).
+	mock := &mockDynamoDBClient{
+		queryFunc: func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+			return &dynamodb.QueryOutput{Count: 1}, nil
+		},
+	}
+	repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+	// Act
+	rank, err := repo.LeaderboardRank(context.Background(), "2026-05-02", 12345, "user_abc")
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rank != 1 {
+		t.Errorf("rank = %d, want 1", rank)
+	}
+}
+
+func TestLeaderboardRank_NormalRanking(t *testing.T) {
+	// Arrange — mock returns Count=5 (four faster rows ahead of the player
+	// plus the player's own row → rank 5).
+	mock := &mockDynamoDBClient{
+		queryFunc: func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+			return &dynamodb.QueryOutput{Count: 5}, nil
+		},
+	}
+	repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+	// Act
+	rank, err := repo.LeaderboardRank(context.Background(), "2026-05-02", 67890, "user_xyz")
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if rank != 5 {
+		t.Errorf("rank = %d, want 5", rank)
+	}
 }
