@@ -15,6 +15,7 @@ import type { Mode, PuzzleData, CellState } from '../engine/types';
 import { isMode } from '../engine/types';
 import type { FlowType, GameState, GameHistory, CompletionRecord } from '../storage/types';
 import { EMPTY_HISTORY, buildCurationFlowId, parseFlowType } from '../storage/types';
+import { DailyFlow } from './DailyFlow';
 
 /** Format seconds as MM:SS. */
 function formatTime(seconds: number): string {
@@ -48,6 +49,11 @@ export function GamePage() {
   const [loadStatus, setLoadStatus] = useState<LoadState>({ status: 'loading' });
   const [fetchKey, setFetchKey] = useState(0);
 
+  // R-8-02 chunk 3: when the URL says `?flow=daily`, delegate the
+  // entire flow to DailyFlow. The existing pool/practice/curation
+  // path below remains untouched for non-daily flows.
+  const isDailyFlow = searchParams.get('flow') === 'daily';
+
   /** Force a re-fetch of the current Flow Slot (used by Retry / Play Again). */
   const retryFetch = useCallback(() => {
     setLoadStatus({ status: 'loading' });
@@ -61,6 +67,11 @@ export function GamePage() {
 
   useEffect(() => {
     let cancelled = false;
+    // The daily flow is handled entirely by <DailyFlow /> below; skip
+    // the pool/curation fetcher so it doesn't race or flip loadStatus.
+    if (isDailyFlow) {
+      return () => { cancelled = true; };
+    }
     const flowType = parseFlowType(searchParams.get('flow'));
     if (flowType === null) {
       setLoadStatus({ status: 'no-state' });
@@ -127,7 +138,15 @@ export function GamePage() {
     });
 
     return () => { cancelled = true; };
-  }, [searchParams, loadState, saveState, fetchKey]);
+  }, [searchParams, loadState, saveState, fetchKey, isDailyFlow]);
+
+  if (isDailyFlow) {
+    return (
+      <div data-testid="daily-flow">
+        <DailyFlow />
+      </div>
+    );
+  }
 
   if (loadStatus.status === 'loading') {
     return (
