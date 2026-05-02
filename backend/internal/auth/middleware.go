@@ -218,6 +218,17 @@ func RequireAuth(verifier sessionVerifier) func(http.Handler) http.Handler {
 	}
 }
 
+// OptionalAuth is the anon-or-user middleware (DP-14). Stubbed here
+// so the failing-test commit compiles; the real implementation lands
+// in the follow-up commit on this branch.
+func OptionalAuth(_ sessionVerifier) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // publicMetadataRole is the minimal view into Clerk's publicMetadata
 // JSON. Clerk returns PublicMetadata as json.RawMessage; we only care
 // about the role field in this phase.

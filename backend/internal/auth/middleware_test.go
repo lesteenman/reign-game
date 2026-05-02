@@ -650,6 +650,186 @@ func TestCachedVerifier_Verify_PassesThrough(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// OptionalAuth: anon-or-user middleware (DP-14).
+//
+// Routes like /api/daily/{date} accept Anonymous OR User auth. The
+// handler decides which one applies (signed-in user via context, or
+// anonymous via X-Device-Id). OptionalAuth's job is to populate the
+// user when a session cookie is present and valid, and otherwise pass
+// the request through untouched — never write 401, never log on the
+// silent paths (it sits in front of public traffic where missing
+// tokens are routine).
+// ---------------------------------------------------------------------------
+
+func TestOptionalAuth_NoHeader_PassesThrough(t *testing.T) {
+	// Arrange
+	next := &sentinelHandler{}
+	verifier := &fakeVerifier{
+		verifyFn: func(context.Context, string) (*clerk.SessionClaims, error) {
+			t.Fatal("OptionalAuth invoked Verify with no session cookie present")
+			return nil, nil
+		},
+	}
+	mw := OptionalAuth(verifier)(next)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/2026-05-02", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	// Act
+	mw.ServeHTTP(rec, req)
+
+	// Assert
+	if !next.called {
+		t.Fatal("next handler was not called")
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
+	}
+	if next.user != nil {
+		t.Errorf("user in context = %+v, want nil", next.user)
+	}
+}
+
+func TestOptionalAuth_MalformedHeader_PassesThrough(t *testing.T) {
+	// Arrange — request carries a non-session cookie that should be
+	// ignored; OptionalAuth must not invoke Verify because the canonical
+	// __session cookie is absent (the "malformed/missing" case for the
+	// cookie-based extraction path RequireAuth already uses).
+	next := &sentinelHandler{}
+	verifier := &fakeVerifier{
+		verifyFn: func(context.Context, string) (*clerk.SessionClaims, error) {
+			t.Fatal("OptionalAuth invoked Verify with no __session cookie")
+			return nil, nil
+		},
+	}
+	mw := OptionalAuth(verifier)(next)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/2026-05-02", http.NoBody)
+	req.AddCookie(&http.Cookie{Name: "not_session", Value: "irrelevant"})
+	rec := httptest.NewRecorder()
+
+	// Act
+	mw.ServeHTTP(rec, req)
+
+	// Assert
+	if !next.called {
+		t.Fatal("next handler was not called")
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
+	}
+	if next.user != nil {
+		t.Errorf("user in context = %+v, want nil", next.user)
+	}
+}
+
+func TestOptionalAuth_VerifierError_PassesThrough(t *testing.T) {
+	// Arrange — valid-looking cookie but verifier rejects it. The
+	// downstream handler must still run, ctx must NOT have a user, and
+	// the middleware must NOT write 401 (vs. RequireAuth which would).
+	next := &sentinelHandler{}
+	verifier := &fakeVerifier{
+		verifyFn: func(context.Context, string) (*clerk.SessionClaims, error) {
+			return nil, errors.New("signature invalid")
+		},
+	}
+	mw := OptionalAuth(verifier)(next)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/2026-05-02", http.NoBody)
+	addSessionCookie(req, "not-a-real-jwt")
+	rec := httptest.NewRecorder()
+
+	// Act
+	mw.ServeHTTP(rec, req)
+
+	// Assert
+	if !next.called {
+		t.Fatal("next handler was not called despite verifier error")
+	}
+	if rec.Code == http.StatusUnauthorized {
+		t.Fatal("OptionalAuth wrote 401 on verifier error; must pass through")
+	}
+	if rec.Code != http.StatusOK {
+		t.Errorf("status = %d, want 200", rec.Code)
+	}
+	if next.user != nil {
+		t.Errorf("user in context = %+v, want nil", next.user)
+	}
+}
+
+func TestOptionalAuth_ValidToken_PopulatesUser(t *testing.T) {
+	// Arrange
+	next := &sentinelHandler{}
+	user := userWithRole("user_xyz", "")
+	verifier := &fakeVerifier{
+		verifyFn: func(context.Context, string) (*clerk.SessionClaims, error) {
+			return claimsFor("user_xyz"), nil
+		},
+		getUserFn: func(_ context.Context, id string) (*clerk.User, error) {
+			if id != "user_xyz" {
+				t.Errorf("GetUser called with id=%q, want %q", id, "user_xyz")
+			}
+			return user, nil
+		},
+	}
+	mw := OptionalAuth(verifier)(next)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/2026-05-02", http.NoBody)
+	addSessionCookie(req, "valid-jwt")
+	rec := httptest.NewRecorder()
+
+	// Act
+	mw.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if !next.called {
+		t.Fatal("next handler was not called")
+	}
+	if next.user == nil || next.user.ID != "user_xyz" {
+		t.Errorf("user in context = %+v, want user_xyz", next.user)
+	}
+}
+
+func TestOptionalAuth_DownstreamSeesUser_AdminFlag(t *testing.T) {
+	// Arrange — verifier returns a user with publicMetadata.role: admin.
+	// OptionalAuth itself does no role check (that's RequireAdmin's
+	// job); we just confirm the *clerk.User pointer round-trips
+	// faithfully so a downstream RequireAdmin chain would see the role.
+	next := &sentinelHandler{}
+	user := userWithRole("user_admin", "admin")
+	verifier := &fakeVerifier{
+		verifyFn: func(context.Context, string) (*clerk.SessionClaims, error) {
+			return claimsFor("user_admin"), nil
+		},
+		getUserFn: func(context.Context, string) (*clerk.User, error) {
+			return user, nil
+		},
+	}
+	mw := OptionalAuth(verifier)(next)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/2026-05-02", http.NoBody)
+	addSessionCookie(req, "valid-jwt")
+	rec := httptest.NewRecorder()
+
+	// Act
+	mw.ServeHTTP(rec, req)
+
+	// Assert
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rec.Code)
+	}
+	if next.user == nil || next.user.ID != "user_admin" {
+		t.Fatalf("user in context = %+v, want user_admin", next.user)
+	}
+	if next.user != user {
+		t.Error("user pointer did not round-trip; OptionalAuth must store the verifier-returned *clerk.User unchanged")
+	}
+}
+
 // assertErrorBody checks the 401/403 JSON shape from writeUnauth /
 // writeForbidden.
 func assertErrorBody(t *testing.T, rec *httptest.ResponseRecorder, wantError, wantMsg string) {
