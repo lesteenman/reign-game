@@ -32,9 +32,9 @@ const dailyDateLayout = "2006-01-02"
 // identifier when no Clerk session cookie is present (DP-08).
 const dailyDeviceHeader = "X-Device-Id"
 
-// DailyRepo is the narrow surface the GET handler needs from the
-// repository layer. Decoupling on a small interface lets tests use a
-// hand-rolled fake without LocalStack and keeps the production
+// DailyRepo is the narrow surface the GET and POST handlers need from
+// the repository layer. Decoupling on a small interface lets tests use
+// a hand-rolled fake without LocalStack and keeps the production
 // repository (*repository.PuzzleRepository) trivially compliant.
 type DailyRepo interface {
 	GetSchedule(ctx context.Context, date string) (*repository.ScheduleRecord, error)
@@ -48,6 +48,14 @@ type DailyRepo interface {
 	// daily.SyncFinalizeForToday.
 	GetCandidate(ctx context.Context) (*repository.CandidateRecord, error)
 	FinalizeDailyTransaction(ctx context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error
+
+	// SubmitPlayTransactionally + LeaderboardRank power POST
+	// /api/daily/{date}/result (DP-12). The submit method commits the
+	// PLAY-row update, the schedule counter ADD, and (signed-in only) the
+	// leaderboard row in one TransactWriteItems; LeaderboardRank is
+	// best-effort post-commit and never fails the response.
+	SubmitPlayTransactionally(ctx context.Context, playerID, date string, submission repository.SubmitInput) error
+	LeaderboardRank(ctx context.Context, date string, elapsedMs int64, userID string) (int, error)
 }
 
 // dailyResponse is the GET 200 response shape (DP-09). ServerElapsedMs
@@ -307,4 +315,286 @@ func writeDailyError(w http.ResponseWriter, status int, message string) {
 	if err := json.NewEncoder(w).Encode(map[string]string{"error": message}); err != nil {
 		log.Printf("daily get: response write failed: %v", err)
 	}
+}
+
+// dailySubmitRequest is the POST /api/daily/{date}/result body shape
+// per DP-11. Decoded into pointers so the handler can distinguish
+// missing fields from zero values for outcome and playTimeMs.
+type dailySubmitRequest struct {
+	Outcome    *string `json:"outcome"`
+	PlayTimeMs *int64  `json:"playTimeMs"`
+	Solution   [][]int `json:"solution"`
+}
+
+// dailySubmitResponse is the POST 200 response shape. JSON keys match
+// the GET handler's serverElapsedMs casing (DP-09) so the SPA can
+// share field readers across endpoints. LeaderboardRank is pointer-typed
+// so omitempty drops it for anonymous submits and rank-fetch failures.
+type dailySubmitResponse struct {
+	ServerElapsedMs int64 `json:"serverElapsedMs"`
+	LeaderboardRank *int  `json:"leaderboardRank,omitempty"`
+}
+
+// playNotStartedMessage maps to HTTP 400 — the player must call GET
+// (which materializes the PLAY row) before POSTing a result. DP-21
+// doesn't pin a status code for this path explicitly, but 400 is the
+// right family: the request is structurally valid yet semantically
+// requires server state the caller hasn't established. Keeping it 400
+// rather than 404 avoids confusing the "no daily today" case (which
+// already 404s on GET) with the "submit before start" case.
+const playNotStartedMessage = "play not started"
+
+// DailySubmitHandler creates the POST /api/daily/{date}/result handler
+// per DP-11..DP-14. Flow:
+//
+//  1. auth + date window (chunks 1+2 helpers, unchanged)
+//  2. parse + validate body (outcome, playTimeMs, solution shape)
+//  3. GetPlay — 400 when missing, 409 when already solved
+//  4. GetSchedule + GetPuzzle to validate the submitted solution
+//     against the canonical puzzle (DP-11)
+//  5. SubmitPlayTransactionally — 409 on race-loser, 500 on other
+//     errors (DP-22 structured log)
+//  6. LeaderboardRank for signed-in players; on error log a WARN and
+//     omit the field — the row is already written
+//
+// The clock argument lets tests pin "now" so serverElapsedMs is
+// deterministic; production callers pass time.Now.
+func DailySubmitHandler(repo DailyRepo, clock func() time.Time) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		start := time.Now()
+
+		playerID, isAnonymous, ok := resolveDailyPlayer(r)
+		if !ok {
+			writeDailyError(w, http.StatusUnauthorized, "unauthenticated")
+			log.Printf("daily submit: 401 unauthenticated path=%s", r.URL.Path)
+			return
+		}
+
+		date := chi.URLParam(r, "date")
+		parsed, err := time.ParseInLocation(dailyDateLayout, date, time.UTC)
+		if err != nil {
+			writeDailyError(w, http.StatusBadRequest, "invalid date")
+			log.Printf("daily submit: 400 invalid_date date=%q player=%s", date, truncatePlayer(playerID))
+			return
+		}
+		now := clock().UTC()
+		todayUTC := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+		yesterdayUTC := todayUTC.AddDate(0, 0, -1)
+		requested := time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC)
+		if requested.Before(yesterdayUTC) || requested.After(todayUTC) {
+			writeDailyError(w, http.StatusNotFound, "out of window")
+			log.Printf("daily submit: 404 out_of_window date=%s player=%s", date, truncatePlayer(playerID))
+			return
+		}
+
+		body, validationErr := parseAndValidateSubmitBody(r)
+		if validationErr != nil {
+			writeDailyError(w, http.StatusBadRequest, validationErr.Error())
+			log.Printf("daily submit: 400 %s date=%s player=%s", validationErr.Error(), date, truncatePlayer(playerID))
+			return
+		}
+
+		ctx := r.Context()
+
+		playStart := time.Now()
+		play, err := repo.GetPlay(ctx, playerID, date)
+		playMs := time.Since(playStart).Milliseconds()
+		if err != nil {
+			writeDailyError(w, http.StatusInternalServerError, "internal error")
+			log.Printf("daily submit: 500 play_read_failed date=%s player=%s err=%v", date, truncatePlayer(playerID), err)
+			return
+		}
+		if play == nil {
+			writeDailyError(w, http.StatusBadRequest, playNotStartedMessage)
+			log.Printf("daily submit: 400 play_not_started date=%s player=%s", date, truncatePlayer(playerID))
+			return
+		}
+		if play.Outcome == repository.PlayOutcomeSolved {
+			writeDailyError(w, http.StatusConflict, "already solved")
+			log.Printf("daily submit: 409 already_solved date=%s player=%s", date, truncatePlayer(playerID))
+			return
+		}
+
+		scheduleStart := time.Now()
+		schedule, err := repo.GetSchedule(ctx, date)
+		scheduleMs := time.Since(scheduleStart).Milliseconds()
+		if err != nil {
+			writeDailyError(w, http.StatusInternalServerError, "internal error")
+			log.Printf("daily submit: 500 schedule_read_failed date=%s err=%v", date, err)
+			return
+		}
+		if schedule == nil {
+			// PLAY row exists but no schedule row — system invariant
+			// violation; we never finalize a PLAY for a date whose
+			// schedule has already aged out. 500 with a loud log so ops
+			// notices.
+			writeDailyError(w, http.StatusInternalServerError, "internal error")
+			log.Printf("daily submit: 500 schedule_missing_for_play date=%s player=%s", date, truncatePlayer(playerID))
+			return
+		}
+
+		size, mode, err := parseSourcePartition(schedule.SourcePartition)
+		if err != nil {
+			writeDailyError(w, http.StatusInternalServerError, "internal error")
+			log.Printf("daily submit: 500 source_partition_malformed date=%s sourcePartition=%q err=%v", date, schedule.SourcePartition, err)
+			return
+		}
+
+		puzzleStart := time.Now()
+		puzzle, err := repo.GetPuzzle(ctx, size, mode, schedule.PuzzleID)
+		puzzleMs := time.Since(puzzleStart).Milliseconds()
+		if err != nil {
+			writeDailyError(w, http.StatusInternalServerError, "internal error")
+			log.Printf("daily submit: 500 puzzle_read_failed date=%s puzzleId=%s err=%v", date, schedule.PuzzleID, err)
+			return
+		}
+		if puzzle == nil {
+			writeDailyError(w, http.StatusInternalServerError, "internal error")
+			log.Printf("daily submit: 500 puzzle_missing date=%s puzzleId=%s", date, schedule.PuzzleID)
+			return
+		}
+
+		if !solutionMatches(body.Solution, puzzle.Solution) {
+			writeDailyError(w, http.StatusBadRequest, "invalid solution")
+			log.Printf("daily submit: 400 invalid_solution date=%s player=%s puzzleId=%s", date, truncatePlayer(playerID), schedule.PuzzleID)
+			return
+		}
+
+		assignedAt, err := time.Parse(time.RFC3339, play.AssignedAt)
+		if err != nil {
+			writeDailyError(w, http.StatusInternalServerError, "internal error")
+			log.Printf("daily submit: 500 assignedAt_parse_failed date=%s assignedAt=%q err=%v", date, play.AssignedAt, err)
+			return
+		}
+		serverElapsedMs := now.Sub(assignedAt).Milliseconds()
+		if serverElapsedMs < 0 {
+			// Defensive: clock skew between PLAY-row writer and submit
+			// handler. Clamp to 0 rather than reject — the player is
+			// already done; refusing would be hostile UX.
+			serverElapsedMs = 0
+		}
+
+		submitInput := repository.SubmitInput{
+			PuzzleID:    schedule.PuzzleID,
+			AssignedAt:  assignedAt,
+			SubmittedAt: now,
+			ClientMs:    *body.PlayTimeMs,
+			IsAnonymous: isAnonymous,
+		}
+		if !isAnonymous {
+			submitInput.UserID = playerID
+		}
+
+		submitStart := time.Now()
+		submitErr := repo.SubmitPlayTransactionally(ctx, playerID, date, submitInput)
+		submitMs := time.Since(submitStart).Milliseconds()
+		if submitErr != nil {
+			if errors.Is(submitErr, repository.ErrPlayNotInStartedState) {
+				writeDailyError(w, http.StatusConflict, "already solved")
+				log.Printf("daily submit: 409 race_loser date=%s player=%s", date, truncatePlayer(playerID))
+				return
+			}
+			writeDailyError(w, http.StatusInternalServerError, "internal error")
+			// DP-22: structured failure log. Raw err is logged but never
+			// echoed in the response body — a DDB error message could
+			// leak internal table names / capacity hints.
+			log.Printf("daily submit: 500 transaction_failed date=%s player=%s err=%v", date, truncatePlayer(playerID), submitErr)
+			return
+		}
+
+		var rankMs int64
+		resp := dailySubmitResponse{ServerElapsedMs: serverElapsedMs}
+		if !isAnonymous {
+			rankStart := time.Now()
+			rank, rankErr := repo.LeaderboardRank(ctx, date, serverElapsedMs, playerID)
+			rankMs = time.Since(rankStart).Milliseconds()
+			if rankErr != nil {
+				log.Printf("WARN: daily submit: rank_fetch_failed date=%s player=%s err=%v", date, truncatePlayer(playerID), rankErr)
+			} else {
+				resp.LeaderboardRank = &rank
+			}
+		}
+
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(resp); err != nil {
+			log.Printf("daily submit: response write failed: %v", err)
+			return
+		}
+
+		totalMs := time.Since(start).Milliseconds()
+		log.Printf("daily submit: total_ms=%d play_ms=%d schedule_ms=%d puzzle_ms=%d submit_ms=%d rank_ms=%d path=%s player=%s",
+			totalMs, playMs, scheduleMs, puzzleMs, submitMs, rankMs, r.URL.Path, truncatePlayer(playerID))
+	})
+}
+
+// parseAndValidateSubmitBody decodes the POST body and enforces the
+// DP-11 contract. Returns a typed *dailySubmitRequest with non-nil
+// pointer fields on success, or a sentinel-shaped error whose message
+// is safe to surface in the response body (no DDB internals, no
+// stacktrace leakage).
+func parseAndValidateSubmitBody(r *http.Request) (*dailySubmitRequest, error) {
+	var body dailySubmitRequest
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&body); err != nil {
+		return nil, errors.New("invalid body")
+	}
+
+	if body.Outcome == nil || *body.Outcome != "solved" {
+		return nil, errors.New("invalid outcome")
+	}
+	if body.PlayTimeMs == nil || *body.PlayTimeMs < 0 {
+		return nil, errors.New("invalid playTimeMs")
+	}
+	if !solutionShapeValid(body.Solution) {
+		return nil, errors.New("invalid solution")
+	}
+	return &body, nil
+}
+
+// solutionShapeValid checks that solution is a non-empty rectangular
+// grid whose cells are 0 or 1. Returns false for empty grids,
+// jagged rows, or out-of-range cells. Mismatch against the puzzle's
+// expected solution is checked separately by solutionMatches once we
+// know the puzzle's actual size.
+func solutionShapeValid(solution [][]int) bool {
+	if len(solution) == 0 {
+		return false
+	}
+	width := len(solution[0])
+	if width == 0 {
+		return false
+	}
+	for _, row := range solution {
+		if len(row) != width {
+			return false
+		}
+		for _, cell := range row {
+			if cell != 0 && cell != 1 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// solutionMatches returns true iff the player's submitted grid equals
+// the puzzle's expected solution: same dimensions, and each submitted
+// 1 corresponds to expected true (0 ↔ false).
+func solutionMatches(submitted [][]int, expected [][]bool) bool {
+	if len(submitted) != len(expected) {
+		return false
+	}
+	for i, row := range submitted {
+		if len(row) != len(expected[i]) {
+			return false
+		}
+		for j, cell := range row {
+			want := expected[i][j]
+			if (cell == 1) != want {
+				return false
+			}
+		}
+	}
+	return true
 }
