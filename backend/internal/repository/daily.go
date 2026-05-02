@@ -637,6 +637,114 @@ func (r *PuzzleRepository) SubmitPlayTransactionally(ctx context.Context, player
 	return nil
 }
 
+// FinalizeMode discriminates the two T=0 finalize paths (design §4):
+// confirm consumes the singleton candidate slot; recycle reuses
+// yesterday's puzzle and skips the candidate delete entirely.
+type FinalizeMode string
+
+// FinalizeModeConfirm / FinalizeModeRecycle are the only legal values
+// for FinalizeMode. Any other value is rejected by FinalizeDailyTransaction
+// before any DDB call so a typo can't silently flow through.
+const (
+	FinalizeModeConfirm FinalizeMode = "confirm"
+	FinalizeModeRecycle FinalizeMode = "recycle"
+)
+
+// FinalizeDailyTransaction wraps the T=0 finalize legs in a single
+// TransactWriteItems per design §4 step 5. The legs are:
+//
+//  1. Put schedule row (PK=DAILY#date) with attribute_not_exists(PK) —
+//     ErrScheduleAlreadyFinalized on race-loser, callers GetSchedule
+//     and use the winner's row.
+//  2. Update PuzzleRecord at (PK=sourcePartition, SK=puzzleID) setting
+//     lastDailyDate=date (DP-17, DP-18). On the recycle path this
+//     advances yesterday's puzzle's lastDailyDate to today (Finding 6).
+//  3. Confirm-mode only: Delete DAILY-CANDIDATE row, conditional on
+//     its puzzleId still matching the value we just consumed — guards
+//     against a different candidate having been swapped in between
+//     the cron's GetCandidate read and this transaction.
+//
+// All legs commit or none do. The candidate-delete condition uses
+// puzzleId, not unconditional delete, to make a 3-process race
+// (T-6h cron, T=0 cron, sync fallback) fail closed instead of
+// silently consuming the wrong row.
+func (r *PuzzleRepository) FinalizeDailyTransaction(
+	ctx context.Context,
+	date, puzzleID, sourcePartition string,
+	mode FinalizeMode,
+) error {
+	if mode != FinalizeModeConfirm && mode != FinalizeModeRecycle {
+		return fmt.Errorf("invalid finalize mode %q", mode)
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+
+	items := []types.TransactWriteItem{
+		{
+			Put: &types.Put{
+				TableName: aws.String(r.tableName),
+				Item: map[string]types.AttributeValue{
+					"PK":              &types.AttributeValueMemberS{Value: buildDailySchedulePK(date)},
+					"SK":              &types.AttributeValueMemberS{Value: dailySingletonSK},
+					"puzzleId":        &types.AttributeValueMemberS{Value: puzzleID},
+					"assignedAt":      &types.AttributeValueMemberS{Value: now},
+					"sourcePartition": &types.AttributeValueMemberS{Value: sourcePartition},
+					"counters": &types.AttributeValueMemberM{
+						Value: map[string]types.AttributeValue{
+							"started": &types.AttributeValueMemberN{Value: "0"},
+							"solved":  &types.AttributeValueMemberN{Value: "0"},
+						},
+					},
+				},
+				ConditionExpression: aws.String("attribute_not_exists(PK)"),
+			},
+		},
+		{
+			Update: &types.Update{
+				TableName: aws.String(r.tableName),
+				Key: map[string]types.AttributeValue{
+					"PK": &types.AttributeValueMemberS{Value: sourcePartition},
+					"SK": &types.AttributeValueMemberS{Value: puzzleID},
+				},
+				UpdateExpression: aws.String("SET lastDailyDate = :date"),
+				ExpressionAttributeValues: map[string]types.AttributeValue{
+					":date": &types.AttributeValueMemberS{Value: date},
+				},
+			},
+		},
+	}
+
+	if mode == FinalizeModeConfirm {
+		items = append(items, types.TransactWriteItem{
+			Delete: &types.Delete{
+				TableName: aws.String(r.tableName),
+				Key: map[string]types.AttributeValue{
+					"PK": &types.AttributeValueMemberS{Value: dailyCandidatePK},
+					"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
+				},
+				ConditionExpression: aws.String("puzzleId = :pid"),
+				ExpressionAttributeValues: map[string]types.AttributeValue{
+					":pid": &types.AttributeValueMemberS{Value: puzzleID},
+				},
+			},
+		})
+	}
+
+	_, err := r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+		TransactItems: items,
+	})
+	if err != nil {
+		// Leg-0 conditional failure → schedule row already exists; surface
+		// the sentinel so callers (T=0 cron, sync fallback) can read the
+		// winner's row and proceed.
+		if isConditionalCheckFailureOnLeg(err, 0) {
+			return ErrScheduleAlreadyFinalized
+		}
+		return fmt.Errorf("finalizing daily transaction for %s (mode=%s): %w", date, mode, err)
+	}
+	return nil
+}
+
 // isConditionalCheckFailureOnLeg returns true when err is a
 // TransactionCanceledException whose CancellationReasons indicate the
 // leg at `legIndex` failed its ConditionExpression. DDB's Go SDK v2
