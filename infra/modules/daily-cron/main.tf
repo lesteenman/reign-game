@@ -76,7 +76,7 @@ resource "aws_lambda_function" "daily_cron" {
   runtime       = "provided.al2023"
   filename      = var.lambda_zip_path
 
-  source_code_hash = fileexists(var.lambda_zip_path) ? filebase64sha256(var.lambda_zip_path) : null
+  source_code_hash = (var.lambda_zip_path != "" && fileexists(var.lambda_zip_path)) ? filebase64sha256(var.lambda_zip_path) : null
 
   timeout     = 60
   memory_size = 256

@@ -58,7 +58,7 @@ type DailyRepo interface {
 	// PLAY-row update, the schedule counter ADD, and (signed-in only) the
 	// leaderboard row in one TransactWriteItems; LeaderboardRank is
 	// best-effort post-commit and never fails the response.
-	SubmitPlayTransactionally(ctx context.Context, playerID, date string, submission repository.SubmitInput) error
+	SubmitPlayTransactionally(ctx context.Context, playerID, date string, submission *repository.SubmitInput) error
 	LeaderboardRank(ctx context.Context, date string, elapsedMs int64, userID string) (int, error)
 }
 
@@ -313,12 +313,12 @@ func materializePlayRow(
 // Returns an error on shapes that can't be parsed; callers map to 500
 // because the value is server-controlled (written by the cron) and a
 // malformed value is a system-invariant violation, not user input.
-func parseSourcePartition(sp string) (int, string, error) {
+func parseSourcePartition(sp string) (size int, mode string, err error) {
 	parts := strings.SplitN(sp, "#", 2)
 	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
 		return 0, "", errors.New("sourcePartition must be {size}#{mode}")
 	}
-	size, err := strconv.Atoi(parts[0])
+	size, err = strconv.Atoi(parts[0])
 	if err != nil {
 		return 0, "", err
 	}
@@ -340,7 +340,7 @@ func truncatePlayer(id string) string {
 // auth.RequireAuth) wins over the X-Device-Id header so users who
 // happen to send both end up with their stable user ID. Returns
 // ok=false when neither identifier is present — the caller emits 401.
-func resolveDailyPlayer(r *http.Request) (string, bool, bool) {
+func resolveDailyPlayer(r *http.Request) (playerID string, isAnonymous bool, ok bool) {
 	if u, present := auth.UserFromContextOK(r.Context()); present && u != nil && u.ID != "" {
 		return u.ID, false, true
 	}
@@ -533,7 +533,7 @@ func DailySubmitHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 		}
 
 		submitStart := time.Now()
-		submitErr := repo.SubmitPlayTransactionally(ctx, playerID, date, submitInput)
+		submitErr := repo.SubmitPlayTransactionally(ctx, playerID, date, &submitInput)
 		submitMs := time.Since(submitStart).Milliseconds()
 		if submitErr != nil {
 			if errors.Is(submitErr, repository.ErrPlayNotInStartedState) {

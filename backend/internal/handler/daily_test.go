@@ -209,12 +209,14 @@ func (f *fakeDailyRepo) PutCandidateIfAbsent(_ context.Context, _, _ string) err
 
 // submitErr is returned by SubmitPlayTransactionally. Nil means success.
 // repository.ErrPlayNotInStartedState exercises the race-loser 409 path.
-func (f *fakeDailyRepo) SubmitPlayTransactionally(_ context.Context, playerID, date string, submission repository.SubmitInput) error {
+func (f *fakeDailyRepo) SubmitPlayTransactionally(_ context.Context, playerID, date string, submission *repository.SubmitInput) error {
 	f.mu.Lock()
 	f.submitCalls++
 	f.submitCaptured.playerID = playerID
 	f.submitCaptured.date = date
-	f.submitCaptured.input = submission
+	if submission != nil {
+		f.submitCaptured.input = *submission
+	}
 	err := f.submitErr
 	f.mu.Unlock()
 	return err
@@ -253,13 +255,6 @@ func mountDailyWithRepo(repo handler.DailyRepo) *chi.Mux {
 func fixedClock() func() time.Time {
 	t := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 	return func() time.Time { return t }
-}
-
-// mountDaily mounts the daily GET handler at /api/daily/{date} with a
-// nil repo. Used by tests that fail before any repo call (auth, date
-// validation) — passing a real fake would just be noise.
-func mountDaily() *chi.Mux {
-	return mountDailyWithRepo(nil)
 }
 
 // withUserID returns a request whose context carries a Clerk user
@@ -331,7 +326,7 @@ func TestDailyGetHandler_AuthMatrix(t *testing.T) {
 				puzzleByID:     map[string]*repository.PuzzleRecord{puzzleID: puzzleFixture(puzzleID)},
 			}
 			router := mountDailyWithRepo(repo)
-			req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, http.NoBody)
 			if tc.userID != "" {
 				req = withUserID(req, tc.userID)
 			}
@@ -447,7 +442,7 @@ func TestDailyGetHandler_SyncFallback_Engaged_ConfirmPath(t *testing.T) {
 	}
 	wrapper := &finalizeWrapperRepo{fakeDailyRepo: repo, onFinalize: finalizeOnce}
 	router := mountDailyWithRepo(wrapper)
-	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+today, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+today, http.NoBody)
 	req.Header.Set("X-Device-Id", "dev_abc")
 	rec := httptest.NewRecorder()
 
@@ -515,7 +510,7 @@ func TestDailyGetHandler_SyncFallback_Engaged_RecyclePath(t *testing.T) {
 		repo.scheduleByDate[today] = finalizedToday
 	}}
 	router := mountDailyWithRepo(wrapper)
-	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+today, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+today, http.NoBody)
 	req.Header.Set("X-Device-Id", "dev_abc")
 	rec := httptest.NewRecorder()
 
@@ -543,7 +538,7 @@ func TestDailyGetHandler_SyncFallback_PoolExhausted_500(t *testing.T) {
 		candidate:      nil,
 	}
 	router := mountDailyWithRepo(repo)
-	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+today, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+today, http.NoBody)
 	req.Header.Set("X-Device-Id", "dev_abc")
 	rec := httptest.NewRecorder()
 
@@ -570,7 +565,7 @@ func TestDailyGetHandler_SyncFallback_NotEngaged_Yesterday_404(t *testing.T) {
 		scheduleByDate: map[string]*repository.ScheduleRecord{},
 	}
 	router := mountDailyWithRepo(repo)
-	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+yesterday, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+yesterday, http.NoBody)
 	req.Header.Set("X-Device-Id", "dev_abc")
 	rec := httptest.NewRecorder()
 
@@ -633,7 +628,7 @@ func TestDailyGetHandler_SyncFallback_RaceLoser(t *testing.T) {
 		repo.scheduleByDate[today] = winnerRow
 	}}
 	router := mountDailyWithRepo(wrapper)
-	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+today, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+today, http.NoBody)
 	req.Header.Set("X-Device-Id", "dev_abc")
 	rec := httptest.NewRecorder()
 
@@ -695,7 +690,7 @@ func TestDailyGetHandler_FirstGet_CreatesPlayRow(t *testing.T) {
 		// GetPlay needed.
 	}
 	router := mountDailyWithRepo(repo)
-	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, http.NoBody)
 	req.Header.Set("X-Device-Id", "dev_abc")
 	rec := httptest.NewRecorder()
 
@@ -762,7 +757,7 @@ func TestDailyGetHandler_FirstGet_RaceLoser(t *testing.T) {
 		putPlayErr:     repository.ErrPlayAlreadyExists,
 	}
 	router := mountDailyWithRepo(repo)
-	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, http.NoBody)
 	req.Header.Set("X-Device-Id", "dev_abc")
 	rec := httptest.NewRecorder()
 
@@ -811,7 +806,7 @@ func TestDailyGetHandler_RefreshGet_PreservesAssignedAt(t *testing.T) {
 		playSequence:   []*repository.PlayRecord{existing},
 	}
 	router := mountDailyWithRepo(repo)
-	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, http.NoBody)
 	req.Header.Set("X-Device-Id", "dev_abc")
 	rec := httptest.NewRecorder()
 
@@ -856,7 +851,7 @@ func TestDailyGetHandler_AlreadySolved_IncludesElapsedAndSubmitted(t *testing.T)
 		playSequence:   []*repository.PlayRecord{solvedRow},
 	}
 	router := mountDailyWithRepo(repo)
-	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, http.NoBody)
 	req.Header.Set("X-Device-Id", "dev_abc")
 	rec := httptest.NewRecorder()
 
@@ -891,7 +886,7 @@ func TestDailyGetHandler_PuzzleMissing_500(t *testing.T) {
 		puzzleByID:     map[string]*repository.PuzzleRecord{}, // empty → GetPuzzle returns (nil, nil)
 	}
 	router := mountDailyWithRepo(repo)
-	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, http.NoBody)
 	req.Header.Set("X-Device-Id", "dev_abc")
 	rec := httptest.NewRecorder()
 
@@ -913,7 +908,7 @@ func TestDailyGetHandler_SourcePartitionMalformed_500(t *testing.T) {
 		scheduleByDate: map[string]*repository.ScheduleRecord{date: bad},
 	}
 	router := mountDailyWithRepo(repo)
-	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, nil)
+	req := httptest.NewRequest(http.MethodGet, "/api/daily/"+date, http.NoBody)
 	req.Header.Set("X-Device-Id", "dev_abc")
 	rec := httptest.NewRecorder()
 
@@ -962,7 +957,7 @@ func TestDailyGetHandler_DateMatrix(t *testing.T) {
 				puzzleByID: map[string]*repository.PuzzleRecord{puzzleID: puzzleFixture(puzzleID)},
 			}
 			router := mountDailyWithRepo(repo)
-			req := httptest.NewRequest(http.MethodGet, "/api/daily/"+tc.date, nil)
+			req := httptest.NewRequest(http.MethodGet, "/api/daily/"+tc.date, http.NoBody)
 			req.Header.Set("X-Device-Id", "dev_abc")
 			rec := httptest.NewRecorder()
 

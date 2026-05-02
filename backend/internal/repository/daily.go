@@ -550,7 +550,7 @@ func (r *PuzzleRepository) PutPlayStartedIfAbsent(ctx context.Context, playerID,
 //
 // All legs commit or none do. DDB's transaction guarantees rule out
 // partial writes (DP-22).
-func (r *PuzzleRepository) SubmitPlayTransactionally(ctx context.Context, playerID, date string, submission SubmitInput) error {
+func (r *PuzzleRepository) SubmitPlayTransactionally(ctx context.Context, playerID, date string, submission *SubmitInput) error {
 	playOriginDate := submission.AssignedAt.UTC().Format("2006-01-02")
 	submittedAt := submission.SubmittedAt.UTC().Format(time.RFC3339)
 	elapsedMs := submission.SubmittedAt.Sub(submission.AssignedAt).Milliseconds()

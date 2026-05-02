@@ -1315,7 +1315,7 @@ func TestSubmitPlayTransactionally(t *testing.T) {
 			repo := NewPuzzleRepository(mock, "puzzle-pool")
 
 			// Act
-			err := repo.SubmitPlayTransactionally(context.Background(), tt.playerID, tt.date, tt.submission)
+			err := repo.SubmitPlayTransactionally(context.Background(), tt.playerID, tt.date, &tt.submission)
 
 			// Assert
 			if calls != tt.wantSDKCalls {
