@@ -14,6 +14,7 @@ backend/bin/
 backend/cmd/*/main
 backend/api
 backend/bootstrap
+backend/daily-cron
 backend/lambda.zip
 *.exe
 *.exe~
