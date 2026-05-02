@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -123,12 +124,12 @@ func DailyGetHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 
 		ctx := r.Context()
 
-		scheduleStart := time.Now()
-		schedule, err := repo.GetSchedule(ctx, date)
-		scheduleMs := time.Since(scheduleStart).Milliseconds()
-		if err != nil {
+		readStart := time.Now()
+		schedule, existingPlay, sErr, pErr := fetchScheduleAndPlay(ctx, repo, date, playerID)
+		readMs := time.Since(readStart).Milliseconds()
+		if sErr != nil {
 			writeDailyError(w, http.StatusInternalServerError, "internal error")
-			log.Printf("daily get: 500 schedule_read_failed date=%s err=%v", date, err)
+			log.Printf("daily get: 500 schedule_read_failed date=%s err=%v", date, sErr)
 			return
 		}
 
@@ -160,6 +161,12 @@ func DailyGetHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 			schedule = finalized
 		}
 
+		if pErr != nil {
+			writeDailyError(w, http.StatusInternalServerError, "internal error")
+			log.Printf("daily get: 500 play_read_failed date=%s player=%s err=%v", date, truncatePlayer(playerID), pErr)
+			return
+		}
+
 		size, mode, err := parseSourcePartition(schedule.SourcePartition)
 		if err != nil {
 			writeDailyError(w, http.StatusInternalServerError, "internal error")
@@ -184,7 +191,7 @@ func DailyGetHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 			return
 		}
 
-		play, playMs, err := materializePlayRow(ctx, repo, playerID, date, schedule.PuzzleID, clock)
+		play, playMs, err := materializePlayRow(ctx, repo, existingPlay, playerID, date, schedule.PuzzleID, clock)
 		if err != nil {
 			writeDailyError(w, http.StatusInternalServerError, "internal error")
 			log.Printf("daily get: 500 play_materialize_failed date=%s player=%s err=%v", date, truncatePlayer(playerID), err)
@@ -212,33 +219,66 @@ func DailyGetHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 		}
 
 		totalMs := time.Since(start).Milliseconds()
-		log.Printf("daily get: total_ms=%d schedule_ms=%d sync_ms=%d puzzle_ms=%d play_ms=%d path=%s player=%s",
-			totalMs, scheduleMs, syncMs, puzzleMs, playMs, r.URL.Path, truncatePlayer(playerID))
+		log.Printf("daily get: total_ms=%d read_ms=%d sync_ms=%d puzzle_ms=%d play_ms=%d path=%s player=%s",
+			totalMs, readMs, syncMs, puzzleMs, playMs, r.URL.Path, truncatePlayer(playerID))
 	})
+}
+
+// fetchScheduleAndPlay runs GetSchedule and GetPlay concurrently. They
+// have no dependency — both are keyed off (date, playerID) alone — so
+// fanning them out saves one DDB RTT per request on the daily hot path
+// (R2). Returns (schedule, play, scheduleErr, playErr) so callers can
+// surface different status codes for each path. Both errors may be set
+// if both calls failed; callers are expected to handle scheduleErr
+// first because the schedule drives sync-fallback and 404 routing,
+// which the play read can't supersede.
+func fetchScheduleAndPlay(
+	ctx context.Context,
+	repo DailyRepo,
+	date, playerID string,
+) (*repository.ScheduleRecord, *repository.PlayRecord, error, error) {
+	var (
+		schedule *repository.ScheduleRecord
+		play     *repository.PlayRecord
+		sErr     error
+		pErr     error
+		wg       sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		schedule, sErr = repo.GetSchedule(ctx, date)
+	}()
+	go func() {
+		defer wg.Done()
+		play, pErr = repo.GetPlay(ctx, playerID, date)
+	}()
+	wg.Wait()
+	return schedule, play, sErr, pErr
 }
 
 // materializePlayRow returns the PLAY row for (playerID, date),
 // creating it on first GET. On the race-loser branch it re-reads the
 // row so the caller surfaces the winner's assignedAt — DP-19's
 // "assignedAt is set once, never overwritten" invariant lives here.
-// playMs is the wall-clock cost of every PLAY-related DDB call so the
-// per-step timing log can be a single bucket.
+// existingPlay is the result of an upstream GetPlay (typically from
+// fetchScheduleAndPlay's parallel fan-out); when non-nil the function
+// short-circuits and returns it directly, avoiding a second DDB read.
+// When nil, the started-row creation + race-loser re-read path runs as
+// before. playMs is the wall-clock cost of any PLAY-related DDB calls
+// this function issues itself (zero on the cache-hit path).
 func materializePlayRow(
 	ctx context.Context,
 	repo DailyRepo,
+	existingPlay *repository.PlayRecord,
 	playerID, date, puzzleID string,
 	clock func() time.Time,
 ) (*repository.PlayRecord, int64, error) {
+	if existingPlay != nil {
+		return existingPlay, 0, nil
+	}
+
 	playStart := time.Now()
-
-	existing, err := repo.GetPlay(ctx, playerID, date)
-	if err != nil {
-		return nil, time.Since(playStart).Milliseconds(), err
-	}
-	if existing != nil {
-		return existing, time.Since(playStart).Milliseconds(), nil
-	}
-
 	now := clock().UTC()
 	putErr := repo.PutPlayStartedIfAbsent(ctx, playerID, date, puzzleID, now)
 	if putErr == nil {
@@ -400,12 +440,12 @@ func DailySubmitHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 
 		ctx := r.Context()
 
-		playStart := time.Now()
-		play, err := repo.GetPlay(ctx, playerID, date)
-		playMs := time.Since(playStart).Milliseconds()
-		if err != nil {
+		readStart := time.Now()
+		schedule, play, sErr, pErr := fetchScheduleAndPlay(ctx, repo, date, playerID)
+		readMs := time.Since(readStart).Milliseconds()
+		if pErr != nil {
 			writeDailyError(w, http.StatusInternalServerError, "internal error")
-			log.Printf("daily submit: 500 play_read_failed date=%s player=%s err=%v", date, truncatePlayer(playerID), err)
+			log.Printf("daily submit: 500 play_read_failed date=%s player=%s err=%v", date, truncatePlayer(playerID), pErr)
 			return
 		}
 		if play == nil {
@@ -418,13 +458,9 @@ func DailySubmitHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 			log.Printf("daily submit: 409 already_solved date=%s player=%s", date, truncatePlayer(playerID))
 			return
 		}
-
-		scheduleStart := time.Now()
-		schedule, err := repo.GetSchedule(ctx, date)
-		scheduleMs := time.Since(scheduleStart).Milliseconds()
-		if err != nil {
+		if sErr != nil {
 			writeDailyError(w, http.StatusInternalServerError, "internal error")
-			log.Printf("daily submit: 500 schedule_read_failed date=%s err=%v", date, err)
+			log.Printf("daily submit: 500 schedule_read_failed date=%s err=%v", date, sErr)
 			return
 		}
 		if schedule == nil {
@@ -533,8 +569,8 @@ func DailySubmitHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 		}
 
 		totalMs := time.Since(start).Milliseconds()
-		log.Printf("daily submit: total_ms=%d play_ms=%d schedule_ms=%d puzzle_ms=%d submit_ms=%d rank_ms=%d path=%s player=%s",
-			totalMs, playMs, scheduleMs, puzzleMs, submitMs, rankMs, r.URL.Path, truncatePlayer(playerID))
+		log.Printf("daily submit: total_ms=%d read_ms=%d puzzle_ms=%d submit_ms=%d rank_ms=%d path=%s player=%s",
+			totalMs, readMs, puzzleMs, submitMs, rankMs, r.URL.Path, truncatePlayer(playerID))
 	})
 }
 

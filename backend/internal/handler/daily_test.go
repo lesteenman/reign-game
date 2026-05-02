@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -22,6 +23,15 @@ import (
 // downstream call; counters expose call counts so race / refresh
 // behavior can be asserted without time-of-day flakiness.
 type fakeDailyRepo struct {
+	// mu guards every counter / capture field below. The R2 fan-out
+	// (perf: parallelize GetSchedule+GetPlay in daily handlers) calls
+	// GetSchedule and GetPlay from two goroutines, so without this lock
+	// `go test -race` flags concurrent writes to getScheduleCalls /
+	// getPlayCalls. Locking everything keeps the fake unconditionally
+	// thread-safe regardless of which methods a future handler decides
+	// to fan out.
+	mu sync.Mutex
+
 	scheduleByDate map[string]*repository.ScheduleRecord
 	scheduleErr    error
 
@@ -109,57 +119,79 @@ type fakeDailyRepo struct {
 }
 
 func (f *fakeDailyRepo) GetSchedule(_ context.Context, date string) (*repository.ScheduleRecord, error) {
+	f.mu.Lock()
 	f.getScheduleCalls++
-	if f.scheduleErr != nil {
-		return nil, f.scheduleErr
+	err := f.scheduleErr
+	rec := f.scheduleByDate[date]
+	f.mu.Unlock()
+	if err != nil {
+		return nil, err
 	}
-	return f.scheduleByDate[date], nil
+	return rec, nil
 }
 
 func (f *fakeDailyRepo) GetPuzzle(_ context.Context, _ int, _, puzzleID string) (*repository.PuzzleRecord, error) {
+	f.mu.Lock()
 	f.getPuzzleCalls++
-	if f.puzzleErr != nil {
-		return nil, f.puzzleErr
+	err := f.puzzleErr
+	rec := f.puzzleByID[puzzleID]
+	f.mu.Unlock()
+	if err != nil {
+		return nil, err
 	}
-	return f.puzzleByID[puzzleID], nil
+	return rec, nil
 }
 
 func (f *fakeDailyRepo) GetPlay(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
+	f.mu.Lock()
 	idx := f.getPlayCalls
 	f.getPlayCalls++
-	if f.playSequenceErr != nil {
-		return nil, f.playSequenceErr
+	err := f.playSequenceErr
+	var rec *repository.PlayRecord
+	if idx < len(f.playSequence) {
+		rec = f.playSequence[idx]
 	}
-	if idx >= len(f.playSequence) {
-		return nil, nil
+	f.mu.Unlock()
+	if err != nil {
+		return nil, err
 	}
-	return f.playSequence[idx], nil
+	return rec, nil
 }
 
 func (f *fakeDailyRepo) PutPlayStartedIfAbsent(_ context.Context, playerID, date, puzzleID string, assignedAt time.Time) error {
+	f.mu.Lock()
 	f.putPlayCalls++
 	f.putPlayCaptured.playerID = playerID
 	f.putPlayCaptured.date = date
 	f.putPlayCaptured.puzzleID = puzzleID
 	f.putPlayCaptured.assignedAt = assignedAt
-	return f.putPlayErr
+	err := f.putPlayErr
+	f.mu.Unlock()
+	return err
 }
 
 func (f *fakeDailyRepo) GetCandidate(_ context.Context) (*repository.CandidateRecord, error) {
+	f.mu.Lock()
 	f.getCandidateCalls++
-	if f.candidateErr != nil {
-		return nil, f.candidateErr
+	err := f.candidateErr
+	rec := f.candidate
+	f.mu.Unlock()
+	if err != nil {
+		return nil, err
 	}
-	return f.candidate, nil
+	return rec, nil
 }
 
 func (f *fakeDailyRepo) FinalizeDailyTransaction(_ context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error {
+	f.mu.Lock()
 	f.finalizeCalls++
 	f.finalizeCaptured.date = date
 	f.finalizeCaptured.puzzleID = puzzleID
 	f.finalizeCaptured.sourcePartition = sourcePartition
 	f.finalizeCaptured.mode = mode
-	return f.finalizeErr
+	err := f.finalizeErr
+	f.mu.Unlock()
+	return err
 }
 
 // ListApprovedPool + PutCandidateIfAbsent are stubs to satisfy the
@@ -178,25 +210,32 @@ func (f *fakeDailyRepo) PutCandidateIfAbsent(_ context.Context, _, _ string) err
 // submitErr is returned by SubmitPlayTransactionally. Nil means success.
 // repository.ErrPlayNotInStartedState exercises the race-loser 409 path.
 func (f *fakeDailyRepo) SubmitPlayTransactionally(_ context.Context, playerID, date string, submission repository.SubmitInput) error {
+	f.mu.Lock()
 	f.submitCalls++
 	f.submitCaptured.playerID = playerID
 	f.submitCaptured.date = date
 	f.submitCaptured.input = submission
-	return f.submitErr
+	err := f.submitErr
+	f.mu.Unlock()
+	return err
 }
 
 // LeaderboardRank returns rankResult, rankErr. Default zero values mean
 // rank=0, err=nil — fine for anonymous tests where the handler MUST NOT
 // call this method anyway.
 func (f *fakeDailyRepo) LeaderboardRank(_ context.Context, date string, elapsedMs int64, userID string) (int, error) {
+	f.mu.Lock()
 	f.rankCalls++
 	f.rankCaptured.date = date
 	f.rankCaptured.elapsedMs = elapsedMs
 	f.rankCaptured.userID = userID
-	if f.rankErr != nil {
-		return 0, f.rankErr
+	rank := f.rankResult
+	err := f.rankErr
+	f.mu.Unlock()
+	if err != nil {
+		return 0, err
 	}
-	return f.rankResult, nil
+	return rank, nil
 }
 
 // mountDailyWithRepo mounts the daily GET handler at /api/daily/{date}
