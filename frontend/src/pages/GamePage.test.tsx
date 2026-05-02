@@ -56,6 +56,19 @@ vi.mock('../services/verdictService', () => ({
   submitVerdict: (...args: unknown[]) => mockSubmitVerdict(...args),
 }));
 
+// R-8-02 chunk 3: GamePage delegates to <DailyFlow /> for `flow=daily`.
+// Stub getDaily() so the delegated component renders without hitting
+// the network — the delegation test only asserts the wrapper is mounted.
+vi.mock('../services/dailyService', async () => {
+  const actual = await vi.importActual<typeof import('../services/dailyService')>(
+    '../services/dailyService',
+  );
+  return {
+    ...actual,
+    getDaily: vi.fn().mockReturnValue(new Promise(() => {})),
+  };
+});
+
 // Clerk hook mock — controls the role-gated UI (verdict surface, Skip
 // button) under three states: signedOut, role=user, role=admin.
 type UseUserReturn = {
@@ -832,3 +845,16 @@ describe('GamePage — Flow Slot URL contract (R-7-03)', () => {
   });
 });
 
+describe('GamePage daily delegation (R-8-02 chunk 3)', () => {
+  it('delegates to DailyFlow when flow=daily search param is set', async () => {
+    // Arrange + Act
+    renderGamePage('/play?flow=daily');
+
+    // Assert — DailyFlow's wrapper is mounted; the existing pool/
+    // curation fetcher must not have been invoked.
+    await waitFor(() => {
+      expect(screen.getByTestId('daily-flow')).toBeInTheDocument();
+    });
+    expect(fetchCallCount).toBe(0);
+  });
+});
