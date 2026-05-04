@@ -5,7 +5,7 @@
 | ID | Slice | Layer | Status |
 |---|---|---|---|
 | R-8-01 | Backend daily resolution + cron + submission | 1 | [x] |
-| R-8-02 | Frontend daily flow UX | 2 | [ ] |
+| R-8-02 | Frontend daily flow UX | 2 | [x] |
 
 ## Slice dependency graph
 
@@ -73,37 +73,37 @@ R-8-02 depends on R-8-01's API contract being live. Implementation can overlap i
 ### R-8-02: Frontend daily flow UX
 
 **Routing (`frontend/src/App.tsx` + `frontend/src/pages/`):**
-- [ ] New `DailyPage.tsx` mounted at `/play?flow=daily` — wraps the existing GamePage and injects daily-specific service + storage adapters
-- [ ] LandingPage's `tile-daily` becomes enabled with `onClick → navigate('/play?flow=daily')`; copy update for the tile
+- [x] New `DailyFlow.tsx` mounted at `/play?flow=daily` — wraps the existing GamePage and injects daily-specific service + storage adapters
+- [x] LandingPage's `tile-daily` becomes enabled with `onClick → navigate('/play?flow=daily')`; copy update for the tile
 
 **Service (`frontend/src/services/`):**
-- [ ] New `dailyService.ts`: `getDaily(date?)` (defaults to today UTC) and `submitDailyResult({ outcome, playTimeMs, solution })`
-- [ ] Reads/writes `X-Device-Id` header for anonymous identity (Finding 5 / design §5 anonymous identity contract)
-- [ ] Type definitions imported from a shared location (Lesson 16 — DTOs live in service module, not in components)
-- [ ] Vitest unit tests with explicit Arrange/Act/Assert sections per CLAUDE.md frontend conventions
+- [x] New `dailyService.ts`: `getDaily(date?)` (defaults to today UTC) and `submitDailyResult({ outcome, playTimeMs, solution })`
+- [x] Reads/writes `X-Device-Id` header for anonymous identity (Finding 5 / design §5 anonymous identity contract)
+- [x] Type definitions imported from a shared location (Lesson 16 — DTOs live in service module, not in components)
+- [x] Vitest unit tests with explicit Arrange/Act/Assert sections per CLAUDE.md frontend conventions
 
 **Storage (`frontend/src/storage/`):**
-- [ ] Reuse the per-flow IndexedDB pattern from R-7-03; key with `flowType: 'daily'`, `flowId: 'YYYY-MM-DD'`
-- [ ] Storage shape definitions live in `storage/`, not in DailyPage or hooks (Lesson 16)
-- [ ] No new schema migration needed if R-7-03's per-flow store already accepts arbitrary `flowType`; otherwise extend the type union
+- [x] Reuse the per-flow IndexedDB pattern from R-7-03; key with `flowType: 'daily'`, `flowId: 'YYYY-MM-DD'`
+- [x] Storage shape definitions live in `storage/`, not in DailyPage or hooks (Lesson 16)
+- [x] No new schema migration needed if R-7-03's per-flow store already accepts arbitrary `flowType`; otherwise extend the type union (type union already accepts `'daily'` from R-7-03; `GameState` extended with optional `serverElapsedMs` / `submittedAt` / `leaderboardRank`)
 
-**UX states (`frontend/src/pages/DailyPage.tsx`):**
-- [ ] **Initial load**: fetch today's daily via `getDaily()`, show puzzle on success
-- [ ] **Mid-play**: standard GamePage interactions; persist progress under daily storage key
-- [ ] **Solved (this session)**: post-completion screen with `serverElapsedMs` from server response, "Done for today" message, countdown to next UTC midnight
-- [ ] **Already-solved (prior session)**: on landing, read PLAY storage; if solved, short-circuit to "Done for today" without re-fetching
-- [ ] **Recycle day callout**: post-completion copy must explicitly mention recycle days when applicable (design §7 residual risk — recycle UX surprise)
-- [ ] **Error states**: 404 (date out of window), network failure, invalid solution → user-facing error with retry affordance
+**UX states (`frontend/src/pages/DailyFlow.tsx`):**
+- [x] **Initial load**: fetch today's daily via `getDaily()`, show puzzle on success
+- [x] **Mid-play**: standard GamePage interactions; persist progress under daily storage key
+- [x] **Solved (this session)**: post-completion screen with `serverElapsedMs` from server response, "Done for today" message, countdown to next UTC midnight
+- [x] **Already-solved (prior session)**: on landing, read PLAY storage; if solved, short-circuit to "Done for today" without re-fetching
+- [ ] **Recycle day callout**: post-completion copy must explicitly mention recycle days when applicable (design §7 residual risk — recycle UX surprise) (deferred — backend response lacks isRecycle metadata; TODO in PostCompletionScreen.tsx)
+- [x] **Error states**: 404 (date out of window), network failure, invalid solution → user-facing error with retry affordance
 
 **Tests:**
-- [ ] Vitest unit tests on `dailyService.ts` (mocked fetch) and on DailyPage state machine
-- [ ] Playwright e2e: `/play?flow=daily` happy path against `task dev:up` — load, play, submit, see "Done for today"
-- [ ] Playwright e2e: already-solved short-circuit on second visit
-- [ ] Per CLAUDE.md lesson 3, write the Playwright e2e BEFORE Vitest unit tests for any touch/pointer interaction added in this slice
+- [x] Vitest unit tests on `dailyService.ts` (mocked fetch) and on DailyPage state machine
+- [x] Playwright e2e: `/play?flow=daily` happy path against `task dev:up` — load, play, submit, see "Done for today"
+- [x] Playwright e2e: already-solved short-circuit on second visit
+- [x] Per CLAUDE.md lesson 3, write the Playwright e2e BEFORE Vitest unit tests for any touch/pointer interaction added in this slice
 
 **OpenSpec + sweep:**
-- [ ] Update `PROJECT_STRUCTURE.md` if new component / service / storage files are added under previously-undocumented trees
-- [ ] Flip the R-8-02 row to `[x]` in this `tasks.md` as part of the slice's PR (Lesson 17)
+- [x] Update `PROJECT_STRUCTURE.md` if new component / service / storage files are added under previously-undocumented trees
+- [x] Flip the R-8-02 row to `[x]` in this `tasks.md` as part of the slice's PR (Lesson 17)
 
 ## Gate criteria
 

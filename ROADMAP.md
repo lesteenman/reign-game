@@ -127,7 +127,7 @@ Goal: Capture admin-only puzzle verdicts (up / down) so a curated corpus can gro
 Goal: Ship the Daily Puzzle flow — one canonical 9×9 Standard puzzle per UTC day for everyone, drawn from the Phase 7 verdict-approved pool. Stateless for anonymous players (deviceId-keyed), leaderboard row only for signed-in users. T-6h candidate cron + T=0 finalize cron + sync-fallback safety net so `GET /api/daily/{today}` never 404s. Design artifacts in `openspec/changes/phase-8-daily-puzzle/` until archived.
 
 - [x] **R-8-01** — Backend daily resolution + cron + submission (integration tests deferred — comprehensive unit coverage, R-8-02 Playwright will exercise end-to-end)
-- [ ] **R-8-02** — Frontend daily flow UX
+- [x] **R-8-02** — Frontend daily flow UX (no recycle copy yet — backend response shape lacks isRecycle metadata; tracked as TODO in PostCompletionScreen.tsx)
 
 ## Backlog
 

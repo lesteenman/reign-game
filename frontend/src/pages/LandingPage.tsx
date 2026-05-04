@@ -5,20 +5,17 @@ import { PageShell } from '../components/common/PageShell';
 import { getClerkUserRole } from '../components/auth/role';
 
 /**
- * Landing page (Phase 7 redesign — R-7-02).
+ * Landing page (Phase 7 redesign — R-7-02; Daily activated R-8-02).
  *
  * Three top-level tiles for the project's eventual feature set:
- * Daily, Packs, and (admin-only) Curation. Daily and Packs are
- * disabled placeholders this phase — Daily is a future feature
- * (date-keyed schedule + leaderboard); Packs is a future feature
- * (curated bundles built from verdict-up puzzles in the corpus).
+ * Daily, Packs, and (admin-only) Curation. Daily is live as of
+ * R-8-02 (DP-23) and navigates to `/play?flow=daily` for both
+ * Anonymous and User identities. Packs remains a disabled placeholder
+ * — a future feature (curated bundles built from verdict-up puzzles
+ * in the corpus).
  *
  * Per the FB-01 / FB-10 visibility model, the Curation tile is
  * rendered only when `getClerkUserRole(user.publicMetadata) === 'admin'`.
- * Anonymous + User-role players see only the two disabled tiles —
- * no playable flow this phase, by design (the user explicitly chose
- * "admin-only Curation, Daily and Packs are coming soon" during the
- * Phase 7 design grill).
  */
 
 const containerStyle: CSSProperties = {
@@ -101,9 +98,10 @@ export function LandingPage() {
       <div style={containerStyle} data-testid="landing-tiles">
         <LandingTile
           testId="tile-daily"
-          title="Daily Puzzle"
-          subtitle="Coming soon"
-          enabled={false}
+          title="Today's puzzle"
+          subtitle="One 9×9 puzzle a day. UTC midnight resets."
+          enabled
+          onClick={() => navigate('/play?flow=daily')}
         />
         <LandingTile
           testId="tile-packs"

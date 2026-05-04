@@ -149,11 +149,15 @@ frontend/
 │   │   ├── AdminLandingPage.tsx # Forbidden state for signed-in non-admin users on /admin (R-08B)
 │   │   ├── AdminPage.tsx        # Pool management UI (admin-only behind ProtectedAdminRoute)
 │   │   ├── CurationPage.tsx     # Admin curation picker — pool buttons + Settings link to /admin (Phase 7, R-7-02)
+│   │   ├── DailyFlow.tsx        # Daily Puzzle flow at /play?flow=daily — fetch + state machine + short-circuit (Phase 8, R-8-02)
+│   │   ├── DailyGameBoard.tsx   # GameBoard wrapper for the daily flow (Phase 8, R-8-02)
 │   │   ├── GamePage.tsx         # Active-puzzle view (admin: verdict surface in completion overlay + Skip button)
-│   │   └── LandingPage.tsx      # Three-tile landing: Daily / Packs / Curation (Phase 7, R-7-02)
+│   │   ├── LandingPage.tsx      # Three-tile landing: Daily / Packs / Curation (Phase 7, R-7-02)
+│   │   └── PostCompletionScreen.tsx # Daily-specific solved-state UI: solve time + leaderboard rank + UTC midnight countdown (Phase 8, R-8-02)
 │   ├── services/
 │   │   ├── api.ts               # Base apiFetch / apiPut / apiPost wrappers
 │   │   ├── adminService.ts      # MODES, ConfigView, CRUD calls (R-06A)
+│   │   ├── dailyService.ts      # GET /api/daily/{date} + POST /api/daily/{date}/result + X-Device-Id (Phase 8, R-8-02)
 │   │   ├── landingService.ts    # fetchEnabledModes (R-06A)
 │   │   ├── puzzleService.ts     # /api/puzzles/next
 │   │   └── verdictService.ts    # PUT /api/admin/puzzles/{id}/verdict (Phase 7, R-7-02)
@@ -187,6 +191,7 @@ frontend/
 │       ├── play-to-completion.spec.ts
 │       ├── dynamic-modes.spec.ts
 │       ├── admin-config-flow.spec.ts       # (e2e-coverage-and-clerk-injection)
+│       ├── daily-flow.spec.ts              # /play?flow=daily happy path + already-solved short-circuit (Phase 8, R-8-02)
 │       ├── pool-replenishment.spec.ts      # (e2e-coverage-and-clerk-injection)
 │       ├── served-marking.spec.ts          # (e2e-coverage-and-clerk-injection)
 │       ├── pool-empty-fallback.spec.ts     # (e2e-coverage-and-clerk-injection)

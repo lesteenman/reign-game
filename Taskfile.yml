@@ -798,6 +798,29 @@ tasks:
             }
           echo "  seeded $(basename "$f")"
         done
+
+        # Seed a DAILY-CANDIDATE row pointing at the daily-eligible
+        # 9_standard fixture (seed=11). The e2e environment has no cron
+        # Lambda, so the daily endpoint relies on the sync-fallback path
+        # which can only confirm an existing candidate or recycle
+        # yesterday's schedule — it does not pull from the approved pool.
+        # Without this row a fresh e2e stack returns 500
+        # (ErrPoolExhausted) on the first daily GET.
+        echo "seeding DAILY-CANDIDATE row pointing at the daily-eligible fixture..."
+        docker compose exec -T localstack awslocal dynamodb put-item \
+          --table-name puzzle-pool-e2e \
+          --item '{
+            "PK": {"S": "DAILY-CANDIDATE"},
+            "SK": {"S": "<single>"},
+            "puzzleId": {"S": "e2e0000-0000-4000-9000-000000000001"},
+            "queuedAt": {"S": "2026-01-01T00:00:00Z"},
+            "sourcePartition": {"S": "9#standard"}
+          }' >/dev/null 2>&1 || {
+            echo "  FAIL: seeding DAILY-CANDIDATE" >&2
+            exit 1
+          }
+        echo "  seeded DAILY-CANDIDATE -> e2e0000-0000-4000-9000-000000000001"
+
         echo "e2e fixtures ready."
         BASH
 
