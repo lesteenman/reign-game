@@ -76,7 +76,8 @@ jobs:
         run: |
           terraform apply -auto-approve \
             -var="aws_region=${{ vars.AWS_REGION }}" \
-            -var="lambda_zip_path=${{ github.workspace }}/backend/lambda.zip"
+            -var="lambda_zip_path=${{ github.workspace }}/backend/lambda.zip" \
+            -var="daily_cron_lambda_zip_path=${{ github.workspace }}/backend/daily-cron.zip"
 
       - name: Fetch Clerk publishable key from SSM
         id: clerk

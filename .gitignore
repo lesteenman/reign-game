@@ -16,6 +16,7 @@ backend/api
 backend/bootstrap
 backend/daily-cron
 backend/lambda.zip
+backend/daily-cron.zip
 *.exe
 *.exe~
 *.dll
