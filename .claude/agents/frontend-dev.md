@@ -104,6 +104,17 @@ Use Vitest for all unit tests. Tests live next to the code they test (`Component
 - Use `rel="noopener noreferrer"` on external links.
 - Avoid exposing API keys, secrets, or sensitive configuration in client-side code.
 
+## Frontend (React + TypeScript) Conventions
+
+Project-wide rules in `CLAUDE.md` § Coding Principles. Frontend-specific additions:
+
+- **Functional components only.** No class components.
+- **Custom hooks for reusable logic** (`useGame`, `useTimer`, `usePuzzle`).
+- **Strict TypeScript.** No `any`, no type assertions without justification.
+- **File naming.** Components PascalCase (`Grid.tsx`); hooks camelCase (`useGame.ts`).
+- **Mobile-first, responsive.** All components must work across mobile, tablet, and desktop viewports.
+- **Accessibility: WCAG 2.1 AA minimum.** ARIA attributes, keyboard navigation, contrast ratios, alt text.
+
 ## Lessons from Past Reviews
 
 <!--
@@ -118,6 +129,15 @@ Use Vitest for all unit tests. Tests live next to the code they test (`Component
 5. **Extract shared constants/components immediately** for multi-page features. Don't copy-paste between pages.
 
 <!-- Add your project-specific lessons below this line -->
+
+### Project-Specific (Reign)
+
+6. **Touch/pointer e2e tests first.** For any touch/pointer interaction code, write Playwright e2e tests before unit tests. jsdom does not simulate synthesized mouse events after touch events, so unit tests pass while the actual mobile experience is broken. The Phase 1 touch double-fire bug was only caught by user playtesting.
+7. **First-paint correctness for visual components.** Never render a component at a default/placeholder size then resize after measuring. Use CSS-based sizing or defer rendering until the container is measured. Layout flicker is a user-visible bug.
+8. **Validate URL params before type assertion.** When the frontend reads URL params and uses them as typed values (enums, numbers), validate against known values before type assertion. URL params are always `string | null` — invalid values passed unchecked will reach the API.
+9. **Persisted data shapes live in `storage/`.** If a type is going to be saved to IndexedDB or any local store, define it once in the storage module and import from every consumer (hooks, services, components). Don't redeclare a shape like `History` in a hook and `GameHistory` in storage — they will drift.
+10. **Playwright `request` and `page.request` have separate cookie jars.** When a test authenticates via the browser (`clerk.signIn({ page })`, `page.goto('/login')`, etc.), session cookies attach to the `page`'s `BrowserContext`. The standalone `request` fixture is a separate `APIRequestContext` with its own cookie jar — calls through it arrive cookie-less and 401 on auth-gated endpoints. Use `page.request.X(...)` instead, or alias `const request = page.request` at the top of the test. Note in the spec header why the alias exists so future readers don't refactor it back.
+11. **Vite reads `.env*` files at dev-server start; HMR doesn't reload them.** Adding or changing a `VITE_*` variable while `task dev:up:frontend` (or `task e2e:up:frontend`) is running has no effect on the served bundle until the Vite process restarts. After editing `.env.local`: `task dev:restart:frontend` (or `task e2e:down:frontend && task e2e:up:frontend`).
 
 ## Quality Standards
 

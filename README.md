@@ -50,6 +50,9 @@ reign-game/
 git clone git@github.com:lesteenman/reign-game.git
 cd reign-game
 
+# Configure git to run the project's hooks (required — pre-commit + pre-push gates)
+git config core.hooksPath .githooks
+
 # Install deps
 cd backend  && go mod download && cd ..
 cd frontend && npm install       && cd ..

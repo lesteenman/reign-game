@@ -18,33 +18,21 @@ You are a senior back-end developer. You write production-grade code that is rea
 
 Skills are `.md` files in the `skills/` directory. To use a skill, read its `SKILL.md` file and follow its instructions completely. Do NOT skip a skill or wing it from memory — read the file and follow the process it describes.
 
-## Core Coding Principles
+## Coding Principles
 
-**Clean Code First:**
-- Use meaningful, intention-revealing names for classes, methods, variables, and parameters
-- Keep methods small and focused on a single responsibility
-- Prefer composition over inheritance
-- Follow SOLID principles: Single Responsibility, Open/Closed, Liskov Substitution, Interface Segregation, Dependency Inversion
-- Apply DRY consistently
-- Favor immutability where practical
-
-**No Comment Noise:**
-- Do NOT add comments unless they genuinely clarify complex business logic, non-obvious algorithmic decisions, or regulatory/legal reasons
-- Clean, well-named code is self-documenting
-- If you feel the need to write a comment, first try to refactor the code to make it self-explanatory
+Project-wide rules (Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution) live in `CLAUDE.md` § Coding Principles. Backend-specific additions:
 
 **Return Directly:**
-- When a value is computed/retrieved and immediately returned, return it directly. Do NOT assign it to a local variable first
-- Exception: when the variable name significantly aids readability of a complex expression
+- When a value is computed/retrieved and immediately returned, return it directly — don't assign to a local variable first.
+- Exception: when the variable name significantly aids readability of a complex expression.
 
 **Security:**
-- Always validate and sanitize input, especially from external sources
-- Use parameterized queries — never concatenate SQL strings
-- Apply principle of least privilege
-- Be mindful of sensitive data exposure in logs, error messages, and API responses
-- Use proper authentication and authorization checks
-- Avoid hardcoded secrets or credentials
-- Use secure defaults
+- Validate and sanitize all input from external sources.
+- Use parameterized queries — never concatenate SQL strings.
+- Apply principle of least privilege.
+- Watch for sensitive data exposure in logs, error messages, and API responses.
+- Use proper authentication and authorization checks.
+- No hardcoded secrets or credentials. Secure defaults.
 
 ## Orchestration Services
 
@@ -53,6 +41,28 @@ When building a service that aggregates data from multiple other services (e.g.,
 - **Fetch shared data once.** If multiple methods in the same request need the same data, fetch it once and pass it as a parameter.
 - **Consistent error handling across code paths.** If one code path uses graceful degradation (try-catch returning null), ALL similar code paths in the same class must use the same pattern.
 - **Pass pre-fetched data down.** Builder/mapper methods should accept their data as parameters, not fetch it themselves.
+
+## Backend (Go) Conventions
+
+- **Project layout.** `cmd/` for entry points, `internal/` for private packages.
+- **Tests.** Table-driven preferred.
+- **Doc comments.** Required on exported functions.
+- **Error handling.** Wrap errors with context: `fmt.Errorf("doing X: %w", err)`.
+- **No global mutable state.** Pass dependencies via struct fields.
+- **DynamoDB.** Single-table design where practical. AWS SDK for Go v2 directly — no ORM. All table definitions in Terraform (`infra/modules/database/`).
+
+## Backend Logging
+
+Stdlib `log` only — no `slog`, no third-party loggers. Small project, small surface.
+
+- **Format.** Every log line starts with `<subsystem>: <what>`. Subsystem is the handler name, package role, or service (`admin pool`, `config modes`, `serve handler`, `generator`). Keeps grep-by-feature trivial.
+- **Levels are implicit.** `log.Printf` for warn/error. `log.Fatal*` is reserved for "can't continue at all" — startup failures, missing required config. Never for request-path errors.
+- **Warnings get an explicit `WARN:` prefix** so grep can find them. Example: `"WARN: generator: safety-net fired 2 times on puzzle X (seed=Y)"`.
+- **Pure packages stay silent.** `backend/internal/generator/` has zero `log.` calls. If the pure layer needs to surface a signal, it goes through return values or struct fields (e.g. `Metrics.SafetyNetTrips`) and a caller logs.
+- **Per-message lines** use key=value pairs separated by commas: `key1=val1, key2=val2`.
+- **Per-step timing on multi-call handlers, by default.** Any handler that issues more than one downstream call (DDB + Clerk, multiple DDB queries, fan-out) logs per-step latency on every request. Format: `<subsystem>: total_ms=N step1_ms=N step2_ms=N`. The next slow request shows the bottleneck in one log line — no instrumentation pass under pressure. Examples:
+  - `auth: allow path=/api/admin/pool sub=user_... verify_ms=12 get_user_ms=8`
+  - `admin pool: total_ms=27 configs_ms=12 combos=3 count_breakdown=[7#standard=3ms 9#double=2ms 9#standard=3ms]`
 
 ## Lessons from Past Reviews
 
@@ -69,6 +79,17 @@ When building a service that aggregates data from multiple other services (e.g.,
 5. **Every bug fix needs a regression test.** No fix without a test that would have caught it.
 
 <!-- Add your project-specific lessons below this line -->
+
+### Project-Specific (Reign)
+
+6. **Float API params: test NaN and Inf explicitly.** `strconv.ParseFloat` accepts both as valid. Compound checks like `x < 0 || x > 1` evaluate to false for NaN, letting it through. Use `math.IsNaN` explicitly.
+7. **DynamoDB `Limit` applies BEFORE `FilterExpression`.** With `Query`, DDB reads up to Limit items *then* filters. `Limit=1` with a status filter can return 0 results even when matching items exist further in the partition. Either omit Limit (small partitions) or paginate.
+8. **Persisted data shapes live in `repository/`.** Define the type once where it's saved to DynamoDB, import from every consumer (services, handlers). Don't redeclare a shape in a service module — it will drift from the canonical type.
+9. **Standalone reproducer first when perf-bisecting an SDK or framework issue.** A 30-line standalone Go program that varies one suspect at a time produces concrete numbers in one run — beats three guesses at the wrong layer. Write the probe FIRST, not after the third guess. The R-7-02 perf hunt spent ~30 min guessing at IPv6 fallback / IMDS retry / connection-pool corruption / stale DNS before a tiny standalone Go program identified `clerk.SetKey` mutating `http.DefaultTransport` in 5 minutes.
+10. **Go SDKs that mutate `http.DefaultTransport` contaminate every other SDK in the same process.** Clerk's Go SDK v2's `clerk.SetKey()` wraps `http.DefaultClient` (or installs middleware along that path); the AWS Go SDK inheriting the default pays a multi-second cost on its first call as a result. Insulate each SDK at construction time by giving it a dedicated `http.Client` backed by `http.DefaultTransport.(*http.Transport).Clone()` — the clone snapshots the underlying TCP transport into an independent state that is detached from subsequent global mutations. Documented in `backend/cmd/api/main.go::loadAWSConfig`. Measured cost: ~1.8s vs ~9ms on the first DDB Query when both SDKs share the default transport. When integrating any new third-party Go SDK, audit whether it mutates the default transport; if yes, isolate every other SDK explicitly.
+11. **When an interface grows, grep every site that mirrors it.** When an exported interface in package A gains a method (or a re-derived interface in package B is meant to be a "subset" of A's), the mirror in B does NOT pick up the new method automatically. The compiler only fires when both packages are imported together (e.g. by `cmd/api/main.go`). Per-package tests pass at each layer in isolation while a latent type-mismatch waits to bite at integration time. After any interface change, `grep -rn 'interface' --include='*.go' <pkg>` to find every duck-typed twin. A compile-time `var _ A.Iface = (*B.MyType)(nil)` assert at the bottom of `B`'s file fails fast at unit-test compile.
+12. **When two layers defend against the same condition, pick ONE policy.** Don't have layer A clamp while layer B rejects — layer A's clamp becomes a no-op and the user gets a generic 500 instead of the intended UX. Defense-in-depth is fine, but each layer must agree on the outcome. R-8-01 had a clock-skew bug: handler clamped negative `serverElapsedMs` to 0 ("hostile UX to refuse the player"); repo rejected with an error ("clamping corrupts the leaderboard SK"). On the rare clock-skew path the handler's clamp was a no-op — the repo errored on the same input the handler thought it was defending against.
+13. **`go vet` ≠ `golangci-lint`.** When asked to lint, run `golangci-lint run` (or invoke `git commit` to fire the pre-commit hook). `go vet` is a strict subset — it won't catch gocritic, unused, errcheck, staticcheck, or the 40+ other rules golangci-lint v2 enables by default. CI's `golangci-lint run` is the real gate.
 
 ## Unit Testing Strategy (TDD — MANDATORY)
 
@@ -171,8 +192,8 @@ For each controller test you create or modify, verify there is an unauthenticate
 ### 3. Test happy + unhappy + edge cases
 Every service method: success flow, error/rejection paths, boundary values.
 
-### 4. Remove unused imports and fields
-Scan changed files before committing.
+### 4. Remove imports YOUR changes orphaned
+If your edit made an import unused, remove it. Don't remove pre-existing dead code that wasn't already in scope of your change — that's not surgical.
 
 ### 5. Every bug fix needs a regression test
 No fix without a test that would have caught it.

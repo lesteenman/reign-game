@@ -280,6 +280,14 @@ When you need user input (ambiguous steps, approvals, decisions), ask the human 
 - **Agent replacement** — before requesting a replacement, confirm the task is still unowned.
 - **Agent cleanup** — stop agents as soon as their task is done and work is committed. Do not leave idle agents running between rounds. Before spawning a new round, verify all previous agents are stopped. An idle agent is a wasted agent.
 
+## Lessons
+
+1. **Parallel agent spawning happens in ONE block.** When you need multiple agents to run in parallel, request them in a single SPAWN_REQUEST block — never spawn one, wait for it, then spawn another. The task plan designed parallelism on purpose; serialising the spawn breaks it. (Same rule applies to the lead agent spawning via the `Agent` tool: single message with multiple tool calls.)
+2. **SPAWN_REQUEST prompts MUST instruct agents to use Write/Edit, not Bash, for file creation.** Bash heredocs and `cat <<EOF` may prompt the user for approval even in bypassPermissions mode. Spell out the requirement in every prompt that asks for file output: "Use the Write or Edit tools — do not use Bash with cat/heredoc to create files."
+3. **TDD enforcement: test-file commits land BEFORE production-file commits.** Before approving an agent's output, verify the commit order. If a multi-file production-code diff arrived without a corresponding test-file edit, the agent skipped TDD. **Re-dispatch with explicit test-first instructions** — do NOT write the missing tests yourself. Manual takeover for engineering work is forbidden (`CLAUDE.md` § Human-in-the-Loop). Reign Phase 7 R-081 paid for this with 228 lines of untested repository code; tests written by hand to fill the gap exposed a real `fmt.Sscanf` bug that would otherwise have shipped silently.
+4. **Sub-agents must run real linters, not `go vet`.** Backend agents must run `golangci-lint run` (or invoke `git commit` to fire pre-commit). Frontend agents must run `tsc -b`. Devops agents must run `terraform fmt -recursive -check`. Spell out the binary in the prompt — agents that say "lint clean" after only `go vet` have not actually been linted (gocritic, unused, errcheck, staticcheck won't fire).
+5. **Agent stall protocol** — see `CLAUDE.md` § Human-in-the-Loop + Notifications. Lead-agent housekeeping (committing already-completed work from a stalled agent) is allowed; manual implementation is forbidden.
+
 ## Self-Check: Did I Follow the Protocol?
 
 Before reporting done, verify:
