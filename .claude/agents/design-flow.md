@@ -130,6 +130,8 @@ These artifacts are created under `openspec/changes/<change-name>/` and are the 
 
 **Before generating:** Verify with the user that all design decisions from the grill are captured and the chosen approach from parallel-plan is reflected.
 
+**E2E fixture-completeness in tasks.md verification checklist (MANDATORY when slice exercises `task e2e:up`).** If the slice runs Playwright through the e2e stack, the verification checklist at the end of `tasks.md` MUST include a row of the form: `task e2e:status confirms the fixture pool covers every {grid size, puzzle type, operational state, scheduled-state row} the slice's e2e exercises end-to-end`. Walk this row at slice close — not after CI-red. The seam between source-of-truth fixture rows (puzzles) and operational-state rows (candidate slots, schedule rows, leaderboard partitions) is exactly where R-8-02 lost two CI cycles: the daily-flow happy-path test had a 9×9 fixture but no `DAILY-CANDIDATE` row pre-seeded — the sync fallback returned `ErrPoolExhausted` and the endpoint 500'd. Enumerate every row family the slice reads, not just the source-of-truth ones. See `devops-engineer.md` §88.2 for full pattern.
+
 ### Step 5: Handoff
 
 After artifacts are generated, present the user with a summary:
