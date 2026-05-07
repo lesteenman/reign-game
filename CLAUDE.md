@@ -19,6 +19,136 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | CI/CD | GitHub Actions — CI on PR, CD on merge to main |
 | Dev Environment | LocalStack (local DynamoDB), Vite dev server (frontend) |
 
+## Coding Principles
+
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+
+### 1. Think Before Coding
+
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
+
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
+
+### 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+### 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it — don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: every changed line should trace directly to the user's request. A rename or path migration that ripples across the repo IS surgical — every site references the renamed identifier. Cleaning up unrelated dead code you happen to see is not.
+
+### 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
+```
+
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+
+## Change Workflow (MANDATORY)
+
+Every change — feature, fix, or refactor — follows this pipeline:
+
+```
+1. OpenSpec Explore    → parallel-plan + design-grill skills (understand the problem)
+2. OpenSpec Propose    → spec artifacts (define the solution)
+3. UI/UX Design        → wireframes + Nano Banana 2 prompts (if visual change)
+4. Implementation      → red/green TDD, feature branch, commit per artifact
+5. Security Scan       → gitleaks + dependency audit + review-local security agent
+6. Self-Review         → reviewer + writer iterate until consensus (escalate to human if stuck)
+7. OpenSpec Archive    → sync artifacts with final implementation
+8. Retro               → retrospective on the change
+```
+
+- **TDD is non-negotiable** for both backend and frontend. Red/green/refactor — write a failing test first.
+- **Feature branches** for all work. Never commit directly to main.
+- **Commits** happen after every artifact delivery (specs, wireframes, completed code), not just at the end.
+- **Self-review** continues until reviewer agent and implementation agent agree. Escalate to human after two rounds with no consensus.
+- **Each phase's `tasks.md` ends with a Verification Checklist** designed during design-flow. Walk it at phase close — every item gets a citation (file:line, test name, grep result, UI assertion).
+- **PR description includes a "Key Decisions" section** listing intentional design choices. Phase-level PRs also include a "Workarounds shipped" section.
+
+## Agent Teams
+
+This project uses custom AI agents in `.claude/agents/`. The lead agent (Claude Code) orchestrates — it does NOT implement code itself.
+
+| Agent | Role | When |
+|-------|------|------|
+| `product-owner` | Vision guardian, acceptance criteria, scope decisions | Before implementation |
+| `design-flow` | Full design phase: explore, stress-test, glossary alignment, spec generation | Before implementation |
+| `workflow-orchestrator` | Pipeline orchestration, team coordination, glossary enforcement | Full Pipeline Mode |
+| `backend-dev` | Go implementation, API design, DynamoDB, Lambda + TDD | Any back-end work |
+| `frontend-dev` | React/TS implementation, PWA, responsive UI + TDD | Any frontend work |
+| `devops-engineer` | Terraform, GitHub Actions, AWS architecture, monitoring | Infrastructure and CI/CD work |
+| `ui-ux-designer` | Wireframes, interaction design, brand guidelines | Visual design phases |
+| `tester` | E2E test plans, edge cases, regression hunting, Playwright | After implementation |
+| `code-review-final` | Code quality review of PRs | After all implementation |
+| `security-review-final` | Security review (conditional — see Security section) | When diff touches security-sensitive files |
+
+Sub-agents use skills by reading the skill's `SKILL.md` and following its instructions. They do NOT have access to a `Skill()` tool.
+
+## Human-in-the-Loop + Notifications
+
+This project is built by agents with a human supervisor who is NOT actively watching the screen. Pause-and-ask is always cheaper than guessing wrong.
+
+**HITL Rule (CRITICAL — applies to design forks):**
+- NEVER answer your own design questions or auto-approve decisions.
+- NEVER assume you know what the human would choose.
+- ALWAYS present options and wait for an explicit response.
+- Confirm alignment before moving to the next phase.
+
+**Think Before Coding (everyday form — applies to implementation ambiguity):**
+- State assumptions explicitly. If material, ask.
+- If multiple interpretations exist, present them — don't pick silently.
+
+**Notification channel:** Use `PushNotification` when blocked or uncertain. The supervisor isn't watching, so silent stalling is worse than asking.
+
+**Manual lead-agent takeover policy:**
+- **Allowed:** committing work that an agent finished but timed out before committing. Housekeeping only.
+- **Forbidden:** writing application code, writing tests, fixing bugs, completing partial implementations. Never as engineering shortcut.
+
+**Agent stall protocol:**
+- First stall on a chunk → re-dispatch the same chunk once.
+- Second stall on the same chunk → split into smaller batches (~3-5 tool uses each).
+- Recurring stall after splitting → escalate via `PushNotification`. Never re-dispatch a third time.
+- If a stalled agent had completed its work in the working tree, the lead agent commits it. That is the only takeover mode.
+
 ## Build Commands
 
 ```bash
@@ -44,10 +174,7 @@ task e2e:down:generator  # Stop the e2e generator worker
 
 ## Running the Dev Stack (STANDARD — always use these)
 
-The dev stack (LocalStack + backend + generator + frontend) runs as background
-processes with logs streamed to `./logs/*.log`. **Always use these tasks** — do
-not launch `go run ./cmd/api` or `npm run dev` directly. Doing so breaks the
-shared logging/lifecycle contract and leaves orphan processes.
+The dev stack (LocalStack + backend + generator + frontend) runs as background processes with logs streamed to `./logs/*.log`. **Always use these tasks** — do not launch `go run ./cmd/api` or `npm run dev` directly. Doing so breaks the shared logging/lifecycle contract and leaves orphan processes.
 
 ```bash
 task dev:up             # Start LocalStack + backend + generator + frontend (waits for readiness)
@@ -78,10 +205,9 @@ task dev:restart:frontend   # Restart frontend
 - Services run detached via `nohup ... &`; stdout+stderr redirect to `./logs/{backend,generator,frontend}.log`.
 - `dev:up` polls each service until healthy before returning. Backend check hits `/api/health`; frontend check waits for port `:5180` to listen; generator waits for the "starting local SQS poller" log line.
 - Backend/frontend identity tracked by port (`lsof -ti:PORT`). Generator has no port, so its PID is persisted to `./logs/generator.pid` — robust against orphaned files because a stale PID is detected and cleaned up.
-- LocalStack readiness check waits for BOTH the `/_localstack/health` endpoint AND the init-aws.sh script to finish (puzzle-generation queue exists + puzzle-pool table is ACTIVE). Without this, services race with init and log spurious `NonExistentQueue` errors.
-- Task's built-in shell (mvdan/sh) runs commands in-process, so `$!` and `kill -0` against external PIDs are unreliable. Generator lifecycle blocks wrap their logic in `bash <<'BASH' ... BASH` heredocs to get real POSIX semantics.
+- LocalStack readiness check waits for BOTH the `/_localstack/health` endpoint AND the init-aws.sh script to finish (puzzle-generation queue exists + puzzle-pool table is ACTIVE).
 - `./logs/` is gitignored.
-- LocalStack runs in Docker via the existing `docker-compose.yml`; init script `.localstack/init-aws.sh` creates the `puzzle-pool` DynamoDB table, the SQS queues, and seeds initial CONFIG items.
+- LocalStack runs in Docker via `docker-compose.yml`; init script `.localstack/init-aws.sh` creates the DynamoDB table, SQS queues, and seeds initial CONFIG items.
 
 **After changing Go source:** `task dev:restart:backend` and/or `task dev:restart:generator` (neither is hot-reloaded).
 **After changing frontend source:** Vite HMR handles most updates; if you edit `vite.config.ts` or similar, `task dev:restart:frontend`.
@@ -89,12 +215,12 @@ task dev:restart:frontend   # Restart frontend
 **Taskfile shell pitfalls (read before editing Taskfile.yml):**
 Task runs `cmds:` blocks in its built-in interpreter (`mvdan.cc/sh`), not system sh or bash. It mostly matches POSIX but diverges in a few places that bite process-lifecycle code:
 
-- `$!` after a background job returns a **goroutine handle** (e.g. `g1`), not an OS PID. Capturing `echo $! > file.pid` stores garbage.
-- `kill -0 "$PID"` against **external** OS PIDs is unreliable — it can report "not alive" for a process that is demonstrably running.
+- `$!` after a background job returns a goroutine handle (e.g. `g1`), not an OS PID. Capturing `echo $! > file.pid` stores garbage.
+- `kill -0 "$PID"` against external OS PIDs is unreliable.
 - `disown` is not implemented.
-- `set -e` behavior around command substitution differs from bash in edge cases.
+- `set -e` behavior around command substitution differs from bash.
 
-When a task needs to track a backgrounded process by PID (anything without a port to probe via `lsof -ti:PORT`), wrap the whole block in a bash heredoc:
+When a task needs to track a backgrounded process by PID (anything without a port), wrap the block in a bash heredoc:
 
 ```yaml
 cmds:
@@ -103,27 +229,20 @@ cmds:
     set -e
     nohup long-running-cmd > log 2>&1 </dev/null &
     echo $! > pid
-    # ...check readiness, verify alive, etc.
     BASH
 ```
 
-Port-based lifecycle (`lsof -ti:PORT` for status, `kill $(lsof -ti:PORT)` for down) works fine in Task's shell and is preferred whenever a port exists.
+Port-based lifecycle (`lsof -ti:PORT`) works fine in Task's shell and is preferred whenever a port exists.
 
 ## Testing
 
-- Always run the full test suite after making changes
-- After fixing one bug, verify no regressions were introduced before moving on
-- When writing controller tests, check if the test security config has specific auth behavior
-- All unit tests must use **Arrange-Act-Assert** structure with explicit `// Arrange`, `// Act`, `// Assert` comments separating the sections. This applies to both frontend (Vitest) and backend (Go) tests.
+- Always run the full test suite after making changes.
+- After fixing one bug, verify no regressions before moving on.
+- All unit tests use **Arrange-Act-Assert** structure with explicit `// Arrange`, `// Act`, `// Assert` comments.
 
 ## Git Hooks
 
-Pre-push hook (`.githooks/pre-push`) runs before every push:
-- Backend: `golangci-lint run` + `go test ./...`
-- Frontend: `npm run build` (includes tsc) + `npx vitest run` + `npm audit`
-- Secret scan: `gitleaks detect`
-
-Configure with: `git config core.hooksPath .githooks`
+Pre-push hook (`.githooks/pre-push`) runs before every push: backend lint + tests, frontend build + tests + npm audit, and `gitleaks` secret scan. Pre-commit (`.githooks/pre-commit`) runs gofmt/golangci-lint on staged Go and tsc on staged TS.
 
 ## Dev Server Ports
 
@@ -137,70 +256,21 @@ Configure with: `git config core.hooksPath .githooks`
 | E2E Generator | —   | `task e2e:up:generator` (no port; PID at `logs/e2e-generator.pid`) |
 | LocalStack   | 4566 | `task dev:up:localstack`   |
 
-Frontend already binds `--host 0.0.0.0` (for mobile testing over LAN) and the Vite proxy forwards `/api/*` to `localhost:5181`. All backend routes live under `/api/` — SPA routes (e.g., `/admin` page) stay on the frontend. Do not start services with raw `go run`/`npm run dev` — always go through `task dev:up` (see "Running the Dev Stack" above).
+Frontend already binds `--host 0.0.0.0` (for mobile testing over LAN); the Vite proxy forwards `/api/*` to `localhost:5181`. All backend routes live under `/api/`.
+
+## Setup
+
+After cloning the repo, configure git to run the project's hooks:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+Without this, the pre-commit and pre-push gates silently don't run, and CI catches what your local shell should have.
 
 ## Project Structure
 
-See **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** for the full project tree and API endpoints. Search by domain keyword to locate any file.
-
-## Project-Specific Conventions
-
-### General
-- Monorepo: frontend/, backend/, infra/, design/ at the root
-- Feature branches for all changes, merged via PR to main
-- Commit after every artifact delivery (specs, wireframes, code)
-- Every change follows: OpenSpec explore -> propose -> UI/UX design (if visual) -> implementation -> archive/sync -> retro
-- TDD (red/green) for all implementation — backend AND frontend
-- Self-review session after implementation until reviewer and writer agree
-
-### Backend (Go)
-- Standard Go project layout: cmd/ for entry points, internal/ for private packages
-- Table-driven tests preferred
-- Exported functions must have doc comments
-- Error handling: wrap errors with context (`fmt.Errorf("doing X: %w", err)`)
-- No global mutable state — pass dependencies via struct fields
-- DynamoDB single-table design where practical
-
-### Backend logging
-
-Stdlib `log` only — no `slog`, no third-party loggers. Small project, small surface.
-
-- **Format.** Every log line starts with `<subsystem>: <what>`. Subsystem is the handler name, package role, or service (`admin pool`, `config modes`, `serve handler`, `generator`). Keeps grep-by-feature trivial.
-- **Levels are implicit.** `log.Printf` for warn/error. `log.Fatal*` is reserved for "can't continue at all" — startup failures, missing required config. Never for request-path errors.
-- **Warnings get an explicit `WARN:` prefix** so grep can find them. Example: `"WARN: generator: safety-net fired 2 times on puzzle X (seed=Y)"`.
-- **Pure packages stay silent.** `backend/internal/generator/` has zero `log.` calls. If the pure layer needs to surface a signal, it goes through return values or struct fields (e.g. `Metrics.SafetyNetTrips`) and a caller (worker, handler) logs. Keeps the generator testable and side-effect-free.
-- **Per-message lines** (e.g. `"generator: produced puzzle X …"`) use key=value pairs separated by commas so they parse cleanly: `key1=val1, key2=val2`.
-- **Per-step timing on multi-call handlers, by default.** Any handler that issues more than one downstream call (DDB + Clerk, multiple DDB queries, fan-out queries, etc.) logs per-step latency on every request. Format: `<subsystem>: total_ms=N step1_ms=N step2_ms=N`. Examples shipped with R-7-02:
-  - `auth: allow path=/api/admin/pool sub=user_... verify_ms=12 get_user_ms=8`
-  - `admin pool: total_ms=27 configs_ms=12 combos=3 count_breakdown=[7#standard=3ms 9#double=2ms 9#standard=3ms]`
-
-  Cost: ~5 lines per handler. Value: the next slow request shows the bottleneck in one log line — no instrumentation pass under pressure. Treat this as default instrumentation, not a diagnostic afterthought. R-7-02 paid for the "diagnostic afterthought" model when an 8 s pool load forced a full instrumentation pass mid-debug; with the timing logs in place from the start, the same diagnosis would have been a single log line.
-
-### Frontend (React + TypeScript)
-- Functional components only, no class components
-- Custom hooks for reusable logic (useGame, useTimer, usePuzzle)
-- Strict TypeScript — no `any`, no type assertions without justification
-- Component files: PascalCase (Grid.tsx), hooks: camelCase (useGame.ts)
-- TDD with Vitest — write failing test first, then implementation
-- All components must be responsive (mobile-first)
-- Accessibility: WCAG 2.1 AA minimum
-
-### Infrastructure
-- All infrastructure in Terraform — no manual AWS console changes
-- Terraform modules for reusable components (frontend, api, database)
-- Single environment initially, parameterized for dev/prod split later
-
-### Frontend Design Rules
-
-**MANDATORY**: When implementing or modifying ANY frontend visual code (components, pages, layouts, styles), you MUST:
-
-1. Read `skills/frontend-design/SKILL.md` and follow its instructions BEFORE writing any UI code
-2. Read `skills/ui-ux-pro-max/SKILL.md` and follow its instructions with `--design-system --persist` to generate brand guidelines
-3. Persist the output as `BRAND_GUIDELINES.md` in the project root
-4. Reference `BRAND_GUIDELINES.md` for all color palettes, font pairings, spacing, and UX patterns
-5. Never output plain/generic styling — every component must reflect the brand guidelines
-
-`BRAND_GUIDELINES.md` is the single source of truth for visual design decisions. All frontend agents and reviewers reference it. If it doesn't exist when frontend visual code is being written, that is a CRITICAL review finding.
+See **[PROJECT_STRUCTURE.md](PROJECT_STRUCTURE.md)** for the full project tree and API endpoints.
 
 ## Roles
 
@@ -209,189 +279,73 @@ Role names are Title-Case in prose (`Anonymous` / `User` / `Admin`); the Clerk m
 | Role | Identity | Access |
 |------|----------|--------|
 | Anonymous | No account; device-linked local identity | Practice puzzles, daily challenge, local stats, see own percentile |
-| User | Signed-in via Clerk (Google OAuth); default role with no `publicMetadata.role` set or `'user'` | Same as Anonymous for now; reserved for later phases (leaderboard identity, stats sync, premium flip) |
-| Admin | Signed-in via Clerk with `publicMetadata.role === 'admin'` (assigned manually in the Clerk dashboard) | All User access + `/admin` UI and `/api/admin/*` routes (curation, puzzle management, generation tooling) |
+| User | Signed-in via Clerk (Google OAuth); default role | Same as Anonymous for now; reserved for later phases |
+| Admin | Signed-in via Clerk with `publicMetadata.role === 'admin'` | All User access + `/admin` UI and `/api/admin/*` routes |
 
 ## Key References
 
-- **GLOSSARY.md** -- Ubiquitous Language glossary. Consult before using domain terms in specs, designs, and code.
-- **PROJECT_STRUCTURE.md** -- Full project tree + all API endpoints. Search by domain keyword to locate any file.
-- **GAME_DESIGN.md** -- Living game design vision document. The north star for what we're building.
-- **ROADMAP.md** -- Phased roadmap with explicit todos + known issues. The Jira-lite task tracker.
-- **BRAND_GUIDELINES.md** -- Design system (colors, fonts, spacing, component patterns). Generated by following the ui-ux-pro-max skill with `--design-system --persist`. Required before any frontend visual work.
+- **GLOSSARY.md** — Ubiquitous Language glossary. Consult before using domain terms.
+- **PROJECT_STRUCTURE.md** — Full project tree + all API endpoints.
+- **GAME_DESIGN.md** — Living game design vision document.
+- **ROADMAP.md** — Phased roadmap with explicit todos + known issues.
+- **BRAND_GUIDELINES.md** — Design system. Required before any frontend visual work.
 
----
+## Domain Conventions
 
-## Stream Timeout Prevention
+Domain-specific conventions, logging rules, and per-domain lessons live in the agent files:
 
-1. Do each numbered task ONE AT A TIME. Complete one task fully, confirm it worked, then move to the next.
-2. Never write a file longer than ~150 lines in a single tool call. If a file will be longer, write it in multiple append/edit passes.
-3. Start a fresh session if the conversation gets long (20+ tool calls). The error gets worse as the session grows.
-4. Keep individual grep/search outputs short. Use flags like `--include` and `-l` (list files only) to limit output size.
-5. If you do hit the timeout, retry the same step in a shorter form. Don't repeat the entire task from scratch.
+- **Backend (Go) + logging + DynamoDB access patterns** — see `.claude/agents/backend-dev.md`
+- **Frontend (React + TypeScript) + brand integration** — see `.claude/agents/frontend-dev.md`
+- **Infrastructure (Terraform, GitHub Actions, AWS)** — see `.claude/agents/devops-engineer.md`
+- **Pipeline orchestration (parallel spawn rules, stall protocol)** — see `.claude/agents/workflow-orchestrator.md`
 
----
+## Database (DynamoDB)
 
-## Agent Teams
+- On-demand (pay-per-request) billing — no provisioned capacity.
+- Single-table design where practical, separate tables when access patterns diverge.
+- All table definitions in Terraform (`infra/modules/database/`).
+- No ORM — AWS SDK for Go v2 directly.
+- Local development: LocalStack.
 
-This project uses custom AI agents that work together as a team. The lead agent (Claude Code) orchestrates the pipeline -- it does NOT implement code itself but distributes tasks to sub-agents.
+## Lessons (cross-cutting)
 
-### Agent Architecture
+Slice ID scheme uses `R-<phase>-<slice>` where `<phase>` is the integer phase number and `<slice>` is `exploration` or a strictly increasing 2-digit number (`01`, `02`, …). Already-shipped slices keep historical IDs (e.g., `R-067a`, `R-08C`) — those references are preserved in archived OpenSpec artifacts.
 
-Agents are markdown files in `.claude/agents/` that define specialized roles. They are spawned as sub-agents via the `Agent` tool. Sub-agents use skills by reading the skill's SKILL.md file and following its instructions -- they do NOT have access to a `Skill()` tool.
+1. **Run git from repo root.** Use absolute paths or `git -C <root>` to avoid CWD bugs after `cd` into subdirectories.
+2. **Fetch before reporting git state.** Run `git fetch --prune` before reporting branch status, ahead/behind counts, or PR existence. Stale refs produce confidently wrong analysis.
+3. **Run review-local before `gh pr create`, not after.** Every PR — including 1-commit changes — gets the 4-agent review loop first. "Too small to review" is never a valid reason to skip.
+4. **Path/URL/env renames need a full-repo grep.** When renaming a route, endpoint, env var, port, or config key, grep the whole repo (Taskfile, workflows, docs, scripts) — not just obvious source files. This IS surgical (every site references the rename). Cleaning unrelated dead code is not.
+5. **Trust the git hooks — don't re-run what they cover.** Pre-commit covers gofmt/golangci-lint on staged Go + tsc on staged TS. Pre-push covers full golangci-lint, go test, terraform fmt, frontend build+vitest+npm audit, gitleaks. After writing a change: `git add && git commit && git push`. Re-running them manually duplicates work.
+6. **Slice completion includes flipping `tasks.md` rows to `[x]`.** OpenSpec's `tasks.md` is the single source of truth for slice state. Update the row in the slice's PR, not as post-hoc sweep. Parallel slices on the same `tasks.md` produce mechanical merge conflicts — keep both `[x]` flips when resolving.
+7. **Grep ROADMAP for slice ID collisions before opening an OpenSpec change.** New IDs often collide with pre-declared future-phase IDs. `grep -n "R-<phase>" ROADMAP.md` before claiming a range.
+8. **Verify dependency versions at the registry, not from memory.** When adding/bumping any dep (npm, Go module, Terraform provider, GitHub Action, Docker image, Homebrew, Clerk/AWS SDK), the version comes from the live registry or current docs page — never recollection. Re-verify when the slice that installs it starts.
+9. **Non-slice perf fixes that block slice testability attach to the slice's PR with explicit commit-body justification.** When a perf fix isn't part of the slice's stated scope but is needed to playtest the slice end-to-end locally, ship it on the same branch with rationale stated explicitly. Do NOT split into a separate PR if it would block slice testing.
+10. **Lockstep service config: capture EVERY consumer in the spec.** When two services share an identifier (queue URL, table name, env var), the spec's acceptance criteria must enumerate all sites. Define shared constants once in `Taskfile.yml::vars:` and reference from each env block — single source of truth.
 
-### How Agents Use Skills
+## Security: Baseline Gates (every cycle)
 
-Skills are `.md` files in `.claude/skills/`. Agents use them by:
-1. Reading the skill file (e.g., `skills/design-grill/SKILL.md`)
-2. Following its instructions completely — executing the full process described in that file
+Run on every change:
 
-Agents must NOT just summarize or paraphrase a skill. They must read and execute.
+1. **Secret scanning (pre-commit):** `gitleaks detect --source .` — blocks the commit if secrets found.
+2. **Dependency audit (CI):** `govulncheck ./...` (backend) and `npm audit --audit-level=moderate` (frontend) — known vulnerabilities block merge.
+3. **review-local security agent:** runs on every change. CRITICAL or HIGH findings block merge.
 
-### Lessons from Past Reviews
+## Security: Deep Review Trigger (conditional)
 
-**Slice ID scheme.** New slices use `R-<phase>-<slice>` where `<phase>` is the integer phase number (no decimals, no letters) and `<slice>` is either the literal `exploration` or a strictly increasing 2-digit zero-padded number (`01`, `02`, …, `99`). Examples: `R-7-02`, `R-7-exploration`, `R-12-01`. Only the current phase is numbered; everything else lives on the ROADMAP backlog without an ID until we commit to starting it. Already-shipped slices keep their historical IDs (e.g., `R-067a`, `R-08C`, `R-081`) — those stay because they're baked into commit messages, PR titles, and archived OpenSpec artifacts that aren't worth churning. The lessons below reference historical IDs for that reason.
-
-Pipeline, CI, infra, and git-hook lessons live on the **devops-engineer** agent (`.claude/agents/devops-engineer.md`), not here — they only apply when that agent is running. Always spawn `devops-engineer` for any change under `.github/workflows/`, `infra/`, `.githooks/`, `docker-compose.yml`, `Dockerfile`, or workflow-shaped changes to `Taskfile.yml`. The agent owns its own checklists.
-
-1. **Parallel agent spawning:** When spawning parallel agents (e.g., backend-dev + frontend-dev), always use a single message with multiple Agent tool calls. Never spawn one agent, wait for it, then spawn another — this wastes time and breaks the parallelism the task plan designed for.
-2. **Git commands from repo root:** Always run git commands from the repo root. Use absolute paths or `git -C <repo-root>` to avoid working-directory issues after `cd` into subdirectories.
-3. **Touch/pointer e2e tests first:** For any touch/pointer interaction code, write Playwright e2e tests before unit tests. jsdom does not simulate synthesized mouse events after touch events, so unit tests pass while the actual mobile experience is broken. The touch double-fire bug (Phase 1) was only caught by user playtesting.
-4. **Sub-agents must use Write/Edit, not Bash for files:** When spawning implementation agents, explicitly instruct them to use the Write and Edit tools for file creation — not Bash with cat/heredoc. Bash file writes may still prompt for user approval even in bypassPermissions mode.
-5. **First-paint correctness for visual components:** Never render a component at a default/placeholder size then resize after measuring. Use CSS-based sizing or defer rendering until the container is measured. Layout flicker is a user-visible bug.
-6. **Even pixel values for SVG strokes:** Use 2px, 4px — never 2.5px or other subpixel values. Subpixel stroke widths cause anti-aliasing artifacts at line intersections visible on both standard and retina displays.
-7. **Lint before commit, not just at push:** Run `golangci-lint run` (backend) and `npx tsc -b` (frontend) before committing. The pre-push hook catches these, but late failures waste time on fix-up commits. Two Phase 2 commits were purely lint fixes that could have been avoided.
-8. **Float API params: always test NaN and Inf:** When adding float parameters to APIs, explicitly test `NaN` and `Inf` inputs. `strconv.ParseFloat` accepts these as valid, and compound range checks like `x < 0 || x > 1` evaluate to false for NaN, letting it through. Use `math.IsNaN` explicitly.
-9. **Validate URL params before type assertion:** When frontend reads URL params and uses them as typed values (enums, numbers), validate against known values before type assertion. URL params are always `string | null` — invalid values passed unchecked will reach the API.
-10. **DynamoDB `Limit` applies before `FilterExpression`.** When using `Query` with both `Limit` and `FilterExpression`, DynamoDB reads up to Limit items *then* filters. `Limit=1` with a status filter can return 0 results even when matching items exist further in the partition. Either omit Limit (for small partitions) or paginate.
-11. **Sub-agents must run lint and fmt before committing.** Backend agents: run `golangci-lint run` (or `go vet ./...` if unavailable). Devops agents: run `terraform fmt -recursive -check`. Frontend agents already run `tsc -b`. Explicit instructions in agent prompts are required — sub-agents don't read pre-push hooks. **TDD enforcement clause:** verify in the agent's output that test-file commits exist BEFORE production-file commits. If a multi-file production-code diff lands without a corresponding test-file edit, the agent skipped TDD — review the production code carefully, ideally by writing the tests yourself. Phase 7 R-081 paid for this: backend-dev produced 228 lines of repository code with one trivial test fixture edit, then stalled. The follow-up tests I wrote manually caught a real bug — `fmt.Sscanf("%[^#]#%s", ...)` silently fails because Go's scan family doesn't implement the C-style `%[^...]` character-class verb. Without the manual test pass, the bug ships.
-12. **Fetch before reporting git state:** Before reporting branch status, upstream existence, "PR exists?", or ahead/behind counts, run `git fetch --prune` first. Stale refs (especially after a branch is deleted post-merge) produce confidently wrong analysis and push scoping decisions down the wrong path. Treat local refs as cache that needs invalidating, not source of truth.
-13. **Run review-local before `gh pr create`, not after. No exceptions for small PRs.** Every PR, including 1-commit surgical changes, gets the 4-agent review loop first. If the diff is truly trivial, the review costs 60 seconds; if it isn't, the review was needed. Phase 4.5 caught a MAJOR Taskfile bug this way. R-067a (PR #39) skipped the review because "the change felt small" — it happened to be clean, but that was luck, not process. "It's too small to review" is never a valid reason to skip.
-14. **Path/URL/env renames need a full-repo grep.** When renaming a route, endpoint, environment variable, port, or config key, grep the *entire* repo — `Taskfile.yml`, `.github/workflows/**`, `docker-compose.yml`, all `*.md` docs, `CLAUDE.md`, `PROJECT_STRUCTURE.md`, `ROADMAP.md`, shell scripts — not just the obvious source files. Dev tooling and docs silently drift out of sync otherwise. Phase 4.5's `/health` → `/api/health` migration missed the Taskfile readiness probe on the first pass; only review-local's sweep caught it. Same rule applies to **archive moves**: when `git mv`'ing an OpenSpec `changes/X/` directory to `archive/X/`, sweep every `.md`, `.go`, `.ts`, `.tsx`, `.tf`, `.yml`, and shell script for the old path. Source-code comments are easy to miss — Phase 7's archive of phase-6-admin-auth needed a follow-up edit to `backend/internal/generator/probe_test.go`'s file header comment that cited the old path; phase-4/5 archive needed a `ROADMAP.md` ref fix. Each archive PR has historically required at least one mid-PR cross-doc fixup; the grep eliminates them.
-15. **Trust the git hooks — do not re-run what they cover.** `.githooks/pre-commit` runs `gofmt`/`golangci-lint` (on staged Go) and `tsc -b` (on staged TS). `.githooks/pre-push` runs full `golangci-lint`, `go test ./...`, `terraform fmt -recursive -check`, `npm run build` (includes tsc), `npx vitest run`, `npm audit --audit-level=moderate`, and `gitleaks detect --source .`. After writing a change, go straight to `git add && git commit && git push` — if hooks fail, fix the specific issue they reported. Running these tools manually before the hooks duplicates work, clutters terminal output, and wastes wall-clock time. It is appropriate to run them directly during TDD iterations or to debug a specific failure; it is not appropriate as a routine pre-commit/pre-push ritual.
-16. **Persisted data shapes live in `storage/` (frontend) or `repository/` (backend), not in the consumer.** If a type is going to be saved to IndexedDB, DynamoDB, or any store, define it *once* in the storage/repository module and import it from every consumer (hooks, services, handlers). Do not redeclare a shape like `History` in a hook and `GameHistory` in storage — they will drift. Phase 4.6 had to unify `History` / `GameHistory` mid-review for exactly this reason.
-17. **Slice completion includes flipping the `tasks.md` status row to `[x]`.** OpenSpec's `tasks.md` status table is the single source of truth for slice state. A slice is not done until the code ships AND the row is updated in the same branch. Phase 5's pre-main cleanup had to refresh 7 of 11 rows that stayed `[ ]` for weeks after their deliverables had shipped — the status column became useless for planning. Update the row as a required artifact in the slice's PR, not as a post-hoc sweep. (Parallel slices off the same `tasks.md` will produce a merge conflict on the second-to-merge branch — each side flipped its own row to `[x]`. Resolution is mechanical: keep both `[x]` flips, no semantic content change. Phase 6 hit this on R-089 / R-08A / R-08B / integration; don't be surprised by it and don't accidentally drop someone else's flip when resolving.)
-18. **Before opening an OpenSpec change, grep ROADMAP for ID collisions.** New slice IDs often collide with pre-declared IDs in later phase blocks. When creating a change that claims IDs like `R-062..R-06D`, first `grep -n "R-06[0-9A-F]" ROADMAP.md` — if any of those IDs are already reserved for a future phase, renumber one side before the slice lands. Phase 5 shipped R-062..R-06D while ROADMAP Phase 6/7/8 still pre-declared R-063..R-068; the collision went untreated through 14 slices and KI-007's "Related" column ended up citing a nonexistent ID.
-19. **Never guess dependency versions from memory — check the registry.** When adding or bumping an npm / Go / Maven / PyPI dependency, the version number must come from the live registry (`npm view <pkg> version`, `go list -m -versions <module>`, etc.) or the package's current docs page — never from recollection. Training data goes stale; packages are yanked, re-numbered, or change major versions without us knowing. Spec docs and code that name a specific version (e.g. `@clerk/clerk-react@x.y.z`, `github.com/clerk/clerk-sdk-go/v2`) should be verified at the moment they're written, and re-verified when the slice that installs them starts. Applies to both implementation and design-phase artifacts that commit to a particular SDK surface.
-20. **Long agent prompts stall — plan checkpoints, take manual control after two stalls.** Agent prompts requiring more than ~20 tool uses or multi-file coordinated output are at high risk of stream-idle timeout. Plan from the start to split the work into discrete chunks (design phase → test scaffold → implementation → sweep), each independently committable. If a single chunk stalls twice, take manual control rather than attempt a third resume — manual implementation often ships faster AND catches bugs the agent missed. Phase 7 R-081 saw this directly: design-flow timed out after 25 min on PR #70 (recovered cleanly via `SendMessage`), backend-dev timed out twice on PR #71 — the second stall left 228 lines of untested repository code that I had to test by hand, which surfaced a `fmt.Sscanf` bug that would otherwise have shipped silently. Manual takeover finished the slice in the same conversation that the second resume would have spent stalling.
-21. **ROADMAP.md tracks codebase work, not user-side dashboard tasks.** Code, infra, docs, scripts, tests — all in scope. Clicking through Clerk dashboards, AWS console one-offs, manual approvals, third-party-UI configurations — out of scope. The action being "click in a third-party UI" is a strong signal it's not a slice. Where the operational detail still matters, capture it as a one-line callout in the relevant runbook (e.g. `docs/runbooks/admin-auth-setup.md`), not as a tracked ROADMAP slice with an ID and a checkbox. Phase 6's R-08D ("custom domain + production Clerk tenant swap") sat in ROADMAP for ~5 weeks before being dropped because "I'll do that from my side in Clerk when I get to it" isn't a slice — the *infra side* (custom-domain provisioning) survived as a backlog entry, but the dashboard rotation didn't.
-22. **Docker images in dev tooling pin to a specific stable tag, never `:latest`.** Auto-update on `docker compose pull` is silent and untraceable; treat `:latest` like `npm install <pkg>` without a lockfile or `go get` without a version (lesson 19) — same risk, same mitigation. When pinning, document the bump deliberately in the file (one-line comment naming the version + reason). The R-7-02 cycle paid for this when `localstack/localstack:latest` pulled a `2026.3.1.dev4973` build with broken SQS `SendMessage` and an empty exception body in the LocalStack logs. ~1 hour to diagnose because the symptom (replenish 500s) didn't point at the image tag. Pinning to `localstack/localstack:4.14.0` resolved it instantly.
-23. **Standalone reproducer first when perf-bisecting an SDK or framework issue.** When a symptom could be caused by any of N layers (DNS, connection pool, retry backoff, SDK init, library interaction), each guess at the wrong layer costs at least one restart-and-measure cycle (~30 s) plus the cognitive overhead of building a wrong mental model. A 30-line standalone Go (or equivalent) program that varies one suspect at a time produces concrete numbers in one run. The R-7-02 perf hunt spent ~30 min guessing at IPv6 fallback / IMDS retry / connection-pool corruption / stale DNS before a tiny standalone Go program that tested 4 HTTP-client strategies side-by-side identified `clerk.SetKey` mutating `http.DefaultTransport` in 5 minutes. Files live at `/tmp` during the investigation; delete after, or commit if they become a regression test. Rule: when bisecting, write the probe FIRST, not after the third guess.
-24. **Go SDKs that mutate `http.DefaultTransport` contaminate every other SDK in the same process.** Clerk's Go SDK v2's `clerk.SetKey()` wraps `http.DefaultClient` (or installs middleware along that path); the AWS Go SDK inheriting the default pays a multi-second cost on its first call as a result. Insulate each SDK at construction time by giving it a dedicated `http.Client` backed by `http.DefaultTransport.(*http.Transport).Clone()` — the clone snapshots the underlying TCP transport into an independent state that is detached from subsequent global mutations. Documented in `backend/cmd/api/main.go::loadAWSConfig` for the AWS + Clerk pairing. Measured cost: ~1.8 s vs ~9 ms on the first DDB Query when both SDKs share the default transport. When integrating any new third-party Go SDK, audit whether it mutates the default transport; if yes, isolate every other SDK explicitly.
-25. **Non-slice perf fixes that block local testability of the slice attach to the slice's PR with explicit commit-body justification.** When the perf fix isn't part of the slice's stated scope but is needed to make the slice testable end-to-end locally, the pragmatic move is to commit it on the same branch with the rationale stated explicitly in the commit body ("R-7-02 was effectively un-playtest-able locally without this fix"). The reviewer sees the slice + perf fixes as a unit and decides whether the scope creep is acceptable. Do NOT split into a separate PR if it would block testing the slice — that creates merge-order pain. Do split if the perf fix can wait until after the slice merges. R-7-02 ended up with 4 backend perf commits on a frontend-only slice (auth GetUser cache, `localhost`→`127.0.0.1`, `http.DefaultTransport.Clone` + startup warm-up, LocalStack image pin); each commit body justified inclusion explicitly and all merged cleanly.
-26. **Investigate latest versions for ALL external dependencies — generalizes lesson 19 across categories.** Lesson 19 covers npm / Go / Maven / PyPI registry-pinned packages. The same rule applies to: Docker images (lesson 22 — registry on Docker Hub / ECR), GitHub Actions (`@v4` style — check `marketplace.github.com` / repo's release tags), Terraform providers and modules (registry.terraform.io), Homebrew formulae, system packages, Clerk / AWS / any SaaS SDK with versioned API surfaces, and IaC base images. Whatever the dependency, the version number comes from the live source of truth at the moment of writing — never from memory or training data. Training data goes stale; packages are yanked, deprecated, renumbered, or change major versions without us knowing. Re-verify when the slice that installs the dependency starts (in addition to design-phase verification). Applies to spec docs that commit to a particular SDK / image / action surface.
-27. **Every phase's `tasks.md` ends with a Verification Checklist (Phase Close).** Each item must be empirically checkable — file:line, test name, grep result, or a specific UI assertion — not "we did the thing." The checklist is *designed during design-flow* (alongside the slice tasks), not bolted on at close-time, so that the design-grill round produces both the slice plan AND its acceptance criteria. At phase close, walking the checklist becomes mechanical: each `[ ]` flips to `[x]` only with proof in hand. Phase 7's 13-item checklist made today's close-out frictionless — every item had a citation in the diff. Phase 6 didn't have one and accumulated R-08C / R-08D drift that needed bespoke catch-up (PR #66). Adopt as a default phase-close artifact: design-flow generates it; the lead agent walks it before archiving the change directory.
-28. **Playwright `request` and `page.request` have separate cookie jars.** When a test authenticates via the browser (e.g. `clerk.signIn({ page })`, `page.goto('/login')`, or any in-page auth action), the session cookies attach to the `page`'s `BrowserContext`. The standalone `request` fixture is a separate `APIRequestContext` with its own cookie jar — calls through it arrive cookie-less and 401 on auth-gated endpoints. The 2026-05-01 e2e arc landed pool-replenishment.spec.ts and admin-config-flow.spec.ts using `request.get('/api/admin/pool')` after `clerk.signIn` and the symptom was silent 401s. Fix: use `page.request.X(...)` instead, or `const request = page.request` aliased at the top of the test. The same alias avoids retyping `page.request` everywhere downstream. Note in the spec header why the alias exists so future readers don't refactor it back. Generalises to any Playwright spec where browser auth is followed by API assertions.
-29. **Lockstep service config (queue URLs, table names, paths) must be captured in the spec for *every* consumer, not just one.** When two services share an identifier — publisher + consumer of an SQS queue, multiple writers to the same DynamoDB table, multiple readers of the same env var — the spec must explicitly enumerate ALL sites in the acceptance criteria. Capturing only one side is the textbook "two places, same constant" drift. The 2026-05-01 e2e arc had `task e2e:up:generator`'s `SQS_QUEUE_URL` updated to `puzzle-generation-e2e` per spec ES-01, but `task e2e:up:backend`'s `SQS_QUEUE_URL` was missed and still pointed at the dev `puzzle-generation` queue. Replenish messages went to the dev queue; the e2e generator polled an empty queue; specs that depend on replenish→generator→ready timed out silently. Fix shape: when introducing a new shared identifier, list EVERY env-block, IaC reference, init script, and runbook entry that needs to use it. In Taskfile.yml specifically, define shared constants once in `vars:` and reference from each env block — single source of truth makes the lockstep mechanical instead of error-prone.
-30. **Vite reads `.env*` files at dev-server start; HMR doesn't reload them.** Adding or changing a `VITE_*` variable while `task dev:up:frontend` (or `task e2e:up:frontend`) is running has no effect on the served bundle until the Vite process restarts. The 2026-05-01 e2e arc lost ~30 minutes diagnosing why `VITE_CLERK_PUBLISHABLE_KEY` appeared correctly in `frontend/.env.local` but the SPA still rendered Clerk-less mode — the e2e Vite was started before the variable was added. Fix: after editing `.env.local`, restart Vite (`task dev:restart:frontend` for the dev stack; `task e2e:down:frontend && task e2e:up:frontend` for the e2e stack — or `task e2e:down && task e2e:up` to restart everything). Standard Vite behavior; not project-specific. The same applies to `frontend/.env.local.example` only as documentation — only the actual `.env.local` is read.
-31. **Stalled-after-completion is housekeeping, not engineering takeover. Check the working tree before re-dispatching.** Companion to lesson 20. When a sub-agent stream-idle-times-out, the work is often already in the working tree (file written, tests passing, commit step never reached). Running `git status` first reveals which case applies: empty diff → fresh dispatch; full diff with passing tests → manual `git add && git commit` to ship the completed work. Doing the commit yourself is git-ops housekeeping, not the "manual implementation" that the small-batch lesson forbids — the engineering judgment already happened inside the agent. R-8-01 had 8 stalls; 4 of them were stalled-after-completion and recovered cleanly via manual commit. Lesson 20 alone would have prescribed a fresh dispatch each time (~5 min/event burned). The split is: empty working tree → re-dispatch (engineering still owed); populated working tree with passing tests → commit (just unblocking).
-32. **When an interface grows, grep every site that mirrors it.** When an exported interface in package A gains a method (or a re-derived interface in package B is meant to be a "subset" of A's), the mirror in B does NOT pick up the new method automatically. The compiler only fires when both packages are imported together (e.g. by `cmd/api/main.go`'s import closure) — meaning per-package tests pass at each layer in isolation while a latent type-mismatch waits to bite at integration time. R-8-01 chunk 5 grew `daily.Repo` with `ListApprovedPool` + `PutCandidateIfAbsent`; chunk 6b discovered that `handler.DailyRepo` (a structurally-superset mirror) had drifted out of sync — the comment claimed superset but the methods weren't added. After any interface change, `grep -rn 'interface' --include='*.go' <pkg>` to find every duck-typed twin and confirm they grew together. For Go specifically, a compile-time `var _ A.Iface = (*B.MyType)(nil)` assert at the bottom of `B`'s file fails fast at unit-test compile, before the cross-package import closure triggers — cheap and catches the drift at the right layer.
-33. **When two layers defend against the same condition, pick ONE policy. Don't have layer A clamp while layer B rejects.** Defense-in-depth is good, but each layer must agree on the outcome. R-8-01 had a clock-skew bug: the handler clamped negative `serverElapsedMs` to 0 ("hostile UX to refuse the player"); the repo rejected with an error ("clamping corrupts the leaderboard SK"). On the rare clock-skew path the handler's clamp was a no-op — the repo errored on the same input it was supposedly defending against, and the user got a generic 500 instead of the "clamp-and-continue" UX the handler intended. Fix: align both layers (the repo's reject was correct; handler now also rejects with a structured log so the error surfaces with clear context instead of cascading from the transaction layer). When you find yourself adding "defensive" handling, check the layer below — if it has a different policy for the same input, you're not defending in depth, you're writing dead code that hides the real failure mode.
-34. **`core.hooksPath` is per-developer config; verify it's wired or the project's hooks silently don't run.** The project ships `.githooks/pre-commit` + `.githooks/pre-push` with the full lint / test / fmt / npm / gitleaks battery, but git only honors them if `git config core.hooksPath .githooks` is set in the local clone. Default is `.git/hooks/` — usually empty in a fresh checkout. R-8-01 PR #94 burned two CI cycles because my local `core.hooksPath` was unset; pushes succeeded despite missing `golangci-lint` locally because no hook ran. Verify with `git config --get core.hooksPath` — if blank or `.git/hooks`, fix with `git config core.hooksPath .githooks`. Worth automating in a `task setup-hooks` (also installs golangci-lint at the pinned CI version + gitleaks) so contributors don't discover the gap via failing CI. The pre-push hook itself fails fast with helpful install commands when the tooling is missing — but only once it actually runs.
-35. **`go vet` ≠ `golangci-lint`. Agent prompts that say "lint clean" must specify the actual linter.** When backend-dev agents claim "go vet clean" they have NOT run `gocritic`, `unused`, `errcheck`, `staticcheck`, or any of the other 40+ rules golangci-lint v2 enables by default. R-8-01 chunks 6c-7 shipped six gocritic violations that pre-commit hooks would have caught, but the agents only ran `go vet ./...` per the prompt's explicit "lint clean" guidance. CI's `golangci-lint run` is the real gate; `go vet` is a strict subset. Agent prompts should specify `golangci-lint run` (or invoke the pre-commit hook via `git commit`) — `go vet` alone is insufficient. Generalises: when an agent's "ran the linter" claim doesn't name the binary, that's the same gap.
-36. **E2E environments must seed every operational state the prod runtime would have populated, not just the source-of-truth rows.** Approved-pool fixtures alone are not enough when scheduled-state rows (candidate slots, schedule rows, leaderboard partitions) are normally written by crons or workers that don't run in e2e. R-8-02's PR #95 burned two CI cycles on the daily-flow happy-path test: a 9×9 standard fixture with `verdictSummary.up >= 1 && down == 0` was added (necessary), but the daily endpoint's sync-fallback path can ONLY confirm an existing `DAILY-CANDIDATE` or recycle yesterday — it does not pull from the approved pool. With no candidate row pre-seeded, the sync fallback returns `ErrPoolExhausted` and the endpoint 500s even though the pool is "approved." Fix: e2e seed step also wrote a `DAILY-CANDIDATE` row pointing at the fixture's puzzleId. Generalises: when designing an e2e setup, walk every code path that reads from a row family and ensure the e2e seed populates not just the source-of-truth rows the design talks about, but the *intermediate* rows that crons / workers / EventBridge would normally write at T-N hours before the test moment. The `task e2e:seed` recipe is the right home for those one-shot pre-seeds (next to the fixture-loading loop), not the LocalStack init script (which is wiped by the per-run `flush-pool.sh`).
-
-### Human-in-the-Loop Rule (CRITICAL)
-
-**NEVER:**
-- Answer your own design questions or auto-approve decisions
-- Assume you know what the human would choose
-- Skip asking the human because the answer seems obvious
-
-**ALWAYS:**
-- Present decisions and options directly to the human
-- Wait for the human's explicit response before proceeding
-- Confirm alignment before moving to the next phase
-
-### Available Agents
-
-| Agent | Role | When to Use |
-|-------|------|-------------|
-| `product-owner` | Vision guardian, acceptance criteria, scope decisions, prioritization | Before implementation — validates what to build and why |
-| `design-flow` | Full design phase: explore, stress-test, glossary alignment, spec generation | Before implementation — when a feature needs design |
-| `workflow-orchestrator` | Pipeline orchestration, team coordination, glossary enforcement | Full Pipeline Mode — orchestrates all other agents, enforces glossary term consistency |
-| `backend-dev` | Go implementation, API design, DynamoDB, Lambda handlers + TDD | Any back-end work |
-| `frontend-dev` | React/TS implementation, PWA, responsive UI + TDD | Any frontend work |
-| `devops-engineer` | Terraform, GitHub Actions, AWS architecture, monitoring | Infrastructure and CI/CD work |
-| `ui-ux-designer` | Wireframes, interaction design, brand guidelines, Nano Banana 2 prompts | Visual design phases |
-| `tester` | E2E test plans, edge cases, regression hunting, Playwright | After implementation — verify features work |
-| `code-review-final` | Code quality review of PRs | After all implementation is complete |
-| `security-review-final` | Security review of PRs (conditional) | Only when diff touches security-sensitive files |
-
-### Security: Baseline Gates (MANDATORY — every cycle)
-
-These checks run on EVERY change, no exceptions:
-
-1. **Secret scanning (pre-commit):** Run `gitleaks detect --source .` before every commit. If secrets are found, the commit MUST be blocked. Never commit API keys, tokens, passwords, or high-entropy strings.
-2. **Dependency audit (CI):** `govulncheck ./...` (backend) and `npm audit --audit-level=moderate` (frontend) run on every PR. Known vulnerabilities block merge.
-3. **review-local security agent:** The security agent in `review-local` runs on every change. CRITICAL or HIGH findings from this agent block merge — they must be fixed before proceeding.
-
-### Security: Deep Review Trigger (conditional)
-
-Run the full `security-review-final` agent when the diff includes files matching ANY of:
+Run the full `security-review-final` agent when the diff includes any of:
 - `**/auth/**`, `**/middleware/**`
-- `**/handler/*.go` (new or modified Lambda handlers — API attack surface)
-- `go.mod`, `go.sum`, `package.json`, `package-lock.json` (dependency changes — supply chain risk)
-- `infra/**/*.tf` (infrastructure changes — IAM, networking, encryption)
-- `docker-compose.yml`, `Dockerfile` (container security)
-- `.github/workflows/**` (CI/CD pipeline changes)
-- Any file with `password`, `secret`, `token`, `credential`, `key` in its path or content
+- `**/handler/*.go` (new or modified Lambda handlers)
+- `go.mod`, `go.sum`, `package.json`, `package-lock.json` (dependency changes)
+- `infra/**/*.tf` (IAM, networking, encryption)
+- `docker-compose.yml`, `Dockerfile`
+- `.github/workflows/**`
+- Any file with `password`, `secret`, `token`, `credential`, `key` in path or content
 
-Skip deep security review when the diff only touches: service logic, models, frontend components, tests, docs, OpenSpec artifacts.
+Skip when the diff only touches: service logic, models, frontend components, tests, docs, OpenSpec artifacts.
 
-### Change Workflow (MANDATORY for all changes)
+## Available Skills
 
-Every change — feature, fix, or refactor — follows this pipeline:
-
-```
-1. OpenSpec Explore    → parallel-plan + design-grill skills (understand the problem)
-2. OpenSpec Propose    → spec artifacts (define the solution)
-3. UI/UX Design        → wireframes + Nano Banana 2 prompts (if visual change)
-4. Implementation      → red/green TDD, feature branch, commit per artifact
-5. Security Scan       → gitleaks + dependency audit + review-local security agent (every cycle)
-6. Self-Review         → reviewer + writer iterate until consensus (escalate to human if stuck)
-7. OpenSpec Archive    → sync artifacts with final implementation
-8. Retro               → retrospective on the change
-```
-
-**TDD is non-negotiable** for both backend and frontend. Write a failing test first, then make it pass, then refactor. No exceptions.
-
-**Self-review** continues until both the reviewer agent and implementation agent agree the code is ready. The reviewer must be critical but pragmatic — if there's a good reason to deviate from convention, that's acceptable with justification. If there's genuinely no consensus after two rounds, escalate to the human.
-
-**Commits** happen after every artifact delivery: specs, wireframes, images, and completed code. Not just at the end.
-
-**Feature branches** for all work. Never commit directly to main.
-
-### How to Use the Agents
-
-#### Assisted Mode (small changes, bug fixes)
-
-For changes under ~5 files or single-module work, use agents directly without orchestration:
-
-1. Spawn the appropriate implementation agent (e.g., `backend-dev`)
-2. Agent implements + tests + commits
-3. Run build verification
-4. Run `gitleaks detect --source .` — block if secrets found
-5. Read `skills/review-local/SKILL.md` and follow its instructions on the changed code
-6. If review-local security agent finds CRITICAL/HIGH → fix before continuing
-7. Spawn `code-review-final` agent (+ `security-review-final` if deep review triggered)
-8. Fix review comments, push, merge
-
-#### Full Pipeline Mode (features, multi-module changes)
-
-For larger features, spawn the `workflow-orchestrator` agent. It will:
-
-- Distribute tasks to implementation agents in parallel
-- Run build verification, pre-commit quality checks, and local review
-- Create the PR and spawn `code-review-final` (and `security-review-final` if the diff touches security-sensitive files)
-- Spawn Playwright e2e test agents if the project has a frontend
-- For optional or ambiguous steps, ask the human before executing
-
-See the `workflow-orchestrator` agent definition for the full pipeline details.
-
-### Available Skills
-
-Skills are invoked by reading their SKILL.md file and following the instructions. Available in `.claude/skills/`:
+Skills in `.claude/skills/` are invoked by reading their `SKILL.md` and following the instructions:
 
 - `design-grill` — Stress-test design decisions
 - `parallel-plan` — Fan-out parallel approach comparison
@@ -404,27 +358,31 @@ Skills are invoked by reading their SKILL.md file and following the instructions
 - `retro` — Retrospective on the change
 
 **Plugin-based skills** (require Claude Code plugin install — see CONTRIBUTING.md):
+- `frontend-design` — Component-level design guidance
+- `ui-ux-pro-max` — UX patterns, interaction design, design system
 
-- `frontend-design` — Component-level design guidance (plugin: `frontend-design@claude-plugins-official`)
-- `ui-ux-pro-max` — UX patterns, interaction design, design system (plugin: `ui-ux-pro-max@ui-ux-pro-max-skill`)
+## How to Use the Agents
 
-### Key Rules
+### Assisted Mode (small changes, bug fixes — under ~5 files)
 
-- **Sweep enforcement**: Every review finding includes a grep command. Fix agents MUST run the sweep and fix ALL matches -- not just the reported file
-- **Cross-stack contract alignment**: When backend and frontend run in parallel, the frontend API service task MUST read the actual backend DTOs before writing interfaces
-- **PR Key Decisions**: Include a "Key Decisions" section in PR descriptions listing intentional design choices. Prevents review agents from flagging them as bugs
+1. Spawn the appropriate implementation agent (e.g., `backend-dev`).
+2. Agent implements + tests + commits.
+3. Run build verification.
+4. Run `gitleaks detect --source .` — block if secrets found.
+5. Read `skills/review-local/SKILL.md` and follow its instructions.
+6. Fix CRITICAL/HIGH security findings before continuing.
+7. Spawn `code-review-final` (+ `security-review-final` if deep review triggered).
+8. Fix review comments, push, merge.
 
-## Code Review Workflow
+### Full Pipeline Mode (features, multi-module changes)
 
-- When reviewing PRs, structure findings by category: security, efficiency, code quality, reuse
-- Post findings directly to PR via `gh` CLI
-- Two review passes max -- after pass 2, the PR is considered ready for merge
+Spawn the `workflow-orchestrator` agent. It distributes tasks in parallel, runs build verification + pre-commit checks + local review, creates the PR, spawns reviewers, and Playwright e2e agents. For optional/ambiguous steps, it asks the human.
 
-## Database (DynamoDB)
+See `.claude/agents/workflow-orchestrator.md` for full pipeline details.
 
-- On-demand (pay-per-request) billing mode — no provisioned capacity
-- Single-table design where practical, separate tables when access patterns diverge significantly
-- Partition key design must avoid hot partitions (e.g., daily puzzle leaderboards need careful key design)
-- Local development: use LocalStack or DynamoDB Local for testing
-- No ORM — use the AWS SDK for Go v2 directly
-- All table definitions managed in Terraform (infra/modules/database/)
+## Key Pipeline Rules
+
+- **Sweep enforcement:** every review finding includes a grep command. Fix agents fix ALL matches, not just the reported file.
+- **Cross-stack contract alignment:** when backend and frontend run in parallel, the frontend API service task MUST read the actual backend DTOs before writing interfaces.
+- **PR Key Decisions section:** include intentional design choices in PR descriptions to prevent reviewers flagging them as bugs.
+- **Two review passes max** — after pass 2, the PR is considered ready for merge.
