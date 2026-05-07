@@ -30,6 +30,11 @@ resource "aws_cloudfront_distribution" "frontend" {
   default_root_object = "index.html"
   comment             = "${var.project_name} ${var.environment} frontend"
 
+  # Only attach aliases when an ACM cert is supplied. CloudFront rejects
+  # aliases without a matching cert, so this guard makes the "ARN not set
+  # yet" intermediate state apply cleanly (no aliases, default cert).
+  aliases = var.acm_certificate_arn != "" ? var.domain_aliases : []
+
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id                = "s3-frontend"
@@ -106,8 +111,14 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
+  # When acm_certificate_arn is empty, fall back to the default
+  # *.cloudfront.net cert (unblocks first-time apply / non-prod envs).
+  # When set, switch to SNI-only ACM with the modern protocol baseline.
   viewer_certificate {
-    cloudfront_default_certificate = true
+    cloudfront_default_certificate = var.acm_certificate_arn == ""
+    acm_certificate_arn            = var.acm_certificate_arn != "" ? var.acm_certificate_arn : null
+    ssl_support_method             = var.acm_certificate_arn != "" ? "sni-only" : null
+    minimum_protocol_version       = var.acm_certificate_arn != "" ? "TLSv1.2_2021" : null
   }
 }
 

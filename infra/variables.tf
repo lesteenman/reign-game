@@ -45,3 +45,15 @@ variable "clerk_secret_key" {
   sensitive   = true
   default     = ""
 }
+
+variable "domain_aliases" {
+  description = "CloudFront alternate domain names (CNAME aliases) for the frontend distribution. Empty list keeps the distribution at *.cloudfront.net only. When non-empty, acm_certificate_arn MUST also be set and the cert MUST cover every entry. Set via TF_VAR_domain_aliases='[\"reign.acc.steenman.me\"]' in CI."
+  type        = list(string)
+  default     = []
+}
+
+variable "acm_certificate_arn" {
+  description = "ARN of the ACM certificate (in us-east-1) covering domain_aliases. Empty string keeps the default *.cloudfront.net cert. The cert is provisioned in a separate Terraform project (accounts/reign-game) because it crosses AWS-account boundaries; this repo just references the ARN."
+  type        = string
+  default     = ""
+}
