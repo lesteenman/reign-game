@@ -348,7 +348,8 @@ jobs:
         run: |
           terraform plan -no-color -out=tfplan \
             -var="aws_region=${{ vars.AWS_REGION }}" \
-            -var="lambda_zip_path=${{ github.workspace }}/backend/lambda.zip"
+            -var="lambda_zip_path=${{ github.workspace }}/backend/build/lambda.zip" \
+            -var="daily_cron_lambda_zip_path=${{ github.workspace }}/backend/build/daily-cron.zip"
         continue-on-error: true
 
       - name: Post Plan to PR
