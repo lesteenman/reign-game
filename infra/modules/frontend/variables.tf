@@ -17,3 +17,15 @@ variable "api_gateway_stage" {
   description = "API Gateway stage name (used as origin path)"
   type        = string
 }
+
+variable "domain_aliases" {
+  description = "Alternate domain names for the CloudFront distribution. Only attached when acm_certificate_arn is also set — CloudFront rejects aliases without a matching cert."
+  type        = list(string)
+  default     = []
+}
+
+variable "acm_certificate_arn" {
+  description = "ARN of the ACM cert (us-east-1) covering domain_aliases. Empty string keeps the default *.cloudfront.net certificate."
+  type        = string
+  default     = ""
+}

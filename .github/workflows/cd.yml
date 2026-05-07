@@ -65,6 +65,14 @@ jobs:
           # (PR context) where the secrets aren't available.
           TF_VAR_clerk_publishable_key: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
           TF_VAR_clerk_secret_key: ${{ secrets.CLERK_SECRET_KEY }}
+          # Custom-domain wiring. Both default to empty in
+          # variables.tf, so the apply is a no-op until the GH repo
+          # variables are populated. ACM_CERTIFICATE_ARN must be an
+          # ISSUED us-east-1 cert covering every entry in
+          # DOMAIN_ALIASES (JSON list, e.g. '["reign.acc.steenman.me"]').
+          # See docs/runbooks/custom-domain.md.
+          TF_VAR_domain_aliases: ${{ vars.DOMAIN_ALIASES }}
+          TF_VAR_acm_certificate_arn: ${{ vars.ACM_CERTIFICATE_ARN }}
         run: |
           terraform apply -auto-approve \
             -var="aws_region=${{ vars.AWS_REGION }}" \

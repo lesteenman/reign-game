@@ -32,10 +32,12 @@ module "api" {
 module "frontend" {
   source = "./modules/frontend"
 
-  project_name       = var.project_name
-  environment        = var.environment
-  api_gateway_domain = module.api.api_gateway_domain
-  api_gateway_stage  = module.api.api_gateway_stage
+  project_name        = var.project_name
+  environment         = var.environment
+  api_gateway_domain  = module.api.api_gateway_domain
+  api_gateway_stage   = module.api.api_gateway_stage
+  domain_aliases      = var.domain_aliases
+  acm_certificate_arn = var.acm_certificate_arn
 }
 
 module "daily_cron" {
