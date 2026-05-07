@@ -27,7 +27,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.26"
+          go-version: "1.26.3"
           cache-dependency-path: backend/go.sum
 
       - name: Build
@@ -184,7 +184,7 @@ jobs:
       # backend/go.sum the Backend job populates (CW-14).
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.26"
+          go-version: "1.26.3"
           cache-dependency-path: backend/go.sum
 
       - uses: arduino/setup-task@v2
@@ -313,7 +313,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.26"
+          go-version: "1.26.3"
           cache-dependency-path: backend/go.sum
 
       - uses: hashicorp/setup-terraform@v4
@@ -442,7 +442,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.26"
+          go-version: "1.26.3"
           cache-dependency-path: backend/go.sum
 
       - uses: actions/setup-node@v6
