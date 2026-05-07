@@ -157,6 +157,9 @@ Run targeted greps from the implementation agents' quality checklists. If violat
 **Glossary Terminology Check (MANDATORY when GLOSSARY.md exists):**
 Read `GLOSSARY.md` and verify that the new/changed code uses glossary terms consistently. Grep for known anti-patterns — e.g., if the glossary defines "Book Year", grep for `FiscalYear`, `fiscal_year`, `financialYear` etc. in the diff. Term mismatches MUST be fixed before proceeding.
 
+**Cross-Chunk Placeholder Sweep (MANDATORY when the slice is broken into chunks):**
+When an earlier chunk plants a stub for a later chunk (a placeholder render branch, a `// TODO chunk N` comment, a literal user-visible string like "Coming soon" or "(post-completion screen lands chunk 5)"), the later chunk's close MUST grep for the identifying string and confirm it's gone. Maintain a running list of placeholder strings in the slice's `tasks.md` so the sweep is mechanical, not from memory. R-8-02 chunk-3 left a placeholder branch that chunk-5 added the screen for but never replaced — day-2 returning users saw the stub. Run this grep before the build-verification step in §4.
+
 ### 6. Local Review (MANDATORY for code changes)
 
 **Action: Read `skills/review-local/SKILL.md` and follow its instructions completely.**
