@@ -89,7 +89,11 @@ type dailyResponse struct {
 // The clock argument lets tests pin "today" for the
 // [yesterdayUTC, todayUTC] window check; production callers pass
 // time.Now.
-func DailyGetHandler(repo DailyRepo, clock func() time.Time) http.Handler {
+//
+// replenishHook is plumbed through SyncFinalizeForToday's cold-start
+// bootstrap to fire auto-replenish on the approved-pool drain. nil is
+// supported for tests and local-dev wiring without SQS.
+func DailyGetHandler(repo DailyRepo, clock func() time.Time, replenishHook func(size int, mode string)) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		start := time.Now()
@@ -146,7 +150,7 @@ func DailyGetHandler(repo DailyRepo, clock func() time.Time) http.Handler {
 				return
 			}
 			syncStart := time.Now()
-			finalized, syncErr := daily.SyncFinalizeForToday(ctx, repo, todayStr, yesterdayStr, clock())
+			finalized, syncErr := daily.SyncFinalizeForToday(ctx, repo, todayStr, yesterdayStr, clock(), replenishHook)
 			syncMs = time.Since(syncStart).Milliseconds()
 			if errors.Is(syncErr, daily.ErrPoolExhausted) {
 				writeDailyError(w, http.StatusInternalServerError, poolExhaustedMessage)

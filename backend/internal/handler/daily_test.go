@@ -245,7 +245,7 @@ func (f *fakeDailyRepo) LeaderboardRank(_ context.Context, date string, elapsedM
 // chunk-2 tests that exercise the schedule + PLAY paths.
 func mountDailyWithRepo(repo handler.DailyRepo) *chi.Mux {
 	r := chi.NewRouter()
-	r.Get("/api/daily/{date}", handler.DailyGetHandler(repo, fixedClock()).ServeHTTP)
+	r.Get("/api/daily/{date}", handler.DailyGetHandler(repo, fixedClock(), nil).ServeHTTP)
 	return r
 }
 

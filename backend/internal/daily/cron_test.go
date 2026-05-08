@@ -88,7 +88,7 @@ func TestEnsureCandidate_FreshExisting_NoOp(t *testing.T) {
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
 	repo := &fakeCronRepo{candidate: candidateFixture("puzzle-fresh", now.Add(-1*time.Hour))}
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now)
+	err := EnsureCandidate(context.Background(), repo, now, nil)
 	// Assert
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -108,7 +108,7 @@ func TestEnsureCandidate_StaleExisting_Replaces(t *testing.T) {
 		pool:      poolPuzzles("puzzle-b", "puzzle-a"),
 	}
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now)
+	err := EnsureCandidate(context.Background(), repo, now, nil)
 	// Assert — picked smallest, called Put with sourcePartition 9#standard.
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -129,7 +129,7 @@ func TestEnsureCandidate_NoExisting_Picks(t *testing.T) {
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
 	repo := &fakeCronRepo{pool: poolPuzzles("puzzle-c", "puzzle-a", "puzzle-b")}
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now)
+	err := EnsureCandidate(context.Background(), repo, now, nil)
 	// Assert
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -144,7 +144,7 @@ func TestEnsureCandidate_DeterministicPick(t *testing.T) {
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
 	repo := &fakeCronRepo{pool: poolPuzzles("puzzle-zzz", "puzzle-001", "puzzle-mid")}
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now)
+	err := EnsureCandidate(context.Background(), repo, now, nil)
 	// Assert — lex order: 001 < mid < zzz.
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -159,7 +159,7 @@ func TestEnsureCandidate_EmptyPool_Sentinel(t *testing.T) {
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
 	repo := &fakeCronRepo{pool: []repository.PuzzleRecord{}}
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now)
+	err := EnsureCandidate(context.Background(), repo, now, nil)
 	// Assert
 	if !errors.Is(err, ErrCandidatePoolEmpty) {
 		t.Fatalf("expected ErrCandidatePoolEmpty, got %v", err)
@@ -177,7 +177,7 @@ func TestEnsureCandidate_RaceLoser_Nil(t *testing.T) {
 		putErr: repository.ErrCandidateAlreadyExists,
 	}
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now)
+	err := EnsureCandidate(context.Background(), repo, now, nil)
 	// Assert — race-loser cleanly exits.
 	if err != nil {
 		t.Fatalf("race-loser should return nil, got %v", err)
@@ -190,13 +190,105 @@ func TestEnsureCandidate_PutGenericFailure_Wrapped(t *testing.T) {
 	plain := errors.New("ddb broken")
 	repo := &fakeCronRepo{pool: poolPuzzles("puzzle-a"), putErr: plain}
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now)
+	err := EnsureCandidate(context.Background(), repo, now, nil)
 	// Assert — wrapped, errors.Is finds the underlying.
 	if err == nil {
 		t.Fatalf("expected error, got nil")
 	}
 	if !errors.Is(err, plain) {
 		t.Fatalf("expected wrapped %v, got %v (%T)", plain, err, err)
+	}
+}
+
+// hookCall records one invocation of the replenishHook so tests can
+// assert the (size, mode) it received and how often it fired.
+type hookCall struct {
+	size int
+	mode string
+}
+
+func captureHook(calls *[]hookCall) func(int, string) {
+	return func(size int, mode string) {
+		*calls = append(*calls, hookCall{size: size, mode: mode})
+	}
+}
+
+func TestEnsureCandidate_FiresReplenishHookAfterApprovedPoolRead(t *testing.T) {
+	// Arrange — non-empty pool path triggers the hook.
+	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
+	repo := &fakeCronRepo{pool: poolPuzzles("puzzle-a")}
+	var calls []hookCall
+
+	// Act
+	err := EnsureCandidate(context.Background(), repo, now, captureHook(&calls))
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("hook calls = %d, want 1", len(calls))
+	}
+	if calls[0].size != CandidatePoolSize || calls[0].mode != CandidatePoolMode {
+		t.Errorf("hook call = %+v, want {%d %s}", calls[0], CandidatePoolSize, CandidatePoolMode)
+	}
+}
+
+func TestEnsureCandidate_DoesNotFireHookOnFreshExisting(t *testing.T) {
+	// Arrange — fresh existing candidate skips the read; no hook fire.
+	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
+	repo := &fakeCronRepo{candidate: candidateFixture("puzzle-fresh", now.Add(-1*time.Hour))}
+	var calls []hookCall
+
+	// Act
+	err := EnsureCandidate(context.Background(), repo, now, captureHook(&calls))
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(calls) != 0 {
+		t.Errorf("hook must not fire when no read happened; got %d calls", len(calls))
+	}
+}
+
+func TestEnsureCandidate_DoesNotFireHookOnEmptyPool(t *testing.T) {
+	// Arrange — pool empty; ErrCandidatePoolEmpty; no hook fire.
+	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
+	repo := &fakeCronRepo{pool: []repository.PuzzleRecord{}}
+	var calls []hookCall
+
+	// Act
+	err := EnsureCandidate(context.Background(), repo, now, captureHook(&calls))
+
+	// Assert
+	if !errors.Is(err, ErrCandidatePoolEmpty) {
+		t.Fatalf("expected ErrCandidatePoolEmpty, got %v", err)
+	}
+	if len(calls) != 0 {
+		t.Errorf("hook must not fire on empty-pool path; got %d calls", len(calls))
+	}
+}
+
+func TestEnsureCandidate_FiresHookEvenOnRaceLoser(t *testing.T) {
+	// Arrange — Put fails with race-loser sentinel; hook should still
+	// have fired because the read drained the partition.
+	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
+	repo := &fakeCronRepo{
+		pool:   poolPuzzles("puzzle-a"),
+		putErr: repository.ErrCandidateAlreadyExists,
+	}
+	var calls []hookCall
+
+	// Act
+	err := EnsureCandidate(context.Background(), repo, now, captureHook(&calls))
+
+	// Assert
+	if err != nil {
+		t.Fatalf("race-loser should return nil, got %v", err)
+	}
+	if len(calls) != 1 {
+		t.Errorf("hook should fire on the read drain regardless of Put outcome; got %d calls", len(calls))
 	}
 }
 

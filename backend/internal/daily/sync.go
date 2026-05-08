@@ -58,11 +58,16 @@ type Repo interface {
 // `today` and `yesterday` are caller-supplied to keep this package
 // time-zone-agnostic and trivially testable. Caller is responsible
 // for computing them as YYYY-MM-DD UTC.
+//
+// replenishHook is plumbed through to the cold-start bootstrap call
+// of EnsureCandidate; see EnsureCandidate's comment for invocation
+// rules. Pass nil from callers that don't want auto-replenish.
 func SyncFinalizeForToday(
 	ctx context.Context,
 	repo Repo,
 	today, yesterday string,
 	now time.Time,
+	replenishHook func(size int, mode string),
 ) (*repository.ScheduleRecord, error) {
 	yesterdaySchedule, err := repo.GetSchedule(ctx, yesterday)
 	if err != nil {
@@ -83,7 +88,7 @@ func SyncFinalizeForToday(
 	// unlucky first request: 1 Query + 1 conditional Put + 1 GetItem on
 	// top of the existing path.
 	if candidate == nil && yesterdaySchedule == nil {
-		if err := EnsureCandidate(ctx, repo, now); err != nil {
+		if err := EnsureCandidate(ctx, repo, now, replenishHook); err != nil {
 			if errors.Is(err, ErrCandidatePoolEmpty) {
 				return nil, ErrPoolExhausted
 			}

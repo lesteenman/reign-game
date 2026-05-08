@@ -129,7 +129,7 @@ func TestSyncFinalizeForToday_ConfirmCandidate_YesterdayHasSolves(t *testing.T) 
 	}
 
 	// Act
-	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now())
+	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
 
 	// Assert
 	if err != nil {
@@ -186,7 +186,7 @@ func TestSyncFinalizeForToday_RecycleYesterday_NoSolves(t *testing.T) {
 	}
 
 	// Act
-	_, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now())
+	_, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
 
 	// Assert
 	if err != nil {
@@ -228,7 +228,7 @@ func TestSyncFinalizeForToday_RecycleYesterday_NoCandidate(t *testing.T) {
 	}
 
 	// Act
-	_, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now())
+	_, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
 
 	// Assert
 	if err != nil {
@@ -263,7 +263,7 @@ func TestSyncFinalizeForToday_ConfirmCandidate_NoYesterday(t *testing.T) {
 	}
 
 	// Act
-	_, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now())
+	_, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
 
 	// Assert
 	if err != nil {
@@ -301,7 +301,7 @@ func TestSyncFinalizeForToday_BothAbsent_BootstrapsFromApprovedPool(t *testing.T
 	}
 
 	// Act
-	canonical, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now())
+	canonical, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
 
 	// Assert
 	if err != nil {
@@ -334,7 +334,7 @@ func TestSyncFinalizeForToday_PoolExhausted(t *testing.T) {
 	}
 
 	// Act
-	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now())
+	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
 
 	// Assert
 	if !errors.Is(err, ErrPoolExhausted) {
@@ -381,7 +381,7 @@ func TestSyncFinalizeForToday_RaceLoser(t *testing.T) {
 	}
 
 	// Act
-	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now())
+	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
 
 	// Assert
 	if err != nil {
@@ -431,7 +431,7 @@ func TestSyncFinalizeForToday_RaceLoser_VanishingSchedule(t *testing.T) {
 	}
 
 	// Act
-	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now())
+	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
 
 	// Assert
 	if err == nil {
@@ -467,7 +467,7 @@ func TestSyncFinalizeForToday_TransactionGenericFailure(t *testing.T) {
 	}
 
 	// Act
-	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now())
+	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
 
 	// Assert
 	if err == nil {

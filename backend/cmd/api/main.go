@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -23,9 +24,19 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/awsclient"
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
+	"github.com/eriksteenman/reign-game/backend/internal/replenish"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 	"github.com/eriksteenman/reign-game/backend/internal/worker"
 )
+
+// reactiveReplenishWindow is the per-combo debounce duration used for
+// reactive auto-replenish. 60s — design D2.
+const reactiveReplenishWindow = 60 * time.Second
+
+// reactiveReplenishTimeout caps the SQS publish goroutine launched
+// per drain-site invocation, so the goroutine doesn't sit idle when
+// the Lambda runtime is about to freeze.
+const reactiveReplenishTimeout = 2 * time.Second
 
 // newUUIDv4 generates a UUID v4 string using crypto/rand.
 func newUUIDv4() (string, error) {
@@ -48,13 +59,18 @@ func newUUIDv4() (string, error) {
 // admin route inherits the middleware chain by construction (BM-05). Adding
 // a new admin route is a single r.Method(...) call inside the admin group.
 func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux {
+	// Build the reactive-replenish hook once. nil when SQS is not
+	// configured — the drain handlers treat nil as no-op so the player
+	// path keeps working in local-dev without LocalStack SQS.
+	replenishHook := buildReplenishHook(repo, pub)
+
 	r := chi.NewRouter()
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", handler.HealthCheck)
 		r.Get("/puzzles/generate", handler.GenerateHandler)
 
 		if repo != nil {
-			r.Get("/puzzles/next", handler.ServeHandler(repo))
+			r.Get("/puzzles/next", handler.ServeHandler(repo, replenishHook))
 			r.Put("/puzzles/{id}/status", handler.StatusHandler(repo))
 
 			// Public modes listing for the landing page. Narrower than
@@ -68,7 +84,7 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 			// handler factories return http.Handler, not http.HandlerFunc.
 			r.Route("/daily", func(r chi.Router) {
 				r.Use(auth.OptionalAuth(auth.NewClerkSessionVerifier()))
-				r.Method(http.MethodGet, "/{date}", handler.DailyGetHandler(repo, time.Now))
+				r.Method(http.MethodGet, "/{date}", handler.DailyGetHandler(repo, time.Now, replenishHook))
 				r.Method(http.MethodPost, "/{date}/result", handler.DailySubmitHandler(repo, time.Now))
 			})
 
@@ -262,4 +278,34 @@ func runLocalPoller(ctx context.Context, sqsClient worker.SQSConsumerAPI, queueU
 	defer cancel()
 
 	worker.RunLocalPoller(pollerCtx, sqsClient, queueURL, handleFn)
+}
+
+// buildReplenishHook constructs the closure passed to drain-site
+// handlers. The closure spawns a goroutine that runs
+// replenish.TryReactiveTopUp under a short timeout so the Lambda
+// runtime doesn't pause it indefinitely after the response commits.
+//
+// Returns nil when repo or pub is nil — local-dev runs without SQS in
+// that case, and the drain handlers are nil-tolerant so the player
+// path keeps working.
+func buildReplenishHook(repo *repository.PuzzleRepository, pub *queue.Publisher) func(size int, mode string) {
+	if repo == nil || pub == nil {
+		return nil
+	}
+	deps := replenish.ReactiveDeps{
+		Configs:   repo,
+		Claimer:   repo,
+		Publisher: pub,
+		Window:    reactiveReplenishWindow,
+		Clock:     time.Now,
+	}
+	return func(size int, mode string) {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), reactiveReplenishTimeout)
+			defer cancel()
+			if err := replenish.TryReactiveTopUp(ctx, deps, size, mode); err != nil && !errors.Is(err, replenish.ErrSkippedDebounced) {
+				log.Printf("reactive replenish: %d#%s: %v", size, mode, err)
+			}
+		}()
+	}
 }

@@ -45,7 +45,14 @@ type serveResponse struct {
 // ServeHandler creates an HTTP handler for GET /puzzles/next.
 // It retrieves the next ready puzzle for the requested size and mode,
 // marks it as served, and returns it without the solution.
-func ServeHandler(fetcher PuzzleFetcher) http.HandlerFunc {
+//
+// replenishHook, if non-nil, is invoked synchronously after a
+// successful MarkServed with the served puzzle's (size, mode). Wiring
+// in cmd/api/main.go installs a hook that spawns a goroutine running
+// replenish.TryReactiveTopUp under a 2s timeout; tests pass a counting
+// fake. nil is supported for callers that don't wire the auto-replenish
+// path (older test sites; the local-dev fallback when SQS is absent).
+func ServeHandler(fetcher PuzzleFetcher, replenishHook func(size int, mode string)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -97,6 +104,15 @@ func ServeHandler(fetcher PuzzleFetcher) http.HandlerFunc {
 			log.Printf("error marking puzzle %s as served: %v", puzzle.ID, err)
 			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to serve puzzle")
 			return
+		}
+
+		// Reactive replenish: fire after a successful drain. The hook
+		// is responsible for its own async dispatch + timeout — keeping
+		// the handler synchronous here makes tests trivial and matches
+		// the daily-flow / serve-flow injection pattern (clock,
+		// replenishHook, etc.).
+		if replenishHook != nil {
+			replenishHook(size, mode)
 		}
 
 		metadata := serveMetadata{
