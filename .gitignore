@@ -13,9 +13,12 @@
 backend/bin/
 backend/cmd/*/main
 backend/api
+# Lambda build outputs (cmd/api → lambda.zip, cmd/daily-cron → daily-cron.zip).
+# task build:lambda writes everything under backend/build/.
+backend/build/
+# Ad-hoc dev binaries from `go build ./cmd/X` at backend/ root.
 backend/bootstrap
 backend/daily-cron
-backend/lambda.zip
 *.exe
 *.exe~
 *.dll

@@ -8,12 +8,18 @@ tasks:
       - go build ./...
 
   build:lambda:
-    desc: Build the reproducible Lambda zip (cmd/api → backend/lambda.zip). Same recipe in CI and CD so terraform plan stays clean across PRs.
+    desc: Build the reproducible Lambda zips into backend/build/ (cmd/api → backend/build/lambda.zip, cmd/daily-cron → backend/build/daily-cron.zip). Same recipe in CI and CD so terraform plan stays clean across PRs. The shared bootstrap binary is overwritten between the two builds; each zip captures the right binary at its zip step.
     dir: backend
     cmds:
-      - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-s -w" -o bootstrap ./cmd/api
-      - touch -t 200001010000.00 bootstrap
-      - zip -jX lambda.zip bootstrap
+      - mkdir -p build
+      # cmd/api → backend/build/lambda.zip
+      - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-s -w" -o build/bootstrap ./cmd/api
+      - touch -t 200001010000.00 build/bootstrap
+      - zip -jX build/lambda.zip build/bootstrap
+      # cmd/daily-cron → backend/build/daily-cron.zip (overwrites build/bootstrap)
+      - GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -buildvcs=false -ldflags="-s -w" -o build/bootstrap ./cmd/daily-cron
+      - touch -t 200001010000.00 build/bootstrap
+      - zip -jX build/daily-cron.zip build/bootstrap
 
   test:backend:
     desc: Run backend tests

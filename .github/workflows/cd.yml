@@ -22,7 +22,7 @@ jobs:
 
       - uses: actions/setup-go@v6
         with:
-          go-version: "1.26"
+          go-version: "1.26.3"
           cache-dependency-path: backend/go.sum
 
       - uses: actions/setup-node@v6
@@ -76,7 +76,8 @@ jobs:
         run: |
           terraform apply -auto-approve \
             -var="aws_region=${{ vars.AWS_REGION }}" \
-            -var="lambda_zip_path=${{ github.workspace }}/backend/lambda.zip"
+            -var="lambda_zip_path=${{ github.workspace }}/backend/build/lambda.zip" \
+            -var="daily_cron_lambda_zip_path=${{ github.workspace }}/backend/build/daily-cron.zip"
 
       - name: Fetch Clerk publishable key from SSM
         id: clerk
