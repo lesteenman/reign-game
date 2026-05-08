@@ -610,6 +610,51 @@ func (r *PuzzleRepository) RecomputeVerdictSummary(ctx context.Context, size int
 	return summary, nil
 }
 
+// TryClaimAutoReplenish attempts to claim a per-combo auto-replenish
+// debounce window via a conditional UpdateItem on the matching CONFIG
+// record (PK="CONFIG", SK="{size}#{mode}"). Returns (true, nil) when
+// the claim succeeds, (false, nil) when another concurrent caller
+// holds a fresh window, and (false, err) on transport / DDB errors.
+//
+// The condition succeeds only when last_auto_replenish_ts is absent
+// (first-fire / never-fired) or older than (now - window). Timestamps
+// are stored as RFC3339Nano strings — lexicographic comparison is
+// correct for the "<" predicate on ISO-8601.
+//
+// Missing CONFIG records also fail the conditional check (no
+// last_auto_replenish_ts attribute and no row to attach it to). Callers
+// treat that as a quiet skip — we intentionally do not create CONFIG
+// records reactively (auto_replenish-puzzle-pool design D2).
+func (r *PuzzleRepository) TryClaimAutoReplenish(ctx context.Context, size int, mode string, now time.Time, window time.Duration) (bool, error) {
+	sk := buildPK(size, mode)
+	nowStr := now.UTC().Format(time.RFC3339Nano)
+	cutoffStr := now.Add(-window).UTC().Format(time.RFC3339Nano)
+
+	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(r.tableName),
+		Key: map[string]types.AttributeValue{
+			"PK": &types.AttributeValueMemberS{Value: "CONFIG"},
+			"SK": &types.AttributeValueMemberS{Value: sk},
+		},
+		UpdateExpression: aws.String("SET last_auto_replenish_ts = :now"),
+		// attribute_exists(PK) prevents silent upsert when the CONFIG
+		// record is absent — we never create CONFIG rows reactively.
+		ConditionExpression: aws.String("attribute_exists(PK) AND (attribute_not_exists(last_auto_replenish_ts) OR last_auto_replenish_ts < :cutoff)"),
+		ExpressionAttributeValues: map[string]types.AttributeValue{
+			":now":    &types.AttributeValueMemberS{Value: nowStr},
+			":cutoff": &types.AttributeValueMemberS{Value: cutoffStr},
+		},
+	})
+	if err != nil {
+		var ccfe *types.ConditionalCheckFailedException
+		if errors.As(err, &ccfe) {
+			return false, nil
+		}
+		return false, fmt.Errorf("claiming auto-replenish window for %s: %w", sk, err)
+	}
+	return true, nil
+}
+
 // CountReady returns the number of puzzles with status "ready" for the given
 // size and mode combination.
 func (r *PuzzleRepository) CountReady(ctx context.Context, size int, mode string) (int, error) {
