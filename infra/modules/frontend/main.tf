@@ -5,6 +5,12 @@ locals {
 # S3 bucket for frontend static files (private, no public access)
 resource "aws_s3_bucket" "frontend" {
   bucket = local.bucket_name
+
+  # Required to allow Terraform to delete the bucket when the bucket
+  # name changes (e.g. an environment rename) — without this, destroy
+  # fails on the existing build artifacts. CD re-syncs the frontend
+  # to the recreated bucket on the next apply.
+  force_destroy = true
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {

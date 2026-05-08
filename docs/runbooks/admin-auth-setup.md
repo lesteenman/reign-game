@@ -153,7 +153,7 @@ Clerk supports rotating both keys. The infrastructure is set up so rotation does
 
 1. Clerk dashboard → `API Keys → Secret keys → Generate new secret key`.
 2. Copy the new value.
-3. AWS Systems Manager Console → `Parameter Store` → `/reign/prod/clerk-secret-key`.
+3. AWS Systems Manager Console → `Parameter Store` → `/reign/acc/clerk-secret-key`.
 4. **Edit** → paste the new value → **Save changes**.
 5. The Lambda caches the secret for the lifetime of its container. Either trigger a deploy to bounce the function, or wait for natural cold starts (a few minutes of idle, then the next request rebuilds the cache).
 6. Once the new key is live and you've verified `/api/admin/*` returns 200 to the admin account, **revoke the old secret** in the Clerk dashboard.
@@ -161,7 +161,7 @@ Clerk supports rotating both keys. The infrastructure is set up so rotation does
 For the publishable key (rare — keys regenerate when you re-create the Clerk application):
 
 1. Clerk dashboard → `API Keys → Publishable keys → Show / Copy new`.
-2. AWS SSM Console → `/reign/prod/clerk-publishable-key` → Edit → paste new value.
+2. AWS SSM Console → `/reign/acc/clerk-publishable-key` → Edit → paste new value.
 3. Re-run the CD workflow (push an empty commit to main, or rerun the latest run from the Actions tab). The next frontend build picks up the new value via the SSM fetch step.
 
 ## 9. Decommission
@@ -171,7 +171,7 @@ If the project shuts down or moves off Clerk:
 1. Disable the production CD workflow.
 2. Clerk dashboard → `Settings → Delete application`.
 3. GCP console → `Credentials` → revoke the OAuth client.
-4. AWS SSM Console → delete `/reign/prod/clerk-publishable-key` and `/reign/prod/clerk-secret-key` (or `terraform destroy` the api module — the parameters are managed there).
+4. AWS SSM Console → delete `/reign/acc/clerk-publishable-key` and `/reign/acc/clerk-secret-key` (or `terraform destroy` the api module — the parameters are managed there).
 
 ## Reference
 
