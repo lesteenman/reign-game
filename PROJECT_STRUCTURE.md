@@ -71,8 +71,8 @@ backend/
 │   │   ├── generate.go          # GET /api/puzzles/generate (legacy, slow)
 │   │   ├── health.go            # GET /api/health
 │   │   ├── params.go            # Shared handler helpers
-│   │   ├── replenish.go         # POST /api/admin/replenish
-│   │   ├── serve.go             # GET /api/puzzles/next
+│   │   ├── replenish.go         # POST /api/admin/replenish — thin shim over internal/replenish.Sweep
+│   │   ├── serve.go             # GET /api/puzzles/next — fires reactive replenish hook on successful serve
 │   │   ├── status.go            # PUT /api/puzzles/{id}/status
 │   │   └── verdict.go           # PUT /api/admin/puzzles/{id}/verdict (Phase 7, R-081)
 │   ├── model/                   # Legacy domain types (Phase 5 kept puzzle.go only)
@@ -84,6 +84,9 @@ backend/
 │   │   └── puzzle_test.go
 │   ├── queue/                   # SQS publisher
 │   │   └── publisher.go
+│   ├── replenish/               # Shared puzzle-pool top-up logic (admin sweep + reactive triggers)
+│   │   ├── replenish.go         # Sweep (full iteration) + TryReactiveTopUp (single combo) + NewAsyncHook
+│   │   └── replenish_test.go
 │   ├── worker/                  # SQS consumer — generates puzzles into the pool
 │   │   └── generator.go         # Seed capture + SafetyNetTrips WARN logging (R-06C/D)
 │   └── generator/               # Phase 5 rework — sampler + solver + grower + mutator + classifier

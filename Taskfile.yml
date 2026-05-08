@@ -22,10 +22,12 @@ tasks:
       - zip -jX build/daily-cron.zip build/bootstrap
 
   test:backend:
-    desc: Run backend tests
+    desc: Run backend tests (-short matches pre-push + ci.yml; long generator
+      tests are testing.Short()-guarded and run via
+      .github/workflows/generator-check.yml with -tags=soak and a 40-min timeout)
     dir: backend
     cmds:
-      - go test ./... -v
+      - go test -short ./... -v
 
   lint:backend:
     desc: Run backend linter

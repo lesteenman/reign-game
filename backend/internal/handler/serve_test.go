@@ -119,7 +119,7 @@ func TestServeHandler(t *testing.T) {
 					return tt.markErr
 				},
 			}
-			h := handler.ServeHandler(fetcher)
+			h := handler.ServeHandler(fetcher, nil)
 
 			req := httptest.NewRequest(http.MethodGet, "/puzzles/next"+tt.query, http.NoBody)
 			rec := httptest.NewRecorder()

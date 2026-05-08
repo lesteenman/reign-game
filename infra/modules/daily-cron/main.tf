@@ -68,6 +68,26 @@ resource "aws_iam_role_policy" "daily_cron_dynamodb" {
   })
 }
 
+# SQS access — auto-replenish-puzzle-pool slice. The daily-cron Lambda
+# publishes to the puzzle-generation queue from the reactive top-up
+# hook installed on EnsureCandidate / SyncFinalizeForToday. Scoped to
+# the single generation queue ARN, no DLQ access needed.
+resource "aws_iam_role_policy" "daily_cron_sqs" {
+  name = "${local.function_name}-sqs"
+  role = aws_iam_role.daily_cron_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["sqs:SendMessage"]
+        Resource = var.generation_queue_arn
+      }
+    ]
+  })
+}
+
 # Daily-cron Lambda function
 resource "aws_lambda_function" "daily_cron" {
   function_name = local.function_name
@@ -84,6 +104,7 @@ resource "aws_lambda_function" "daily_cron" {
   environment {
     variables = {
       PUZZLE_POOL_TABLE = var.puzzle_pool_table_name
+      SQS_QUEUE_URL     = var.generation_queue_url
     }
   }
 

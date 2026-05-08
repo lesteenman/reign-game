@@ -43,9 +43,16 @@ var ErrCandidatePoolEmpty = errors.New("approved candidate pool is empty")
 //     PutCandidateIfAbsent collapses cleanly.
 //  5. PutCandidateIfAbsent. ErrCandidateAlreadyExists -> nil (race-loser).
 //
+// replenishHook, if non-nil, is invoked synchronously after a
+// non-empty ListApprovedPool result, with the partition's (size, mode).
+// The pool read drained the approved partition; the hook gives the
+// caller a chance to publish auto-replenish messages. Wiring decides
+// whether to dispatch async/sync. The hook is not invoked on
+// fresh-candidate (no read), pool-empty, or pool-read-error paths.
+//
 // Future-clock-skew: a candidate with QueuedAt > now is treated as
 // stale (refresh) — defensive, not strictly required.
-func EnsureCandidate(ctx context.Context, repo Repo, now time.Time) error {
+func EnsureCandidate(ctx context.Context, repo Repo, now time.Time, replenishHook func(size int, mode string)) error {
 	existing, err := repo.GetCandidate(ctx)
 	if err != nil {
 		return fmt.Errorf("ensure daily candidate: get candidate: %w", err)
@@ -60,6 +67,14 @@ func EnsureCandidate(ctx context.Context, repo Repo, now time.Time) error {
 	}
 	if len(pool) == 0 {
 		return ErrCandidatePoolEmpty
+	}
+
+	// Approved-pool read succeeded with at least one row — partition
+	// just drained by 1. Fire the auto-replenish hook (if wired) before
+	// the Put: the Put outcome (winner/race-loser/error) doesn't
+	// affect whether replenish should run.
+	if replenishHook != nil {
+		replenishHook(CandidatePoolSize, CandidatePoolMode)
 	}
 
 	pick := lowestPuzzleID(pool)
