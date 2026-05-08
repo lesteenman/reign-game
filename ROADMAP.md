@@ -165,7 +165,7 @@ Items not committed to a phase. Each entry is roughly one phase's worth of work.
 
 - **Rate limiting and abuse prevention** on the player-facing completion submission API. Lands once Daily ships.
 
-- **Auto-replenish the puzzle pool when it runs low.** Done 2026-05-08 in PR #<TBD> (`auto-replenish-puzzle-pool`). Reactive hook on the three drain sites (practice serve, daily candidate, daily sync-fallback) replaces the cron path originally proposed; per-combo conditional `UpdateItem` on CONFIG provides the cross-replica debounce. Admin "Replenish All" remains as the manual sweep.
+- **Auto-replenish the puzzle pool when it runs low.** Done 2026-05-08 in PR #104 (`auto-replenish-puzzle-pool`). Reactive hook on the three drain sites (practice serve, daily candidate, daily sync-fallback) replaces the cron path originally proposed; per-combo conditional `UpdateItem` on CONFIG provides the cross-replica debounce. Admin "Replenish All" remains as the manual sweep.
 
 - **E2E coverage expansion** (slices 2+3 shipped 2026-05-01 — see `openspec/archive/e2e-coverage-and-clerk-injection/` after merge). Slice 1 (E2E in CI) shipped 2026-04-30 in PR #89.
 
