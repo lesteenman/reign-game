@@ -165,7 +165,7 @@ Items not committed to a phase. Each entry is roughly one phase's worth of work.
 
 - **Rate limiting and abuse prevention** on the player-facing completion submission API. Lands once Daily ships.
 
-- **Auto-replenish the puzzle pool when it runs low.** The existing `POST /api/admin/replenish` already does the per-combo "below threshold → enqueue gap" logic and is idempotent on healthy pools; what's missing is an automatic trigger. Today the only way to refill a draining pool is for an admin to click "Replenish All" in `/admin`. Without auto-trigger, the daily cold-start fix (sync-fallback self-bootstrap from the approved pool) eventually fails when the approved 9_standard pool drains below 1. Implementation choice deferred to slice design — natural shape is extending the existing `daily-cron` Lambda with a `replenish` detail-type fired by an EventBridge rule on a regular cadence (every few hours), reusing the deploy pipeline already in place.
+- **Auto-replenish the puzzle pool when it runs low.** Done 2026-05-08 in PR #<TBD> (`auto-replenish-puzzle-pool`). Reactive hook on the three drain sites (practice serve, daily candidate, daily sync-fallback) replaces the cron path originally proposed; per-combo conditional `UpdateItem` on CONFIG provides the cross-replica debounce. Admin "Replenish All" remains as the manual sweep.
 
 - **E2E coverage expansion** (slices 2+3 shipped 2026-05-01 — see `openspec/archive/e2e-coverage-and-clerk-injection/` after merge). Slice 1 (E2E in CI) shipped 2026-04-30 in PR #89.
 

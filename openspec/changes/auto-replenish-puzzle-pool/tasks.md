@@ -4,7 +4,7 @@
 
 | ID | Slice | Status |
 |---|---|---|
-| — | Auto-replenish (reactive trigger + shared package) | [ ] |
+| — | Auto-replenish (reactive trigger + shared package) | [x] |
 
 Flip to `[x]` in the same branch as the implementation per CLAUDE.md
 lesson 6.
