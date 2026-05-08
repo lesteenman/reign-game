@@ -15,11 +15,12 @@ import (
 )
 
 // ErrPoolExhausted is returned by SyncFinalizeForToday when the
-// system has no usable puzzle: candidate is empty AND yesterday's
-// schedule row does not exist. Operators must surface this — the
-// daily endpoint will 500 until a candidate is queued or a manual
-// recovery happens (DP-16, Finding 9). NEVER silently no-op.
-var ErrPoolExhausted = errors.New("daily pool exhausted: no candidate and no yesterday schedule")
+// system has no usable puzzle. With the cold-start bootstrap (added
+// 2026-05-08), this means: candidate is empty, yesterday's schedule
+// does not exist, AND the approved 9_standard pool has zero eligible
+// puzzles. Operators must surface this — the daily endpoint will 500
+// until approvals catch up. NEVER silently no-op.
+var ErrPoolExhausted = errors.New("daily pool exhausted: no candidate, no yesterday schedule, and approved pool empty")
 
 // Repo is the narrow interface SyncFinalizeForToday needs. The
 // production *repository.PuzzleRepository satisfies it; tests use
@@ -71,6 +72,34 @@ func SyncFinalizeForToday(
 	candidate, err := repo.GetCandidate(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("sync finalize for %s: reading candidate: %w", today, err)
+	}
+
+	// Cold-start bootstrap: when both signals are absent (the original
+	// ErrPoolExhausted branch in chooseFinalizeTarget), pull a candidate
+	// from the approved pool synchronously and retry. This handles the
+	// day-0 case (cron hasn't run yet) and any later "cron silently
+	// failed last night" gap. EnsureCandidate is idempotent — concurrent
+	// callers collapse on the conditional Put. Latency cost on the
+	// unlucky first request: 1 Query + 1 conditional Put + 1 GetItem on
+	// top of the existing path.
+	if candidate == nil && yesterdaySchedule == nil {
+		if err := EnsureCandidate(ctx, repo, now); err != nil {
+			if errors.Is(err, ErrCandidatePoolEmpty) {
+				return nil, ErrPoolExhausted
+			}
+			return nil, fmt.Errorf("sync finalize for %s: bootstrap candidate: %w", today, err)
+		}
+		candidate, err = repo.GetCandidate(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("sync finalize for %s: re-reading candidate after bootstrap: %w", today, err)
+		}
+		if candidate == nil {
+			// EnsureCandidate succeeded but candidate is still absent —
+			// rare race where another caller transitioned the candidate
+			// out between our Put and Get. Fall through to ErrPoolExhausted
+			// rather than loop; the caller can retry.
+			return nil, ErrPoolExhausted
+		}
 	}
 
 	puzzleID, sourcePartition, mode, err := chooseFinalizeTarget(candidate, yesterdaySchedule)

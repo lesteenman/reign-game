@@ -28,6 +28,11 @@ type fakeRepo struct {
 	// runs.
 	scheduleAfterFinalize map[string]*repository.ScheduleRecord
 
+	// approvedPool is what ListApprovedPool returns. Empty/nil keeps
+	// pre-bootstrap-era tests intact (they expect ErrCandidatePoolEmpty
+	// to bubble up as ErrPoolExhausted from the cold-start path).
+	approvedPool []repository.PuzzleRecord
+
 	calls []string
 }
 
@@ -70,14 +75,28 @@ func (f *fakeRepo) FinalizeDailyTransaction(_ context.Context, date, puzzleID, s
 	return f.finalizeErr
 }
 
-// ListApprovedPool — sync tests don't exercise this method, but the
-// Repo interface grew in chunk 5 so the fake must satisfy it.
+// ListApprovedPool returns the seeded pool. Cold-start bootstrap
+// tests populate f.approvedPool; pre-bootstrap-era tests leave it
+// nil so EnsureCandidate sees an empty pool and surfaces
+// ErrCandidatePoolEmpty (which the cold-start path translates back
+// to ErrPoolExhausted).
 func (f *fakeRepo) ListApprovedPool(_ context.Context, _ int, _ string, _ bool, _ time.Time) ([]repository.PuzzleRecord, error) {
-	return nil, nil
+	f.calls = append(f.calls, "ListApprovedPool")
+	return f.approvedPool, nil
 }
 
-// PutCandidateIfAbsent — see ListApprovedPool.
-func (f *fakeRepo) PutCandidateIfAbsent(_ context.Context, _, _ string) error {
+// PutCandidateIfAbsent simulates the conditional Put: only writes
+// when no candidate exists. Sets f.candidate so the bootstrap path's
+// re-read sees the freshly-written row, mirroring what DDB would
+// surface to a follow-up GetItem.
+func (f *fakeRepo) PutCandidateIfAbsent(_ context.Context, puzzleID, sourcePartition string) error {
+	f.calls = append(f.calls, "PutCandidateIfAbsent")
+	if f.candidate == nil {
+		f.candidate = &repository.CandidateRecord{
+			PuzzleID:        puzzleID,
+			SourcePartition: sourcePartition,
+		}
+	}
 	return nil
 }
 
@@ -255,6 +274,53 @@ func TestSyncFinalizeForToday_ConfirmCandidate_NoYesterday(t *testing.T) {
 	}
 	if repo.finalizeCall.puzzleID != "puzzle-candidate" {
 		t.Errorf("expected puzzleID=puzzle-candidate, got %q", repo.finalizeCall.puzzleID)
+	}
+}
+
+func TestSyncFinalizeForToday_BothAbsent_BootstrapsFromApprovedPool(t *testing.T) {
+	// Arrange — cold-start: candidate AND yesterday both absent, but the
+	// approved 9_standard pool has a puzzle ready. Sync-fallback should
+	// bootstrap a candidate from the pool and then confirm-finalize it,
+	// rather than 500ing as ErrPoolExhausted.
+	today := "2026-05-08"
+	yesterday := "2026-05-07"
+	repo := &fakeRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{}, // yesterday absent
+		candidate:      nil,                                     // candidate absent → cold-start
+		approvedPool: []repository.PuzzleRecord{
+			{ID: "puzzle-from-pool"},
+		},
+		scheduleAfterFinalize: map[string]*repository.ScheduleRecord{
+			today: {
+				Date:            today,
+				PuzzleID:        "puzzle-from-pool",
+				SourcePartition: "9#standard",
+				AssignedAt:      "2026-05-08T00:00:01Z",
+			},
+		},
+	}
+
+	// Act
+	canonical, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now())
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected nil error after pool bootstrap, got %v", err)
+	}
+	if repo.finalizeCall == nil {
+		t.Fatal("FinalizeDailyTransaction MUST be called after the cold-start bootstrap")
+	}
+	if repo.finalizeCall.mode != repository.FinalizeModeConfirm {
+		t.Errorf("expected mode=confirm (bootstrapped candidate present, yesterday absent), got %q", repo.finalizeCall.mode)
+	}
+	if repo.finalizeCall.puzzleID != "puzzle-from-pool" {
+		t.Errorf("expected puzzleID from approved pool, got %q", repo.finalizeCall.puzzleID)
+	}
+	if repo.finalizeCall.sourcePartition != "9#standard" {
+		t.Errorf("expected sourcePartition=9#standard (CandidatePool constants), got %q", repo.finalizeCall.sourcePartition)
+	}
+	if canonical == nil || canonical.PuzzleID != "puzzle-from-pool" {
+		t.Errorf("expected canonical schedule with bootstrapped puzzle, got %+v", canonical)
 	}
 }
 
