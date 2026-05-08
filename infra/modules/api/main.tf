@@ -62,7 +62,9 @@ resource "aws_iam_role_policy" "lambda_sqs" {
   })
 }
 
-# DynamoDB access policy for API Lambda
+# DynamoDB access policy for API Lambda — actions match the call sites in
+# internal/repository/{puzzle,daily}.go. Keep this list in sync with that
+# code; an untracked addition there will fail at runtime, not at build.
 resource "aws_iam_role_policy" "lambda_dynamodb" {
   name = "${local.function_name}-dynamodb"
   role = aws_iam_role.lambda_exec.id
@@ -73,9 +75,12 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
       {
         Effect = "Allow"
         Action = [
-          "dynamodb:Query",
+          "dynamodb:GetItem",
+          "dynamodb:PutItem",
           "dynamodb:UpdateItem",
-          "dynamodb:PutItem"
+          "dynamodb:DeleteItem",
+          "dynamodb:Query",
+          "dynamodb:TransactWriteItems"
         ]
         Resource = var.puzzle_table_arn
       }
