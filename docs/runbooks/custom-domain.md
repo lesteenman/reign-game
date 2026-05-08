@@ -1,6 +1,6 @@
 # Custom Domain Setup
 
-How to attach a custom domain (e.g. `reign.acc.steenman.me`) to the prod CloudFront distribution.
+How to attach a custom domain (e.g. `reign.acc.steenman.me`) to the frontend CloudFront distribution.
 
 ## Prerequisites
 

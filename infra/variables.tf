@@ -10,9 +10,9 @@ variable "project_name" {
 }
 
 variable "environment" {
-  description = "Deployment environment (e.g., prod, staging)"
+  description = "Deployment environment. Currently 'acc' — this stack serves the acceptance domain reign.acc.steenman.me. Future real-prod env (reign.steenman.me) will set this to 'prod' via per-env tfvars or a separate workspace."
   type        = string
-  default     = "prod"
+  default     = "acc"
 }
 
 variable "lambda_zip_path" {
