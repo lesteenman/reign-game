@@ -30,3 +30,13 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "generation_queue_arn" {
+  description = "ARN of the puzzle-generation SQS queue (used to scope sqs:SendMessage IAM policy for reactive auto-replenish)."
+  type        = string
+}
+
+variable "generation_queue_url" {
+  description = "URL of the puzzle-generation SQS queue (passed as SQS_QUEUE_URL env var so the Lambda can publish replenish messages on approved-pool drains)."
+  type        = string
+}

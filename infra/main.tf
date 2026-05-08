@@ -46,6 +46,8 @@ module "daily_cron" {
   name_prefix            = "${var.project_name}-${var.environment}"
   puzzle_pool_table_name = module.database.puzzle_table_name
   puzzle_pool_table_arn  = module.database.puzzle_table_arn
+  generation_queue_arn   = module.generation.queue_arn
+  generation_queue_url   = module.generation.queue_url
   lambda_zip_path        = var.daily_cron_lambda_zip_path
   lambda_zip_hash        = var.daily_cron_lambda_zip_hash
 
