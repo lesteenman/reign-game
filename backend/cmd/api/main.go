@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -28,15 +27,6 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 	"github.com/eriksteenman/reign-game/backend/internal/worker"
 )
-
-// reactiveReplenishWindow is the per-combo debounce duration used for
-// reactive auto-replenish. 60s — design D2.
-const reactiveReplenishWindow = 60 * time.Second
-
-// reactiveReplenishTimeout caps the SQS publish goroutine launched
-// per drain-site invocation, so the goroutine doesn't sit idle when
-// the Lambda runtime is about to freeze.
-const reactiveReplenishTimeout = 2 * time.Second
 
 // newUUIDv4 generates a UUID v4 string using crypto/rand.
 func newUUIDv4() (string, error) {
@@ -280,32 +270,17 @@ func runLocalPoller(ctx context.Context, sqsClient worker.SQSConsumerAPI, queueU
 	worker.RunLocalPoller(pollerCtx, sqsClient, queueURL, handleFn)
 }
 
-// buildReplenishHook constructs the closure passed to drain-site
-// handlers. The closure spawns a goroutine that runs
-// replenish.TryReactiveTopUp under a short timeout so the Lambda
-// runtime doesn't pause it indefinitely after the response commits.
-//
-// Returns nil when repo or pub is nil — local-dev runs without SQS in
-// that case, and the drain handlers are nil-tolerant so the player
-// path keeps working.
+// buildReplenishHook constructs the drain-site closure that spawns the
+// reactive top-up goroutine. Returns nil when repo or pub is nil so
+// local-dev runs without SQS keep working — drain handlers are
+// nil-tolerant.
 func buildReplenishHook(repo *repository.PuzzleRepository, pub *queue.Publisher) func(size int, mode string) {
 	if repo == nil || pub == nil {
 		return nil
 	}
-	deps := replenish.ReactiveDeps{
+	return replenish.NewAsyncHook(replenish.ReactiveDeps{
 		Configs:   repo,
 		Claimer:   repo,
 		Publisher: pub,
-		Window:    reactiveReplenishWindow,
-		Clock:     time.Now,
-	}
-	return func(size int, mode string) {
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), reactiveReplenishTimeout)
-			defer cancel()
-			if err := replenish.TryReactiveTopUp(ctx, deps, size, mode); err != nil && !errors.Is(err, replenish.ErrSkippedDebounced) {
-				log.Printf("reactive replenish: %d#%s: %v", size, mode, err)
-			}
-		}()
-	}
+	}, "reactive replenish")
 }

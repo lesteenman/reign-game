@@ -134,8 +134,10 @@ func TestServeHandler_NilReplenishHookIsHandledGracefully(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/puzzles/next?size=9&mode=standard", http.NoBody)
 	rec := httptest.NewRecorder()
 
-	// Act + Assert — nil hook must not panic; success still 200.
+	// Act
 	h.ServeHTTP(rec, req)
+
+	// Assert — nil hook must not panic; success still 200.
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
 	}

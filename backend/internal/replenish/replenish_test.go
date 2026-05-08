@@ -459,3 +459,71 @@ func TestTryReactiveTopUp_PublisherErrorAfterClaim(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+// --- NewAsyncHook ---------------------------------------------------------
+
+func TestNewAsyncHook_NilDepsReturnsNilHook(t *testing.T) {
+	// Arrange — nil Configs makes the hook nil so local-dev without SQS works.
+	deps := replenish.ReactiveDeps{Configs: nil, Claimer: &fakeClaimer{}, Publisher: &fakePublisher{}}
+
+	// Act
+	hook := replenish.NewAsyncHook(deps, "test")
+
+	// Assert
+	if hook != nil {
+		t.Fatal("nil Configs should produce nil hook")
+	}
+}
+
+func TestNewAsyncHook_DispatchesGoroutineThatPublishesOnClaim(t *testing.T) {
+	// Arrange — claim wins; goroutine should publish Threshold messages.
+	cfg := enabledConfig(9, "standard", 3, 100)
+	cfgs := &fakeConfigReader{byKey: map[string]*repository.ConfigRecord{keyFor(9, "standard"): &cfg}}
+	claimer := &fakeClaimer{claim: true}
+	pub := &fakePublisher{}
+	deps := replenish.ReactiveDeps{Configs: cfgs, Claimer: claimer, Publisher: pub}
+
+	// Act
+	hook := replenish.NewAsyncHook(deps, "test")
+	if hook == nil {
+		t.Fatal("hook unexpectedly nil")
+	}
+	hook(9, "standard")
+
+	// Assert — goroutine completes well within the publisher fake's no-op latency.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if len(pub.published) == 3 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if len(pub.published) != 3 {
+		t.Fatalf("published = %d, want 3", len(pub.published))
+	}
+}
+
+func TestNewAsyncHook_AppliesDefaultWindowAndClockWhenZero(t *testing.T) {
+	// Arrange — zero Window/Clock should fall back to DefaultWindow/time.Now.
+	cfg := enabledConfig(5, "standard", 1, 0)
+	cfgs := &fakeConfigReader{byKey: map[string]*repository.ConfigRecord{keyFor(5, "standard"): &cfg}}
+	claimer := &fakeClaimer{claim: true}
+	pub := &fakePublisher{}
+	deps := replenish.ReactiveDeps{Configs: cfgs, Claimer: claimer, Publisher: pub}
+
+	// Act
+	hook := replenish.NewAsyncHook(deps, "")
+	hook(5, "standard")
+
+	// Assert — claimer must have been invoked (defaults wired through).
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if claimer.calls == 1 {
+			break
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if claimer.calls != 1 {
+		t.Fatalf("claimer calls = %d, want 1", claimer.calls)
+	}
+}

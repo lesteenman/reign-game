@@ -36,15 +36,6 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
-// reactiveReplenishWindow is the per-combo debounce duration for
-// auto-replenish triggered from the daily-cron Lambda. Same value used
-// across all reactive entry points (60s — design D2).
-const reactiveReplenishWindow = 60 * time.Second
-
-// reactiveReplenishTimeout bounds the SQS publish goroutine so it
-// doesn't sit idle when the runtime is about to freeze.
-const reactiveReplenishTimeout = 2 * time.Second
-
 // EventBridgeScheduledEvent is the slice of an EventBridge scheduled
 // event we care about. Real events have many more fields; we read
 // only `detail-type`.
@@ -152,22 +143,11 @@ func main() {
 	if queueURL != "" {
 		sqsClient := sqs.NewFromConfig(cfg)
 		pub := queue.NewPublisher(sqsClient, queueURL)
-		reactiveDeps := replenish.ReactiveDeps{
+		replenishHook = replenish.NewAsyncHook(replenish.ReactiveDeps{
 			Configs:   repo,
 			Claimer:   repo,
 			Publisher: pub,
-			Window:    reactiveReplenishWindow,
-			Clock:     time.Now,
-		}
-		replenishHook = func(size int, mode string) {
-			go func() {
-				goCtx, cancel := context.WithTimeout(context.Background(), reactiveReplenishTimeout)
-				defer cancel()
-				if err := replenish.TryReactiveTopUp(goCtx, reactiveDeps, size, mode); err != nil && !errors.Is(err, replenish.ErrSkippedDebounced) {
-					log.Printf("daily cron: reactive replenish: %d#%s: %v", size, mode, err)
-				}
-			}()
-		}
+		}, "daily cron: reactive replenish")
 		log.Printf("daily cron: reactive replenish enabled (queue=%s)", queueURL)
 	} else {
 		log.Printf("WARN: daily cron: SQS_QUEUE_URL unset, reactive replenish disabled")

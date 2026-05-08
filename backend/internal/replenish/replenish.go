@@ -22,11 +22,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
+
+// DefaultWindow is the default per-combo debounce duration for reactive
+// top-ups. Picked to match the order-of-magnitude of one generator
+// cycle for a 9x9 Standard puzzle (design D2).
+const DefaultWindow = 60 * time.Second
+
+// DefaultGoroutineTimeout caps the SQS publish goroutine launched per
+// drain-site invocation, so the goroutine doesn't sit idle when the
+// Lambda runtime is about to freeze (design D4).
+const DefaultGoroutineTimeout = 2 * time.Second
 
 // ErrSkippedDebounced is the sentinel returned by TryReactiveTopUp when
 // another concurrent request already claimed the per-combo debounce
@@ -34,10 +45,15 @@ import (
 // do not log it as an error.
 var ErrSkippedDebounced = errors.New("replenish: debounced")
 
-// ConfigReader reads config records for combo discovery and per-combo
-// lookup. Sweep uses GetAllConfigs; TryReactiveTopUp uses GetConfig.
-type ConfigReader interface {
+// AllConfigsLister enumerates every CONFIG record. Used by Sweep.
+type AllConfigsLister interface {
 	GetAllConfigs(ctx context.Context) ([]repository.ConfigRecord, error)
+}
+
+// ConfigGetter looks up a single CONFIG record by size and mode. Used
+// by TryReactiveTopUp on the reactive hot path so we don't pay the
+// list-all cost on every drain.
+type ConfigGetter interface {
 	GetConfig(ctx context.Context, size int, mode string) (*repository.ConfigRecord, error)
 }
 
@@ -62,7 +78,7 @@ type AutoReplenishClaimer interface {
 
 // SweepDeps is the dependency bundle for Sweep.
 type SweepDeps struct {
-	Configs   ConfigReader
+	Configs   AllConfigsLister
 	Counter   PoolCounter
 	Publisher MessagePublisher
 }
@@ -71,11 +87,11 @@ type SweepDeps struct {
 // from SweepDeps because the reactive path needs Claimer but not Counter,
 // and Sweep needs Counter but not Claimer (design D5).
 type ReactiveDeps struct {
-	Configs   ConfigReader
+	Configs   ConfigGetter
 	Claimer   AutoReplenishClaimer
 	Publisher MessagePublisher
-	// Window is the per-combo debounce duration. Default 60s; tunable
-	// at construction time.
+	// Window is the per-combo debounce duration. Default DefaultWindow
+	// (60s) when zero; tunable at construction time.
 	Window time.Duration
 	// Clock returns the current time. Injectable for tests.
 	Clock func() time.Time
@@ -212,4 +228,38 @@ func TryReactiveTopUp(ctx context.Context, deps ReactiveDeps, size int, mode str
 		}
 	}
 	return nil
+}
+
+// NewAsyncHook returns the drain-site closure that dispatches a
+// goroutine running TryReactiveTopUp under DefaultGoroutineTimeout.
+// The goroutine logs every error except ErrSkippedDebounced, prefixed
+// with `logPrefix` so operators can tell which binary fired the hook.
+//
+// Returns nil when any of Configs, Claimer, or Publisher is nil, which
+// matches local-dev runs without SQS — drain handlers must be
+// nil-tolerant so the player path keeps working.
+//
+// Window and Clock fall back to DefaultWindow / time.Now when zero.
+func NewAsyncHook(deps ReactiveDeps, logPrefix string) func(size int, mode string) {
+	if deps.Configs == nil || deps.Claimer == nil || deps.Publisher == nil {
+		return nil
+	}
+	if deps.Window == 0 {
+		deps.Window = DefaultWindow
+	}
+	if deps.Clock == nil {
+		deps.Clock = time.Now
+	}
+	if logPrefix == "" {
+		logPrefix = "reactive replenish"
+	}
+	return func(size int, mode string) {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), DefaultGoroutineTimeout)
+			defer cancel()
+			if err := TryReactiveTopUp(ctx, deps, size, mode); err != nil && !errors.Is(err, ErrSkippedDebounced) {
+				log.Printf("%s: %d#%s: %v", logPrefix, size, mode, err)
+			}
+		}()
+	}
 }
