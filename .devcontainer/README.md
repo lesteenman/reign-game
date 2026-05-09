@@ -76,6 +76,85 @@ When Gateway opens the project, it gives you an integrated terminal that's
 already inside the container. Step 1 and 2 above happen automatically. Just
 run `claude` in that terminal.
 
+## MCP servers
+
+Three MCP servers are wired up via `.mcp.json` at the repo root and are
+loaded by Claude Code automatically when it starts in this project:
+
+| Server | Provides | Auth |
+|---|---|---|
+| `terraform` | Terraform Registry lookups (providers, modules, resources) — pulls `hashicorp/terraform-mcp-server` | None for registry browsing |
+| `aws` | AWS API access via the [Agent Toolkit's hosted MCP](https://docs.aws.amazon.com/agent-toolkit/) — `uvx mcp-proxy-for-aws@latest` | Local AWS SDK creds (SSO) |
+| `github` | GitHub API (issues, PRs, comments, contents) — pulls `ghcr.io/github/github-mcp-server` | Personal access token |
+
+### One-time setup on the host
+
+Set up these two host-level prerequisites once, before launching the dev
+container. The dev container forwards them via `${localEnv:...}` in
+`devcontainer.json`'s `containerEnv`.
+
+**1. AWS SSO login** — required for the `aws` MCP server.
+
+```bash
+# On the host (macOS), run once per session expiry (typically every ~8 hours):
+aws sso login --profile <your-profile>
+
+# Add to your shell rc (~/.zshrc / ~/.bash_profile):
+export AWS_PROFILE=<your-profile>
+```
+
+The dev container mounts `~/.aws/config` and `~/.aws/sso/cache/` read-only,
+so once you've logged in on the host, the in-container SDK can use the
+session. Read-only means SSO refresh fails — when the token expires, run
+`aws sso login` on the host again. (The `~/.aws/credentials` static-keys
+file is intentionally not mounted.)
+
+**2. GitHub PAT** — required for the `github` MCP server.
+
+Create a fine-grained PAT at <https://github.com/settings/personal-access-tokens>
+with these repository permissions for `lesteenman/reign-game`:
+
+- Contents: read/write
+- Pull requests: read/write
+- Issues: read/write
+- Actions: read (so the agent can poll CI status)
+- Metadata: read (mandatory)
+
+Then export the token in your shell rc:
+
+```bash
+export GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_…
+```
+
+After exporting either of these, restart the dev container so the new env
+flows in:
+
+```bash
+~/.devcontainers/bin/devcontainer up --workspace-folder . --remove-existing-container
+```
+
+### How AWS MCP avoids the LocalStack creds
+
+The dev container sets `AWS_ACCESS_KEY_ID=test` / `AWS_SECRET_ACCESS_KEY=test`
+/ `AWS_ENDPOINT_URL=http://localstack:4566` so the backend code can talk to
+LocalStack out of the box. Those would shadow the real SSO creds for the
+AWS MCP server, so `.mcp.json` wraps the proxy in `env -u AWS_ACCESS_KEY_ID
+-u AWS_SECRET_ACCESS_KEY -u AWS_ENDPOINT_URL` — the proxy starts in a clean
+slate and falls through to the SSO config in `~/.aws/config`. No backend
+behavior changes.
+
+### Verifying the MCP servers
+
+Inside the container, after `claude` is running, ask it `what MCP tools do
+you have?` — you should see Terraform/AWS/GitHub tool prefixes. Or from a
+separate shell:
+
+```bash
+claude mcp list
+```
+
+If a server is failing to start, `claude mcp list` shows the error.
+
 ## Skills + agents
 
 | Source | Inside the container | Writeable? |

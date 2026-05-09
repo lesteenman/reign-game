@@ -26,10 +26,20 @@
     "AWS_ENDPOINT_URL": "http://localstack:4566",
     "AWS_ACCESS_KEY_ID": "test",
     "AWS_SECRET_ACCESS_KEY": "test",
-    "AWS_DEFAULT_REGION": "us-east-1"
+    "AWS_DEFAULT_REGION": "us-east-1",
+    "AWS_PROFILE": "${localEnv:AWS_PROFILE}",
+    "GITHUB_PERSONAL_ACCESS_TOKEN": "${localEnv:GITHUB_PERSONAL_ACCESS_TOKEN}"
   },
 
   "forwardPorts": [4566, 5180, 5181, 5182, 5183],
 
-  "postCreateCommand": "bash .devcontainer/post-create.sh"
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+  "customizations": {
+    "jetbrains": {
+      "settings": {
+        "com.intellij:app:EditorSettings.soft_wrap_file_masks": "*.md; *.txt; *.rst; *.adoc",
+        "com.intellij:app:HttpConfigurable.use_proxy_pac": true
+      }
+    }
+  }
 }

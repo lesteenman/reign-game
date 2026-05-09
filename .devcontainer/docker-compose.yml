@@ -21,7 +21,14 @@ services:
       # devcontainer.json `mounts`) because the `readonly` flag in
       # devcontainer.json silently doesn't propagate through compose-based
       # containers — `:ro` in compose is honored faithfully.
-      - ${HOME}/.claude/skills:/home/vscode/.claude/skills:ro
+#      - ${HOME}/.claude/skills:/home/vscode/.claude/skills:ro
+      # AWS SSO config + bearer-token cache, read-only. The AWS MCP server
+      # (uvx mcp-proxy-for-aws) reads these via the standard SDK lookup.
+      # Skipping ~/.aws/credentials and ~/.aws/cli/cache/ — for SSO users the
+      # bearer token in sso/cache already grants any role assigned to the
+      # session, so adding the static-keys file widens nothing.
+      - ${HOME}/.aws/config:/home/vscode/.aws/config:ro
+      - ${HOME}/.aws/sso/cache:/home/vscode/.aws/sso/cache:ro
     command: sleep infinity
     depends_on:
       - localstack

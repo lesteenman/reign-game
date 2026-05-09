@@ -12,6 +12,7 @@ TASK_VERSION=v3.50.0
 GOLANGCI_LINT_VERSION=v2.11.4    # must match .github/workflows/ci.yml + .githooks/pre-push
 GITLEAKS_VERSION=8.30.1
 GOVULNCHECK_VERSION=v1.3.0
+UV_VERSION=0.11.12               # used by `uvx` to launch the AWS MCP proxy
 
 echo "=== Installing project tooling ==="
 
@@ -56,6 +57,11 @@ rm /tmp/gitleaks.tgz
 # govulncheck (CI security gate)
 echo "--- Installing govulncheck ${GOVULNCHECK_VERSION} ---"
 go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+
+# uv. Used by `uvx` to launch the AWS MCP proxy declared in .mcp.json.
+# Installs to ~/.local/bin (already on PATH for the vscode user).
+echo "--- Installing uv ${UV_VERSION} ---"
+curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh
 
 # Note: `awslocal` is intentionally not installed here. Every project usage is
 # `docker compose exec localstack awslocal ...` — it runs inside the LocalStack
