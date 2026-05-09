@@ -16,13 +16,16 @@ GOVULNCHECK_VERSION=v1.3.0
 echo "=== Installing project tooling ==="
 
 # Named volumes mount at root-owned mount points the first time the container
-# is created. Hand them to the runtime user so subsequent npm/go writes don't
-# need sudo and don't fail with EACCES.
+# is created. Hand them to the runtime user so subsequent npm/go/claude writes
+# don't need sudo and don't fail with EACCES.
 sudo chown -R vscode:vscode \
   /home/vscode/.npm \
   /home/vscode/go \
   /workspaces/reign-game/frontend/node_modules \
   || true
+# /home/vscode/.claude is the Claude Code config volume; chown only the top
+# level — recursing would hit the read-only skills bind underneath.
+sudo chown vscode:vscode /home/vscode/.claude
 
 # go-task. Installed via `go install` so the version is pinned and reproducible
 # (the upstream `taskfile.dev/install.sh` resolves "latest" at run time).
