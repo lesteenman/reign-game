@@ -89,32 +89,38 @@ loaded by Claude Code automatically when it starts in this project:
 | `aws` | AWS API access via the [Agent Toolkit's hosted MCP](https://docs.aws.amazon.com/agent-toolkit/) — `uvx mcp-proxy-for-aws@latest` | Local AWS SDK creds (SSO) |
 | `github` | GitHub API (issues, PRs, comments, contents) — pulls `ghcr.io/github/github-mcp-server` | Personal access token |
 
-### One-time setup on the host
+### One-time setup
 
-Set up these two host-level prerequisites once, before launching the dev
-container. The dev container forwards them via `${localEnv:...}` in
-`devcontainer.json`'s `containerEnv`.
-
-**1. AWS SSO login** — required for the `aws` MCP server.
+Project-scoped secrets live in `.devcontainer/.env.local` (gitignored).
+Compose loads it as an `env_file` for the dev service — the values land
+in the container's environment without ever touching your host shell rc.
 
 ```bash
-# On the host (macOS), run once per session expiry (typically every ~8 hours):
-aws sso login --profile <your-profile>
-
-# Add to your shell rc (~/.zshrc / ~/.bash_profile):
-export AWS_PROFILE=<your-profile>
+cp .devcontainer/.env.local.example .devcontainer/.env.local
+chmod 600 .devcontainer/.env.local
 ```
 
-The dev container mounts `~/.aws/config` and `~/.aws/sso/cache/` read-only,
-so once you've logged in on the host, the in-container SDK can use the
-session. Read-only means SSO refresh fails — when the token expires, run
-`aws sso login` on the host again. (The `~/.aws/credentials` static-keys
-file is intentionally not mounted.)
+Then fill in the two values:
 
-**2. GitHub PAT** — required for the `github` MCP server.
+**1. `AWS_PROFILE`** — for the `aws` MCP server and ad-hoc `aws` CLI use.
+
+Must match a profile defined in your host's `~/.aws/config`, which is
+bind-mounted read-only into the container. Before working in the
+container (and again whenever the SSO session expires, ~8h), run on the
+host:
+
+```bash
+aws sso login --profile <your-profile>
+```
+
+(`~/.aws/credentials` static keys + `~/.aws/cli/cache/` are intentionally
+NOT mounted — the SSO bearer in `sso/cache/` is the only credential the
+container sees.)
+
+**2. `GITHUB_PERSONAL_ACCESS_TOKEN`** — for the `github` MCP server.
 
 Create a fine-grained PAT at <https://github.com/settings/personal-access-tokens>
-with these repository permissions for `lesteenman/reign-game`:
+scoped to `lesteenman/reign-game` with these repository permissions:
 
 - Contents: read/write
 - Pull requests: read/write
@@ -122,13 +128,7 @@ with these repository permissions for `lesteenman/reign-game`:
 - Actions: read (so the agent can poll CI status)
 - Metadata: read (mandatory)
 
-Then export the token in your shell rc:
-
-```bash
-export GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_…
-```
-
-After exporting either of these, restart the dev container so the new env
+After updating `.env.local`, restart the dev container so the new env
 flows in:
 
 ```bash

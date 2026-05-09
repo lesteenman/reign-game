@@ -26,9 +26,7 @@
     "AWS_ENDPOINT_URL": "http://localstack:4566",
     "AWS_ACCESS_KEY_ID": "test",
     "AWS_SECRET_ACCESS_KEY": "test",
-    "AWS_DEFAULT_REGION": "us-east-1",
-    "AWS_PROFILE": "",
-    "GITHUB_PERSONAL_ACCESS_TOKEN": "${localEnv:GITHUB_PERSONAL_ACCESS_TOKEN}"
+    "AWS_DEFAULT_REGION": "us-east-1"
   },
 
   "forwardPorts": [4566, 5180, 5181, 5182, 5183],

@@ -29,6 +29,15 @@ services:
       # session, so adding the static-keys file widens nothing.
       - ${HOME}/.aws/config:/home/vscode/.aws/config:ro
       - ${HOME}/.aws/sso/cache:/home/vscode/.aws/sso/cache:ro
+    # Project-scoped secrets (PAT, AWS_PROFILE, etc.). Optional — the stack
+    # still comes up if the file isn't present. Anything in .env.local is
+    # set on the dev container's environment without ever passing through
+    # the host's shell rc. Path is resolved against project_directory
+    # (= repo root, dirname of the first `-f` arg), not the compose file's
+    # own directory — same rule we hit for volumes.
+    env_file:
+      - path: .devcontainer/.env.local
+        required: false
     command: sleep infinity
     depends_on:
       - localstack
