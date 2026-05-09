@@ -94,7 +94,8 @@ Every change — feature, fix, or refactor — follows this pipeline:
 5. Security Scan       → gitleaks + dependency audit + review-local security agent
 6. Self-Review         → reviewer + writer iterate until consensus (escalate to human if stuck)
 7. OpenSpec Archive    → sync artifacts with final implementation
-8. Retro               → retrospective on the change
+8. CD Watch            → after merge, poll the CD run for the merge SHA; surface failures immediately
+9. Retro               → retrospective on the change
 ```
 
 - **TDD is non-negotiable** for both backend and frontend. Red/green/refactor — write a failing test first.
@@ -321,6 +322,7 @@ Slice ID scheme uses `R-<phase>-<slice>` where `<phase>` is the integer phase nu
 8. **Verify dependency versions at the registry, not from memory.** When adding/bumping any dep (npm, Go module, Terraform provider, GitHub Action, Docker image, Homebrew, Clerk/AWS SDK), the version comes from the live registry or current docs page — never recollection. Re-verify when the slice that installs it starts.
 9. **Non-slice perf fixes that block slice testability attach to the slice's PR with explicit commit-body justification.** When a perf fix isn't part of the slice's stated scope but is needed to playtest the slice end-to-end locally, ship it on the same branch with rationale stated explicitly. Do NOT split into a separate PR if it would block slice testing.
 10. **Lockstep service config: capture EVERY consumer in the spec.** When two services share an identifier (queue URL, table name, env var), the spec's acceptance criteria must enumerate all sites. Define shared constants once in `Taskfile.yml::vars:` and reference from each env block — single source of truth.
+11. **Watch CD after every merge to main.** After a PR merges, fetch the latest `cd.yml` run for that commit (`gh run list --workflow=cd.yml --branch=main --limit=1`), poll it to completion (`gh run watch <id>`), and surface failures immediately as in-flight blocking work — don't move on assuming green. CI green is not CD green: TF state can fail on pre-existing drift (PR #102 BucketNotEmpty), IAM policies can fail to attach, frontend sync can fail post-build. Three consecutive silent CD failures (PR #102/103/104, 2026-05-08) only surfaced when the user-facing acc surface degraded behind a CloudFront cache TTL — none of which would have happened if the first failure had been caught at merge time.
 
 ## Security: Baseline Gates (every cycle)
 
