@@ -9,6 +9,13 @@ services:
       - .:/workspaces/reign-game:cached
       - go-mod-cache:/home/vscode/go/pkg/mod
       - npm-cache:/home/vscode/.npm
+      # Container-local node_modules. Native modules (rolldown, esbuild, etc.)
+      # ship platform-specific binaries; sharing node_modules between the
+      # macOS host and the Linux container via the workspace bind would have
+      # both sides fight over the same dir and break the host's `npm test`
+      # the moment the container's `npm ci` ran. This volume override scopes
+      # the Linux install to the container.
+      - frontend-node-modules:/workspaces/reign-game/frontend/node_modules
       - /var/run/docker.sock:/var/run/docker.sock
       # Host global Claude skills, read-only. Declared here (not in
       # devcontainer.json `mounts`) because the `readonly` flag in
@@ -22,3 +29,4 @@ services:
 volumes:
   go-mod-cache:
   npm-cache:
+  frontend-node-modules:

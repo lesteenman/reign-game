@@ -15,10 +15,14 @@ GOVULNCHECK_VERSION=v1.3.0
 
 echo "=== Installing project tooling ==="
 
-# The npm-cache + go-mod-cache named volumes mount at root-owned mount points
-# the first time the container is created. Hand them to the runtime user so
-# subsequent npm/go writes don't need sudo and don't fail with EACCES.
-sudo chown -R vscode:vscode /home/vscode/.npm /home/vscode/go || true
+# Named volumes mount at root-owned mount points the first time the container
+# is created. Hand them to the runtime user so subsequent npm/go writes don't
+# need sudo and don't fail with EACCES.
+sudo chown -R vscode:vscode \
+  /home/vscode/.npm \
+  /home/vscode/go \
+  /workspaces/reign-game/frontend/node_modules \
+  || true
 
 # go-task. Installed via `go install` so the version is pinned and reproducible
 # (the upstream `taskfile.dev/install.sh` resolves "latest" at run time).
@@ -63,9 +67,9 @@ echo "--- Downloading Go modules ---"
 ( cd backend && go mod download )
 
 echo "--- Installing frontend dependencies ---"
-# Force a clean install. node_modules lives on the host bind mount and may have
-# been populated by a different Node major (e.g. host-shell `task dev:up`), so
-# `npm ci` can otherwise hit ENOTEMPTY when it tries to replace existing trees.
-( cd frontend && rm -rf node_modules && npm ci )
+# `npm ci` clears node_modules content before installing, so no manual rm.
+# The container-local `frontend-node-modules` volume keeps Linux native
+# bindings separate from the host's darwin bindings.
+( cd frontend && npm ci )
 
 echo "=== Setup complete ==="
