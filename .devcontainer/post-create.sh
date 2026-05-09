@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Project tools that aren't covered by devcontainer features.
+# Installed once at container create time.
+#
+# All versions pinned. Per CLAUDE.md lesson 8 ("verify dependency versions at
+# the registry") + lesson 10 ("lockstep service config") — any time CI bumps a
+# tool, bump the matching pin here.
+
+TASK_VERSION=v3.50.0
+GOLANGCI_LINT_VERSION=v2.11.4    # must match .github/workflows/ci.yml + .githooks/pre-push
+GITLEAKS_VERSION=8.30.1
+GOVULNCHECK_VERSION=v1.3.0
+
+echo "=== Installing project tooling ==="
+
+# The npm-cache + go-mod-cache named volumes mount at root-owned mount points
+# the first time the container is created. Hand them to the runtime user so
+# subsequent npm/go writes don't need sudo and don't fail with EACCES.
+sudo chown -R vscode:vscode /home/vscode/.npm /home/vscode/go || true
+
+# go-task. Installed via `go install` so the version is pinned and reproducible
+# (the upstream `taskfile.dev/install.sh` resolves "latest" at run time).
+echo "--- Installing task ${TASK_VERSION} ---"
+go install "github.com/go-task/task/v3/cmd/task@${TASK_VERSION}"
+
+# golangci-lint. The installer script is pulled from the same tag as the binary
+# version so a compromised `master` can't ship malicious install logic.
+echo "--- Installing golangci-lint ${GOLANGCI_LINT_VERSION} ---"
+curl -sSfL "https://raw.githubusercontent.com/golangci/golangci-lint/${GOLANGCI_LINT_VERSION}/install.sh" \
+  | sh -s -- -b "$(go env GOPATH)/bin" "${GOLANGCI_LINT_VERSION}"
+
+# gitleaks (used by pre-commit + pre-push). Installed from the official release
+# tarball — `go install` fails because the module declares its path as
+# github.com/zricethezav/gitleaks/v8 even though releases ship from
+# github.com/gitleaks/gitleaks.
+echo "--- Installing gitleaks ${GITLEAKS_VERSION} ---"
+ARCH=$(uname -m); case "$ARCH" in
+  x86_64) GL_ARCH=x64 ;;
+  aarch64|arm64) GL_ARCH=arm64 ;;
+  *) echo "Unsupported arch $ARCH for gitleaks" >&2; exit 1 ;;
+esac
+curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${GL_ARCH}.tar.gz" \
+  -o /tmp/gitleaks.tgz
+sudo tar -xz -C /usr/local/bin -f /tmp/gitleaks.tgz gitleaks
+rm /tmp/gitleaks.tgz
+
+# govulncheck (CI security gate)
+echo "--- Installing govulncheck ${GOVULNCHECK_VERSION} ---"
+go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+
+# Note: `awslocal` is intentionally not installed here. Every project usage is
+# `docker compose exec localstack awslocal ...` — it runs inside the LocalStack
+# container (which has it pre-installed), not on the dev container's PATH.
+
+# Project hooks (CLAUDE.md: "After cloning the repo, configure git to run the project's hooks")
+echo "--- Configuring git hooks path ---"
+git config core.hooksPath .githooks
+
+# Dependency download — pre-warm caches so first build is fast.
+echo "--- Downloading Go modules ---"
+( cd backend && go mod download )
+
+echo "--- Installing frontend dependencies ---"
+# Force a clean install. node_modules lives on the host bind mount and may have
+# been populated by a different Node major (e.g. host-shell `task dev:up`), so
+# `npm ci` can otherwise hit ENOTEMPTY when it tries to replace existing trees.
+( cd frontend && rm -rf node_modules && npm ci )
+
+echo "=== Setup complete ==="

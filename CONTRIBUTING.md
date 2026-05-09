@@ -2,10 +2,15 @@
 
 ## Prerequisites
 
-### Required
+You can either install the toolchain on your host (instructions below) **or**
+use the dev container, which ships everything pre-pinned to match CI. See
+`.devcontainer/README.md` for the dev container path. The two paths are
+maintained in parallel.
 
-- **Go 1.22+** — [install](https://go.dev/dl/)
-- **Node.js 20+** — [install](https://nodejs.org/)
+### Required (host install)
+
+- **Go 1.26+** — [install](https://go.dev/dl/)
+- **Node.js 24+** — [install](https://nodejs.org/)
 - **Terraform 1.5+** — [install](https://developer.hashicorp.com/terraform/install)
 - **Docker** — for LocalStack (local DynamoDB)
 - **golangci-lint** — `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4` (v2 module path; CI is pinned to v2.11.4 in `.github/workflows/ci.yml`)

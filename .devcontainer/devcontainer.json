@@ -1,0 +1,35 @@
+{
+  "name": "reign-game",
+
+  "dockerComposeFile": [
+    "../docker-compose.yml",
+    "docker-compose.yml"
+  ],
+  "service": "dev",
+  "workspaceFolder": "/workspaces/reign-game",
+  "remoteUser": "vscode",
+
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1.0": {},
+    "ghcr.io/devcontainers/features/common-utils:2": {},
+    "ghcr.io/devcontainers/features/go:1": { "version": "1.26.3" },
+    "ghcr.io/devcontainers/features/node:1": { "version": "24" },
+    "ghcr.io/devcontainers/features/terraform:1": {},
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {}
+  },
+
+  "mounts": [
+    "source=claude-code-config-${devcontainerId},target=/home/vscode/.claude,type=volume"
+  ],
+
+  "containerEnv": {
+    "AWS_ENDPOINT_URL": "http://localstack:4566",
+    "AWS_ACCESS_KEY_ID": "test",
+    "AWS_SECRET_ACCESS_KEY": "test",
+    "AWS_DEFAULT_REGION": "us-east-1"
+  },
+
+  "forwardPorts": [4566, 5180, 5181, 5182, 5183],
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh"
+}
