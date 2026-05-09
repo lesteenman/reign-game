@@ -885,3 +885,23 @@ tasks:
     dir: backend
     cmds:
       - go run ./cmd/genfixtures
+
+  devcontainer:exec:
+    desc: Open an interactive shell inside the dev container; brings the stack up first if it isn't already running.
+    interactive: true
+    cmds:
+      - |
+        DEVCONTAINER="$HOME/.devcontainers/bin/devcontainer"
+        if [ ! -x "$DEVCONTAINER" ]; then
+          DEVCONTAINER=$(command -v devcontainer 2>/dev/null || true)
+        fi
+        if [ -z "$DEVCONTAINER" ] || [ ! -x "$DEVCONTAINER" ]; then
+          echo "ERROR: devcontainer CLI not found at ~/.devcontainers/bin/devcontainer or on PATH" >&2
+          echo "       Install: https://github.com/devcontainers/cli" >&2
+          exit 1
+        fi
+        if [ -z "$(docker ps --filter name=reign-game-dev-1 --filter status=running -q)" ]; then
+          echo "Dev container not running — starting via devcontainer up..."
+          "$DEVCONTAINER" up --workspace-folder .
+        fi
+        "$DEVCONTAINER" exec --workspace-folder . bash
