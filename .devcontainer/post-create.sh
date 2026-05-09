@@ -13,6 +13,7 @@ GOLANGCI_LINT_VERSION=v2.11.4    # must match .github/workflows/ci.yml + .githoo
 GITLEAKS_VERSION=8.30.1
 GOVULNCHECK_VERSION=v1.3.0
 UV_VERSION=0.11.12               # used by `uvx` to launch the AWS MCP proxy
+AWSCLI_VERSION=2.34.45           # `aws sso login`, `aws s3 ...`, etc.
 
 echo "=== Installing project tooling ==="
 
@@ -62,6 +63,19 @@ go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
 # Installs to ~/.local/bin (already on PATH for the vscode user).
 echo "--- Installing uv ${UV_VERSION} ---"
 curl -LsSf "https://astral.sh/uv/${UV_VERSION}/install.sh" | sh
+
+# AWS CLI v2 — `aws sso login` and ad-hoc human use. The base image doesn't
+# ship `unzip`, which the official installer needs.
+echo "--- Installing aws-cli ${AWSCLI_VERSION} ---"
+case "$ARCH" in
+  x86_64) AWS_ARCH=x86_64 ;;
+  aarch64|arm64) AWS_ARCH=aarch64 ;;
+esac
+sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends unzip
+curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${AWS_ARCH}-${AWSCLI_VERSION}.zip" \
+  -o /tmp/awscliv2.zip
+( cd /tmp && unzip -q -o awscliv2.zip && sudo ./aws/install --update )
+rm -rf /tmp/awscliv2.zip /tmp/aws
 
 # Note: `awslocal` is intentionally not installed here. Every project usage is
 # `docker compose exec localstack awslocal ...` — it runs inside the LocalStack

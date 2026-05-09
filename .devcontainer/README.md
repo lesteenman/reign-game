@@ -11,6 +11,8 @@ volumes, not the host filesystem.
   `.github/workflows/ci.yml`
 - `task` v3.50.0, `golangci-lint` v2.11.4, `gitleaks` 8.30.1,
   `govulncheck` v1.3.0
+- `aws-cli` v2.34.45 — `aws sso login`, `aws s3 ...`, etc.
+- `uv` 0.11.12 (provides `uvx`, used by the AWS MCP proxy)
 - Docker CLI with the host socket mounted
 
 The `.devcontainer/docker-compose.yml` extends the root `docker-compose.yml` —
@@ -214,6 +216,8 @@ task --version        # 3.50.0
 terraform -version    # 1.x
 golangci-lint version # v2.11.4
 gitleaks version      # 8.30.1
+aws --version         # aws-cli/2.34.45
+uv --version          # 0.11.12
 claude --version
 
 curl http://localstack:4566/_localstack/health   # JSON response
