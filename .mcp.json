@@ -5,12 +5,8 @@
       "args": ["run", "-i", "--rm", "hashicorp/terraform-mcp-server"]
     },
     "aws": {
-      "command": "env",
+      "command": ".devcontainer/aws-mcp.sh",
       "args": [
-        "-u", "AWS_ACCESS_KEY_ID",
-        "-u", "AWS_SECRET_ACCESS_KEY",
-        "-u", "AWS_ENDPOINT_URL",
-        "uvx", "mcp-proxy-for-aws@latest",
         "https://aws-mcp.us-east-1.api.aws/mcp",
         "--metadata", "AWS_REGION=us-east-1"
       ]

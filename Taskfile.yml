@@ -888,6 +888,7 @@ tasks:
 
   devcontainer:exec:
     desc: Open an interactive shell inside the dev container; brings the stack up first if it isn't already running.
+    aliases: [dev]
     interactive: true
     cmds:
       - |

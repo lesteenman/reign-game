@@ -102,7 +102,7 @@ chmod 600 .devcontainer/.env.local
 
 Then fill in the two values:
 
-**1. `AWS_PROFILE`** — for the `aws` MCP server and ad-hoc `aws` CLI use.
+**1. `REIGN_AWS_PROFILE`** — for the `aws` MCP server.
 
 Must match a profile defined in your host's `~/.aws/config`, which is
 bind-mounted read-only into the container. Before working in the
@@ -112,6 +112,14 @@ host:
 ```bash
 aws sso login --profile <your-profile>
 ```
+
+The variable is named `REIGN_AWS_PROFILE` rather than `AWS_PROFILE` on
+purpose: a container-wide `AWS_PROFILE` leaks into `go test` and the
+backend's SDK init, which doesn't expect a profile lookup.
+`.devcontainer/aws-mcp.sh` translates `REIGN_AWS_PROFILE` into
+`AWS_PROFILE` for the MCP process only. For ad-hoc `aws` CLI use inside
+the container, either pass `--profile <name>` per command or `export
+AWS_PROFILE=<name>` in your interactive shell session.
 
 (`~/.aws/credentials` static keys + `~/.aws/cli/cache/` are intentionally
 NOT mounted — the SSO bearer in `sso/cache/` is the only credential the
@@ -137,13 +145,18 @@ flows in:
 
 ### How AWS MCP avoids the LocalStack creds
 
-The dev container sets `AWS_ACCESS_KEY_ID=test` / `AWS_SECRET_ACCESS_KEY=test`
-/ `AWS_ENDPOINT_URL=http://localstack:4566` so the backend code can talk to
-LocalStack out of the box. Those would shadow the real SSO creds for the
-AWS MCP server, so `.mcp.json` wraps the proxy in `env -u AWS_ACCESS_KEY_ID
--u AWS_SECRET_ACCESS_KEY -u AWS_ENDPOINT_URL` — the proxy starts in a clean
-slate and falls through to the SSO config in `~/.aws/config`. No backend
-behavior changes.
+The dev container sets `DYNAMODB_ENDPOINT` and `SQS_ENDPOINT` (project-
+specific, only the backend reads them) plus `AWS_ACCESS_KEY_ID=test` /
+`AWS_SECRET_ACCESS_KEY=test` so `go run ./cmd/api` talks to LocalStack out
+of the box. The static creds would still shadow real SSO for the AWS MCP
+server, so `.mcp.json` invokes the proxy through `.devcontainer/aws-mcp.sh`,
+which `unset`s the dummy creds and exports `AWS_PROFILE` from
+`REIGN_AWS_PROFILE` for that one process.
+
+We deliberately do NOT set the generic `AWS_ENDPOINT_URL`. That env var is
+SDK-wide and would route every AWS call (MCP, `aws` CLI, `terraform plan`
+against real AWS) to LocalStack. The backend doesn't need it — it reads
+the project-specific `DYNAMODB_ENDPOINT`/`SQS_ENDPOINT` directly.
 
 ### Verifying the MCP servers
 
