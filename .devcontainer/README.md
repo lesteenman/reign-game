@@ -64,6 +64,12 @@ The first time you log in, Claude may ask for trust permissions on the
 workspace; the workspace path inside the container is
 `/workspaces/reign-game`.
 
+Claude Code's main config file at `~/.claude.json` (note: sibling to the
+directory, not inside it) sits on the container's overlay filesystem and
+would be wiped on every recreate. `post-create.sh` symlinks it into the
+named volume so project-trust + model preferences + history persist across
+recreates — without that, the setup wizard fires every time.
+
 To remove the saved auth (e.g., switching accounts):
 
 ```bash

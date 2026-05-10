@@ -29,6 +29,27 @@ sudo chown -R vscode:vscode \
 # level — recursing would hit the read-only skills bind underneath.
 sudo chown vscode:vscode /home/vscode/.claude
 
+# Persist ~/.claude.json across container recreates. The named volume covers
+# ~/.claude/ but NOT the sibling ~/.claude.json file at $HOME, which is on
+# the overlay filesystem and therefore wiped every recreate — making Claude
+# Code re-run its setup wizard each time even though credentials in the
+# volume persist. Symlink the file into the volume so writes flow through.
+CLAUDE_HOME_CONFIG=/home/vscode/.claude.json
+CLAUDE_VOL_CONFIG=/home/vscode/.claude/.claude.json
+if [ ! -L "$CLAUDE_HOME_CONFIG" ]; then
+  if [ -f "$CLAUDE_HOME_CONFIG" ]; then
+    if [ -f "$CLAUDE_VOL_CONFIG" ]; then
+      # Volume already has a config from a prior session — archive the
+      # fresh $HOME stub (Claude Code creates one when it can't find the
+      # symlink target).
+      mv "$CLAUDE_HOME_CONFIG" "${CLAUDE_VOL_CONFIG}.recovered-$(date +%s)"
+    else
+      mv "$CLAUDE_HOME_CONFIG" "$CLAUDE_VOL_CONFIG"
+    fi
+  fi
+  ln -s "$CLAUDE_VOL_CONFIG" "$CLAUDE_HOME_CONFIG"
+fi
+
 # go-task. Installed via `go install` so the version is pinned and reproducible
 # (the upstream `taskfile.dev/install.sh` resolves "latest" at run time).
 echo "--- Installing task ${TASK_VERSION} ---"
