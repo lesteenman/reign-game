@@ -23,6 +23,7 @@ echo "=== Installing project tooling ==="
 sudo chown -R vscode:vscode \
   /home/vscode/.npm \
   /home/vscode/go \
+  /home/vscode/.aws/sso/cache \
   /workspaces/reign-game/frontend/node_modules \
   || true
 # /home/vscode/.claude is the Claude Code config volume; chown only the top

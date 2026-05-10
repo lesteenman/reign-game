@@ -22,13 +22,20 @@ services:
       # devcontainer.json silently doesn't propagate through compose-based
       # containers — `:ro` in compose is honored faithfully.
 #      - ${HOME}/.claude/skills:/home/vscode/.claude/skills:ro
-      # AWS SSO config + bearer-token cache, read-only. The AWS MCP server
-      # (uvx mcp-proxy-for-aws) reads these via the standard SDK lookup.
-      # Skipping ~/.aws/credentials and ~/.aws/cli/cache/ — for SSO users the
-      # bearer token in sso/cache already grants any role assigned to the
-      # session, so adding the static-keys file widens nothing.
+      # AWS profile definitions, read-only — lets the container know which
+      # profiles exist (start URLs, regions, role names) without granting any
+      # active session.
       - ${HOME}/.aws/config:/home/vscode/.aws/config:ro
-      - ${HOME}/.aws/sso/cache:/home/vscode/.aws/sso/cache:ro
+      # SSO bearer-token cache lives in a container-local named volume, NOT
+      # bind-mounted from the host. This separates the host's sign-in (which
+      # may have admin scope) from the container's. The user must explicitly
+      # `aws sso login` from inside the container to populate this; the cache
+      # persists across container recreates so the standard SSO TTL still
+      # applies, but a host login alone never reaches the container.
+      # ~/.aws/credentials (static keys) and ~/.aws/cli/cache/ (assume-role
+      # cache, auto-refreshed from the SSO bearer) are intentionally not
+      # mounted at all.
+      - aws-sso-cache:/home/vscode/.aws/sso/cache
     # Project-scoped secrets (PAT, AWS_PROFILE, etc.). Optional — the stack
     # still comes up if the file isn't present. Anything in .env.local is
     # set on the dev container's environment without ever passing through
@@ -46,3 +53,4 @@ volumes:
   go-mod-cache:
   npm-cache:
   frontend-node-modules:
+  aws-sso-cache:

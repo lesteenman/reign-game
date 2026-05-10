@@ -111,13 +111,23 @@ Then fill in the two values:
 **1. `REIGN_AWS_PROFILE`** — for the `aws` MCP server.
 
 Must match a profile defined in your host's `~/.aws/config`, which is
-bind-mounted read-only into the container. Before working in the
-container (and again whenever the SSO session expires, ~8h), run on the
-host:
+bind-mounted read-only into the container.
+
+Sign-in itself happens **inside the container**, not on the host:
 
 ```bash
+# inside the container, once per SSO TTL (typically ~8h)
 aws sso login --profile <your-profile>
 ```
+
+The host's `~/.aws/sso/cache/` is deliberately NOT mounted into the
+container — that's where the SSO bearer token lives, and mounting it
+would mean a host login (potentially with admin scope) immediately grants
+the container the same access. Instead the container has its own
+`~/.aws/sso/cache/` in a named volume (`aws-sso-cache`), populated only
+by an `aws sso login` you run from inside. The cache persists across
+container recreates within the project, so you don't re-auth on every
+rebuild — but cross-host-and-container leakage is impossible.
 
 The variable is named `REIGN_AWS_PROFILE` rather than `AWS_PROFILE` on
 purpose: a container-wide `AWS_PROFILE` leaks into `go test` and the
@@ -127,9 +137,9 @@ backend's SDK init, which doesn't expect a profile lookup.
 the container, either pass `--profile <name>` per command or `export
 AWS_PROFILE=<name>` in your interactive shell session.
 
-(`~/.aws/credentials` static keys + `~/.aws/cli/cache/` are intentionally
-NOT mounted — the SSO bearer in `sso/cache/` is the only credential the
-container sees.)
+(`~/.aws/credentials` static keys and `~/.aws/cli/cache/` assume-role
+cache are intentionally not mounted at all. The cli cache is
+auto-refreshed from the SSO bearer when needed.)
 
 **2. `GITHUB_PERSONAL_ACCESS_TOKEN`** — for the `github` MCP server.
 
