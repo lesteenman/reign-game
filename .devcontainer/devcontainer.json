@@ -27,7 +27,21 @@
     "AWS_SECRET_ACCESS_KEY": "test",
     "AWS_DEFAULT_REGION": "us-east-1",
     "DYNAMODB_ENDPOINT": "http://localstack:4566",
-    "SQS_ENDPOINT": "http://localstack:4566"
+    "SQS_ENDPOINT": "http://localstack:4566",
+    // Host-side absolute path to the repo. Consumed by ../docker-compose.yml
+    // (LocalStack bind mount) so `docker compose` invoked from inside the
+    // devcontainer hands the host's Docker daemon a path it can actually
+    // resolve. Without this, the daemon receives `/workspaces/...` (the
+    // container's mount point) and bails with "mounts denied".
+    "HOST_REPO_PATH": "${localWorkspaceFolder}",
+    // Endpoint Task tasks (dev:up:backend, e2e:up:backend, etc.) hand to the
+    // backend. On the host this would be `http://127.0.0.1:4566`; from inside
+    // the devcontainer it must be the docker-network DNS name `localstack`
+    // since the LocalStack ports aren't published into the dev container's
+    // loopback. The Taskfile vars LOCALSTACK_URL / SQS_QUEUE_HOST default to
+    // the 127.0.0.1 forms; these env values override them.
+    "LOCALSTACK_URL": "http://localstack:4566",
+    "SQS_QUEUE_HOST": "http://localstack:4566"
   },
 
   "forwardPorts": [4566, 5180, 5181, 5182, 5183],

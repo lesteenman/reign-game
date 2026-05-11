@@ -1,5 +1,24 @@
 version: "3"
 
+# LocalStack endpoint vars (host vs devcontainer divergence).
+#
+# On the host, LocalStack is reachable on the published port at 127.0.0.1:4566
+# and the SQS magic hostname `sqs.us-east-1.localhost.localstack.cloud:4566`
+# (which resolves to 127.0.0.1 via a public DNS A record).
+#
+# Inside the devcontainer, neither works: 127.0.0.1 is the dev container's own
+# loopback and `localhost.localstack.cloud` resolves to that same 127.0.0.1.
+# LocalStack is reachable at the docker-network DNS name `localstack:4566`.
+#
+# devcontainer.json::containerEnv sets LOCALSTACK_URL and SQS_QUEUE_HOST to the
+# `localstack:4566` form inside the container; on the host they're unset and
+# the defaults below apply.
+vars:
+  LOCALSTACK_URL:
+    sh: echo "${LOCALSTACK_URL:-http://127.0.0.1:4566}"
+  SQS_QUEUE_HOST:
+    sh: echo "${SQS_QUEUE_HOST:-http://sqs.us-east-1.localhost.localstack.cloud:4566}"
+
 tasks:
   build:backend:
     desc: Build the Go backend
@@ -84,9 +103,9 @@ tasks:
     # dotenv variables are available to the child `go run` process.
     dotenv: ['.env.local']
     env:
-      DYNAMODB_ENDPOINT: http://127.0.0.1:4566
-      SQS_ENDPOINT: http://127.0.0.1:4566
-      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
+      DYNAMODB_ENDPOINT: '{{.LOCALSTACK_URL}}'
+      SQS_ENDPOINT: '{{.LOCALSTACK_URL}}'
+      SQS_QUEUE_URL: '{{.SQS_QUEUE_HOST}}/000000000000/puzzle-generation'
       AWS_REGION: us-east-1
       PUZZLE_TABLE_NAME: puzzle-pool
       AWS_ACCESS_KEY_ID: test
@@ -99,9 +118,9 @@ tasks:
     dir: backend
     env:
       GENERATOR_MODE: sqs
-      DYNAMODB_ENDPOINT: http://127.0.0.1:4566
-      SQS_ENDPOINT: http://127.0.0.1:4566
-      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
+      DYNAMODB_ENDPOINT: '{{.LOCALSTACK_URL}}'
+      SQS_ENDPOINT: '{{.LOCALSTACK_URL}}'
+      SQS_QUEUE_URL: '{{.SQS_QUEUE_HOST}}/000000000000/puzzle-generation'
       AWS_REGION: us-east-1
       PUZZLE_TABLE_NAME: puzzle-pool
       AWS_ACCESS_KEY_ID: test
@@ -184,9 +203,9 @@ tasks:
     cmds:
       - docker compose up -d localstack
       - |
-        echo "waiting for LocalStack on :4566..."
+        echo "waiting for LocalStack on {{.LOCALSTACK_URL}}..."
         for i in $(seq 1 60); do
-          if curl -sf http://127.0.0.1:4566/_localstack/health >/dev/null 2>&1; then
+          if curl -sf {{.LOCALSTACK_URL}}/_localstack/health >/dev/null 2>&1; then
             break
           fi
           sleep 1
@@ -278,9 +297,9 @@ tasks:
     # no Clerk secret is resolvable from env or SSM.
     dotenv: ['.env.local']
     env:
-      DYNAMODB_ENDPOINT: http://127.0.0.1:4566
-      SQS_ENDPOINT: http://127.0.0.1:4566
-      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
+      DYNAMODB_ENDPOINT: '{{.LOCALSTACK_URL}}'
+      SQS_ENDPOINT: '{{.LOCALSTACK_URL}}'
+      SQS_QUEUE_URL: '{{.SQS_QUEUE_HOST}}/000000000000/puzzle-generation'
       AWS_REGION: us-east-1
       PUZZLE_TABLE_NAME: puzzle-pool
       AWS_ACCESS_KEY_ID: test
@@ -317,9 +336,9 @@ tasks:
     dir: backend
     env:
       GENERATOR_MODE: sqs
-      DYNAMODB_ENDPOINT: http://127.0.0.1:4566
-      SQS_ENDPOINT: http://127.0.0.1:4566
-      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation
+      DYNAMODB_ENDPOINT: '{{.LOCALSTACK_URL}}'
+      SQS_ENDPOINT: '{{.LOCALSTACK_URL}}'
+      SQS_QUEUE_URL: '{{.SQS_QUEUE_HOST}}/000000000000/puzzle-generation'
       AWS_REGION: us-east-1
       PUZZLE_TABLE_NAME: puzzle-pool
       AWS_ACCESS_KEY_ID: test
@@ -600,13 +619,13 @@ tasks:
     dotenv: ['.env.local']
     env:
       PORT: "5182"
-      DYNAMODB_ENDPOINT: http://127.0.0.1:4566
-      SQS_ENDPOINT: http://127.0.0.1:4566
+      DYNAMODB_ENDPOINT: '{{.LOCALSTACK_URL}}'
+      SQS_ENDPOINT: '{{.LOCALSTACK_URL}}'
       # Publish replenish messages to the e2e queue so e2e:up:generator
       # (which polls puzzle-generation-e2e) can pick them up. Using the
       # dev `puzzle-generation` queue here would route messages to the
       # dev generator and starve the e2e generator — silent test break.
-      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation-e2e
+      SQS_QUEUE_URL: '{{.SQS_QUEUE_HOST}}/000000000000/puzzle-generation-e2e'
       AWS_REGION: us-east-1
       PUZZLE_TABLE_NAME: puzzle-pool-e2e
       AWS_ACCESS_KEY_ID: test
@@ -649,9 +668,9 @@ tasks:
     dir: backend
     env:
       GENERATOR_MODE: sqs
-      DYNAMODB_ENDPOINT: http://127.0.0.1:4566
-      SQS_ENDPOINT: http://127.0.0.1:4566
-      SQS_QUEUE_URL: http://sqs.us-east-1.localhost.localstack.cloud:4566/000000000000/puzzle-generation-e2e
+      DYNAMODB_ENDPOINT: '{{.LOCALSTACK_URL}}'
+      SQS_ENDPOINT: '{{.LOCALSTACK_URL}}'
+      SQS_QUEUE_URL: '{{.SQS_QUEUE_HOST}}/000000000000/puzzle-generation-e2e'
       AWS_REGION: us-east-1
       PUZZLE_TABLE_NAME: puzzle-pool-e2e
       AWS_ACCESS_KEY_ID: test
@@ -792,7 +811,7 @@ tasks:
         fi
 
         echo "flushing puzzle-pool-e2e..."
-        TABLE_NAME=puzzle-pool-e2e AWS_ENDPOINT_URL=http://127.0.0.1:4566 \
+        TABLE_NAME=puzzle-pool-e2e AWS_ENDPOINT_URL={{.LOCALSTACK_URL}} \
           AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-1 \
           CONFIRM=YES ./scripts/flush-pool.sh
 
