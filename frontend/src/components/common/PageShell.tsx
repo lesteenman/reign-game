@@ -11,6 +11,12 @@ interface PageShellProps {
   onBack?: () => void;
   /** Accessible label for the back button. Defaults to "Back to home". */
   backLabel?: string;
+  /**
+   * Optional caption rendered directly under the Reign wordmark.
+   * Used by flow-specific pages (e.g. the daily flow renders
+   * "Daily Puzzle · May 11"). Omit for generic pages.
+   */
+  subtitle?: ReactNode;
 }
 
 /**
@@ -41,8 +47,14 @@ function HeaderAuthSlot() {
   );
 }
 
-/** Standard page layout wrapper with centered content, Reign heading, and dark mode toggle. */
-export function PageShell({ children, onBack, backLabel = 'Back to home' }: PageShellProps) {
+/**
+ * Standard page layout wrapper. Header pinned to top, body content laid
+ * out top-down within the remaining viewport. Keeps the puzzle visible
+ * on phone-portrait viewports (e.g. 360x800, 390x844) — vertically
+ * centering would push the header down and float the action row below
+ * the fold.
+ */
+export function PageShell({ children, onBack, backLabel = 'Back to home', subtitle }: PageShellProps) {
   const { isDark, toggle } = useDarkMode();
 
   return (
@@ -51,9 +63,8 @@ export function PageShell({ children, onBack, backLabel = 'Back to home' }: Page
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: '24px',
-        padding: '24px 16px',
+        gap: '16px',
+        padding: '16px 16px 24px',
         minHeight: '100vh',
         backgroundColor: 'var(--color-background)',
         fontFamily: '"Nunito Sans", system-ui, sans-serif',
@@ -140,6 +151,21 @@ export function PageShell({ children, onBack, backLabel = 'Back to home' }: Page
           </button>
         </div>
       </div>
+      {subtitle && (
+        <p
+          data-testid="page-subtitle"
+          style={{
+            margin: 0,
+            color: 'var(--color-muted)',
+            fontWeight: 600,
+            fontSize: '0.875rem',
+            letterSpacing: '0.01em',
+            textAlign: 'center',
+          }}
+        >
+          {subtitle}
+        </p>
+      )}
       {children}
     </div>
   );
