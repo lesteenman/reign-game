@@ -11,7 +11,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.42.27
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.68.6
 	github.com/awslabs/aws-lambda-go-api-proxy v0.16.2
-	github.com/clerk/clerk-sdk-go/v2 v2.5.1
+	github.com/clerk/clerk-sdk-go/v2 v2.6.0
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-jose/go-jose/v3 v3.0.5
 )

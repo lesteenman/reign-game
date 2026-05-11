@@ -8,6 +8,11 @@
 # Agent worktrees (created by Agent isolation: worktree)
 .claude/worktrees/
 
+# ===== Dev container =====
+# Project-scoped secrets loaded via compose env_file.
+# Tracked template lives at .devcontainer/.env.local.example.
+.devcontainer/.env.local
+
 # ===== Go (backend) =====
 # Compiled binaries
 backend/bin/

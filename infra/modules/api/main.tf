@@ -137,10 +137,22 @@ resource "aws_api_gateway_deployment" "api" {
     aws_api_gateway_integration.api_proxy_lambda,
   ]
 
-  # Force new deployment when integrations change
+  # Force new deployment when any part of the API surface changes. The
+  # integration's `id` is a composite of (rest_api_id, resource_id,
+  # http_method) — it does NOT include the integration `uri`. Hashing
+  # the URI as well catches Lambda renames (e.g. PR #102's prod→acc
+  # rename, where the live integration was updated to the new function
+  # name but the deployment was never rebuilt, leaving the stage
+  # invoking the deleted reign-game-prod-api Lambda and serving 500s
+  # for two days). Resource and method ids are included so additions
+  # to the API surface also force a redeploy.
   triggers = {
     redeployment = sha1(jsonencode([
+      aws_api_gateway_resource.api_root.id,
+      aws_api_gateway_resource.api_proxy.id,
+      aws_api_gateway_method.api_proxy_any.id,
       aws_api_gateway_integration.api_proxy_lambda.id,
+      aws_api_gateway_integration.api_proxy_lambda.uri,
     ]))
   }
 

@@ -23,6 +23,7 @@ reign-game/
 ├── .claude/               # Agent definitions, skills, settings
 │   ├── agents/            # Agent .md files
 │   └── skills/            # Skill directories with SKILL.md files
+├── .devcontainer/         # Dev container config — Go/Node/Terraform/Claude Code, extends root docker-compose for LocalStack
 ├── .github/
 │   └── workflows/         # GitHub Actions CI/CD pipelines
 ├── Taskfile.yml           # Task runner for build, test, dev, deploy
