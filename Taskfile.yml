@@ -154,6 +154,12 @@ tasks:
 
   test:integration:
     desc: Run the Playwright integration project (mocked APIs, no backend stack).
+    # Playwright's global-setup.ts requires VITE_CLERK_PUBLISHABLE_KEY even
+    # though the integration project mocks /api/* — the bundled frontend
+    # still imports Clerk and won't boot without a publishable key. Loads
+    # from the same files as test:e2e so the user doesn't need to export
+    # anything to invoke the task.
+    dotenv: ['.env.local', '../backend/.env.local']
     dir: frontend
     cmds:
       - npm run test:integration
