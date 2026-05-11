@@ -210,9 +210,17 @@ the backend reaches LocalStack at `http://localstack:4566` (set via
 - `cd backend && go run ./cmd/api` — the same binary the Taskfile starts for
   both the API (on `:5181`) and the generator worker (no port). Generator role
   is selected via env, the way `task dev:up:generator` does it.
-- `cd frontend && npm run dev` — frontend on `:5180`.
+- `task dev:frontend` — frontend on `:5180`. Use this rather than
+  `npm run dev` directly: the task passes `--host 0.0.0.0`, which makes
+  Vite bind on all interfaces so the host browser can reach it through the
+  compose `ports:` publish (`5180:5180`). Open <http://localhost:5180> on
+  your Mac.
 - `go test`, `npm test`, `golangci-lint run`, `gitleaks detect`,
   `terraform fmt`, etc.
+
+Only port `5180` is published to the host. The backend on `:5181` stays
+unreachable from outside the container — Vite proxies `/api/*` to it
+internally, which is how the host browser reaches the API.
 
 ### What does NOT work inside the container
 

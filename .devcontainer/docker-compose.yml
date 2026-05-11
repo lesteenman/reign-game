@@ -45,6 +45,13 @@ services:
     env_file:
       - path: .devcontainer/.env.local
         required: false
+    # Publish only what the host browser hits directly. Vite (5180) is the
+    # front door; it proxies /api/* to the backend on the container's
+    # loopback at 127.0.0.1:5181, so the backend stays unpublished. The
+    # backend code hardcodes a 127.0.0.1 bind anyway
+    # (backend/cmd/api/main.go).
+    ports:
+      - "5180:5180"
     command: sleep infinity
     depends_on:
       - localstack
