@@ -322,7 +322,7 @@ export function GameBoard({
     history,
     handlePointerDown,
     handleDragEnter,
-    handlePointerUp: originalPointerUp,
+    handlePointerUp,
     resetGame: originalResetGame,
     undo,
     redo,
@@ -482,11 +482,6 @@ export function GameBoard({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo]);
-
-  // The timer is started by the mount-effect above so it ticks from
-  // first paint for all flows. `handlePointerUp` no longer needs to
-  // gate the timer — pass the engine handler straight through.
-  const handlePointerUp = originalPointerUp;
 
   const resetGame = useCallback(() => {
     originalResetGame();
