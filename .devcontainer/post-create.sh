@@ -117,4 +117,19 @@ echo "--- Installing frontend dependencies ---"
 # bindings separate from the host's darwin bindings.
 ( cd frontend && npm ci )
 
+# Playwright browser + system libs. `install-deps` apt-installs the shared
+# objects chromium needs (libnss3, libatk, etc.); `install chromium` drops
+# the matching browser binary into ~/.cache/ms-playwright (mounted as a named
+# volume so it survives container recreates — see docker-compose.yml).
+# Browser version is pinned by the @playwright/test version in
+# frontend/package.json. Chromium-only — playwright.config.ts uses only chromium.
+#
+# sudo strips PATH (secure_path in sudoers) so `npx` / `node` aren't found.
+# `sudo env "PATH=$PATH" ...` forwards the vscode user's PATH so the playwright
+# binary can locate `node` via its `#!/usr/bin/env node` shebang.
+echo "--- Installing Playwright chromium + system deps ---"
+sudo chown -R vscode:vscode /home/vscode/.cache/ms-playwright || true
+( cd frontend && sudo env "PATH=$PATH" ./node_modules/.bin/playwright install-deps chromium )
+( cd frontend && ./node_modules/.bin/playwright install chromium )
+
 echo "=== Setup complete ==="
