@@ -18,7 +18,14 @@ services:
       # enabled by LOCALSTACK_AUTH_TOKEN.
       - PERSISTENCE=1
     volumes:
-      - ./.localstack:/etc/localstack/init/ready.d
+      # `./.localstack` resolves relative to compose's cwd. When `docker compose`
+      # is invoked from inside the devcontainer, that cwd is `/workspaces/...`,
+      # which Docker Desktop's daemon can't find on the host filesystem (the
+      # repo lives at `/Users/.../reign-game`). HOST_REPO_PATH is set by the
+      # devcontainer (devcontainer.json containerEnv → ${localWorkspaceFolder})
+      # to the host-side absolute path; when unset (host shell), `.` keeps the
+      # original behavior.
+      - ${HOST_REPO_PATH:-.}/.localstack:/etc/localstack/init/ready.d
       - localstack-data:/var/lib/localstack
 
 volumes:
