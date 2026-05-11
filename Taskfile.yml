@@ -872,8 +872,14 @@ tasks:
         echo "  e2e frontend: http://localhost:5183/ (proxies /api/* to :5182)"
         echo "  e2e backend:  http://localhost:5182/ (health: /api/health)"
         echo "  fixtures:     frontend/playwright/e2e/fixtures/puzzles/*.json"
-        echo "  run tests:    npm --prefix frontend run test:e2e"
+        echo "  run tests:    task test:e2e   (or task e2e for up + test in one go)"
         echo "  stop:         task e2e:down"
+
+  e2e:
+    desc: "Single-shot: bring the e2e stack up if needed, run the e2e Playwright project, leave the stack up for the next run."
+    cmds:
+      - task: e2e:up
+      - task: test:e2e
 
   e2e:down:
     desc: Stop the e2e frontend + generator + backend. LocalStack stays up (shared with dev).

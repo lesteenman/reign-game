@@ -255,23 +255,32 @@ proxies `/api/*` to them internally.
 ### Running e2e tests
 
 ```bash
-# Inside the dev container:
-task e2e:up                # bring up the e2e stack (idempotent)
-cd frontend && npm run test:e2e   # run the e2e Playwright project against :5183
+# Inside the dev container, single shot — brings the stack up if needed, runs tests, leaves stack up:
+task e2e
 
-# When done:
-task e2e:down              # tears down e2e backend + frontend; LocalStack stays
+# Or, for hot-loop iteration once the stack is up:
+task e2e:up                # idempotent; no-ops if already up
+task test:e2e              # run as many times as you want against the same stack
+task e2e:down              # tear it all down when done
 ```
 
+**Use `task test:e2e`, not `npm run test:e2e` directly.** Playwright doesn't
+auto-load `.env*` files (that's a Vite feature). The Taskfile wrapper has
+`dotenv: ['.env.local', '../backend/.env.local']` and pushes Clerk creds +
+other required vars into the env before invoking Playwright. Running
+`npm run test:e2e` bypasses Task and fails at `global-setup.ts` with
+`missing required env var: VITE_CLERK_PUBLISHABLE_KEY`.
+
 `task e2e:up` chains `e2e:up:backend` (port 5182, table `puzzle-pool-e2e`,
-queue `puzzle-generation-e2e`) → `e2e:up:frontend` (Vite on `:5183` proxying
-to `:5182`) → `e2e:seed` (idempotent fixture seed). `npm run test:e2e` sets
+queue `puzzle-generation-e2e`) → `e2e:up:generator` → `e2e:up:frontend` (Vite
+on `:5183` proxying to `:5182`) → `e2e:seed` (idempotent fixture seed) →
+warmup ping. Under the hood `npm run test:e2e` sets
 `PLAYWRIGHT_SKIP_WEBSERVER=1` so Playwright doesn't try to spawn a redundant
 Vite on `:5180`.
 
 The integration project (the lighter-weight tests with mocked `/api/*`
-responses) needs neither LocalStack nor the e2e stack — `npm run
-test:integration` is enough.
+responses) needs neither LocalStack nor the e2e stack —
+`task test:integration` is enough.
 
 ### Running tasks from the host
 
