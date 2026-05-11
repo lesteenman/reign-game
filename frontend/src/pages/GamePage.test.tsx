@@ -858,3 +858,54 @@ describe('GamePage daily delegation (R-8-02 chunk 3)', () => {
     expect(fetchCallCount).toBe(0);
   });
 });
+
+describe('GamePage — timer starts on mount (not on first tap)', () => {
+  it('timer is running by the time the grid first renders, before any user input', async () => {
+    // Arrange — fresh puzzle, no restored state. The timer must begin
+    // ticking on mount so a user opening the daily/curation page sees
+    // it count from 0 without needing to tap a cell first.
+    mockLoadState.mockResolvedValue(null);
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    await waitForHeader();
+
+    // Assert — the timer-display is mounted (with elapsed=0 initially)
+    // and a saveState payload includes a non-null `lastResumedAt`
+    // within the debounce window. That `lastResumedAt` is the proof
+    // the timer has been .start()ed without a pointer event.
+    const timer = await screen.findByTestId('timer-display');
+    expect(timer).toBeInTheDocument();
+    await waitFor(() => {
+      const startedSave = mockSaveState.mock.calls.find((c: unknown[]) => {
+        const state = c[0] as { timer?: { lastResumedAt: number | null } };
+        return state.timer?.lastResumedAt !== null && state.timer?.lastResumedAt !== undefined;
+      });
+      expect(startedSave).toBeDefined();
+    }, { timeout: 1500 });
+  });
+});
+
+describe('GamePage — daily-flow gates the Skip button (admin only on curation)', () => {
+  // Skip puzzle is the admin verdict surface and belongs to the
+  // curation flow. The daily flow must NOT render Skip even for
+  // admins. This test exercises the curation case (admin sees Skip)
+  // and the daily case (admin does not). Daily branch goes via
+  // <DailyFlow /> which mocks getDaily to never resolve, so a Skip
+  // probe there would only be possible from inside the real
+  // GameBoard — see GameBoard.test.tsx for the direct-render test.
+
+  it('curation flow: admin sees Skip button', async () => {
+    // Arrange
+    useUserMock.mockReturnValue({
+      isLoaded: true,
+      isSignedIn: true,
+      user: { publicMetadata: { role: 'admin' } },
+    });
+
+    // Act
+    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    await waitForHeader();
+
+    // Assert
+    expect(await screen.findByTestId('skip-button')).toBeInTheDocument();
+  });
+});

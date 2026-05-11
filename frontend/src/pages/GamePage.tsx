@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useLayoutEffect } from 'react';
+import { useState, useEffect, useCallback, useRef, useLayoutEffect, type ReactNode } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useUser } from '@clerk/react';
 import { Grid } from '../components/grid/Grid';
@@ -346,13 +346,26 @@ export function GameBoard({
   // mid-game re-render can't reset the elapsed-time anchor.
   const startedAtRef = useRef(startedAt);
 
-  // Restore timer on mount
+  // Restore timer on mount, then start it. The timer ticks from the
+  // moment the grid renders for ALL flows (daily, curation, practice).
+  // Previously the timer started on first pointer interaction, which
+  // both surprised users and let them read the puzzle for an arbitrary
+  // amount of time before the clock began.
+  //
+  // Ordering: restore first so the elapsed display reflects any saved
+  // progress; then start() (idempotent if already running from a
+  // restored `lastResumedAt`). Skip if the puzzle is already solved —
+  // a no-op start would still be safe (stop() sets `stopped`), but
+  // this avoids ticking the visible "completed" state.
   useEffect(() => {
     if (timerElapsed > 0 || timerResumedAt !== null) {
       timer.restore({
         elapsedAtLastPause: timerElapsed,
         lastResumedAt: timerResumedAt,
       });
+    }
+    if (!isSolved) {
+      timer.start();
       timerStartedRef.current = true;
     }
     // Only run on mount
@@ -470,14 +483,10 @@ export function GameBoard({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [undo, redo]);
 
-  // Wrap pointerUp to start timer on first interaction
-  const handlePointerUp = useCallback(() => {
-    originalPointerUp();
-    if (!timerStartedRef.current && !isSolvedRef.current) {
-      timerStartedRef.current = true;
-      timerRef.current.start();
-    }
-  }, [originalPointerUp]);
+  // The timer is started by the mount-effect above so it ticks from
+  // first paint for all flows. `handlePointerUp` no longer needs to
+  // gate the timer — pass the engine handler straight through.
+  const handlePointerUp = originalPointerUp;
 
   const resetGame = useCallback(() => {
     originalResetGame();
@@ -492,8 +501,22 @@ export function GameBoard({
     navigate('/');
   }, [navigate]);
 
-  return (
-    <PageShell onBack={onBack}>
+  // Delegated mode: when the caller wires `onSolveDetected` it also
+  // owns the page chrome (DailyFlow → PageShell with the subtitle).
+  // GameBoard rendering its own PageShell here would stack two "Reign"
+  // headers. Standalone mode (curation/practice, no delegate) still
+  // wraps itself so the page is self-contained.
+  //
+  // Note: a wrapping component identity must be stable across renders.
+  // Inlining a `ShellWrapper` arrow component into the render would
+  // re-create the component type each render, forcing React to unmount
+  // and remount everything beneath it on every tick — which silently
+  // resets `useGame`'s reducer state. Emit one of two render trees
+  // straight from the JSX instead.
+  const isDelegated = onSolveDetected !== undefined;
+
+  const board: ReactNode = (
+    <>
       {/* Timer display */}
       <div
         data-testid="timer-display"
@@ -649,7 +672,11 @@ export function GameBoard({
         <SecondaryButton onClick={resetGame} data-testid="reset-button">
           Reset
         </SecondaryButton>
-        {isAdmin && !isSolved && (
+        {/* Skip is the admin verdict surface for curation/practice. The
+            daily flow doesn't expose a verdict step — admins playing
+            the daily play it like everyone else. Gate the Skip button
+            on flowType so the admin role alone doesn't surface it. */}
+        {isAdmin && !isSolved && flowType !== 'daily' && (
           <GhostButton
             onClick={() => setShowSkipModal(true)}
             data-testid="skip-button"
@@ -707,6 +734,8 @@ export function GameBoard({
           </div>
         </div>
       )}
-    </PageShell>
+    </>
   );
+
+  return isDelegated ? board : <PageShell onBack={onBack}>{board}</PageShell>;
 }
