@@ -179,6 +179,21 @@ describe('DailyGameBoard', () => {
     expect(props.startedAt).toBe(1_700_000_000_000);
   });
 
+  it('forwards payload.assignedAt to GameBoard as the wall-clock anchor (KI-025)', async () => {
+    // Arrange — default storage mock returns null (no restore).
+
+    // Act
+    renderBoard();
+    await waitFor(() => {
+      expect(mockGameBoardProps).toHaveBeenCalled();
+    });
+
+    // Assert
+    const calls = mockGameBoardProps.mock.calls;
+    const props = calls[calls.length - 1]![0] as GameBoardProps;
+    expect(props.assignedAt).toBe('2026-05-02T00:00:00Z');
+  });
+
   it('forwards GameBoard onSolveDetected to props.onSolved with (solution, elapsedMs)', async () => {
     // Arrange
     const onSolved = vi.fn();

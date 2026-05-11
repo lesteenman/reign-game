@@ -49,6 +49,18 @@ function todayUtcDate(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Read the MM:SS text from the timer-display element and return seconds. */
+async function readTimerSeconds(
+  locator: import("@playwright/test").Locator,
+): Promise<number> {
+  const text = (await locator.textContent())?.trim() ?? "";
+  const match = text.match(/^(\d+):(\d+)$/);
+  if (!match) {
+    throw new Error(`Unexpected timer-display text: ${JSON.stringify(text)}`);
+  }
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
 test.describe("Daily flow", () => {
   test("happy path — anonymous user navigates from landing tile to playing state", async ({
     page,
@@ -82,6 +94,64 @@ test.describe("Daily flow", () => {
     await expect(page.getByTestId(DAILY_GAME_BOARD_TESTID)).toBeVisible({
       timeout: 15_000,
     });
+  });
+
+  test("KI-025 — displayed timer does NOT reset when the player navigates back and re-enters", async ({
+    page,
+  }) => {
+    // Arrange: start clean so the daily PLAY row is materialised on
+    // first GET (sets assignedAt server-side, never overwritten on
+    // re-GET per DP-19 — the invariant this fix relies on).
+    await page.goto("/");
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          const req = indexedDB.deleteDatabase("reign-game");
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error);
+          req.onblocked = () => resolve();
+        }),
+    );
+    await page.goto("/");
+
+    // Act 1: enter the daily flow and capture the initial timer
+    // reading. Timer-display text is MM:SS (e.g. "00:03"); convert to
+    // seconds for arithmetic.
+    await page.getByTestId(DAILY_TILE_TESTID).click();
+    const board = page.getByTestId(DAILY_GAME_BOARD_TESTID);
+    await expect(board).toBeVisible({ timeout: 15_000 });
+    const timer = page.getByTestId("timer-display");
+    await expect(timer).toBeVisible();
+    const firstReading = await readTimerSeconds(timer);
+
+    // Act 2: linger on the puzzle, then navigate back to landing.
+    await page.waitForTimeout(3_000);
+    await page.goto("/");
+    await expect(page.getByTestId(DAILY_TILE_TESTID)).toBeVisible();
+    await page.waitForTimeout(3_000); // simulated "in the menu" away time
+
+    // Act 3: re-enter daily. With the wall-clock anchor on `assignedAt`,
+    // the displayed elapsed must reflect the total wall time since the
+    // first GET — not restart from 0 (KI-025 symptom).
+    await page.getByTestId(DAILY_TILE_TESTID).click();
+    await expect(board).toBeVisible({ timeout: 15_000 });
+    await expect(timer).toBeVisible();
+    const secondReading = await readTimerSeconds(timer);
+
+    // Assert: ~6 seconds passed between readings (3s linger + 3s away).
+    // Allow a 2s tolerance for navigation + network round-trips.
+    const elapsedBetweenReadings = secondReading - firstReading;
+    expect(
+      elapsedBetweenReadings,
+      `timer should reflect wall-clock progress across navigate-back ` +
+        `(got first=${firstReading}s second=${secondReading}s, delta=${elapsedBetweenReadings}s)`,
+    ).toBeGreaterThanOrEqual(4);
+    // Guard against a regression where the second reading drops to
+    // zero entirely (the original symptom).
+    expect(
+      secondReading,
+      `second reading must NOT reset to 0 (KI-025 regression)`,
+    ).toBeGreaterThan(0);
   });
 
   test("already-solved short-circuit (DP-27) renders PostCompletionScreen with no network call", async ({
