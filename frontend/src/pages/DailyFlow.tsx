@@ -73,6 +73,32 @@ function dateFromAssignedAt(assignedAt: string): string {
   return new Date(assignedAt).toISOString().slice(0, 10);
 }
 
+/**
+ * Format the daily's assignedAt as a locale-aware "Mon DD" string for
+ * the page subtitle (e.g. "May 11"). Use the UTC date components from
+ * the RFC3339 timestamp — the daily belongs to a UTC calendar day, so
+ * a player in PST playing at 23:30 local on May 10 still sees the May
+ * 11 puzzle's date correctly rather than the local-time month/day.
+ *
+ * Returns an empty string for an unparseable assignedAt; callers fall
+ * back to a date-less subtitle rather than crashing.
+ */
+function formatDailyDate(assignedAt: string): string {
+  const d = new Date(assignedAt);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  }).format(d);
+}
+
+/** Subtitle copy for the daily-flow PageShell, e.g. "Daily Puzzle · May 11". */
+function dailySubtitle(assignedAt: string): string {
+  const date = formatDailyDate(assignedAt);
+  return date ? `Daily Puzzle · ${date}` : 'Daily Puzzle';
+}
+
 /** Empty cells grid sized to the payload's grid dimension — minimal
  *  placeholder so the persisted GameState row carries a coherent
  *  shape for the daily flow. The follow-up chunk that wires the real
@@ -376,7 +402,10 @@ export function DailyFlow() {
 
   if (state.kind === 'playing') {
     return (
-      <PageShell onBack={handleBack}>
+      <PageShell
+        onBack={handleBack}
+        subtitle={dailySubtitle(state.payload.assignedAt)}
+      >
         <DailyGameBoard payload={state.payload} onSolved={handleSolved} />
       </PageShell>
     );
@@ -384,7 +413,10 @@ export function DailyFlow() {
 
   if (state.kind === 'submitting') {
     return (
-      <PageShell onBack={handleBack}>
+      <PageShell
+        onBack={handleBack}
+        subtitle={dailySubtitle(state.payload.assignedAt)}
+      >
         <div
           data-testid="daily-submitting"
           style={{
@@ -407,7 +439,10 @@ export function DailyFlow() {
 
   if (state.kind === 'submit-error') {
     return (
-      <PageShell onBack={handleBack}>
+      <PageShell
+        onBack={handleBack}
+        subtitle={dailySubtitle(state.payload.assignedAt)}
+      >
         <div data-testid="daily-submit-error" style={errorCardStyle}>
           <p style={errorTextStyle}>{submitErrorCopy(state)}</p>
           <PrimaryButton onClick={retrySubmit} data-testid="daily-submit-retry">
