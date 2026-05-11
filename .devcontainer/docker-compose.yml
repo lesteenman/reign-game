@@ -36,6 +36,9 @@ services:
       # cache, auto-refreshed from the SSO bearer) are intentionally not
       # mounted at all.
       - aws-sso-cache:/home/vscode/.aws/sso/cache
+      # Playwright browser cache. The chromium-headless-shell binary is ~110MB
+      # and is re-downloaded every container recreate without this volume.
+      - playwright-cache:/home/vscode/.cache/ms-playwright
     # Project-scoped secrets (PAT, AWS_PROFILE, etc.). Optional — the stack
     # still comes up if the file isn't present. Anything in .env.local is
     # set on the dev container's environment without ever passing through
@@ -61,3 +64,4 @@ volumes:
   npm-cache:
   frontend-node-modules:
   aws-sso-cache:
+  playwright-cache:

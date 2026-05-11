@@ -201,46 +201,100 @@ is read-only.
 ## Running the app
 
 LocalStack auto-starts via the dev-compose stack. From inside the container,
-the backend reaches LocalStack at `http://localstack:4566` (set via
-`AWS_ENDPOINT_URL`). The host (your Mac) reaches forwarded ports at
-`http://localhost:5180` etc.
+backend processes reach LocalStack at `http://localstack:4566` (docker-network
+DNS name); the host reaches forwarded ports at `http://localhost:5180` etc.
+
+### Two endpoint forms — and how the Taskfile picks one
+
+LocalStack is reachable at two different addresses depending on who's asking:
+
+| Caller | LocalStack address |
+|---|---|
+| Host shell | `http://127.0.0.1:4566` (and `sqs.us-east-1.localhost.localstack.cloud:4566`) |
+| Inside the dev container | `http://localstack:4566` (compose service DNS) |
+
+`Taskfile.yml` reads two vars with env fallbacks:
+
+```yaml
+vars:
+  LOCALSTACK_URL:
+    sh: echo "${LOCALSTACK_URL:-http://127.0.0.1:4566}"
+  SQS_QUEUE_HOST:
+    sh: echo "${SQS_QUEUE_HOST:-http://sqs.us-east-1.localhost.localstack.cloud:4566}"
+```
+
+The host has both unset, so the host-form defaults apply. The dev container's
+`devcontainer.json::containerEnv` sets both to `http://localstack:4566`, so every
+`task dev:up:*` / `task e2e:up:*` inside the container hands the backend the
+right address.
+
+The same indirection covers `docker compose`. The root `docker-compose.yml`
+LocalStack bind mount is written as `${HOST_REPO_PATH:-.}/.localstack`;
+`devcontainer.json` sets `HOST_REPO_PATH=${localWorkspaceFolder}` so the
+host-side absolute path flows through to Docker Desktop's daemon when compose
+runs inside the container. Without this, `docker compose up -d localstack`
+from inside the container fails with "mounts denied: path is not shared from
+the host".
 
 ### What works inside the container
 
-- `cd backend && go run ./cmd/api` — the same binary the Taskfile starts for
-  both the API (on `:5181`) and the generator worker (no port). Generator role
-  is selected via env, the way `task dev:up:generator` does it.
-- `task dev:frontend` — frontend on `:5180`. Use this rather than
-  `npm run dev` directly: the task passes `--host 0.0.0.0`, which makes
-  Vite bind on all interfaces so the host browser can reach it through the
-  compose `ports:` publish (`5180:5180`). Open <http://localhost:5180> on
-  your Mac.
+- `task dev:up` — full stack (LocalStack + backend + generator + frontend).
+  LocalStack started by the devcontainer at boot stays; the task no-ops on it.
+- `task dev:up:backend`, `task dev:up:generator`, `task dev:up:frontend` —
+  individual services.
+- `task e2e:up` — e2e backend (`:5182`) + e2e Vite (`:5183`) + seeded fixtures.
+  See "Running e2e tests" below for the full flow.
+- `cd backend && go run ./cmd/api` — same binary `task dev:up:backend` starts.
 - `go test`, `npm test`, `golangci-lint run`, `gitleaks detect`,
   `terraform fmt`, etc.
 
-Only port `5180` is published to the host. The backend on `:5181` stays
-unreachable from outside the container — Vite proxies `/api/*` to it
-internally, which is how the host browser reaches the API.
+Only ports `5180` (and `5183` for e2e Vite) are published to the host. The
+backend on `:5181` and the e2e backend on `:5182` stay container-local — Vite
+proxies `/api/*` to them internally.
 
-### What does NOT work inside the container
+### Running e2e tests
 
-`task dev:up`, `task dev:up:backend`, `task dev:up:generator`, and
-`task dev:up:localstack` all invoke `docker compose ...` against the host
-docker daemon (via the mounted socket). The compose CLI inside the container
-emits container paths (e.g. `/workspaces/reign-game/.localstack`); host docker
-rejects them with "mounts denied: path is not shared from the host". This is
-the well-known path-translation limit of docker-outside-of-docker.
+```bash
+# Inside the dev container, single shot — brings the stack up if needed, runs tests, leaves stack up:
+task e2e
 
-You don't need those tasks here anyway — the dev-compose stack already brings
-LocalStack up. Just run the app processes directly with `go run` / `npm run dev`.
+# Or, for hot-loop iteration once the stack is up:
+task e2e:up                # idempotent; no-ops if already up
+task test:e2e              # run as many times as you want against the same stack
+task e2e:down              # tear it all down when done
+```
+
+**Use `task test:e2e`, not `npm run test:e2e` directly.** Playwright doesn't
+auto-load `.env*` files (that's a Vite feature). The Taskfile wrapper has
+`dotenv: ['.env.local', '../backend/.env.local']` and pushes Clerk creds +
+other required vars into the env before invoking Playwright. Running
+`npm run test:e2e` bypasses Task and fails at `global-setup.ts` with
+`missing required env var: VITE_CLERK_PUBLISHABLE_KEY`.
+
+`task e2e:up` chains `e2e:up:backend` (port 5182, table `puzzle-pool-e2e`,
+queue `puzzle-generation-e2e`) → `e2e:up:generator` → `e2e:up:frontend` (Vite
+on `:5183` proxying to `:5182`) → `e2e:seed` (idempotent fixture seed) →
+warmup ping. Under the hood `npm run test:e2e` sets
+`PLAYWRIGHT_SKIP_WEBSERVER=1` so Playwright doesn't try to spawn a redundant
+Vite on `:5180`.
+
+The integration project (the lighter-weight tests with mocked `/api/*`
+responses) needs neither LocalStack nor the e2e stack —
+`task test:integration` is enough.
 
 ### Running tasks from the host
 
-If you want `task dev:up` and friends, run them on the host shell as before.
-LocalStack is already up via the dev-compose stack (project `reign-game`,
-service `localstack`), so `task dev:up:localstack` will report it's running and
-no-op. The other targets compile + run host-side Go/Node processes — same as
-they did before the dev container existed.
+Everything still works on the host shell. The endpoint vars fall back to
+their host-form defaults; `HOST_REPO_PATH` is unset and the compose mount
+resolves to `./.localstack` as before.
+
+If both host and container try to manage the same LocalStack container,
+compose is idempotent on the bind-mount path (it's the same absolute host
+path in both directions), so no recreate loop. Backend / generator processes
+are per-side: a `task dev:up:backend` on the host listens on the host's
+loopback; one inside the container listens on the container's loopback.
+They'd race for the same port (`:5181`) if you tried to run both — pick one
+side.
 
 ## Verifying the setup
 
