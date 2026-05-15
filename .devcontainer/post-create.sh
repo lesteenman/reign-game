@@ -20,7 +20,16 @@ echo "=== Installing project tooling ==="
 # Named volumes mount at root-owned mount points the first time the container
 # is created. Hand them to the runtime user so subsequent npm/go/claude writes
 # don't need sudo and don't fail with EACCES.
+#
+# /home/vscode/.cache is intentionally listed even though no named volume
+# targets `.cache` directly. The `playwright-cache` volume mounts to
+# `.cache/ms-playwright`, and Docker creates the parent `.cache/` as root
+# when materialising the mount path. Without chowning the parent, the very
+# first `go install` below fails creating `~/.cache/go-build` and the whole
+# script aborts — leaving the container with no `task`, `gitleaks`,
+# `govulncheck`, or `aws` on PATH.
 sudo chown -R vscode:vscode \
+  /home/vscode/.cache \
   /home/vscode/.npm \
   /home/vscode/go \
   /home/vscode/.aws/sso/cache \
@@ -128,7 +137,6 @@ echo "--- Installing frontend dependencies ---"
 # `sudo env "PATH=$PATH" ...` forwards the vscode user's PATH so the playwright
 # binary can locate `node` via its `#!/usr/bin/env node` shebang.
 echo "--- Installing Playwright chromium + system deps ---"
-sudo chown -R vscode:vscode /home/vscode/.cache/ms-playwright || true
 ( cd frontend && sudo env "PATH=$PATH" ./node_modules/.bin/playwright install-deps chromium )
 ( cd frontend && ./node_modules/.bin/playwright install chromium )
 

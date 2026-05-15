@@ -107,4 +107,42 @@ describe('PageShell', () => {
     // Assert
     expect(toggle.getAttribute('aria-label')).not.toEqual(initialLabel);
   });
+
+  it('renders subtitle when provided', () => {
+    // Arrange & Act
+    renderShell(
+      <PageShell subtitle="Daily Puzzle · May 11"><p>content</p></PageShell>,
+    );
+
+    // Assert
+    expect(screen.getByTestId('page-subtitle')).toBeInTheDocument();
+    expect(screen.getByTestId('page-subtitle')).toHaveTextContent('Daily Puzzle · May 11');
+  });
+
+  it('does not render subtitle when not provided', () => {
+    // Arrange & Act
+    renderShell(<PageShell><p>content</p></PageShell>);
+
+    // Assert
+    expect(screen.queryByTestId('page-subtitle')).not.toBeInTheDocument();
+  });
+
+  it('lays content out top-down (header is the first child of the shell flex column)', () => {
+    // Arrange
+    renderShell(<PageShell><p data-testid="body">content</p></PageShell>);
+
+    // Act
+    const header = screen.getByTestId('page-header');
+    const shell = header.parentElement!;
+
+    // Assert — the shell uses a column flex layout that does NOT
+    // vertically center its children. On a tall viewport, vertically-
+    // centering pushes the header off the top and floats content
+    // outside the visible area on mobile.
+    const computed = window.getComputedStyle(shell);
+    expect(computed.flexDirection).toBe('column');
+    expect(computed.justifyContent).not.toBe('center');
+    // Header is the first DOM child so it pins to the top.
+    expect(shell.firstElementChild).toBe(header);
+  });
 });

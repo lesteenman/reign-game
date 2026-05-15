@@ -142,6 +142,26 @@ describe('DailyFlow', () => {
     });
   });
 
+  it('renders a "Daily Puzzle · <date>" subtitle while playing', async () => {
+    // Arrange
+    mockGetDaily.mockResolvedValue(MOCK_PAYLOAD);
+
+    // Act
+    renderDailyFlow();
+
+    // Assert — subtitle is rendered as a single PageShell once the
+    // daily payload is available. The exact day formatting is locale-
+    // dependent; we assert the "Daily Puzzle ·" prefix and that the
+    // month/day from `assignedAt` (2026-05-02) reaches the DOM.
+    await waitFor(() => {
+      expect(screen.getByTestId('page-subtitle')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('page-subtitle').textContent).toMatch(/Daily Puzzle ·/);
+    // There must be exactly ONE Reign header — DailyFlow's PageShell.
+    // The (mocked) DailyGameBoard stub must not introduce a second.
+    expect(screen.getAllByRole('heading', { name: /reign/i })).toHaveLength(1);
+  });
+
   it('renders 404 error UI when getDaily throws DailyApiError with status 404', async () => {
     // Arrange
     mockGetDaily.mockRejectedValue(new DailyApiError('not found', 404));

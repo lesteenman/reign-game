@@ -93,7 +93,7 @@ Puzzles are **algorithmically generated, then human-curated**. The generator is 
 
 ### Daily Challenge Scoring
 
-- **Metric:** Completion time (seconds from first interaction to correct solution)
+- **Metric:** Completion time (seconds from puzzle load to correct solution)
 - **Percentile rank:** Where you fall relative to all players who completed the same daily puzzle (e.g., "Top 15%")
 - **Absolute position:** Your rank number out of total completions (e.g., "512 / 1,247")
 - Leaderboard updates in near-real-time

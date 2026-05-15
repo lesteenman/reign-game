@@ -170,8 +170,21 @@ export function DailyGameBoard({ payload, onSolved }: DailyGameBoardProps) {
   const timerResumedAt = restored?.timerResumedAt ?? null;
   const startedAt = restored?.startedAt ?? Date.now();
 
+  // Match PageShell's flex-column layout. Without it, GameBoard's
+  // delegated render (fragment of timer / grid / metadata / actions)
+  // collapses against this wrapper with no inter-element spacing,
+  // because PageShell's gap only applies to its own direct children.
   return (
-    <div data-testid="daily-game-board">
+    <div
+      data-testid="daily-game-board"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '16px',
+        width: '100%',
+      }}
+    >
       <GameBoard
         key={puzzle.puzzleId}
         puzzle={puzzle}
