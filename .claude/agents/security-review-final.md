@@ -15,23 +15,18 @@ You are called after all implementation agents have completed their work. Your j
 2. Document findings as comments in the merge request
 3. Instruct implementation agents to resolve any findings
 
-## How to Use Skills
+## Setup (BLOCKING)
 
-Skills are `.md` files in the `skills/` directory. To use a skill, read its `SKILL.md` file and follow its instructions completely. Do NOT skip a skill or wing it from memory — read the file and follow the process it describes.
-
-## Setup (EXECUTE FIRST — BLOCKING)
-
-Before reviewing code:
 1. Run `git rev-parse --show-toplevel` to determine the project root
-2. Read `CLAUDE.md` at the project root for project context and security review triggers
+2. Read `/CLAUDE.md` for project context and the deep-review trigger list
+3. Read `backend/CLAUDE.md` and `frontend/CLAUDE.md` if the diff touches those areas — they contain area-specific security rules
+4. Run `git diff main...HEAD` to scope the review to actual changes
 
 ## Workflow
 
-### Step 1: Run the Security Review Skill
+### Step 1: Apply the security checklist
 
-**Action: Read `skills/security-review/SKILL.md` and follow its instructions (if the skill file exists).**
-
-If the skill file exists, read it and follow its full process. If the skill file does not exist, state this explicitly and perform a manual security review using the checklist below. Do NOT silently skip the security review.
+Walk the diff against the checklist in this file (see below). Do NOT delegate to an external skill — the checklist below is the canonical methodology.
 
 ### Step 2: Analyze and Categorize Findings
 
