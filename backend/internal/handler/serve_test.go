@@ -12,18 +12,16 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
-// mockPuzzleFetcher implements handler.PuzzleFetcher for testing.
-type mockPuzzleFetcher struct {
-	nextReadyFunc  func(ctx context.Context, size int, mode string) (*repository.PuzzleRecord, error)
-	markServedFunc func(ctx context.Context, pk string, sk string) error
+// stubServeService implements handler.ServeService for testing the
+// HTTP boundary. The service-layer behaviors (claim race, replenish
+// hook firing) are covered in internal/service/serve.
+type stubServeService struct {
+	puzzle *repository.PuzzleRecord
+	err    error
 }
 
-func (m *mockPuzzleFetcher) NextReady(ctx context.Context, size int, mode string) (*repository.PuzzleRecord, error) {
-	return m.nextReadyFunc(ctx, size, mode)
-}
-
-func (m *mockPuzzleFetcher) MarkServed(ctx context.Context, pk, sk string) error {
-	return m.markServedFunc(ctx, pk, sk)
+func (s *stubServeService) NextPuzzle(_ context.Context, _ int, _ string) (*repository.PuzzleRecord, error) {
+	return s.puzzle, s.err
 }
 
 func TestServeHandler(t *testing.T) {
@@ -46,8 +44,7 @@ func TestServeHandler(t *testing.T) {
 		name       string
 		query      string
 		puzzle     *repository.PuzzleRecord
-		nextErr    error
-		markErr    error
+		svcErr     error
 		wantStatus int
 		wantError  string
 	}{
@@ -89,17 +86,9 @@ func TestServeHandler(t *testing.T) {
 			wantError:  "invalid_params",
 		},
 		{
-			name:       "DynamoDB query error returns 500",
+			name:       "service error returns 500",
 			query:      "?size=7&mode=standard",
-			nextErr:    errors.New("dynamodb error"),
-			wantStatus: http.StatusInternalServerError,
-			wantError:  "internal_error",
-		},
-		{
-			name:       "MarkServed error returns 500",
-			query:      "?size=7&mode=standard",
-			puzzle:     readyPuzzle,
-			markErr:    errors.New("dynamodb update error"),
+			svcErr:     errors.New("ddb error"),
 			wantStatus: http.StatusInternalServerError,
 			wantError:  "internal_error",
 		},
@@ -108,19 +97,8 @@ func TestServeHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			fetcher := &mockPuzzleFetcher{
-				nextReadyFunc: func(_ context.Context, _ int, _ string) (*repository.PuzzleRecord, error) {
-					if tt.nextErr != nil {
-						return nil, tt.nextErr
-					}
-					return tt.puzzle, nil
-				},
-				markServedFunc: func(_ context.Context, _ string, _ string) error {
-					return tt.markErr
-				},
-			}
-			h := handler.ServeHandler(fetcher, nil)
-
+			svc := &stubServeService{puzzle: tt.puzzle, err: tt.svcErr}
+			h := handler.ServeHandler(svc)
 			req := httptest.NewRequest(http.MethodGet, "/puzzles/next"+tt.query, http.NoBody)
 			rec := httptest.NewRecorder()
 
@@ -155,32 +133,22 @@ func TestServeHandler(t *testing.T) {
 				t.Fatalf("failed to parse success response: %v", err)
 			}
 
-			// puzzleId must match.
 			if resp["puzzleId"] != "puzzle-uuid-123" {
 				t.Errorf("puzzleId = %v, want %q", resp["puzzleId"], "puzzle-uuid-123")
 			}
-
-			// gridSize must match.
 			if int(resp["gridSize"].(float64)) != 7 {
 				t.Errorf("gridSize = %v, want 7", resp["gridSize"])
 			}
-
-			// mode must match.
 			if resp["mode"] != "standard" {
 				t.Errorf("mode = %v, want %q", resp["mode"], "standard")
 			}
-
-			// regionMap must be present.
 			if resp["regionMap"] == nil {
 				t.Error("regionMap should not be nil")
 			}
-
-			// solution must NOT be present.
 			if _, exists := resp["solution"]; exists {
 				t.Error("solution should not be in response")
 			}
 
-			// metadata must be present with expected fields.
 			metadata, ok := resp["metadata"].(map[string]interface{})
 			if !ok {
 				t.Fatal("metadata should be an object")
