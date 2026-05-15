@@ -84,18 +84,16 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## Change Workflow (MANDATORY)
 
-Every change — feature, fix, or refactor — follows this pipeline:
+Every change — feature, fix, or refactor — follows this pipeline. **This pipeline is the Track 1 (2026-05-15) light-touch revision.** Track 2 will overhaul it again as Superpowers lands.
 
 ```
-1. OpenSpec Explore    → parallel-plan + design-grill skills (understand the problem)
-2. OpenSpec Propose    → spec artifacts (define the solution)
-3. UI/UX Design        → wireframes + Nano Banana 2 prompts (if visual change)
-4. Implementation      → red/green TDD, feature branch, commit per artifact
-5. Security Scan       → gitleaks + dependency audit + review-local security agent
-6. Self-Review         → reviewer + writer iterate until consensus (escalate to human if stuck)
-7. OpenSpec Archive    → sync artifacts with final implementation
-8. CD Watch            → after merge, poll the CD run for the merge SHA; surface failures immediately
-9. Retro               → retrospective on the change
+1. Issue Triage        → open or pick a GitHub issue; capture acceptance criteria and open questions in issue comments
+2. UI/UX Design        → wireframes + Nano Banana 2 prompts (if visual change)
+3. Implementation      → red/green TDD, feature branch, commit per issue/sub-task
+4. Security Scan       → gitleaks + dependency audit + review-local security agent
+5. Self-Review         → reviewer + writer iterate until consensus (escalate to human if stuck)
+6. CD/Dependabot       → monitored by the `Reign CD + Dependabot monitor` Claude routine (twice daily UTC); failures auto-open a P0 GitHub issue. No inline post-merge watch.
+7. Retro               → retrospective on the change
 ```
 
 - **TDD is non-negotiable** for both backend and frontend. Red/green/refactor — write a failing test first.
@@ -288,8 +286,10 @@ Role names are Title-Case in prose (`Anonymous` / `User` / `Admin`); the Clerk m
 - **GLOSSARY.md** — Ubiquitous Language glossary. Consult before using domain terms.
 - **PROJECT_STRUCTURE.md** — Full project tree + all API endpoints.
 - **GAME_DESIGN.md** — Living game design vision document.
-- **ROADMAP.md** — Phased roadmap with explicit todos + known issues.
 - **BRAND_GUIDELINES.md** — Design system. Required before any frontend visual work.
+- **[GitHub Issues](https://github.com/lesteenman/reign-game/issues)** — current todos, backlog, known issues (replaces ROADMAP.md as of Track 1, 2026-05-15)
+- **[`Reign` project board](https://github.com/users/lesteenman/projects/1)** — status overview by Kanban column, with `Priority` / `Area` / `Estimate (days)` custom fields
+- **[Wiki](https://github.com/lesteenman/reign-game/wiki)** — Phases 0–8 roadmap history, design decisions log, workflow narrative
 
 ## Domain Conventions
 
@@ -310,19 +310,19 @@ Domain-specific conventions, logging rules, and per-domain lessons live in the a
 
 ## Lessons (cross-cutting)
 
-Slice ID scheme uses `R-<phase>-<slice>` where `<phase>` is the integer phase number and `<slice>` is `exploration` or a strictly increasing 2-digit number (`01`, `02`, …). Already-shipped slices keep historical IDs (e.g., `R-067a`, `R-08C`) — those references are preserved in archived OpenSpec artifacts.
+Slice IDs (`R-<phase>-<slice>`) are historical — new work uses GitHub issue numbers. Existing references in archived OpenSpec artifacts and Wiki pages are preserved as a frozen record. Lessons below that mention slice IDs (#6, #7) are historical-only as of Track 1 (2026-05-15).
 
 1. **Run git from repo root.** Use absolute paths or `git -C <root>` to avoid CWD bugs after `cd` into subdirectories.
 2. **Fetch before reporting git state.** Run `git fetch --prune` before reporting branch status, ahead/behind counts, or PR existence. Stale refs produce confidently wrong analysis.
 3. **Run review-local before `gh pr create`, not after.** Every PR — including 1-commit changes — gets the 4-agent review loop first. "Too small to review" is never a valid reason to skip.
 4. **Path/URL/env renames need a full-repo grep.** When renaming a route, endpoint, env var, port, or config key, grep the whole repo (Taskfile, workflows, docs, scripts) — not just obvious source files. This IS surgical (every site references the rename). Cleaning unrelated dead code is not.
 5. **Trust the git hooks — don't re-run what they cover.** Pre-commit covers gofmt/golangci-lint on staged Go + tsc on staged TS. Pre-push covers full golangci-lint, go test, terraform fmt, frontend build+vitest+npm audit, gitleaks. After writing a change: `git add && git commit && git push`. Re-running them manually duplicates work.
-6. **Slice completion includes flipping `tasks.md` rows to `[x]`.** OpenSpec's `tasks.md` is the single source of truth for slice state. Update the row in the slice's PR, not as post-hoc sweep. Parallel slices on the same `tasks.md` produce mechanical merge conflicts — keep both `[x]` flips when resolving.
-7. **Grep ROADMAP for slice ID collisions before opening an OpenSpec change.** New IDs often collide with pre-declared future-phase IDs. `grep -n "R-<phase>" ROADMAP.md` before claiming a range.
+6. **(Historical)** ~~Slice completion includes flipping `tasks.md` rows to `[x]`.~~ OpenSpec is frozen as of Track 1 (2026-05-15). New work closes via the linked GitHub issue, not via `tasks.md` flips. Kept here so older PR descriptions referencing this lesson are still resolvable.
+7. **(Historical)** ~~Grep ROADMAP for slice ID collisions before opening an OpenSpec change.~~ Slice IDs are no longer used (Track 1, 2026-05-15). New work uses GitHub issue numbers, which are unique by construction.
 8. **Verify dependency versions at the registry, not from memory.** When adding/bumping any dep (npm, Go module, Terraform provider, GitHub Action, Docker image, Homebrew, Clerk/AWS SDK), the version comes from the live registry or current docs page — never recollection. Re-verify when the slice that installs it starts.
 9. **Non-slice perf fixes that block slice testability attach to the slice's PR with explicit commit-body justification.** When a perf fix isn't part of the slice's stated scope but is needed to playtest the slice end-to-end locally, ship it on the same branch with rationale stated explicitly. Do NOT split into a separate PR if it would block slice testing.
 10. **Lockstep service config: capture EVERY consumer in the spec.** When two services share an identifier (queue URL, table name, env var), the spec's acceptance criteria must enumerate all sites. Define shared constants once in `Taskfile.yml::vars:` and reference from each env block — single source of truth.
-11. **Watch CD after every merge to main.** After a PR merges, fetch the latest `cd.yml` run for that commit (`gh run list --workflow=cd.yml --branch=main --limit=1`), poll it to completion (`gh run watch <id>`), and surface failures immediately as in-flight blocking work — don't move on assuming green. CI green is not CD green: TF state can fail on pre-existing drift (PR #102 BucketNotEmpty), IAM policies can fail to attach, frontend sync can fail post-build. Three consecutive silent CD failures (PR #102/103/104, 2026-05-08) only surfaced when the user-facing acc surface degraded behind a CloudFront cache TTL — none of which would have happened if the first failure had been caught at merge time.
+11. **CD + Dependabot monitored by a scheduled Claude routine — don't inline-watch.** The `Reign CD + Dependabot monitor` routine fires twice daily (09:00 + 21:00 Europe/Amsterdam = `0 7,19 * * *` UTC) and opens a `priority:p0`+`area:devops`+`type:bug`+`status:blocks-prod` GitHub issue on any CD failure or critical/high Dependabot alert. **Don't run `gh run watch` after a merge** — let the routine surface failures. The inline-watch practice (motivated by the silent PR #102/103/104 failures on 2026-05-08) is replaced by this routine as of Track 1. The underlying lesson still applies as design context: _CI green is not CD green — TF state can fail on pre-existing drift, IAM policies can fail to attach, frontend sync can fail post-build._
 
 ## Security: Baseline Gates (every cycle)
 
