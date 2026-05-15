@@ -26,6 +26,7 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/replenish"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 	serveservice "github.com/eriksteenman/reign-game/backend/internal/service/serve"
+	statusservice "github.com/eriksteenman/reign-game/backend/internal/service/status"
 	"github.com/eriksteenman/reign-game/backend/internal/worker"
 )
 
@@ -62,7 +63,7 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 
 		if repo != nil {
 			r.Get("/puzzles/next", handler.ServeHandler(serveservice.New(repo, replenishHook)))
-			r.Put("/puzzles/{id}/status", handler.StatusHandler(repo))
+			r.Put("/puzzles/{id}/status", handler.StatusHandler(statusservice.New(repo)))
 
 			// Public modes listing for the landing page. Narrower than
 			// /admin/pool — no thresholds, ready counts, or maxAttempts.
