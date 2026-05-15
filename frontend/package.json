@@ -13,29 +13,29 @@
     "test:playwright": "playwright test"
   },
   "dependencies": {
-    "@clerk/react": "^6.6.2",
+    "@clerk/react": "^6.6.3",
     "@tamagui/config": "2.0.0-rc.42",
     "@tanstack/react-query": "^5.100.10",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
-    "react-router-dom": "^7.15.0",
+    "react-router-dom": "^7.15.1",
     "tamagui": "2.0.0-rc.42"
   },
   "devDependencies": {
-    "@clerk/testing": "^2.0.27",
-    "@playwright/test": "^1.59.1",
+    "@clerk/testing": "^2.0.28",
+    "@playwright/test": "^1.60.0",
     "@tailwindcss/vite": "^4.3.0",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^6.0.0",
+    "@vitejs/plugin-react": "^6.0.2",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^29.1.1",
     "tailwindcss": "4.3.0",
     "typescript": "~6.0.3",
-    "vite": "^8.0.11",
-    "vitest": "^4.1.5"
+    "vite": "^8.0.13",
+    "vitest": "^4.1.6"
   }
 }
