@@ -11,13 +11,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Layer | Technology |
 |-------|-----------|
 | Backend | Go, AWS Lambda, API Gateway (REST) |
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS, Workbox (PWA) |
+| Frontend | React 19, TypeScript, Vite, Tamagui (UI primitives, cross-platform), TanStack Query (server state), Workbox (PWA) |
 | Database | DynamoDB (on-demand pricing) |
 | Testing | Go test (backend), Vitest (frontend unit), Playwright (e2e) |
 | Build | Go build / Taskfile (backend), npm + Vite (frontend) |
 | Infrastructure | Terraform, AWS (S3, CloudFront, Lambda, API Gateway, DynamoDB) |
 | CI/CD | GitHub Actions — CI on PR, CD on merge to main |
 | Dev Environment | LocalStack (local DynamoDB), Vite dev server (frontend) |
+
+**Frontend transition state.** Tamagui + TanStack Query are installed in Track 2 as foundations; Track 3 migrates existing code (Tailwind → Tamagui, manual `LoadState` → TanStack hooks). New code uses Tamagui + TanStack from the start. See `frontend/CLAUDE.md` and `.claude/skills/architecture/SKILL.md`.
 
 ## Coding Principles
 
@@ -84,45 +86,40 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## Change Workflow (MANDATORY)
 
-Every change — feature, fix, or refactor — follows this pipeline:
+Every change — feature, fix, or refactor — follows this pipeline. The full pipeline is driven by Superpowers skills (installed via `/plugin install superpowers@claude-plugins-official`).
 
 ```
-1. OpenSpec Explore    → parallel-plan + design-grill skills (understand the problem)
-2. OpenSpec Propose    → spec artifacts (define the solution)
-3. UI/UX Design        → wireframes + Nano Banana 2 prompts (if visual change)
-4. Implementation      → red/green TDD, feature branch, commit per artifact
-5. Security Scan       → gitleaks + dependency audit + review-local security agent
-6. Self-Review         → reviewer + writer iterate until consensus (escalate to human if stuck)
-7. OpenSpec Archive    → sync artifacts with final implementation
-8. CD Watch            → after merge, poll the CD run for the merge SHA; surface failures immediately
-9. Retro               → retrospective on the change
+1. Issue triage           → pick or open a GitHub issue; capture acceptance criteria in issue comments
+2. Brainstorm             → Superpowers `brainstorming` skill (Socratic refinement) + `architecture` skill (design-time layered/feature-folder check) + `glossary` skill (vocab alignment)
+3. Plan                   → Superpowers `writing-plans` skill (decompose into 2–5 min tasks). For multi-approach exploration: `parallel-plan` skill first to compare 5 approaches, then `writing-plans` to decompose the chosen one.
+4. Worktree or branch     → Superpowers `using-git-worktrees` (preferred) or feature branch on the main repo (solo dev)
+5. TDD execution          → Superpowers `subagent-driven-development` or `executing-plans`, gated by `test-driven-development`. Subagents auto-load the relevant subdirectory CLAUDE.md (`backend/CLAUDE.md`, `frontend/CLAUDE.md`, `infra/CLAUDE.md`) based on the file paths they touch.
+6. Inter-task review      → Superpowers `requesting-code-review` + the `architecture` skill's review-time drift greps. Findings get a SWEEP grep command — fix agents fix ALL matches, not just the reported file.
+7. Security gate          → `security-review-final` agent (always; deep-review trigger list in the Security section below)
+8. Finish branch          → Superpowers `finishing-a-development-branch`. PR description includes a "Key Decisions" section listing intentional design choices.
+9. CD/Dependabot          → monitored by the `Reign CD + Dependabot monitor` Claude routine (twice daily, 09:00 + 21:00 Europe/Amsterdam = `0 7,19 * * *` UTC). Failures auto-open a `priority:p0`+`area:devops`+`type:bug`+`status:blocks-prod` GitHub issue. No inline post-merge watch.
+10. Retro                 → `retro` skill on shipped features
 ```
 
-- **TDD is non-negotiable** for both backend and frontend. Red/green/refactor — write a failing test first.
-- **Feature branches** for all work. Never commit directly to main.
-- **Commits** happen after every artifact delivery (specs, wireframes, completed code), not just at the end.
-- **Self-review** continues until reviewer agent and implementation agent agree. Escalate to human after two rounds with no consensus.
-- **Each phase's `tasks.md` ends with a Verification Checklist** designed during design-flow. Walk it at phase close — every item gets a citation (file:line, test name, grep result, UI assertion).
-- **PR description includes a "Key Decisions" section** listing intentional design choices. Phase-level PRs also include a "Workarounds shipped" section.
+- **TDD is non-negotiable.** Superpowers `test-driven-development` enforces RED-GREEN-REFACTOR.
+- **Feature branches or worktrees** for all work. Never commit directly to main.
+- **Commits** happen after every artifact delivery (plan, individual tasks, completed feature), not just at the end.
+- **Verification before completion.** Superpowers `verification-before-completion` requires running build + tests + verifying output before claiming done. Evidence before assertions.
+- **PR description Key Decisions section** lists intentional design choices to prevent reviewers flagging them as bugs.
 
 ## Agent Teams
 
-This project uses custom AI agents in `.claude/agents/`. The lead agent (Claude Code) orchestrates — it does NOT implement code itself.
+Custom agents live in `.claude/agents/`. After Track 2, the implementation-agent slots (backend-dev/frontend-dev/devops-engineer) are gone — Superpowers' `subagent-driven-development` dispatches subagents directly per task, and the subdirectory CLAUDE.md files (`backend/CLAUDE.md`, `frontend/CLAUDE.md`, `infra/CLAUDE.md`) provide the area-specific context that auto-loads when subagents touch files in those directories. The remaining agents handle non-implementation roles where having a named, invokable persona is the right shape.
 
 | Agent | Role | When |
 |-------|------|------|
-| `product-owner` | Vision guardian, acceptance criteria, scope decisions | Before implementation |
-| `design-flow` | Full design phase: explore, stress-test, glossary alignment, spec generation | Before implementation |
-| `workflow-orchestrator` | Pipeline orchestration, team coordination, glossary enforcement | Full Pipeline Mode |
-| `backend-dev` | Go implementation, API design, DynamoDB, Lambda + TDD | Any back-end work |
-| `frontend-dev` | React/TS implementation, PWA, responsive UI + TDD | Any frontend work |
-| `devops-engineer` | Terraform, GitHub Actions, AWS architecture, monitoring | Infrastructure and CI/CD work |
-| `ui-ux-designer` | Wireframes, interaction design, brand guidelines | Visual design phases |
-| `tester` | E2E test plans, edge cases, regression hunting, Playwright | After implementation |
-| `code-review-final` | Code quality review of PRs | After all implementation |
+| `product-owner` | Vision guardian, acceptance criteria, scope decisions. Does NOT write code. | Before implementation |
+| `ui-ux-designer` | Wireframes, interaction design, brand guidelines, Nano Banana 2 prompts | Visual design phases |
+| `tester` | Test plans, edge case discovery, coverage audits, Playwright execution, bug-found protocol (unit test first) | After implementation (focused or broad audit) |
+| `code-review-final` | Code quality review of PRs via `gh pr` + Superpowers `requesting-code-review` + `architecture` skill | After all implementation, before security |
 | `security-review-final` | Security review (conditional — see Security section) | When diff touches security-sensitive files |
 
-Sub-agents use skills by reading the skill's `SKILL.md` and following its instructions. They do NOT have access to a `Skill()` tool.
+Implementation work happens via Superpowers subagent dispatch (no named implementation agent). Each subagent reads the relevant subdirectory `CLAUDE.md` for conventions.
 
 ## Human-in-the-Loop + Notifications
 
@@ -261,13 +258,29 @@ Frontend already binds `--host 0.0.0.0` (for mobile testing over LAN); the Vite 
 
 ## Setup
 
-After cloning the repo, configure git to run the project's hooks:
+After cloning the repo:
 
 ```bash
+# 1. Git hooks (pre-commit + pre-push gates)
 git config core.hooksPath .githooks
+
+# 2. Frontend dependencies (Tamagui, TanStack, Tailwind, React, etc.)
+cd frontend && npm ci && cd ..
+
+# 3. Playwright CLI for agent-driven browser testing
+npm install -g @playwright/cli@latest
+playwright-cli install --skills   # writes/updates .claude/skills/playwright-cli/
+
+# 4. Superpowers plugin (per-machine; the repo only commits the
+#    `enabledPlugins` flag in .claude/settings.json — the actual
+#    skill files live in ~/.claude/plugins/, per-machine cache)
+#    Run from inside a Claude Code session:
+#        /plugin install superpowers@claude-plugins-official
 ```
 
-Without this, the pre-commit and pre-push gates silently don't run, and CI catches what your local shell should have.
+Without step 1, the pre-commit and pre-push gates silently don't run, and CI catches what your local shell should have.
+
+Without step 4, the Superpowers skills (`brainstorming`, `writing-plans`, `subagent-driven-development`, etc.) are referenced by `.claude/settings.json` but the skill files won't be available locally — the workflow falls back to ad-hoc behavior.
 
 ## Project Structure
 
@@ -288,17 +301,19 @@ Role names are Title-Case in prose (`Anonymous` / `User` / `Admin`); the Clerk m
 - **GLOSSARY.md** — Ubiquitous Language glossary. Consult before using domain terms.
 - **PROJECT_STRUCTURE.md** — Full project tree + all API endpoints.
 - **GAME_DESIGN.md** — Living game design vision document.
-- **ROADMAP.md** — Phased roadmap with explicit todos + known issues.
 - **BRAND_GUIDELINES.md** — Design system. Required before any frontend visual work.
+- **[GitHub Issues](https://github.com/lesteenman/reign-game/issues)** — current todos, backlog, known issues (replaces ROADMAP.md as of Track 1, 2026-05-15)
+- **[`Reign` project board](https://github.com/users/lesteenman/projects/1)** — status overview by Kanban column, with `Priority` / `Area` / `Estimate (days)` custom fields
+- **[Wiki](https://github.com/lesteenman/reign-game/wiki)** — Phases 0–8 roadmap history, design decisions log, workflow narrative
 
 ## Domain Conventions
 
-Domain-specific conventions, logging rules, and per-domain lessons live in the agent files:
+Domain-specific conventions, logging rules, and per-domain lessons live in the subdirectory `CLAUDE.md` files. Claude Code auto-loads these when working on files within those directories.
 
-- **Backend (Go) + logging + DynamoDB access patterns** — see `.claude/agents/backend-dev.md`
-- **Frontend (React + TypeScript) + brand integration** — see `.claude/agents/frontend-dev.md`
-- **Infrastructure (Terraform, GitHub Actions, AWS)** — see `.claude/agents/devops-engineer.md`
-- **Pipeline orchestration (parallel spawn rules, stall protocol)** — see `.claude/agents/workflow-orchestrator.md`
+- **Backend (Go) + logging + DynamoDB access patterns** — see `backend/CLAUDE.md`
+- **Frontend (React + TypeScript + Tamagui + TanStack)** — see `frontend/CLAUDE.md`
+- **Infrastructure (Terraform, GitHub Actions, AWS)** — see `infra/CLAUDE.md`
+- **Architecture rules (per-area, design-time + review-time)** — see `.claude/skills/architecture/SKILL.md`
 
 ## Database (DynamoDB)
 
@@ -310,19 +325,19 @@ Domain-specific conventions, logging rules, and per-domain lessons live in the a
 
 ## Lessons (cross-cutting)
 
-Slice ID scheme uses `R-<phase>-<slice>` where `<phase>` is the integer phase number and `<slice>` is `exploration` or a strictly increasing 2-digit number (`01`, `02`, …). Already-shipped slices keep historical IDs (e.g., `R-067a`, `R-08C`) — those references are preserved in archived OpenSpec artifacts.
+Slice IDs (`R-<phase>-<slice>`) are historical — new work uses GitHub issue numbers. Existing references in archived OpenSpec artifacts and Wiki pages are preserved as a frozen record. Lessons below that mention slice IDs (#6, #7) are historical-only as of Track 1 (2026-05-15).
 
 1. **Run git from repo root.** Use absolute paths or `git -C <root>` to avoid CWD bugs after `cd` into subdirectories.
 2. **Fetch before reporting git state.** Run `git fetch --prune` before reporting branch status, ahead/behind counts, or PR existence. Stale refs produce confidently wrong analysis.
-3. **Run review-local before `gh pr create`, not after.** Every PR — including 1-commit changes — gets the 4-agent review loop first. "Too small to review" is never a valid reason to skip.
+3. **Run Superpowers `requesting-code-review` before `gh pr create`, not after.** Every PR — including 1-commit changes — gets a review pass first. "Too small to review" is never a valid reason to skip.
 4. **Path/URL/env renames need a full-repo grep.** When renaming a route, endpoint, env var, port, or config key, grep the whole repo (Taskfile, workflows, docs, scripts) — not just obvious source files. This IS surgical (every site references the rename). Cleaning unrelated dead code is not.
 5. **Trust the git hooks — don't re-run what they cover.** Pre-commit covers gofmt/golangci-lint on staged Go + tsc on staged TS. Pre-push covers full golangci-lint, go test, terraform fmt, frontend build+vitest+npm audit, gitleaks. After writing a change: `git add && git commit && git push`. Re-running them manually duplicates work.
-6. **Slice completion includes flipping `tasks.md` rows to `[x]`.** OpenSpec's `tasks.md` is the single source of truth for slice state. Update the row in the slice's PR, not as post-hoc sweep. Parallel slices on the same `tasks.md` produce mechanical merge conflicts — keep both `[x]` flips when resolving.
-7. **Grep ROADMAP for slice ID collisions before opening an OpenSpec change.** New IDs often collide with pre-declared future-phase IDs. `grep -n "R-<phase>" ROADMAP.md` before claiming a range.
+6. **(Historical)** ~~Slice completion includes flipping `tasks.md` rows to `[x]`.~~ OpenSpec is frozen as of Track 1 (2026-05-15). New work closes via the linked GitHub issue, not via `tasks.md` flips. Kept here so older PR descriptions referencing this lesson are still resolvable.
+7. **(Historical)** ~~Grep ROADMAP for slice ID collisions before opening an OpenSpec change.~~ Slice IDs are no longer used (Track 1, 2026-05-15). New work uses GitHub issue numbers, which are unique by construction.
 8. **Verify dependency versions at the registry, not from memory.** When adding/bumping any dep (npm, Go module, Terraform provider, GitHub Action, Docker image, Homebrew, Clerk/AWS SDK), the version comes from the live registry or current docs page — never recollection. Re-verify when the slice that installs it starts.
 9. **Non-slice perf fixes that block slice testability attach to the slice's PR with explicit commit-body justification.** When a perf fix isn't part of the slice's stated scope but is needed to playtest the slice end-to-end locally, ship it on the same branch with rationale stated explicitly. Do NOT split into a separate PR if it would block slice testing.
 10. **Lockstep service config: capture EVERY consumer in the spec.** When two services share an identifier (queue URL, table name, env var), the spec's acceptance criteria must enumerate all sites. Define shared constants once in `Taskfile.yml::vars:` and reference from each env block — single source of truth.
-11. **Watch CD after every merge to main.** After a PR merges, fetch the latest `cd.yml` run for that commit (`gh run list --workflow=cd.yml --branch=main --limit=1`), poll it to completion (`gh run watch <id>`), and surface failures immediately as in-flight blocking work — don't move on assuming green. CI green is not CD green: TF state can fail on pre-existing drift (PR #102 BucketNotEmpty), IAM policies can fail to attach, frontend sync can fail post-build. Three consecutive silent CD failures (PR #102/103/104, 2026-05-08) only surfaced when the user-facing acc surface degraded behind a CloudFront cache TTL — none of which would have happened if the first failure had been caught at merge time.
+11. **CD + Dependabot monitored by a scheduled Claude routine — don't inline-watch.** The `Reign CD + Dependabot monitor` routine fires twice daily (09:00 + 21:00 Europe/Amsterdam = `0 7,19 * * *` UTC) and opens a `priority:p0`+`area:devops`+`type:bug`+`status:blocks-prod` GitHub issue on any CD failure or critical/high Dependabot alert. **Don't run `gh run watch` after a merge** — let the routine surface failures. The inline-watch practice (motivated by the silent PR #102/103/104 failures on 2026-05-08) is replaced by this routine as of Track 1. The underlying lesson still applies as design context: _CI green is not CD green — TF state can fail on pre-existing drift, IAM policies can fail to attach, frontend sync can fail post-build._
 
 ## Security: Baseline Gates (every cycle)
 
@@ -330,7 +345,7 @@ Run on every change:
 
 1. **Secret scanning (pre-commit):** `gitleaks detect --source .` — blocks the commit if secrets found.
 2. **Dependency audit (CI):** `govulncheck ./...` (backend) and `npm audit --audit-level=moderate` (frontend) — known vulnerabilities block merge.
-3. **review-local security agent:** runs on every change. CRITICAL or HIGH findings block merge.
+3. **Superpowers `requesting-code-review` security pass:** runs on every change as part of the workflow; CRITICAL or HIGH findings block merge. The full `security-review-final` agent runs additionally when the deep-review trigger (next section) applies.
 
 ## Security: Deep Review Trigger (conditional)
 
@@ -343,44 +358,43 @@ Run the full `security-review-final` agent when the diff includes any of:
 - `.github/workflows/**`
 - Any file with `password`, `secret`, `token`, `credential`, `key` in path or content
 
-Skip when the diff only touches: service logic, models, frontend components, tests, docs, OpenSpec artifacts.
+Skip when the diff only touches: service logic, models, frontend components, tests, docs, archived OpenSpec artifacts.
 
 ## Available Skills
 
-Skills in `.claude/skills/` are invoked by reading their `SKILL.md` and following the instructions:
+Project-local skills in `.claude/skills/` (invoked by reading their `SKILL.md` and following the instructions):
 
-- `design-grill` — Stress-test design decisions
-- `parallel-plan` — Fan-out parallel approach comparison
+- `architecture` — Per-area architecture rules (backend layered, frontend feature-folders, infra modules-vs-envs) with design-time and review-time drift greps
+- `parallel-plan` — Fan-out parallel approach comparison (5 approaches in parallel, then synthesize)
 - `glossary` — Ubiquitous language glossary management
-- `review-local` — 4-agent parallel local code review
-- `gitlab-code-review` — PR review via VCS CLI
-- `playwright-cli` — Browser automation for e2e testing
+- `playwright-cli` — Browser automation for e2e testing (Microsoft's `@playwright/cli`)
 - `write-simply` — Plain language writing
 - `structure-clearly` — Pyramid principle document structure
 - `retro` — Retrospective on the change
 
-**Plugin-based skills** (require Claude Code plugin install — see CONTRIBUTING.md):
-- `frontend-design` — Component-level design guidance
-- `ui-ux-pro-max` — UX patterns, interaction design, design system
+**Plugin-based skills** (require Claude Code plugin install):
+- `superpowers:*` — Full workflow chain: `brainstorming`, `using-git-worktrees`, `writing-plans`, `subagent-driven-development`, `executing-plans`, `test-driven-development`, `requesting-code-review`, `receiving-code-review`, `finishing-a-development-branch`, `systematic-debugging`, `verification-before-completion`, `dispatching-parallel-agents`, `using-superpowers`, `writing-skills`. Install: `/plugin install superpowers@claude-plugins-official`.
+- `frontend-design`, `ui-ux-pro-max` — Component-level design guidance, UX patterns, design system
 
 ## How to Use the Agents
 
 ### Assisted Mode (small changes, bug fixes — under ~5 files)
 
-1. Spawn the appropriate implementation agent (e.g., `backend-dev`).
-2. Agent implements + tests + commits.
-3. Run build verification.
-4. Run `gitleaks detect --source .` — block if secrets found.
-5. Read `skills/review-local/SKILL.md` and follow its instructions.
-6. Fix CRITICAL/HIGH security findings before continuing.
-7. Spawn `code-review-final` (+ `security-review-final` if deep review triggered).
-8. Fix review comments, push, merge.
+For one-off small work, skip the full Superpowers chain:
 
-### Full Pipeline Mode (features, multi-module changes)
+1. Dispatch a fresh subagent (via Task tool) to do the work. The subagent auto-loads `/CLAUDE.md` plus the relevant subdirectory CLAUDE.md based on the files it touches.
+2. Subagent implements + tests + commits.
+3. Run build verification (Superpowers `verification-before-completion`).
+4. Pre-commit hook covers `gitleaks` + `golangci-lint`/`gofmt` (Go) + `tsc` (TS).
+5. Run Superpowers `requesting-code-review` over the diff. Fix CRITICAL/HIGH findings.
+6. Spawn `code-review-final` (+ `security-review-final` if the deep-review trigger applies).
+7. Fix review comments, push, merge.
 
-Spawn the `workflow-orchestrator` agent. It distributes tasks in parallel, runs build verification + pre-commit checks + local review, creates the PR, spawns reviewers, and Playwright e2e agents. For optional/ambiguous steps, it asks the human.
+### Full Pipeline Mode (features, multi-area changes)
 
-See `.claude/agents/workflow-orchestrator.md` for full pipeline details.
+Follow the full Change Workflow above. The lead agent (Claude Code) reads each Superpowers skill in turn and dispatches subagents per `subagent-driven-development`. For optional/ambiguous design forks, the lead agent stops and asks the human (HITL rule).
+
+The `architecture` skill is consulted at two points: during `brainstorming` (design-time check) and during `requesting-code-review` + `code-review-final` (review-time drift greps).
 
 ## Key Pipeline Rules
 
@@ -388,3 +402,4 @@ See `.claude/agents/workflow-orchestrator.md` for full pipeline details.
 - **Cross-stack contract alignment:** when backend and frontend run in parallel, the frontend API service task MUST read the actual backend DTOs before writing interfaces.
 - **PR Key Decisions section:** include intentional design choices in PR descriptions to prevent reviewers flagging them as bugs.
 - **Two review passes max** — after pass 2, the PR is considered ready for merge.
+- **Architecture drift = blocking finding.** A `architecture: drift in <file>` finding from the architecture skill blocks merge unless the PR is explicitly marked as introducing a documented exception (in the Key Decisions section).

@@ -345,6 +345,21 @@ jobs:
 
       - name: Terraform Plan
         id: plan
+        # Pass the same TF_VAR_* env vars that CD apply uses (see cd.yml).
+        # Without these, the plan falls back to variables.tf defaults
+        # (domain_aliases=[], acm_certificate_arn=""), which makes the
+        # CloudFront aliases expression compute to [] and the plan show a
+        # phantom diff removing reign.acc.steenman.me on every PR. CD apply
+        # always carries the real values via env, so the diff never runs —
+        # but it scares reviewers and breaks the "no comment on no-op
+        # plans" auto-suppression. Closes #155. The lesson "CI plan must
+        # take the same -var set as CD apply" was captured on 2026-05-08
+        # but never applied to the workflow until now.
+        env:
+          TF_VAR_clerk_publishable_key: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
+          TF_VAR_clerk_secret_key: ${{ secrets.CLERK_SECRET_KEY }}
+          TF_VAR_domain_aliases: ${{ vars.DOMAIN_ALIASES }}
+          TF_VAR_acm_certificate_arn: ${{ vars.ACM_CERTIFICATE_ARN }}
         run: |
           terraform plan -no-color -out=tfplan \
             -var="aws_region=${{ vars.AWS_REGION }}" \
