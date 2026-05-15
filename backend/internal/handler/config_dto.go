@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/eriksteenman/reign-game/backend/internal/mode"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
@@ -116,8 +117,8 @@ func validateSize(size int) (status int, errCode, errMsg string) {
 }
 
 // validateMode rejects modes outside {standard, double}.
-func validateMode(mode string) (status int, errCode, errMsg string) {
-	if mode != ModeStandard && mode != ModeDouble {
+func validateMode(modeName string) (status int, errCode, errMsg string) {
+	if !mode.IsValid(modeName) {
 		return http.StatusBadRequest, "invalid_params",
 			"mode must be 'standard' or 'double'"
 	}

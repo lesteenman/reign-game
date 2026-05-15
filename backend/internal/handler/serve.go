@@ -10,6 +10,7 @@ import (
 	"strconv"
 
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
+	"github.com/eriksteenman/reign-game/backend/internal/mode"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
@@ -69,20 +70,20 @@ func ServeHandler(fetcher PuzzleFetcher, replenishHook func(size int, mode strin
 		}
 
 		// Validate mode parameter.
-		mode := r.URL.Query().Get("mode")
-		if mode == "" {
+		modeName := r.URL.Query().Get("mode")
+		if modeName == "" {
 			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "mode parameter is required")
 			return
 		}
-		if mode != ModeStandard && mode != ModeDouble {
+		if !mode.IsValid(modeName) {
 			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'")
 			return
 		}
 
 		// Fetch next ready puzzle.
-		puzzle, err := fetcher.NextReady(r.Context(), size, mode)
+		puzzle, err := fetcher.NextReady(r.Context(), size, modeName)
 		if err != nil {
-			log.Printf("error fetching next puzzle for %dx%d %s: %v", size, size, mode, err)
+			log.Printf("error fetching next puzzle for %dx%d %s: %v", size, size, modeName, err)
 			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to fetch puzzle")
 			return
 		}
@@ -95,7 +96,7 @@ func ServeHandler(fetcher PuzzleFetcher, replenishHook func(size int, mode strin
 		// Mark as served. ErrPuzzleNotFound here is the NextReady→MarkServed
 		// race (another replica consumed the row between the two calls);
 		// surface it as "no puzzles available" so the client retries.
-		pk := fmt.Sprintf("%d#%s", size, mode)
+		pk := fmt.Sprintf("%d#%s", size, modeName)
 		if err := fetcher.MarkServed(r.Context(), pk, puzzle.ID); err != nil {
 			if errors.Is(err, repository.ErrPuzzleNotFound) {
 				httperr.WriteError(w, http.StatusNotFound, "no_puzzles_available", "No puzzles available for this size and mode. Try again shortly.")
@@ -112,7 +113,7 @@ func ServeHandler(fetcher PuzzleFetcher, replenishHook func(size int, mode strin
 		// the daily-flow / serve-flow injection pattern (clock,
 		// replenishHook, etc.).
 		if replenishHook != nil {
-			replenishHook(size, mode)
+			replenishHook(size, modeName)
 		}
 
 		metadata := serveMetadata{

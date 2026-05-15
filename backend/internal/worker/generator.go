@@ -15,7 +15,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/eriksteenman/reign-game/backend/internal/generator"
-	"github.com/eriksteenman/reign-game/backend/internal/handler"
+	"github.com/eriksteenman/reign-game/backend/internal/mode"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
@@ -105,7 +105,7 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		opts = append(opts, generator.WithMaxAttempts(req.MaxAttempts))
 	}
 
-	g, err := generator.New(req.Size, handler.MarksPerUnitFromMode(req.Mode), opts...)
+	g, err := generator.New(req.Size, mode.MarksPerUnit(req.Mode), opts...)
 	if err != nil {
 		return fmt.Errorf("constructing generator (size=%d, mode=%s): %w", req.Size, req.Mode, err)
 	}
@@ -167,7 +167,7 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		// replays the exact same sequence so the leak can be diagnosed.
 		log.Printf("WARN: generator: safety-net fired %d time(s) on puzzle %s (size=%d, mode=%s, seed=%d) — reproduce with `task reproduce -- --seed=%d --n=%d --k=%d`",
 			pz.Metrics.SafetyNetTrips, puzzleID, req.Size, req.Mode, seed,
-			seed, req.Size, handler.MarksPerUnitFromMode(req.Mode))
+			seed, req.Size, mode.MarksPerUnit(req.Mode))
 	}
 
 	return nil
