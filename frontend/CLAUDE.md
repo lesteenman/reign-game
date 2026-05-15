@@ -1,0 +1,96 @@
+# Frontend — React + TypeScript Conventions
+
+This file is auto-loaded by Claude Code when working on files under `frontend/`. The project-wide rules live in `/CLAUDE.md`; this file is additive.
+
+## Architecture (Track 2)
+
+**Feature-folder structure** (Bulletproof React–style). The `architecture` skill enforces these rules at design time and review time.
+
+```
+frontend/src/
+  app/          app-level composition: router, providers, entry, framework config
+  engine/       domain layer — pure TS, no React, no I/O (→ @reign/core later)
+  features/     product features (each: components/hooks/services/types/__tests__/)
+    auth/  game/  daily/  curation/  admin/  landing/
+  shared/       cross-cutting reusables
+    components/ Tamagui-wrapped Button, PageShell, etc.
+    hooks/      useDarkMode, etc.
+    lib/        api.ts base, fetch utilities
+    types/      cross-feature types
+  theme/        design tokens (tactile.ts, theme types — → @reign/core later)
+  storage/      IndexedDB wrapper
+```
+
+### Import rules
+
+- **`features/X` must not import from `features/Y`.** Cross-feature dependencies go through `shared/`, `engine/`, or `theme/`.
+- **`pages` (inside features) may import from the same feature's components/hooks/services. Nothing else from another feature.**
+- **No `services/*` imports below a feature's `pages/`.** Leaf components consume hooks; hooks own the I/O. `useSubmitVerdict()` is fine in a leaf; `import { submitVerdict } from '...services/verdictService'` in a leaf is a violation.
+- **`engine/` may only be imported, never depend on anything except external libs.** It is the pure domain.
+- **`app/` is the top of the import graph.** Nothing imports from `app/`.
+
+Drift detection grep examples (the architecture skill codifies these):
+- Cross-feature: `grep -rn 'from .*features/[a-z]*' features/ | grep -v "features/$FEATURE_NAME"` for each feature
+- Leaf I/O: `grep -rn 'from .*services/' features/*/components/`
+
+## State Management
+
+- **Server state**: TanStack Query (`@tanstack/react-query`). `useQuery` for reads, `useMutation` for writes. The `QueryClient` is composed in `app/providers.tsx`. No manual `useState<LoadState>` discriminated unions — those are the boilerplate TanStack eliminates.
+- **Client state in-component**: `useState` / `useReducer`. Examples: the `useGame` reducer (move history), local form state.
+- **Theme**: `theme/ThemeContext.tsx` provides theme tokens; consumed via `useTheme()`.
+- **Auth**: Clerk Provider (`@clerk/clerk-react`). `useUser()` for auth state.
+- **No Redux, no Zustand** (not currently needed; revisit when cross-feature client state emerges).
+
+## UI Primitives
+
+- **Tamagui 2 RC** for generic chrome (Button, Sheet, Dialog, Select, Tooltip, Tabs, Popover, Input, Toast). Configured in `tamagui.config.ts` (root of `frontend/`) via `createTokens` + `createTheme` + `createTamagui`, consuming `theme/tactile.ts` as the token source.
+- **Custom game UI** (Grid, Cell, Marker, ExclusionMark, RegionBorderOverlay) is hand-built on Tamagui's low-level primitives (`<View>`, `<Stack>`, `<Text>`) — same tokens, ready for React Native later.
+- **Tailwind is retired.** Migration of existing `className=` sites happens in Track 3, not Track 2. New code uses Tamagui from the start.
+
+## TypeScript Conventions
+
+- **Functional components only.** No class components.
+- **Custom hooks for reusable logic.** Per-feature hooks live in `features/<feature>/hooks/`.
+- **Strict TypeScript.** No `any`, no type assertions without justification.
+- **File naming.** Components PascalCase (`Grid.tsx`); hooks camelCase (`useGame.ts`).
+- **Mobile-first, responsive.** All components must work across mobile, tablet, and desktop viewports.
+- **Accessibility: WCAG 2.1 AA minimum.** ARIA attributes, keyboard navigation, contrast ratios, alt text. Tamagui primitives handle most of this via Radix-equivalent internals.
+
+## Security
+
+- Sanitize all user inputs to prevent XSS.
+- Never use `innerHTML` or equivalent unsafe DOM injection without explicit sanitization.
+- Avoid storing sensitive data in localStorage/sessionStorage — Clerk handles session via httpOnly cookies.
+- Escape dynamic content rendered in the DOM.
+- Use `rel="noopener noreferrer"` on external links.
+- No API keys, secrets, or sensitive configuration in client-side code (except browser-safe Clerk publishable keys baked at build time).
+
+## Testing (TDD — non-negotiable)
+
+Project-wide TDD rule in `/CLAUDE.md`. Frontend-specific:
+- **Vitest** for unit tests. Co-located with source: `Foo.tsx` + `Foo.test.tsx`.
+- **Playwright** for e2e in `frontend/playwright/e2e/`; integration specs in `frontend/playwright/integration/`. See `.claude/skills/playwright-cli/` for browser automation patterns.
+- Aim for above 90% coverage on hooks and services.
+- Use `frontend/src/test-utils.tsx` (wraps RTL `render` with providers).
+- **Mock external dependencies** (network via MSW or `page.route()`; not Vitest unit-mocks of services).
+
+## Lessons (Reign-specific)
+
+1. **Touch/pointer e2e tests first.** For any touch/pointer interaction code, write Playwright e2e tests before unit tests. jsdom does not simulate synthesized mouse events after touch events, so unit tests pass while the actual mobile experience is broken. The Phase 1 touch double-fire bug was only caught by user playtesting.
+2. **First-paint correctness for visual components.** Never render a component at a default/placeholder size then resize after measuring. Use CSS-based sizing or defer rendering until the container is measured. Layout flicker is a user-visible bug.
+3. **Validate URL params before type assertion.** When the frontend reads URL params and uses them as typed values (enums, numbers), validate against known values before type assertion. URL params are always `string | null` — invalid values passed unchecked will reach the API.
+4. **Persisted data shapes live in `storage/`.** If a type is going to be saved to IndexedDB, define it once in the storage module and import from every consumer. Don't redeclare a shape in a hook and storage — they will drift.
+5. **Playwright `request` and `page.request` have separate cookie jars.** When a test authenticates via the browser (`clerk.signIn({ page })`, `page.goto('/login')`, etc.), session cookies attach to the `page`'s `BrowserContext`. The standalone `request` fixture is a separate `APIRequestContext` with its own cookie jar — calls through it arrive cookie-less and 401 on auth-gated endpoints. Use `page.request.X(...)` instead, or alias `const request = page.request` at the top of the test. Note in the spec header why the alias exists so future readers don't refactor it back.
+6. **Vite reads `.env*` files at dev-server start; HMR doesn't reload them.** Adding or changing a `VITE_*` variable while `task dev:up:frontend` (or `task e2e:up:frontend`) is running has no effect on the served bundle until the Vite process restarts. After editing `.env.local`: `task dev:restart:frontend` (or `task e2e:down:frontend && task e2e:up:frontend`).
+7. **Grep for cross-chunk placeholders at chunk close.** When a slice is broken into chunks and an earlier chunk plants a stub for a later chunk (e.g. `'(post-completion screen lands chunk 5)'`, `// TODO chunk 4`, a literal "Coming soon" string), the later chunk MUST grep for the identifying string and confirm it's gone. Don't trust "I'll wire it later" — chunk-handoffs are exactly where stubs survive into shipped code. R-8-02's chunk-3 left a placeholder render branch for the post-completion screen; chunk-5 added the screen but never replaced the branch, so day-2 returning users saw the stub. The pattern: every placeholder string committed in chunk N is a grep target at chunk M's close-out (M > N).
+8. **API response shape verification.** For each new API service function, verify the response type field names match the actual backend return type. Read the backend DTO (`backend/internal/handler/*Response`), not just the spec.
+9. **Navigate after successful form actions.** After form submission that creates/updates data, navigate the user to the appropriate view.
+10. **Null-safe user display names.** Components displaying user names must handle null/missing fields with fallback.
+11. **No `!important` overrides.** Use Tamagui props or theme tokens; don't escape into raw CSS hacks.
+12. **Extract shared constants/components immediately** for multi-page features. Don't copy-paste between pages.
+
+## Quality Standards
+
+- **Performance**: Optimize for Core Web Vitals (LCP, FID, CLS). Lazy-load where appropriate. Minimize bundle size. Tamagui's compiler hoists styles at build time — verify the compiler is running, not falling back to runtime mode.
+- **Accessibility**: Tamagui ships ARIA via Radix-equivalent internals. Custom game-UI components must do their own work (keyboard nav for the grid, screen-reader announcements for state changes).
+- **Responsiveness**: All UI must work across mobile, tablet, and desktop viewports.
