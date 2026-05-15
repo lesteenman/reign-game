@@ -14,38 +14,55 @@ The corresponding subdirectory `CLAUDE.md` files (`backend/CLAUDE.md`, `frontend
 
 ---
 
-## Backend — Three-layer architecture
+## Backend — Layered architecture
+
+Entry points (`cmd/*/main.go`) compose dependencies and dispatch to the appropriate edge package. Two edges exist: `handler/` for HTTP and `worker/` for SQS consumers. Both depend on `service/` for orchestration. The service layer is where multi-leg DDB transactions live, NOT in the repository.
 
 | Layer | Directory | Allowed callees | Forbidden callees |
 |---|---|---|---|
-| **Handler** (frontend) | `backend/internal/handler/` | service | repository, queue, AWS SDK |
-| **Service** (application) | `backend/internal/service/` | domain, repository | handler |
-| **Domain** (generic + repo-callers) | `backend/internal/domain/`, `backend/internal/repository/` | AWS SDK, external libs | handler, service |
+| **Edge: HTTP** | `backend/internal/handler/` | service, mode, httperr, generator (only for the `/api/puzzles/generate` debug endpoint) | repository, queue, AWS SDK directly |
+| **Edge: SQS consumer** | `backend/internal/worker/` | service, mode, generator | handler, repository, queue directly |
+| **Service** (application) | `backend/internal/service/` | repository, queue, domain, mode, generator, replenish, awsclient | handler, worker |
+| **Persistence** | `backend/internal/repository/`, `backend/internal/queue/` | AWS SDK, domain, mode | handler, worker, service |
+| **Pure / domain** | `backend/internal/domain/` (if created), `backend/internal/mode/`, `backend/internal/generator/` | external libs only | anything else under `internal/` |
+| **Infra adapters** | `backend/internal/awsclient/`, `backend/internal/auth/`, `backend/internal/httperr/`, `backend/internal/replenish/` | AWS SDK, external libs, domain | handler, worker (callable but not imported) |
+
+**Notes on the moves codified by Track 3:**
+- `MarksPerUnitFromMode`, `ModeStandard`, `ModeDouble`, `isMode` live in `backend/internal/mode/`. Both `handler/` and `worker/` import them from there.
+- Multi-leg DDB transactions (`SubmitPlayTransactionally`, `FinalizeDailyTransaction`) move from `repository/daily.go` into a `service/daily/` package.
+- Handlers that currently call repository directly (admin_pool, admin_config, daily, replenish, serve, status, verdict, config_modes, etc.) refactor to call service interfaces.
 
 ### Design-time check (backend)
 
 When a proposed change introduces or modifies a backend file, ask:
 
-1. Which layer does this file belong to (handler/service/domain/repository)?
+1. Which layer does this file belong to (edge/service/persistence/pure/infra-adapter)?
 2. What does the new code call? Are all callees in the allowed-callees list for that layer?
-3. If a handler needs persistence: does the design route through a service, or did it shortcut into the repository?
+3. If a handler or worker needs persistence: does the design route through service, or shortcut into repository/queue?
 4. If a service needs another service: are they in the same bounded context? Cross-service composition is fine via interfaces; circular service-to-service dependencies are not.
+5. If the new code is a multi-step DDB operation: it goes in service, not repository. Repository methods are single transactions of single-row scope OR a single `TransactWriteItems`/`TransactGetItems` call with no orchestration logic.
 
-If the answer to (3) is "shortcut," redesign to insert a service layer.
+If the answer to (3) is "shortcut," redesign to insert a service call.
 
 ### Review-time drift check (backend)
 
 Run these greps against the diff (`git diff main...HEAD --name-only` for the file list, then per file):
 
 ```sh
-# Handler importing repository or queue directly — forbidden
-grep -rn "internal/repository\|internal/queue" backend/internal/handler/
+# Handler or worker importing repository/queue directly — forbidden
+grep -rn "internal/repository\|internal/queue" backend/internal/handler/ backend/internal/worker/
 
-# Service importing handler — forbidden (would be a cycle)
-grep -rn "internal/handler" backend/internal/service/
+# Service importing handler/worker — forbidden (cycle)
+grep -rn "internal/handler\|internal/worker" backend/internal/service/
 
-# Domain importing handler or service — forbidden
-grep -rn "internal/handler\|internal/service" backend/internal/domain/ backend/internal/repository/
+# Worker importing handler — forbidden (worker is a peer, not "behind" handler)
+grep -rn "internal/handler" backend/internal/worker/
+
+# Repository/queue importing service or above — forbidden (cycle)
+grep -rn "internal/handler\|internal/worker\|internal/service" backend/internal/repository/ backend/internal/queue/
+
+# Pure layers importing anything internal/ — forbidden
+grep -rn "internal/handler\|internal/worker\|internal/service\|internal/repository\|internal/queue" backend/internal/mode/ backend/internal/generator/ backend/internal/domain/ 2>/dev/null
 ```
 
 Any non-empty result is a finding. Report as: `architecture: <layer> drift in <file>:<line> — imports <forbidden-callee>; route through <correct-layer>`.
@@ -58,15 +75,18 @@ Any non-empty result is a finding. Report as: `architecture: <layer> drift in <f
 frontend/src/
   app/          app composition (router, providers, entry)
   engine/       domain layer — pure TS, no React, no I/O (→ @reign/core later)
-  features/     product features
-    auth/  game/  daily/  curation/  admin/  landing/
-  shared/       cross-cutting reusables
-    components/ Tamagui-wrapped primitives
-    hooks/      generic hooks
-    lib/        api base, fetch utilities
-    types/      cross-feature types
+  features/     product features (each one self-contained)
+    auth/
+      pages/        components mounted by the router (one or a few)
+      screens/      OPTIONAL — sub-flow components used inside a page, NOT routed
+      components/   leaf components specific to this feature
+      hooks/        feature-specific hooks (own I/O via useQuery/useMutation)
+      services/     OPTIONAL — feature-specific API surface (or skip; wire useQuery directly)
+      types/        feature-specific types
+    game/  daily/  curation/  admin/  landing/  (same shape)
+  shared/       cross-cutting reusables (Tamagui-wrapped chrome, generic hooks, api base, cross-feature types)
   theme/        design tokens (→ @reign/core later)
-  storage/      IndexedDB wrapper
+  storage/      IndexedDB wrapper (or fold into shared/lib/storage/ in Track 3 if it stays single-purpose)
 ```
 
 ### Rules
@@ -75,13 +95,15 @@ frontend/src/
 |---|---|---|
 | **No cross-feature imports** | `features/X` never imports from `features/Y` | Features must be independently deletable |
 | **Shared kernel only** | Cross-feature dependencies go via `shared/`, `engine/`, or `theme/` | Single source of truth |
-| **Pages import features, not vice versa** | The route table in `app/` imports features; no feature imports a page from another feature | Clean import direction |
-| **No `services/*` imports below `pages/`** | Leaf components consume hooks; hooks own I/O | Testable, composable, no hidden side effects |
+| **`pages/` are routes only** | `features/X/pages/` holds ONLY components mounted directly by the router. Sub-flow components (intermediate screens within a flow) live under `features/X/screens/`. Leaf components live under `features/X/components/`. | Eliminates page-to-page imports; clear distinction between "routed" and "rendered-by-another-component" |
+| **No page-to-page imports** | A page never imports another page, even within the same feature | Use `screens/` for shared sub-flow components |
+| **No `services/*` imports below `pages/`** | Leaf components and screens consume hooks; hooks own I/O. Direct `import { fooFn } from 'services/...'` from a leaf or screen is a violation | Testable, composable, no hidden side effects |
+| **No type imports from `services/*`** | Type definitions belong in `types/` or `engine/`; services may re-export types but consumers must import them from the source | One source of truth per type |
 | **`engine/` is pure** | No React, no I/O, no DOM, no `fetch`. Only imports external libs | It's the cross-platform domain |
 | **`app/` is the top** | Nothing imports from `app/` | It composes the rest |
 | **Tamagui for chrome** | Use `tamagui` package components for Button, Sheet, Dialog, Select, etc. | Cross-platform accessibility via Radix internals |
 | **Custom on Tamagui primitives** | Game UI (Grid, Cell, Marker) uses `<View>`/`<Stack>`/`<Text>` from `tamagui` | Same code path, ready for RN |
-| **No raw Tailwind in new code** | Tamagui props or theme tokens only | Tailwind is being retired in Track 3 |
+| **No raw Tailwind** | Tamagui props or theme tokens only. Tailwind is retired in Track 3. | One styling system |
 | **Server state via TanStack** | `useQuery`/`useMutation` for backend reads/writes | Eliminates manual LoadState boilerplate |
 | **Client state via React** | `useState`/`useReducer` for in-component state | No Zustand/Redux until cross-feature client state emerges |
 
@@ -99,38 +121,53 @@ When a proposed change introduces or modifies a frontend file:
 
 ```sh
 # Cross-feature imports — forbidden
-for f in $(ls frontend/src/features/); do
+for f in $(ls frontend/src/features/ 2>/dev/null); do
   grep -rn "from .*features/[a-z]" "frontend/src/features/$f" | grep -v "features/$f"
 done
 
-# Leaf I/O — forbidden (services imported below pages)
-find frontend/src/features/*/components -name "*.tsx" -exec grep -l "from .*services/" {} \;
+# Page-to-page imports — forbidden
+grep -rn "from .*pages/" frontend/src/features/*/pages/ 2>/dev/null
+
+# Leaf I/O (components / screens importing services) — forbidden
+find frontend/src/features/*/components frontend/src/features/*/screens -name "*.tsx" 2>/dev/null \
+  | xargs grep -l "from .*services/" 2>/dev/null
+
+# Type imports from services — forbidden
+grep -rn "import type .* from .*services/" frontend/src/ 2>/dev/null
 
 # Engine purity — forbidden (React, fetch, DOM)
 grep -rn "from 'react'\|fetch(\|document\.\|window\." frontend/src/engine/
 
-# Cross-direction — forbidden (anything imports from app/)
+# Anything imports from app/ — forbidden
 grep -rn "from .*app/" frontend/src/ --include='*.ts' --include='*.tsx' | grep -v "from '\\.\\./app"
 
-# Manual LoadState — flag for review (not strictly forbidden in legacy code, but discouraged in new)
+# Manual LoadState — flag for review (legacy migration target)
 grep -rn "useState<LoadState>\|useState<.*FlowState>" frontend/src/
 
-# Raw Tailwind in new code — flag for review
-git diff --name-only main...HEAD -- 'frontend/src/**/*.tsx' | xargs grep -l 'className=' 2>/dev/null
+# Raw Tailwind anywhere — forbidden
+grep -rn 'className=' frontend/src/ --include='*.tsx' --include='*.ts'
 ```
 
 Any non-empty result is a finding. Report as: `architecture: frontend drift in <file>:<line> — <rule>; <fix>`.
 
-### Known legacy violations (pre-Track-3)
+### Known legacy violations (Track 3 refactor scope)
 
-These exist today; Track 3 will refactor:
+These exist on `main` as of pre-Track-3. Track 3 refactors each one. After Track 3, this section should be empty — anything remaining is a real violation.
+
+**Pre-tracked 5:**
 - `frontend/src/components/auth/ProtectedAdminRoute.tsx` imports from `pages/`
-- `frontend/src/components/game/VerdictSurface.tsx` calls `submitVerdict()` and `updatePuzzleStatus()` directly
+- `frontend/src/components/game/VerdictSurface.tsx` calls `submitVerdict()` + `updatePuzzleStatus()` directly (leaf I/O)
 - `frontend/src/services/dailyService.ts` bypasses `api.ts` for header injection
 - `frontend/src/pages/DailyGameBoard.tsx` imports from `pages/GamePage.tsx`
 - `frontend/src/hooks/useGame.ts` re-exports `cellKey` (consumed by `grid/Grid.tsx`)
 
-When the review-time check fires on these, mark as "pre-Track-3 known violation, do not block this PR" unless the PR is specifically Track-3 refactor work.
+**Discovered during Phase 0 indexing:**
+- `frontend/src/pages/DailyFlow.tsx` imports `./DailyGameBoard` and `./PostCompletionScreen` (page-to-page)
+- `frontend/src/pages/GamePage.tsx` imports `./DailyFlow` (page-to-page)
+- `frontend/src/components/landing/PuzzleSelector.tsx` imports `Mode`/`ModeEntry` types from `services/`
+- `frontend/src/services/adminService.ts` re-exports `MODES`/`isMode`/`Mode` from `engine/types` (indirection)
+
+**Refactor target shape**: `DailyFlow`, `DailyGameBoard`, `PostCompletionScreen` are sub-flow components, not routes. They move under `features/daily/screens/`. The two `pages/`-only imports (`ProtectedAdminRoute` → `pages/`, `DailyGameBoard` ← from `GamePage`) dissolve because both source and target end up inside the same feature folder.
 
 ---
 
