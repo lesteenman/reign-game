@@ -245,6 +245,20 @@ export interface GameBoardProps {
   timerElapsed: number;
   timerResumedAt: number | null;
   startedAt: number;
+  /**
+   * Optional server-issued anchor for the displayed elapsed time.
+   * When set, the timer renders `Date.now() − assignedAt` and the
+   * useTimer lifecycle (restore / start / pause-on-visibility / save)
+   * is skipped — there is no client state to lose, and the displayed
+   * value matches the leaderboard's server-authoritative
+   * `serverElapsedMs = submittedAt − assignedAt` (DP-19 invariant:
+   * `assignedAt` is set once on first GET and never overwritten).
+   *
+   * RFC3339 timestamp; parsed to epoch ms on receipt. Used only by
+   * the daily flow today (KI-025 — closing the timer-restarts-on-
+   * navigate-back gap).
+   */
+  assignedAt?: string;
   navigate: ReturnType<typeof useNavigate>;
   saveState: (state: GameState) => Promise<void>;
   clearState: (flowType: FlowType, flowId: string) => Promise<void>;
@@ -301,6 +315,7 @@ export function GameBoard({
   timerElapsed,
   timerResumedAt,
   startedAt,
+  assignedAt,
   navigate,
   saveState,
   clearState,
@@ -309,6 +324,8 @@ export function GameBoard({
   onPlayAgain,
   onSolveDetected,
 }: GameBoardProps) {
+  const assignedAtMs = assignedAt ? new Date(assignedAt).getTime() : null;
+  const isWallClockAnchored = assignedAtMs !== null && !Number.isNaN(assignedAtMs);
   const [ready, setReady] = useState(false);
   useLayoutEffect(() => { setReady(true); }, []);
 
@@ -347,17 +364,20 @@ export function GameBoard({
   const startedAtRef = useRef(startedAt);
 
   // Restore timer on mount, then start it. The timer ticks from the
-  // moment the grid renders for ALL flows (daily, curation, practice).
-  // Previously the timer started on first pointer interaction, which
-  // both surprised users and let them read the puzzle for an arbitrary
-  // amount of time before the clock began.
+  // moment the grid renders for non-daily flows (curation, practice).
+  // Daily flows are wall-clock-anchored — they read elapsed straight
+  // off `Date.now() − assignedAt` instead of restoring + resuming
+  // useTimer state, so they skip this whole effect. See
+  // `isWallClockAnchored` above and KI-025.
   //
-  // Ordering: restore first so the elapsed display reflects any saved
-  // progress; then start() (idempotent if already running from a
-  // restored `lastResumedAt`). Skip if the puzzle is already solved —
-  // a no-op start would still be safe (stop() sets `stopped`), but
-  // this avoids ticking the visible "completed" state.
+  // Ordering for the non-daily path: restore first so the elapsed
+  // display reflects any saved progress; then start() (idempotent if
+  // already running from a restored `lastResumedAt`). Skip start when
+  // the puzzle is already solved — a no-op start would still be safe
+  // (stop() sets `stopped`), but this avoids ticking the visible
+  // "completed" state.
   useEffect(() => {
+    if (isWallClockAnchored) return;
     if (timerElapsed > 0 || timerResumedAt !== null) {
       timer.restore({
         elapsedAtLastPause: timerElapsed,
@@ -371,6 +391,17 @@ export function GameBoard({
     // Only run on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Wall-clock tick — re-renders the timer display every second when
+  // anchored on `assignedAt`. No pause-on-hide; the leaderboard ticks
+  // too (`serverElapsedMs = submittedAt − assignedAt`).
+  const [, setWallClockTick] = useState(0);
+  useEffect(() => {
+    if (!isWallClockAnchored) return;
+    if (isSolved) return;
+    const id = setInterval(() => setWallClockTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [isWallClockAnchored, isSolved]);
 
   // Refs for debounced saves
   const cellsRef = useRef(cells);
@@ -393,31 +424,39 @@ export function GameBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cells, history, ready]);
 
-  // Visibility change: pause/resume timer + save
+  // Visibility change: pause/resume timer + save. Wall-clock-anchored
+  // flows skip the pause/resume — the leaderboard counts wall time
+  // regardless of tab visibility, so the displayed timer must too —
+  // but still snapshot cells/history on hide.
   useEffect(() => {
     function handleVisibility() {
       if (document.hidden) {
-        timerRef.current.pause();
+        if (!isWallClockAnchored) {
+          timerRef.current.pause();
+        }
         void saveState(buildCurrentState(puzzle, flowType, flowId, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
       } else {
-        if (timerStartedRef.current && !isSolvedRef.current) {
+        if (!isWallClockAnchored && timerStartedRef.current && !isSolvedRef.current) {
           timerRef.current.start();
         }
       }
     }
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [puzzle, saveState]);
+  }, [puzzle, saveState, isWallClockAnchored]);
 
-  // Before unload: best-effort save
+  // Before unload: best-effort save. Wall-clock-anchored flows skip
+  // the pause (nothing to pause) but still snapshot cells/history.
   useEffect(() => {
     function handleBeforeUnload() {
-      timerRef.current.pause();
+      if (!isWallClockAnchored) {
+        timerRef.current.pause();
+      }
       void saveState(buildCurrentState(puzzle, flowType, flowId, cellsRef, historyRef, timerRef, isSolvedRef, startedAtRef));
     }
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [puzzle, saveState]);
+  }, [puzzle, saveState, isWallClockAnchored]);
 
   // Stable ref for the optional solve-event delegate so the solve
   // effect's deps don't churn when the caller passes an inline arrow.
@@ -436,8 +475,16 @@ export function GameBoard({
   useEffect(() => {
     if (isSolved && !completionHandledRef.current) {
       completionHandledRef.current = true;
-      timer.stop();
-      const finalTimeSeconds = timer.elapsed;
+      let finalTimeSeconds: number;
+      let elapsedMs: number;
+      if (isWallClockAnchored && assignedAtMs !== null) {
+        elapsedMs = Math.max(0, Date.now() - assignedAtMs);
+        finalTimeSeconds = Math.floor(elapsedMs / 1000);
+      } else {
+        timer.stop();
+        finalTimeSeconds = timer.elapsed;
+        elapsedMs = finalTimeSeconds * 1000;
+      }
       setCompletionTime(finalTimeSeconds);
 
       const delegate = onSolveDetectedRef.current;
@@ -445,7 +492,6 @@ export function GameBoard({
         const solution = cellsRef.current.map((row) =>
           row.map((cell) => (cell === 'marked' ? 1 : 0)),
         );
-        const elapsedMs = finalTimeSeconds * 1000;
         delegate(solution, elapsedMs);
         return;
       }
@@ -527,7 +573,11 @@ export function GameBoard({
           textAlign: 'right',
         }}
       >
-        {formatTime(timer.elapsed)}
+        {formatTime(
+          isWallClockAnchored && assignedAtMs !== null
+            ? Math.max(0, Math.floor((Date.now() - assignedAtMs) / 1000))
+            : timer.elapsed,
+        )}
       </div>
 
       {/* Grid area with completion overlay */}

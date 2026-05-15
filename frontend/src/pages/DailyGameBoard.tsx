@@ -195,6 +195,7 @@ export function DailyGameBoard({ payload, onSolved }: DailyGameBoardProps) {
         timerElapsed={timerElapsed}
         timerResumedAt={timerResumedAt}
         startedAt={startedAt}
+        assignedAt={payload.assignedAt}
         navigate={navigate}
         saveState={saveState}
         clearState={clearState}
