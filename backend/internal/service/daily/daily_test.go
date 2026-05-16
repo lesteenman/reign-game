@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 	"github.com/eriksteenman/reign-game/backend/internal/service/daily"
 )
@@ -17,11 +18,11 @@ func TestNew_NilDepsReturnsNonNil(t *testing.T) {
 	// Arrange — nothing to set up
 
 	// Act
-	svc := daily.New(nil, nil, nil)
+	svc := daily.New(nil, "test-table", nil, nil)
 
 	// Assert
 	if svc == nil {
-		t.Fatal("New(nil, nil, nil) returned nil, want non-nil *Service")
+		t.Fatal("New(nil, ...) returned nil, want non-nil *Service")
 	}
 }
 
@@ -32,11 +33,11 @@ func TestNew_WithDepsReturnsNonNil(t *testing.T) {
 	store := &stubStore{}
 
 	// Act
-	svc := daily.New(store, time.Now, nil)
+	svc := daily.New(store, "test-table", time.Now, nil)
 
 	// Assert
 	if svc == nil {
-		t.Fatal("New(store, time.Now, nil) returned nil, want non-nil *Service")
+		t.Fatal("New(store, ...) returned nil, want non-nil *Service")
 	}
 }
 
@@ -44,7 +45,7 @@ func TestNew_WithDepsReturnsNonNil(t *testing.T) {
 // returns a non-nil error (the not-implemented sentinel).
 func TestGetDaily_ReturnsNotImplemented(t *testing.T) {
 	// Arrange
-	svc := daily.New(&stubStore{}, time.Now, nil)
+	svc := daily.New(&stubStore{}, "test-table", time.Now, nil)
 	in := daily.GetInput{PlayerID: "player_1", IsAnonymous: false, Date: "2026-05-16"}
 
 	// Act
@@ -63,7 +64,7 @@ func TestGetDaily_ReturnsNotImplemented(t *testing.T) {
 // returns a non-nil error (the not-implemented sentinel).
 func TestSubmitDaily_ReturnsNotImplemented(t *testing.T) {
 	// Arrange
-	svc := daily.New(&stubStore{}, time.Now, nil)
+	svc := daily.New(&stubStore{}, "test-table", time.Now, nil)
 	in := daily.SubmitInput{
 		PlayerID:   "player_1",
 		Date:       "2026-05-16",
@@ -109,6 +110,10 @@ func (s *stubStore) GetCandidate(_ context.Context) (*repository.CandidateRecord
 }
 
 func (s *stubStore) FinalizeDailyTransaction(_ context.Context, _, _, _ string, _ repository.FinalizeMode) error {
+	return nil
+}
+
+func (s *stubStore) WriteTransaction(_ context.Context, _ []types.TransactWriteItem) error {
 	return nil
 }
 

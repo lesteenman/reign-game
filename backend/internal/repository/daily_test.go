@@ -30,8 +30,8 @@ func TestPutCandidateIfAbsent(t *testing.T) {
 			sourcePartition: "9#standard",
 			putErr:          nil,
 			wantErr:         false,
-			wantPK:          dailyCandidatePK,
-			wantSK:          dailySingletonSK,
+			wantPK:          DailyCandidatePK,
+			wantSK:          DailySingletonSK,
 			wantCondition:   "attribute_not_exists(PK)",
 		},
 		{
@@ -131,8 +131,8 @@ func TestGetCandidate(t *testing.T) {
 		{
 			name: "returns the candidate row when present",
 			item: map[string]types.AttributeValue{
-				"PK":              &types.AttributeValueMemberS{Value: dailyCandidatePK},
-				"SK":              &types.AttributeValueMemberS{Value: dailySingletonSK},
+				"PK":              &types.AttributeValueMemberS{Value: DailyCandidatePK},
+				"SK":              &types.AttributeValueMemberS{Value: DailySingletonSK},
 				"puzzleId":        &types.AttributeValueMemberS{Value: "candidate-uuid-1"},
 				"queuedAt":        &types.AttributeValueMemberS{Value: "2026-04-30T10:00:00Z"},
 				"sourcePartition": &types.AttributeValueMemberS{Value: "9#standard"},
@@ -194,12 +194,12 @@ func TestGetCandidate(t *testing.T) {
 				t.Fatal("GetItem was not called")
 			}
 			pk := capturedInput.Key["PK"].(*types.AttributeValueMemberS).Value
-			if pk != dailyCandidatePK {
-				t.Errorf("PK = %q, want %q", pk, dailyCandidatePK)
+			if pk != DailyCandidatePK {
+				t.Errorf("PK = %q, want %q", pk, DailyCandidatePK)
 			}
 			sk := capturedInput.Key["SK"].(*types.AttributeValueMemberS).Value
-			if sk != dailySingletonSK {
-				t.Errorf("SK = %q, want %q", sk, dailySingletonSK)
+			if sk != DailySingletonSK {
+				t.Errorf("SK = %q, want %q", sk, DailySingletonSK)
 			}
 		})
 	}
@@ -253,12 +253,12 @@ func TestDeleteCandidate(t *testing.T) {
 				t.Fatal("DeleteItem was not called")
 			}
 			pk := capturedInput.Key["PK"].(*types.AttributeValueMemberS).Value
-			if pk != dailyCandidatePK {
-				t.Errorf("PK = %q, want %q", pk, dailyCandidatePK)
+			if pk != DailyCandidatePK {
+				t.Errorf("PK = %q, want %q", pk, DailyCandidatePK)
 			}
 			sk := capturedInput.Key["SK"].(*types.AttributeValueMemberS).Value
-			if sk != dailySingletonSK {
-				t.Errorf("SK = %q, want %q", sk, dailySingletonSK)
+			if sk != DailySingletonSK {
+				t.Errorf("SK = %q, want %q", sk, DailySingletonSK)
 			}
 			if capturedInput.ConditionExpression != nil {
 				t.Errorf("DeleteCandidate should be unconditional (idempotent); got ConditionExpression=%q", *capturedInput.ConditionExpression)
@@ -288,7 +288,7 @@ func TestFinalizeSchedule(t *testing.T) {
 			putErr:          nil,
 			wantErr:         false,
 			wantPK:          "DAILY#2026-04-30",
-			wantSK:          dailySingletonSK,
+			wantSK:          DailySingletonSK,
 			wantCondition:   "attribute_not_exists(PK)",
 		},
 		{
@@ -408,7 +408,7 @@ func TestGetSchedule(t *testing.T) {
 			date: "2026-04-30",
 			item: map[string]types.AttributeValue{
 				"PK":              &types.AttributeValueMemberS{Value: "DAILY#2026-04-30"},
-				"SK":              &types.AttributeValueMemberS{Value: dailySingletonSK},
+				"SK":              &types.AttributeValueMemberS{Value: DailySingletonSK},
 				"puzzleId":        &types.AttributeValueMemberS{Value: "schedule-uuid-1"},
 				"assignedAt":      &types.AttributeValueMemberS{Value: "2026-04-30T00:00:01Z"},
 				"sourcePartition": &types.AttributeValueMemberS{Value: "9#standard"},
@@ -492,8 +492,8 @@ func TestGetSchedule(t *testing.T) {
 				t.Errorf("PK = %q, want %q", pk, "DAILY#"+tt.date)
 			}
 			sk := capturedInput.Key["SK"].(*types.AttributeValueMemberS).Value
-			if sk != dailySingletonSK {
-				t.Errorf("SK = %q, want %q", sk, dailySingletonSK)
+			if sk != DailySingletonSK {
+				t.Errorf("SK = %q, want %q", sk, DailySingletonSK)
 			}
 		})
 	}
@@ -579,8 +579,8 @@ func TestIncrementScheduleCounter(t *testing.T) {
 				t.Errorf("PK = %q, want %q", pk, "DAILY#"+tt.date)
 			}
 			sk := capturedInput.Key["SK"].(*types.AttributeValueMemberS).Value
-			if sk != dailySingletonSK {
-				t.Errorf("SK = %q, want %q", sk, dailySingletonSK)
+			if sk != DailySingletonSK {
+				t.Errorf("SK = %q, want %q", sk, DailySingletonSK)
 			}
 			if capturedInput.ExpressionAttributeNames["#field"] != tt.field {
 				t.Errorf("#field = %q, want %q", capturedInput.ExpressionAttributeNames["#field"], tt.field)
@@ -1375,8 +1375,8 @@ func TestSubmitPlayTransactionally(t *testing.T) {
 			if pk := leg1.Update.Key["PK"].(*types.AttributeValueMemberS).Value; pk != "DAILY#"+tt.date {
 				t.Errorf("leg 1 PK = %q, want %q", pk, "DAILY#"+tt.date)
 			}
-			if sk := leg1.Update.Key["SK"].(*types.AttributeValueMemberS).Value; sk != dailySingletonSK {
-				t.Errorf("leg 1 SK = %q, want %q", sk, dailySingletonSK)
+			if sk := leg1.Update.Key["SK"].(*types.AttributeValueMemberS).Value; sk != DailySingletonSK {
+				t.Errorf("leg 1 SK = %q, want %q", sk, DailySingletonSK)
 			}
 			if expr := *leg1.Update.UpdateExpression; !strings.Contains(expr, "ADD") {
 				t.Errorf("leg 1 UpdateExpression = %q, want it to ADD counter", expr)
@@ -1457,8 +1457,8 @@ func TestFinalizeDailyTransaction(t *testing.T) {
 		if pk := leg0.Put.Item["PK"].(*types.AttributeValueMemberS).Value; pk != "DAILY#"+date {
 			t.Errorf("leg 0 PK = %q, want %q", pk, "DAILY#"+date)
 		}
-		if sk := leg0.Put.Item["SK"].(*types.AttributeValueMemberS).Value; sk != dailySingletonSK {
-			t.Errorf("leg 0 SK = %q, want %q", sk, dailySingletonSK)
+		if sk := leg0.Put.Item["SK"].(*types.AttributeValueMemberS).Value; sk != DailySingletonSK {
+			t.Errorf("leg 0 SK = %q, want %q", sk, DailySingletonSK)
 		}
 		if pid := leg0.Put.Item["puzzleId"].(*types.AttributeValueMemberS).Value; pid != puzzleID {
 			t.Errorf("leg 0 puzzleId = %q, want %q", pid, puzzleID)
@@ -1513,11 +1513,11 @@ func TestFinalizeDailyTransaction(t *testing.T) {
 		if leg2.Delete == nil {
 			t.Fatal("leg 2 missing Delete")
 		}
-		if pk := leg2.Delete.Key["PK"].(*types.AttributeValueMemberS).Value; pk != dailyCandidatePK {
-			t.Errorf("leg 2 PK = %q, want %q", pk, dailyCandidatePK)
+		if pk := leg2.Delete.Key["PK"].(*types.AttributeValueMemberS).Value; pk != DailyCandidatePK {
+			t.Errorf("leg 2 PK = %q, want %q", pk, DailyCandidatePK)
 		}
-		if sk := leg2.Delete.Key["SK"].(*types.AttributeValueMemberS).Value; sk != dailySingletonSK {
-			t.Errorf("leg 2 SK = %q, want %q", sk, dailySingletonSK)
+		if sk := leg2.Delete.Key["SK"].(*types.AttributeValueMemberS).Value; sk != DailySingletonSK {
+			t.Errorf("leg 2 SK = %q, want %q", sk, DailySingletonSK)
 		}
 		if leg2.Delete.ConditionExpression == nil {
 			t.Fatal("leg 2 ConditionExpression must guard against candidate-swap race")

@@ -32,13 +32,13 @@ import (
 // by an order of magnitude.
 const DailyRecycleWindowDays = 14
 
-// dailyCandidatePK / dailyCandidateSK / dailySingletonSK are the keys
-// used for fixed-shape rows (singleton candidate slot, single-row schedule
-// partitions). Centralising them avoids string-literal drift across
-// methods.
+// DailyCandidatePK / DailySingletonSK are the keys used for fixed-shape
+// rows (singleton candidate slot, single-row schedule partitions).
+// Exported so the service layer can reference them when assembling
+// multi-leg transactions without importing private implementation detail.
 const (
-	dailyCandidatePK = "DAILY-CANDIDATE"
-	dailySingletonSK = "<single>"
+	DailyCandidatePK = "DAILY-CANDIDATE"
+	DailySingletonSK = "<single>"
 )
 
 // Sentinel errors surfaced by the daily repository so callers (handlers,
@@ -181,8 +181,10 @@ type SubmitInput struct {
 	UserID string
 }
 
-// buildDailySchedulePK constructs DAILY#YYYY-MM-DD.
-func buildDailySchedulePK(date string) string {
+// BuildDailySchedulePK constructs DAILY#YYYY-MM-DD. Exported so the
+// service layer can build keys for transaction legs without re-encoding
+// the prefix.
+func BuildDailySchedulePK(date string) string {
 	return "DAILY#" + date
 }
 
@@ -220,8 +222,8 @@ func (r *PuzzleRepository) GetSchedule(ctx context.Context, date string) (*Sched
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: buildDailySchedulePK(date)},
-			"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
+			"PK": &types.AttributeValueMemberS{Value: BuildDailySchedulePK(date)},
+			"SK": &types.AttributeValueMemberS{Value: DailySingletonSK},
 		},
 	})
 	if err != nil {
@@ -246,8 +248,8 @@ func (r *PuzzleRepository) GetCandidate(ctx context.Context) (*CandidateRecord, 
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: dailyCandidatePK},
-			"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
+			"PK": &types.AttributeValueMemberS{Value: DailyCandidatePK},
+			"SK": &types.AttributeValueMemberS{Value: DailySingletonSK},
 		},
 	})
 	if err != nil {
@@ -273,8 +275,8 @@ func (r *PuzzleRepository) GetCandidate(ctx context.Context) (*CandidateRecord, 
 func (r *PuzzleRepository) PutCandidateIfAbsent(ctx context.Context, puzzleID, sourcePartition string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	item := map[string]types.AttributeValue{
-		"PK":              &types.AttributeValueMemberS{Value: dailyCandidatePK},
-		"SK":              &types.AttributeValueMemberS{Value: dailySingletonSK},
+		"PK":              &types.AttributeValueMemberS{Value: DailyCandidatePK},
+		"SK":              &types.AttributeValueMemberS{Value: DailySingletonSK},
 		"puzzleId":        &types.AttributeValueMemberS{Value: puzzleID},
 		"queuedAt":        &types.AttributeValueMemberS{Value: now},
 		"sourcePartition": &types.AttributeValueMemberS{Value: sourcePartition},
@@ -303,8 +305,8 @@ func (r *PuzzleRepository) DeleteCandidate(ctx context.Context) error {
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: dailyCandidatePK},
-			"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
+			"PK": &types.AttributeValueMemberS{Value: DailyCandidatePK},
+			"SK": &types.AttributeValueMemberS{Value: DailySingletonSK},
 		},
 	})
 	if err != nil {
@@ -322,8 +324,8 @@ func (r *PuzzleRepository) DeleteCandidate(ctx context.Context) error {
 func (r *PuzzleRepository) FinalizeSchedule(ctx context.Context, date, puzzleID, sourcePartition string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	item := map[string]types.AttributeValue{
-		"PK":              &types.AttributeValueMemberS{Value: buildDailySchedulePK(date)},
-		"SK":              &types.AttributeValueMemberS{Value: dailySingletonSK},
+		"PK":              &types.AttributeValueMemberS{Value: BuildDailySchedulePK(date)},
+		"SK":              &types.AttributeValueMemberS{Value: DailySingletonSK},
 		"puzzleId":        &types.AttributeValueMemberS{Value: puzzleID},
 		"assignedAt":      &types.AttributeValueMemberS{Value: now},
 		"sourcePartition": &types.AttributeValueMemberS{Value: sourcePartition},
@@ -362,8 +364,8 @@ func (r *PuzzleRepository) IncrementScheduleCounter(ctx context.Context, date, f
 	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: buildDailySchedulePK(date)},
-			"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
+			"PK": &types.AttributeValueMemberS{Value: BuildDailySchedulePK(date)},
+			"SK": &types.AttributeValueMemberS{Value: DailySingletonSK},
 		},
 		UpdateExpression: aws.String("ADD #counters.#field :delta"),
 		ExpressionAttributeNames: map[string]string{
@@ -590,8 +592,8 @@ func (r *PuzzleRepository) SubmitPlayTransactionally(ctx context.Context, player
 			Update: &types.Update{
 				TableName: aws.String(r.tableName),
 				Key: map[string]types.AttributeValue{
-					"PK": &types.AttributeValueMemberS{Value: buildDailySchedulePK(playOriginDate)},
-					"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
+					"PK": &types.AttributeValueMemberS{Value: BuildDailySchedulePK(playOriginDate)},
+					"SK": &types.AttributeValueMemberS{Value: DailySingletonSK},
 				},
 				UpdateExpression: aws.String("ADD #counters.#solved :one"),
 				ExpressionAttributeNames: map[string]string{
@@ -629,7 +631,7 @@ func (r *PuzzleRepository) SubmitPlayTransactionally(ctx context.Context, player
 		// reason on leg 1 means the PLAY row was already solved (or
 		// missing). Surface ErrPlayNotInStartedState so the handler
 		// returns 409 (DP-12 idempotency).
-		if isConditionalCheckFailureOnLeg(err, 0) {
+		if IsConditionalCheckFailureOnLeg(err, 0) {
 			return ErrPlayNotInStartedState
 		}
 		return fmt.Errorf("submitting daily play %s/%s: %w", playerID, date, err)
@@ -684,8 +686,8 @@ func (r *PuzzleRepository) FinalizeDailyTransaction(
 			Put: &types.Put{
 				TableName: aws.String(r.tableName),
 				Item: map[string]types.AttributeValue{
-					"PK":              &types.AttributeValueMemberS{Value: buildDailySchedulePK(date)},
-					"SK":              &types.AttributeValueMemberS{Value: dailySingletonSK},
+					"PK":              &types.AttributeValueMemberS{Value: BuildDailySchedulePK(date)},
+					"SK":              &types.AttributeValueMemberS{Value: DailySingletonSK},
 					"puzzleId":        &types.AttributeValueMemberS{Value: puzzleID},
 					"assignedAt":      &types.AttributeValueMemberS{Value: now},
 					"sourcePartition": &types.AttributeValueMemberS{Value: sourcePartition},
@@ -719,8 +721,8 @@ func (r *PuzzleRepository) FinalizeDailyTransaction(
 			Delete: &types.Delete{
 				TableName: aws.String(r.tableName),
 				Key: map[string]types.AttributeValue{
-					"PK": &types.AttributeValueMemberS{Value: dailyCandidatePK},
-					"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
+					"PK": &types.AttributeValueMemberS{Value: DailyCandidatePK},
+					"SK": &types.AttributeValueMemberS{Value: DailySingletonSK},
 				},
 				ConditionExpression: aws.String("puzzleId = :pid"),
 				ExpressionAttributeValues: map[string]types.AttributeValue{
@@ -737,7 +739,7 @@ func (r *PuzzleRepository) FinalizeDailyTransaction(
 		// Leg-0 conditional failure → schedule row already exists; surface
 		// the sentinel so callers (T=0 cron, sync fallback) can read the
 		// winner's row and proceed.
-		if isConditionalCheckFailureOnLeg(err, 0) {
+		if IsConditionalCheckFailureOnLeg(err, 0) {
 			return ErrScheduleAlreadyFinalized
 		}
 		return fmt.Errorf("finalizing daily transaction for %s (mode=%s): %w", date, mode, err)
@@ -745,12 +747,14 @@ func (r *PuzzleRepository) FinalizeDailyTransaction(
 	return nil
 }
 
-// isConditionalCheckFailureOnLeg returns true when err is a
+// IsConditionalCheckFailureOnLeg returns true when err is a
 // TransactionCanceledException whose CancellationReasons indicate the
-// leg at `legIndex` failed its ConditionExpression. DDB's Go SDK v2
+// leg at legIndex failed its ConditionExpression. DDB's Go SDK v2
 // returns this as a typed error with a CancellationReasons slice whose
-// indices align 1:1 with the input TransactItems.
-func isConditionalCheckFailureOnLeg(err error, legIndex int) bool {
+// indices align 1:1 with the input TransactItems. Exported so the
+// service layer can inspect transaction errors without re-implementing
+// the detection logic.
+func IsConditionalCheckFailureOnLeg(err error, legIndex int) bool {
 	var tce *types.TransactionCanceledException
 	if !errors.As(err, &tce) {
 		return false
@@ -760,6 +764,19 @@ func isConditionalCheckFailureOnLeg(err error, legIndex int) bool {
 	}
 	reason := tce.CancellationReasons[legIndex]
 	return reason.Code != nil && strings.EqualFold(*reason.Code, "ConditionalCheckFailed")
+}
+
+// WriteTransaction executes the given transact items as a single
+// DynamoDB TransactWriteItems call. Used by the daily application
+// service to assemble multi-row atomic writes whose orchestration
+// (which legs to include, when) lives in service/ per the
+// architecture rule. No DDB error translation here — callers use
+// IsConditionalCheckFailureOnLeg on the returned error.
+func (r *PuzzleRepository) WriteTransaction(ctx context.Context, items []types.TransactWriteItem) error {
+	_, err := r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+		TransactItems: items,
+	})
+	return err
 }
 
 // LeaderboardRank returns the player's 1-based rank on the daily

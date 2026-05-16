@@ -13,8 +13,11 @@ package daily
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
@@ -52,6 +55,7 @@ type Store interface {
 	PutPlayStartedIfAbsent(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error
 	GetCandidate(ctx context.Context) (*repository.CandidateRecord, error)
 	FinalizeDailyTransaction(ctx context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error
+	WriteTransaction(ctx context.Context, items []types.TransactWriteItem) error
 	ListApprovedPool(ctx context.Context, size int, mode string, excludeRecentlyDailied bool, now time.Time) ([]repository.PuzzleRecord, error)
 	PutCandidateIfAbsent(ctx context.Context, puzzleID, sourcePartition string) error
 	SubmitPlayTransactionally(ctx context.Context, playerID, date string, submission *repository.SubmitInput) error
@@ -101,19 +105,102 @@ type SubmitResult struct {
 // Service holds the application logic for the daily-puzzle endpoints.
 type Service struct {
 	store         Store
+	tableName     string
 	clock         func() time.Time
 	replenishHook func(size int, mode string)
 }
 
-// New constructs a Service. clock is used in tests to pin "now"; pass
-// nil to default to time.Now. replenishHook fires on sync-fallback
-// cold-start when the candidate pool drains; nil is acceptable in
-// tests and in local-dev wiring without SQS.
-func New(store Store, clock func() time.Time, replenishHook func(size int, mode string)) *Service {
+// New constructs a Service. tableName is the DynamoDB table name used
+// when assembling transaction legs in FinalizeDaily. clock is used in
+// tests to pin "now"; pass nil to default to time.Now. replenishHook
+// fires on sync-fallback cold-start when the candidate pool drains; nil
+// is acceptable in tests and in local-dev wiring without SQS.
+func New(store Store, tableName string, clock func() time.Time, replenishHook func(size int, mode string)) *Service {
 	if clock == nil {
 		clock = time.Now
 	}
-	return &Service{store: store, clock: clock, replenishHook: replenishHook}
+	return &Service{store: store, tableName: tableName, clock: clock, replenishHook: replenishHook}
+}
+
+// FinalizeDaily writes the T=0 finalize transaction: puts the schedule
+// row, updates the puzzle's lastDailyDate, and (confirm-mode only)
+// deletes the candidate slot. Mirrors repository.FinalizeDailyTransaction
+// in logic but delegates the actual TransactWriteItems call to
+// s.store.WriteTransaction, keeping orchestration in service/ per the
+// architecture rule.
+//
+// Returns repository.ErrScheduleAlreadyFinalized when leg 0 fails its
+// condition (race-loser / duplicate cron firing). Callers should read the
+// winner's schedule row and continue.
+func (s *Service) FinalizeDaily(
+	ctx context.Context,
+	date, puzzleID, sourcePartition string,
+	mode repository.FinalizeMode,
+) error {
+	if mode != repository.FinalizeModeConfirm && mode != repository.FinalizeModeRecycle {
+		return fmt.Errorf("invalid finalize mode %q", mode)
+	}
+
+	now := s.clock().UTC().Format(time.RFC3339)
+
+	items := []types.TransactWriteItem{
+		{
+			Put: &types.Put{
+				TableName: aws.String(s.tableName),
+				Item: map[string]types.AttributeValue{
+					"PK":              &types.AttributeValueMemberS{Value: repository.BuildDailySchedulePK(date)},
+					"SK":              &types.AttributeValueMemberS{Value: repository.DailySingletonSK},
+					"puzzleId":        &types.AttributeValueMemberS{Value: puzzleID},
+					"assignedAt":      &types.AttributeValueMemberS{Value: now},
+					"sourcePartition": &types.AttributeValueMemberS{Value: sourcePartition},
+					"counters": &types.AttributeValueMemberM{
+						Value: map[string]types.AttributeValue{
+							"started": &types.AttributeValueMemberN{Value: "0"},
+							"solved":  &types.AttributeValueMemberN{Value: "0"},
+						},
+					},
+				},
+				ConditionExpression: aws.String("attribute_not_exists(PK)"),
+			},
+		},
+		{
+			Update: &types.Update{
+				TableName: aws.String(s.tableName),
+				Key: map[string]types.AttributeValue{
+					"PK": &types.AttributeValueMemberS{Value: sourcePartition},
+					"SK": &types.AttributeValueMemberS{Value: puzzleID},
+				},
+				UpdateExpression: aws.String("SET lastDailyDate = :date"),
+				ExpressionAttributeValues: map[string]types.AttributeValue{
+					":date": &types.AttributeValueMemberS{Value: date},
+				},
+			},
+		},
+	}
+
+	if mode == repository.FinalizeModeConfirm {
+		items = append(items, types.TransactWriteItem{
+			Delete: &types.Delete{
+				TableName: aws.String(s.tableName),
+				Key: map[string]types.AttributeValue{
+					"PK": &types.AttributeValueMemberS{Value: repository.DailyCandidatePK},
+					"SK": &types.AttributeValueMemberS{Value: repository.DailySingletonSK},
+				},
+				ConditionExpression: aws.String("puzzleId = :pid"),
+				ExpressionAttributeValues: map[string]types.AttributeValue{
+					":pid": &types.AttributeValueMemberS{Value: puzzleID},
+				},
+			},
+		})
+	}
+
+	if err := s.store.WriteTransaction(ctx, items); err != nil {
+		if repository.IsConditionalCheckFailureOnLeg(err, 0) {
+			return repository.ErrScheduleAlreadyFinalized
+		}
+		return fmt.Errorf("finalizing daily transaction for %s (mode=%s): %w", date, mode, err)
+	}
+	return nil
 }
 
 // errNotImplemented is the placeholder body for the two skeleton
