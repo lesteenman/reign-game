@@ -34,15 +34,15 @@ func (s *stubStatusService) SetStatus(_ context.Context, size int, mode, puzzleI
 
 func TestStatusHandler(t *testing.T) {
 	tests := []struct {
-		name         string
-		puzzleID     string
-		query        string
-		body         string
-		svcErr       error
-		wantStatus   int
-		wantError    string
-		wantSize     int
-		wantMode     string
+		name          string
+		puzzleID      string
+		query         string
+		body          string
+		svcErr        error
+		wantStatus    int
+		wantError     string
+		wantSize      int
+		wantMode      string
 		wantStatusArg string
 	}{
 		{

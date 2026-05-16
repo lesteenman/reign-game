@@ -83,10 +83,10 @@ func (req *ConfigCreateRequest) toRecord() *repository.ConfigRecord {
 
 // toRecord maps a ConfigUpdateRequest to a repository.ConfigRecord
 // using size and mode supplied by the URL path.
-func (req *ConfigUpdateRequest) toRecord(size int, mode string) *repository.ConfigRecord {
+func (req *ConfigUpdateRequest) toRecord(size int, modeName string) *repository.ConfigRecord {
 	return &repository.ConfigRecord{
 		Size:        size,
-		Mode:        mode,
+		Mode:        modeName,
 		Threshold:   req.Threshold,
 		Enabled:     req.Enabled,
 		MaxAttempts: req.MaxAttempts,

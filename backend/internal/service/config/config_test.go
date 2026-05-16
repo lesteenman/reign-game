@@ -10,12 +10,12 @@ import (
 )
 
 type fakeStore struct {
-	getConfig      func(ctx context.Context, size int, mode string) (*repository.ConfigRecord, error)
-	putConfig      func(ctx context.Context, c *repository.ConfigRecord) error
-	createConfig   func(ctx context.Context, c *repository.ConfigRecord) error
-	getAllConfigs  func(ctx context.Context) ([]repository.ConfigRecord, error)
-	lastPutRecord  *repository.ConfigRecord
-	lastCreateRec  *repository.ConfigRecord
+	getConfig     func(ctx context.Context, size int, mode string) (*repository.ConfigRecord, error)
+	putConfig     func(ctx context.Context, c *repository.ConfigRecord) error
+	createConfig  func(ctx context.Context, c *repository.ConfigRecord) error
+	getAllConfigs func(ctx context.Context) ([]repository.ConfigRecord, error)
+	lastPutRecord *repository.ConfigRecord
+	lastCreateRec *repository.ConfigRecord
 }
 
 func (f *fakeStore) GetConfig(ctx context.Context, size int, mode string) (*repository.ConfigRecord, error) {

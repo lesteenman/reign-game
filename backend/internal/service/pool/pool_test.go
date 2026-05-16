@@ -11,7 +11,7 @@ import (
 
 type fakeStore struct {
 	getAllConfigs func(ctx context.Context) ([]repository.ConfigRecord, error)
-	countReady   func(ctx context.Context, size int, mode string) (int, error)
+	countReady    func(ctx context.Context, size int, mode string) (int, error)
 }
 
 func (f *fakeStore) GetAllConfigs(ctx context.Context) ([]repository.ConfigRecord, error) {

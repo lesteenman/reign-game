@@ -68,7 +68,7 @@ func TestAdminPoolHandler(t *testing.T) {
 			},
 		},
 		{
-			name: "empty pool returns empty combos",
+			name:       "empty pool returns empty combos",
 			entries:    []poolsvc.ComboEntry{},
 			wantStatus: http.StatusOK,
 			wantCombos: 0,
