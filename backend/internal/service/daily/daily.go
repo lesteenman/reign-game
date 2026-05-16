@@ -56,11 +56,9 @@ type Store interface {
 	GetPlay(ctx context.Context, playerID, date string) (*repository.PlayRecord, error)
 	PutPlayStartedIfAbsent(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error
 	GetCandidate(ctx context.Context) (*repository.CandidateRecord, error)
-	FinalizeDailyTransaction(ctx context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error
 	WriteTransaction(ctx context.Context, items []types.TransactWriteItem) error
 	ListApprovedPool(ctx context.Context, size int, mode string, excludeRecentlyDailied bool, now time.Time) ([]repository.PuzzleRecord, error)
 	PutCandidateIfAbsent(ctx context.Context, puzzleID, sourcePartition string) error
-	SubmitPlayTransactionally(ctx context.Context, playerID, date string, submission *repository.SubmitInput) error
 	LeaderboardRank(ctx context.Context, date string, elapsedMs int64, userID string) (int, error)
 }
 
@@ -126,10 +124,9 @@ func New(store Store, tableName string, clock func() time.Time, replenishHook fu
 
 // FinalizeDaily writes the T=0 finalize transaction: puts the schedule
 // row, updates the puzzle's lastDailyDate, and (confirm-mode only)
-// deletes the candidate slot. Mirrors repository.FinalizeDailyTransaction
-// in logic but delegates the actual TransactWriteItems call to
-// s.store.WriteTransaction, keeping orchestration in service/ per the
-// architecture rule.
+// deletes the candidate slot. Delegates the actual TransactWriteItems
+// call to s.store.WriteTransaction, keeping orchestration in service/
+// per the architecture rule.
 //
 // Returns repository.ErrScheduleAlreadyFinalized when leg 0 fails its
 // condition (race-loser / duplicate cron firing). Callers should read the
@@ -219,8 +216,7 @@ func (s *Service) FinalizeDaily(
 //     signed-in only. Anonymous (deviceId-keyed) submissions skip this
 //     leg (D13).
 //
-// Mirrors repository.SubmitPlayTransactionally in logic but delegates
-// the actual TransactWriteItems call to s.store.WriteTransaction,
+// Delegates the actual TransactWriteItems call to s.store.WriteTransaction,
 // keeping orchestration in service/ per the architecture rule.
 func (s *Service) SubmitPlay(ctx context.Context, playerID, date string, submission *repository.SubmitInput) error {
 	playOriginDate := submission.AssignedAt.UTC().Format("2006-01-02")

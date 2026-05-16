@@ -49,19 +49,20 @@ var (
 	// the singleton DAILY-CANDIDATE slot is already occupied. Expected on
 	// duplicate T-6h cron firings — caller logs and exits.
 	ErrCandidateAlreadyExists = errors.New("daily candidate already exists")
-	// ErrScheduleAlreadyFinalized is returned by FinalizeSchedule when
-	// today's DAILY#date row already exists. Expected on duplicate T=0
-	// cron firings or when the sync fallback races a cron — caller falls
-	// back to GetSchedule and reads the winner's row.
+	// ErrScheduleAlreadyFinalized is returned by Service.FinalizeDaily in
+	// internal/service/daily when today's DAILY#date row already exists.
+	// Expected on duplicate T=0 cron firings or when the sync fallback
+	// races a cron — caller falls back to GetSchedule and reads the
+	// winner's row.
 	ErrScheduleAlreadyFinalized = errors.New("daily schedule already finalized")
 	// ErrPlayAlreadyExists is returned by PutPlayStartedIfAbsent when a
 	// PLAY row exists for (playerId, date). Caller follows up with GetPlay
 	// to read the existing assignedAt — never overwrite (DP-19).
 	ErrPlayAlreadyExists = errors.New("daily play row already exists")
-	// ErrPlayNotInStartedState is returned by SubmitPlayTransactionally
-	// when the PLAY row is missing or its outcome is not "started" (e.g.
-	// a duplicate submission of an already-solved row). Maps to HTTP 409
-	// per DP-12.
+	// ErrPlayNotInStartedState is returned by Service.SubmitPlay in
+	// internal/service/daily when the PLAY row is missing or its outcome
+	// is not "started" (e.g. a duplicate submission of an already-solved
+	// row). Maps to HTTP 409 per DP-12.
 	ErrPlayNotInStartedState = errors.New("daily play row not in started state")
 )
 
@@ -157,9 +158,9 @@ type PlayRecord struct {
 
 // SubmitInput bundles the fields the handler captures from a valid
 // POST /api/daily/{date}/result request and forwards to
-// SubmitPlayTransactionally. Solution validation is the handler's job
-// (DP-11) — by the time we get here the submission is structurally and
-// semantically valid.
+// Service.SubmitPlay in internal/service/daily. Solution validation
+// is the handler's job (DP-11) — by the time we get here the
+// submission is structurally and semantically valid.
 type SubmitInput struct {
 	// PuzzleID is the schedule row's puzzle (used for the leaderboard
 	// row's correlation/debug — not strictly required for ranking).
@@ -174,7 +175,7 @@ type SubmitInput struct {
 	// Telemetry only.
 	ClientMs int64
 	// IsAnonymous is true for `deviceId`-keyed players. When true,
-	// SubmitPlayTransactionally skips the leaderboard leg (D13).
+	// Service.SubmitPlay skips the leaderboard leg (D13).
 	IsAnonymous bool
 	// UserID is the Clerk user ID, used as the leaderboard SK suffix.
 	// Ignored when IsAnonymous=true.
@@ -541,216 +542,19 @@ func (r *PuzzleRepository) PutPlayStartedIfAbsent(ctx context.Context, playerID,
 	return nil
 }
 
-// SubmitPlayTransactionally commits a daily-puzzle solve via a single
-// TransactWriteItems with up to three legs (DP-12, D14):
-//
-//  1. UpdateItem PLAY → outcome=solved, submittedAt, serverElapsedMs,
-//     clientClaimedMs. Conditional on outcome=started for idempotency —
-//     a duplicate submission produces ErrPlayNotInStartedState (caller
-//     maps to HTTP 409, no double-count).
-//  2. UpdateItem schedule row → ADD counters.solved 1. Date keys off
-//     submission.AssignedAt (Finding 7 / DP-13: cross-midnight
-//     submissions credit the prior date's counter).
-//  3. PutItem leaderboard row at DAILY-LEADERBOARD#{playOriginDate} —
-//     signed-in only. Anonymous (deviceId-keyed) submissions skip this
-//     leg (D13).
-//
-// All legs commit or none do. DDB's transaction guarantees rule out
-// partial writes (DP-22).
-func (r *PuzzleRepository) SubmitPlayTransactionally(ctx context.Context, playerID, date string, submission *SubmitInput) error {
-	playOriginDate := submission.AssignedAt.UTC().Format("2006-01-02")
-	submittedAt := submission.SubmittedAt.UTC().Format(time.RFC3339)
-	elapsedMs := submission.SubmittedAt.Sub(submission.AssignedAt).Milliseconds()
-	if elapsedMs < 0 {
-		// Defensive: clock skew or bad input would otherwise produce a
-		// negative leaderboard SK, which sorts before legitimate plays
-		// and corrupts ranking. Refuse the transaction.
-		return fmt.Errorf("invalid submission: submittedAt before assignedAt (delta=%dms)", elapsedMs)
-	}
-
-	items := []types.TransactWriteItem{
-		{
-			Update: &types.Update{
-				TableName: aws.String(r.tableName),
-				Key: map[string]types.AttributeValue{
-					"PK": &types.AttributeValueMemberS{Value: BuildPlayPK(playerID)},
-					"SK": &types.AttributeValueMemberS{Value: BuildPlaySK(date)},
-				},
-				UpdateExpression: aws.String(
-					"SET #outcome = :solved, submittedAt = :submittedAt, " +
-						"serverElapsedMs = :serverMs, clientClaimedMs = :clientMs",
-				),
-				ConditionExpression: aws.String("#outcome = :started"),
-				ExpressionAttributeNames: map[string]string{
-					"#outcome": "outcome",
-				},
-				ExpressionAttributeValues: map[string]types.AttributeValue{
-					":solved":      &types.AttributeValueMemberS{Value: PlayOutcomeSolved},
-					":started":     &types.AttributeValueMemberS{Value: PlayOutcomeStarted},
-					":submittedAt": &types.AttributeValueMemberS{Value: submittedAt},
-					":serverMs":    &types.AttributeValueMemberN{Value: strconv.FormatInt(elapsedMs, 10)},
-					":clientMs":    &types.AttributeValueMemberN{Value: strconv.FormatInt(submission.ClientMs, 10)},
-				},
-			},
-		},
-		{
-			Update: &types.Update{
-				TableName: aws.String(r.tableName),
-				Key: map[string]types.AttributeValue{
-					"PK": &types.AttributeValueMemberS{Value: BuildDailySchedulePK(playOriginDate)},
-					"SK": &types.AttributeValueMemberS{Value: DailySingletonSK},
-				},
-				UpdateExpression: aws.String("ADD #counters.#solved :one"),
-				ExpressionAttributeNames: map[string]string{
-					"#counters": "counters",
-					"#solved":   ScheduleCounterSolved,
-				},
-				ExpressionAttributeValues: map[string]types.AttributeValue{
-					":one": &types.AttributeValueMemberN{Value: "1"},
-				},
-			},
-		},
-	}
-
-	if !submission.IsAnonymous {
-		items = append(items, types.TransactWriteItem{
-			Put: &types.Put{
-				TableName: aws.String(r.tableName),
-				Item: map[string]types.AttributeValue{
-					"PK":              &types.AttributeValueMemberS{Value: BuildDailyLeaderboardPK(playOriginDate)},
-					"SK":              &types.AttributeValueMemberS{Value: BuildLeaderboardSK(elapsedMs, submission.UserID)},
-					"userId":          &types.AttributeValueMemberS{Value: submission.UserID},
-					"serverElapsedMs": &types.AttributeValueMemberN{Value: strconv.FormatInt(elapsedMs, 10)},
-					"submittedAt":     &types.AttributeValueMemberS{Value: submittedAt},
-					"puzzleId":        &types.AttributeValueMemberS{Value: submission.PuzzleID},
-				},
-			},
-		})
-	}
-
-	_, err := r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
-		TransactItems: items,
-	})
-	if err != nil {
-		// TransactionCanceledException with a ConditionalCheckFailed
-		// reason on leg 1 means the PLAY row was already solved (or
-		// missing). Surface ErrPlayNotInStartedState so the handler
-		// returns 409 (DP-12 idempotency).
-		if IsConditionalCheckFailureOnLeg(err, 0) {
-			return ErrPlayNotInStartedState
-		}
-		return fmt.Errorf("submitting daily play %s/%s: %w", playerID, date, err)
-	}
-	return nil
-}
-
 // FinalizeMode discriminates the two T=0 finalize paths (design §4):
 // confirm consumes the singleton candidate slot; recycle reuses
 // yesterday's puzzle and skips the candidate delete entirely.
 type FinalizeMode string
 
 // FinalizeModeConfirm / FinalizeModeRecycle are the only legal values
-// for FinalizeMode. Any other value is rejected by FinalizeDailyTransaction
-// before any DDB call so a typo can't silently flow through.
+// for FinalizeMode. Any other value is rejected by Service.FinalizeDaily
+// in internal/service/daily before any DDB call so a typo can't
+// silently flow through.
 const (
 	FinalizeModeConfirm FinalizeMode = "confirm"
 	FinalizeModeRecycle FinalizeMode = "recycle"
 )
-
-// FinalizeDailyTransaction wraps the T=0 finalize legs in a single
-// TransactWriteItems per design §4 step 5. The legs are:
-//
-//  1. Put schedule row (PK=DAILY#date) with attribute_not_exists(PK) —
-//     ErrScheduleAlreadyFinalized on race-loser, callers GetSchedule
-//     and use the winner's row.
-//  2. Update PuzzleRecord at (PK=sourcePartition, SK=puzzleID) setting
-//     lastDailyDate=date (DP-17, DP-18). On the recycle path this
-//     advances yesterday's puzzle's lastDailyDate to today (Finding 6).
-//  3. Confirm-mode only: Delete DAILY-CANDIDATE row, conditional on
-//     its puzzleId still matching the value we just consumed — guards
-//     against a different candidate having been swapped in between
-//     the cron's GetCandidate read and this transaction.
-//
-// All legs commit or none do. The candidate-delete condition uses
-// puzzleId, not unconditional delete, to make a 3-process race
-// (T-6h cron, T=0 cron, sync fallback) fail closed instead of
-// silently consuming the wrong row.
-func (r *PuzzleRepository) FinalizeDailyTransaction(
-	ctx context.Context,
-	date, puzzleID, sourcePartition string,
-	mode FinalizeMode,
-) error {
-	if mode != FinalizeModeConfirm && mode != FinalizeModeRecycle {
-		return fmt.Errorf("invalid finalize mode %q", mode)
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-
-	items := []types.TransactWriteItem{
-		{
-			Put: &types.Put{
-				TableName: aws.String(r.tableName),
-				Item: map[string]types.AttributeValue{
-					"PK":              &types.AttributeValueMemberS{Value: BuildDailySchedulePK(date)},
-					"SK":              &types.AttributeValueMemberS{Value: DailySingletonSK},
-					"puzzleId":        &types.AttributeValueMemberS{Value: puzzleID},
-					"assignedAt":      &types.AttributeValueMemberS{Value: now},
-					"sourcePartition": &types.AttributeValueMemberS{Value: sourcePartition},
-					"counters": &types.AttributeValueMemberM{
-						Value: map[string]types.AttributeValue{
-							"started": &types.AttributeValueMemberN{Value: "0"},
-							"solved":  &types.AttributeValueMemberN{Value: "0"},
-						},
-					},
-				},
-				ConditionExpression: aws.String("attribute_not_exists(PK)"),
-			},
-		},
-		{
-			Update: &types.Update{
-				TableName: aws.String(r.tableName),
-				Key: map[string]types.AttributeValue{
-					"PK": &types.AttributeValueMemberS{Value: sourcePartition},
-					"SK": &types.AttributeValueMemberS{Value: puzzleID},
-				},
-				UpdateExpression: aws.String("SET lastDailyDate = :date"),
-				ExpressionAttributeValues: map[string]types.AttributeValue{
-					":date": &types.AttributeValueMemberS{Value: date},
-				},
-			},
-		},
-	}
-
-	if mode == FinalizeModeConfirm {
-		items = append(items, types.TransactWriteItem{
-			Delete: &types.Delete{
-				TableName: aws.String(r.tableName),
-				Key: map[string]types.AttributeValue{
-					"PK": &types.AttributeValueMemberS{Value: DailyCandidatePK},
-					"SK": &types.AttributeValueMemberS{Value: DailySingletonSK},
-				},
-				ConditionExpression: aws.String("puzzleId = :pid"),
-				ExpressionAttributeValues: map[string]types.AttributeValue{
-					":pid": &types.AttributeValueMemberS{Value: puzzleID},
-				},
-			},
-		})
-	}
-
-	_, err := r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
-		TransactItems: items,
-	})
-	if err != nil {
-		// Leg-0 conditional failure → schedule row already exists; surface
-		// the sentinel so callers (T=0 cron, sync fallback) can read the
-		// winner's row and proceed.
-		if IsConditionalCheckFailureOnLeg(err, 0) {
-			return ErrScheduleAlreadyFinalized
-		}
-		return fmt.Errorf("finalizing daily transaction for %s (mode=%s): %w", date, mode, err)
-	}
-	return nil
-}
 
 // IsConditionalCheckFailureOnLeg returns true when err is a
 // TransactionCanceledException whose CancellationReasons indicate the
