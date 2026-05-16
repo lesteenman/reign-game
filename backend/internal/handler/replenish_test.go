@@ -13,16 +13,16 @@ import (
 
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
 
 // mockConfigReader implements handler.ConfigReader for testing.
 type mockConfigReader struct {
-	configs []repository.ConfigRecord
+	configs []configsvc.ConfigView
 	err     error
 }
 
-func (m *mockConfigReader) GetAllConfigs(_ context.Context) ([]repository.ConfigRecord, error) {
+func (m *mockConfigReader) GetAllConfigs(_ context.Context) ([]configsvc.ConfigView, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -74,8 +74,8 @@ type replenishResp struct {
 	} `json:"skipped"`
 }
 
-func defaultConfig(size int, mode string, threshold int) repository.ConfigRecord {
-	return repository.ConfigRecord{
+func defaultConfig(size int, mode string, threshold int) configsvc.ConfigView {
+	return configsvc.ConfigView{
 		Size:      size,
 		Mode:      mode,
 		Threshold: threshold,
@@ -87,7 +87,7 @@ func TestReplenishHandler(t *testing.T) {
 	tests := []struct {
 		name          string
 		query         string
-		configs       []repository.ConfigRecord
+		configs       []configsvc.ConfigView
 		configErr     error
 		counts        map[string]int
 		countErr      error
@@ -99,7 +99,7 @@ func TestReplenishHandler(t *testing.T) {
 	}{
 		{
 			name: "all configs enabled and below threshold — triggers all",
-			configs: []repository.ConfigRecord{
+			configs: []configsvc.ConfigView{
 				defaultConfig(5, "standard", 3),
 				defaultConfig(7, "standard", 3),
 				defaultConfig(9, "standard", 3),
@@ -116,7 +116,7 @@ func TestReplenishHandler(t *testing.T) {
 		},
 		{
 			name: "all pools full — nothing triggered",
-			configs: []repository.ConfigRecord{
+			configs: []configsvc.ConfigView{
 				defaultConfig(5, "standard", 3),
 				defaultConfig(7, "standard", 3),
 				defaultConfig(9, "standard", 3),
@@ -133,7 +133,7 @@ func TestReplenishHandler(t *testing.T) {
 		},
 		{
 			name: "some pools below threshold",
-			configs: []repository.ConfigRecord{
+			configs: []configsvc.ConfigView{
 				defaultConfig(5, "standard", 3),
 				defaultConfig(7, "standard", 3),
 				defaultConfig(9, "standard", 3),
@@ -150,9 +150,9 @@ func TestReplenishHandler(t *testing.T) {
 		},
 		{
 			name: "disabled configs are skipped",
-			configs: []repository.ConfigRecord{
+			configs: []configsvc.ConfigView{
 				defaultConfig(5, "standard", 3),
-				func() repository.ConfigRecord {
+				func() configsvc.ConfigView {
 					c := defaultConfig(7, "standard", 3)
 					c.Enabled = false
 					return c
@@ -170,7 +170,7 @@ func TestReplenishHandler(t *testing.T) {
 		},
 		{
 			name: "different thresholds per combo",
-			configs: []repository.ConfigRecord{
+			configs: []configsvc.ConfigView{
 				defaultConfig(5, "standard", 5),
 				defaultConfig(7, "standard", 2),
 			},
@@ -186,7 +186,7 @@ func TestReplenishHandler(t *testing.T) {
 		{
 			name:  "filter by size=7 only",
 			query: "?size=7",
-			configs: []repository.ConfigRecord{
+			configs: []configsvc.ConfigView{
 				defaultConfig(5, "standard", 3),
 				defaultConfig(7, "standard", 3),
 				defaultConfig(9, "standard", 3),
@@ -202,7 +202,7 @@ func TestReplenishHandler(t *testing.T) {
 		{
 			name:  "filter by size=9 and mode=standard",
 			query: "?size=9&mode=standard",
-			configs: []repository.ConfigRecord{
+			configs: []configsvc.ConfigView{
 				defaultConfig(5, "standard", 3),
 				defaultConfig(7, "standard", 3),
 				defaultConfig(9, "standard", 3),
@@ -222,7 +222,7 @@ func TestReplenishHandler(t *testing.T) {
 		},
 		{
 			name:          "empty config list returns empty response",
-			configs:       []repository.ConfigRecord{},
+			configs:       []configsvc.ConfigView{},
 			counts:        map[string]int{},
 			wantStatus:    http.StatusOK,
 			wantTriggered: 0,
@@ -241,7 +241,7 @@ func TestReplenishHandler(t *testing.T) {
 		},
 		{
 			name: "DynamoDB CountReady error returns 500",
-			configs: []repository.ConfigRecord{
+			configs: []configsvc.ConfigView{
 				defaultConfig(5, "standard", 3),
 			},
 			countErr:   errors.New("dynamodb error"),
@@ -249,7 +249,7 @@ func TestReplenishHandler(t *testing.T) {
 		},
 		{
 			name: "SQS publish error returns 500",
-			configs: []repository.ConfigRecord{
+			configs: []configsvc.ConfigView{
 				defaultConfig(5, "standard", 3),
 			},
 			counts: map[string]int{
@@ -303,7 +303,7 @@ func TestReplenishHandler(t *testing.T) {
 
 func TestReplenishHandler_GenerationParams(t *testing.T) {
 	// Arrange
-	configs := []repository.ConfigRecord{
+	configs := []configsvc.ConfigView{
 		{
 			Size:        7,
 			Mode:        "standard",
@@ -351,7 +351,7 @@ func TestReplenishHandler_AuthMatrix(t *testing.T) {
 	for _, tc := range adminAuthMatrix {
 		t.Run(tc.name, func(t *testing.T) {
 			// Arrange
-			configReader := &mockConfigReader{configs: []repository.ConfigRecord{}}
+			configReader := &mockConfigReader{configs: []configsvc.ConfigView{}}
 			counter := &mockPoolCounter{counts: map[string]int{}}
 			pub := &mockMessagePublisher{}
 			router := mountAdminWithAuth(func(r chi.Router) {

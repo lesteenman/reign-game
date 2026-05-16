@@ -7,23 +7,23 @@ import (
 	"time"
 
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 	"github.com/eriksteenman/reign-game/backend/internal/service/replenish"
 )
 
 // fakeConfigReader stubs ConfigReader (both GetAllConfigs + GetConfig).
 type fakeConfigReader struct {
-	all       []repository.ConfigRecord
+	all       []configsvc.ConfigView
 	allErr    error
-	byKey     map[string]*repository.ConfigRecord
+	byKey     map[string]*configsvc.ConfigView
 	getCfgErr error
 }
 
-func (f *fakeConfigReader) GetAllConfigs(_ context.Context) ([]repository.ConfigRecord, error) {
+func (f *fakeConfigReader) GetAllConfigs(_ context.Context) ([]configsvc.ConfigView, error) {
 	return f.all, f.allErr
 }
 
-func (f *fakeConfigReader) GetConfig(_ context.Context, size int, mode string) (*repository.ConfigRecord, error) {
+func (f *fakeConfigReader) GetConfig(_ context.Context, size int, mode string) (*configsvc.ConfigView, error) {
 	if f.getCfgErr != nil {
 		return nil, f.getCfgErr
 	}
@@ -84,8 +84,8 @@ func (f *fakeClaimer) TryClaimAutoReplenish(_ context.Context, _ int, _ string, 
 	return f.claim, f.claimErr
 }
 
-func enabledConfig(size int, mode string, threshold, maxAttempts int) repository.ConfigRecord {
-	return repository.ConfigRecord{
+func enabledConfig(size int, mode string, threshold, maxAttempts int) configsvc.ConfigView {
+	return configsvc.ConfigView{
 		Size:        size,
 		Mode:        mode,
 		Threshold:   threshold,
@@ -99,7 +99,7 @@ func enabledConfig(size int, mode string, threshold, maxAttempts int) repository
 func TestSweep_EmptyConfigs_NothingTriggered(t *testing.T) {
 	// Arrange
 	deps := replenish.SweepDeps{
-		Configs:   &fakeConfigReader{all: []repository.ConfigRecord{}},
+		Configs:   &fakeConfigReader{all: []configsvc.ConfigView{}},
 		Counter:   &fakePoolCounter{counts: map[string]int{}},
 		Publisher: &fakePublisher{},
 	}
@@ -120,7 +120,7 @@ func TestSweep_MixedBelowAndAbove(t *testing.T) {
 	// Arrange — 5#standard at threshold (skipped), 7#standard below (triggered).
 	pub := &fakePublisher{}
 	deps := replenish.SweepDeps{
-		Configs: &fakeConfigReader{all: []repository.ConfigRecord{
+		Configs: &fakeConfigReader{all: []configsvc.ConfigView{
 			enabledConfig(5, "standard", 3, 0),
 			enabledConfig(7, "standard", 3, 10),
 		}},
@@ -156,7 +156,7 @@ func TestSweep_FilterBySize(t *testing.T) {
 	// Arrange
 	pub := &fakePublisher{}
 	deps := replenish.SweepDeps{
-		Configs: &fakeConfigReader{all: []repository.ConfigRecord{
+		Configs: &fakeConfigReader{all: []configsvc.ConfigView{
 			enabledConfig(5, "standard", 3, 0),
 			enabledConfig(7, "standard", 3, 0),
 			enabledConfig(9, "standard", 3, 0),
@@ -186,7 +186,7 @@ func TestSweep_FilterByMode(t *testing.T) {
 	// Arrange
 	pub := &fakePublisher{}
 	deps := replenish.SweepDeps{
-		Configs: &fakeConfigReader{all: []repository.ConfigRecord{
+		Configs: &fakeConfigReader{all: []configsvc.ConfigView{
 			enabledConfig(7, "standard", 3, 0),
 			enabledConfig(7, "double", 3, 0),
 		}},
@@ -214,7 +214,7 @@ func TestSweep_DisabledConfigsSkipped(t *testing.T) {
 	disabled.Enabled = false
 	pub := &fakePublisher{}
 	deps := replenish.SweepDeps{
-		Configs:   &fakeConfigReader{all: []repository.ConfigRecord{disabled}},
+		Configs:   &fakeConfigReader{all: []configsvc.ConfigView{disabled}},
 		Counter:   &fakePoolCounter{counts: map[string]int{}},
 		Publisher: pub,
 	}
@@ -235,7 +235,7 @@ func TestSweep_PublisherErrorMidSweep(t *testing.T) {
 	// Arrange
 	pub := &fakePublisher{err: errors.New("sqs down")}
 	deps := replenish.SweepDeps{
-		Configs: &fakeConfigReader{all: []repository.ConfigRecord{
+		Configs: &fakeConfigReader{all: []configsvc.ConfigView{
 			enabledConfig(5, "standard", 3, 0),
 		}},
 		Counter: &fakePoolCounter{counts: map[string]int{
@@ -273,7 +273,7 @@ func TestSweep_ConfigReadError(t *testing.T) {
 func TestSweep_CountReadyError(t *testing.T) {
 	// Arrange
 	deps := replenish.SweepDeps{
-		Configs: &fakeConfigReader{all: []repository.ConfigRecord{
+		Configs: &fakeConfigReader{all: []configsvc.ConfigView{
 			enabledConfig(5, "standard", 3, 0),
 		}},
 		Counter:   &fakePoolCounter{err: errors.New("ddb down")},
@@ -296,7 +296,7 @@ func TestTryReactiveTopUp_ClaimWins_PublishesThreshold(t *testing.T) {
 	pub := &fakePublisher{}
 	cfg := enabledConfig(9, "standard", 5, 12)
 	deps := replenish.ReactiveDeps{
-		Configs:   &fakeConfigReader{byKey: map[string]*repository.ConfigRecord{keyFor(9, "standard"): &cfg}},
+		Configs:   &fakeConfigReader{byKey: map[string]*configsvc.ConfigView{keyFor(9, "standard"): &cfg}},
 		Claimer:   &fakeClaimer{claim: true},
 		Publisher: pub,
 		Window:    60 * time.Second,
@@ -323,7 +323,7 @@ func TestTryReactiveTopUp_ClaimLoses_NoPublish(t *testing.T) {
 	pub := &fakePublisher{}
 	cfg := enabledConfig(9, "standard", 5, 0)
 	deps := replenish.ReactiveDeps{
-		Configs:   &fakeConfigReader{byKey: map[string]*repository.ConfigRecord{keyFor(9, "standard"): &cfg}},
+		Configs:   &fakeConfigReader{byKey: map[string]*configsvc.ConfigView{keyFor(9, "standard"): &cfg}},
 		Claimer:   &fakeClaimer{claim: false},
 		Publisher: pub,
 		Window:    60 * time.Second,
@@ -347,7 +347,7 @@ func TestTryReactiveTopUp_MissingConfig_NoOp(t *testing.T) {
 	pub := &fakePublisher{}
 	claimer := &fakeClaimer{claim: true}
 	deps := replenish.ReactiveDeps{
-		Configs:   &fakeConfigReader{byKey: map[string]*repository.ConfigRecord{}}, // not present
+		Configs:   &fakeConfigReader{byKey: map[string]*configsvc.ConfigView{}}, // not present
 		Claimer:   claimer,
 		Publisher: pub,
 		Window:    60 * time.Second,
@@ -376,7 +376,7 @@ func TestTryReactiveTopUp_DisabledConfig_NoOp(t *testing.T) {
 	cfg := enabledConfig(9, "standard", 5, 0)
 	cfg.Enabled = false
 	deps := replenish.ReactiveDeps{
-		Configs:   &fakeConfigReader{byKey: map[string]*repository.ConfigRecord{keyFor(9, "standard"): &cfg}},
+		Configs:   &fakeConfigReader{byKey: map[string]*configsvc.ConfigView{keyFor(9, "standard"): &cfg}},
 		Claimer:   claimer,
 		Publisher: pub,
 		Window:    60 * time.Second,
@@ -424,7 +424,7 @@ func TestTryReactiveTopUp_ClaimerError(t *testing.T) {
 	// Arrange
 	cfg := enabledConfig(9, "standard", 5, 0)
 	deps := replenish.ReactiveDeps{
-		Configs:   &fakeConfigReader{byKey: map[string]*repository.ConfigRecord{keyFor(9, "standard"): &cfg}},
+		Configs:   &fakeConfigReader{byKey: map[string]*configsvc.ConfigView{keyFor(9, "standard"): &cfg}},
 		Claimer:   &fakeClaimer{claimErr: errors.New("ddb down")},
 		Publisher: &fakePublisher{},
 		Window:    60 * time.Second,
@@ -444,7 +444,7 @@ func TestTryReactiveTopUp_PublisherErrorAfterClaim(t *testing.T) {
 	// Arrange
 	cfg := enabledConfig(9, "standard", 5, 0)
 	deps := replenish.ReactiveDeps{
-		Configs:   &fakeConfigReader{byKey: map[string]*repository.ConfigRecord{keyFor(9, "standard"): &cfg}},
+		Configs:   &fakeConfigReader{byKey: map[string]*configsvc.ConfigView{keyFor(9, "standard"): &cfg}},
 		Claimer:   &fakeClaimer{claim: true},
 		Publisher: &fakePublisher{err: errors.New("sqs down")},
 		Window:    60 * time.Second,
@@ -478,7 +478,7 @@ func TestNewAsyncHook_NilDepsReturnsNilHook(t *testing.T) {
 func TestNewAsyncHook_DispatchesGoroutineThatPublishesOnClaim(t *testing.T) {
 	// Arrange — claim wins; goroutine should publish Threshold messages.
 	cfg := enabledConfig(9, "standard", 3, 100)
-	cfgs := &fakeConfigReader{byKey: map[string]*repository.ConfigRecord{keyFor(9, "standard"): &cfg}}
+	cfgs := &fakeConfigReader{byKey: map[string]*configsvc.ConfigView{keyFor(9, "standard"): &cfg}}
 	claimer := &fakeClaimer{claim: true}
 	pub := &fakePublisher{}
 	deps := replenish.ReactiveDeps{Configs: cfgs, Claimer: claimer, Publisher: pub}
@@ -506,7 +506,7 @@ func TestNewAsyncHook_DispatchesGoroutineThatPublishesOnClaim(t *testing.T) {
 func TestNewAsyncHook_AppliesDefaultWindowAndClockWhenZero(t *testing.T) {
 	// Arrange — zero Window/Clock should fall back to DefaultWindow/time.Now.
 	cfg := enabledConfig(5, "standard", 1, 0)
-	cfgs := &fakeConfigReader{byKey: map[string]*repository.ConfigRecord{keyFor(5, "standard"): &cfg}}
+	cfgs := &fakeConfigReader{byKey: map[string]*configsvc.ConfigView{keyFor(5, "standard"): &cfg}}
 	claimer := &fakeClaimer{claim: true}
 	pub := &fakePublisher{}
 	deps := replenish.ReactiveDeps{Configs: cfgs, Claimer: claimer, Publisher: pub}

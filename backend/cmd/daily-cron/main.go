@@ -32,6 +32,7 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/awsclient"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 	"github.com/eriksteenman/reign-game/backend/internal/service/daily"
 	"github.com/eriksteenman/reign-game/backend/internal/service/replenish"
 )
@@ -115,6 +116,7 @@ func main() {
 		log.Fatal("daily cron: PUZZLE_POOL_TABLE not set")
 	}
 	repo := repository.NewPuzzleRepository(ddb, tableName)
+	cfgSvc := configsvc.New(repo)
 
 	// Auto-replenish: when SQS_QUEUE_URL is wired, install a hook that
 	// drives replenish.TryReactiveTopUp from a goroutine on every
@@ -128,7 +130,7 @@ func main() {
 		sqsClient := sqs.NewFromConfig(cfg)
 		pub := queue.NewPublisher(sqsClient, queueURL)
 		replenishHook = replenish.NewAsyncHook(replenish.ReactiveDeps{
-			Configs:   repo,
+			Configs:   cfgSvc,
 			Claimer:   repo,
 			Publisher: pub,
 		}, "daily cron: reactive replenish")

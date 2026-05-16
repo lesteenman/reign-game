@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
 
 // DefaultWindow is the default per-combo debounce duration for reactive
@@ -47,14 +47,14 @@ var ErrSkippedDebounced = errors.New("replenish: debounced")
 
 // AllConfigsLister enumerates every CONFIG record. Used by Sweep.
 type AllConfigsLister interface {
-	GetAllConfigs(ctx context.Context) ([]repository.ConfigRecord, error)
+	GetAllConfigs(ctx context.Context) ([]configsvc.ConfigView, error)
 }
 
 // ConfigGetter looks up a single CONFIG record by size and mode. Used
 // by TryReactiveTopUp on the reactive hot path so we don't pay the
 // list-all cost on every drain.
 type ConfigGetter interface {
-	GetConfig(ctx context.Context, size int, mode string) (*repository.ConfigRecord, error)
+	GetConfig(ctx context.Context, size int, mode string) (*configsvc.ConfigView, error)
 }
 
 // PoolCounter counts ready puzzles for a given size+mode partition.

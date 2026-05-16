@@ -43,10 +43,14 @@ import (
 // admin route inherits the middleware chain by construction. Adding
 // a new admin route is a single r.Method(...) call inside the admin group.
 func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux {
-	// Build the reactive-replenish hook once. nil when SQS is not
-	// configured — the drain handlers treat nil as no-op so the player
-	// path keeps working in local-dev without LocalStack SQS.
-	replenishHook := buildReplenishHook(repo, pub)
+	// Build cfgSvc and the reactive-replenish hook before mounting routes.
+	// cfgSvc is nil when repo is nil (local-dev without LocalStack DDB).
+	var cfgSvc *configservice.Service
+	if repo != nil {
+		cfgSvc = configservice.New(repo)
+	}
+	// nil when SQS is not configured — drain handlers treat nil as no-op.
+	replenishHook := buildReplenishHook(repo, cfgSvc, pub)
 
 	r := chi.NewRouter()
 	r.Route("/api", func(r chi.Router) {
@@ -54,7 +58,6 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 		r.Get("/puzzles/generate", handler.GenerateHandler)
 
 		if repo != nil {
-			cfgSvc := configservice.New(repo)
 			r.Get("/puzzles/next", handler.ServeHandler(serveservice.New(repo, replenishHook)))
 			r.Put("/puzzles/{id}/status", handler.StatusHandler(statusservice.New(repo)))
 
@@ -87,7 +90,7 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 				r.Post("/config", handler.CreateConfigHandler(cfgSvc))
 				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(verdictservice.New(repo)))
 				if pub != nil {
-					r.Post("/replenish", handler.ReplenishHandler(repo, repo, pub))
+					r.Post("/replenish", handler.ReplenishHandler(cfgSvc, repo, pub))
 				}
 			})
 		}
@@ -270,12 +273,12 @@ func runLocalPoller(ctx context.Context, sqsClient worker.SQSConsumerAPI, queueU
 // reactive top-up goroutine. Returns nil when repo or pub is nil so
 // local-dev runs without SQS keep working — drain handlers are
 // nil-tolerant.
-func buildReplenishHook(repo *repository.PuzzleRepository, pub *queue.Publisher) func(size int, mode string) {
+func buildReplenishHook(repo *repository.PuzzleRepository, cfgSvc *configservice.Service, pub *queue.Publisher) func(size int, mode string) {
 	if repo == nil || pub == nil {
 		return nil
 	}
 	return replenish.NewAsyncHook(replenish.ReactiveDeps{
-		Configs:   repo,
+		Configs:   cfgSvc,
 		Claimer:   repo,
 		Publisher: pub,
 	}, "reactive replenish")

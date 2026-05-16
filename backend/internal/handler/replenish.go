@@ -9,7 +9,7 @@ import (
 
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 	"github.com/eriksteenman/reign-game/backend/internal/service/replenish"
 )
 
@@ -17,7 +17,7 @@ import (
 // replenish.AllConfigsLister so callers can pass any list-all
 // implementation directly.
 type ConfigReader interface {
-	GetAllConfigs(ctx context.Context) ([]repository.ConfigRecord, error)
+	GetAllConfigs(ctx context.Context) ([]configsvc.ConfigView, error)
 }
 
 // PoolCounter is the per-combo "ready" count interface used by the

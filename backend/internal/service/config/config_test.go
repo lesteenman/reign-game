@@ -235,3 +235,123 @@ func TestListEnabledModes_WrapsErrors(t *testing.T) {
 		t.Errorf("err = %v, want wrap of sentinel", err)
 	}
 }
+
+func TestGetAllConfigs_ReturnsAllIncludingDisabled(t *testing.T) {
+	// Arrange
+	all := []repository.ConfigRecord{
+		{Size: 7, Mode: "standard", Enabled: true, Threshold: 5, MaxAttempts: 10},
+		{Size: 7, Mode: "double", Enabled: false, Threshold: 3, MaxAttempts: 5},
+	}
+	store := &fakeStore{
+		getConfig:     func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) { return nil, nil },
+		putConfig:     func(_ context.Context, _ *repository.ConfigRecord) error { return nil },
+		createConfig:  func(_ context.Context, _ *repository.ConfigRecord) error { return nil },
+		getAllConfigs: func(_ context.Context) ([]repository.ConfigRecord, error) { return all, nil },
+	}
+	svc := config.New(store)
+
+	// Act
+	got, err := svc.GetAllConfigs(context.Background())
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+	if got[0].Size != 7 || got[0].Mode != "standard" || got[0].Enabled != true {
+		t.Errorf("got[0] = %+v", got[0])
+	}
+	if got[1].Size != 7 || got[1].Mode != "double" || got[1].Enabled != false {
+		t.Errorf("got[1] = %+v", got[1])
+	}
+}
+
+func TestGetAllConfigs_WrapsErrors(t *testing.T) {
+	// Arrange
+	sentinel := errors.New("ddb exploded")
+	store := &fakeStore{
+		getConfig:     func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) { return nil, nil },
+		putConfig:     func(_ context.Context, _ *repository.ConfigRecord) error { return nil },
+		createConfig:  func(_ context.Context, _ *repository.ConfigRecord) error { return nil },
+		getAllConfigs: func(_ context.Context) ([]repository.ConfigRecord, error) { return nil, sentinel },
+	}
+	svc := config.New(store)
+
+	// Act
+	_, err := svc.GetAllConfigs(context.Background())
+
+	// Assert
+	if !errors.Is(err, sentinel) {
+		t.Errorf("err = %v, want wrap of sentinel", err)
+	}
+}
+
+func TestGetConfig_ReturnsViewWhenFound(t *testing.T) {
+	// Arrange
+	rec := &repository.ConfigRecord{Size: 9, Mode: "standard", Threshold: 8, Enabled: true, MaxAttempts: 20}
+	store := &fakeStore{
+		getConfig:     func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) { return rec, nil },
+		putConfig:     func(_ context.Context, _ *repository.ConfigRecord) error { return nil },
+		createConfig:  func(_ context.Context, _ *repository.ConfigRecord) error { return nil },
+		getAllConfigs: func(_ context.Context) ([]repository.ConfigRecord, error) { return nil, nil },
+	}
+	svc := config.New(store)
+
+	// Act
+	got, err := svc.GetConfig(context.Background(), 9, "standard")
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil view")
+	}
+	if got.Size != 9 || got.Mode != "standard" || got.Threshold != 8 || got.MaxAttempts != 20 {
+		t.Errorf("got = %+v", got)
+	}
+}
+
+func TestGetConfig_ReturnsNilWhenMissing(t *testing.T) {
+	// Arrange
+	store := &fakeStore{
+		getConfig:     func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) { return nil, nil },
+		putConfig:     func(_ context.Context, _ *repository.ConfigRecord) error { return nil },
+		createConfig:  func(_ context.Context, _ *repository.ConfigRecord) error { return nil },
+		getAllConfigs: func(_ context.Context) ([]repository.ConfigRecord, error) { return nil, nil },
+	}
+	svc := config.New(store)
+
+	// Act
+	got, err := svc.GetConfig(context.Background(), 9, "standard")
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil, got %+v", got)
+	}
+}
+
+func TestGetConfig_WrapsErrors(t *testing.T) {
+	// Arrange
+	sentinel := errors.New("ddb exploded")
+	store := &fakeStore{
+		getConfig:     func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) { return nil, sentinel },
+		putConfig:     func(_ context.Context, _ *repository.ConfigRecord) error { return nil },
+		createConfig:  func(_ context.Context, _ *repository.ConfigRecord) error { return nil },
+		getAllConfigs: func(_ context.Context) ([]repository.ConfigRecord, error) { return nil, nil },
+	}
+	svc := config.New(store)
+
+	// Act
+	_, err := svc.GetConfig(context.Background(), 9, "standard")
+
+	// Assert
+	if !errors.Is(err, sentinel) {
+		t.Errorf("err = %v, want wrap of sentinel", err)
+	}
+}

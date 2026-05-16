@@ -132,3 +132,43 @@ func (s *Service) ListEnabledModes(ctx context.Context) ([]ConfigView, error) {
 	}
 	return enabled, nil
 }
+
+// GetAllConfigs returns every config (enabled and disabled), ordered
+// as returned by the store. Used by the replenish sweep which needs
+// all rows to apply its own enabled filter and size/mode filters.
+func (s *Service) GetAllConfigs(ctx context.Context) ([]ConfigView, error) {
+	all, err := s.store.GetAllConfigs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing configs: %w", err)
+	}
+	views := make([]ConfigView, len(all))
+	for i, c := range all {
+		views[i] = ConfigView{
+			Size:        c.Size,
+			Mode:        c.Mode,
+			Threshold:   c.Threshold,
+			Enabled:     c.Enabled,
+			MaxAttempts: c.MaxAttempts,
+		}
+	}
+	return views, nil
+}
+
+// GetConfig looks up a single config by size and mode. Returns nil
+// when no matching row exists. Used by the reactive replenish hot path.
+func (s *Service) GetConfig(ctx context.Context, size int, mode string) (*ConfigView, error) {
+	rec, err := s.store.GetConfig(ctx, size, mode)
+	if err != nil {
+		return nil, fmt.Errorf("getting config %d#%s: %w", size, mode, err)
+	}
+	if rec == nil {
+		return nil, nil
+	}
+	return &ConfigView{
+		Size:        rec.Size,
+		Mode:        rec.Mode,
+		Threshold:   rec.Threshold,
+		Enabled:     rec.Enabled,
+		MaxAttempts: rec.MaxAttempts,
+	}, nil
+}
