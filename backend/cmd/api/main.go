@@ -26,6 +26,7 @@ import (
 	configservice "github.com/eriksteenman/reign-game/backend/internal/service/config"
 	dailyservice "github.com/eriksteenman/reign-game/backend/internal/service/daily"
 	poolservice "github.com/eriksteenman/reign-game/backend/internal/service/pool"
+	puzzlestoresvc "github.com/eriksteenman/reign-game/backend/internal/service/puzzlestore"
 	"github.com/eriksteenman/reign-game/backend/internal/service/replenish"
 	serveservice "github.com/eriksteenman/reign-game/backend/internal/service/serve"
 	statusservice "github.com/eriksteenman/reign-game/backend/internal/service/status"
@@ -144,7 +145,8 @@ func main() {
 
 		dynamoClient := awsclient.NewDynamoDBClient(&cfg)
 		repo := repository.NewPuzzleRepository(dynamoClient, tableName)
-		w := worker.NewGeneratorWorker(repo, uuid.NewV4)
+		puzzleSvc := puzzlestoresvc.New(repo)
+		w := worker.NewGeneratorWorker(puzzleSvc, uuid.NewV4)
 
 		if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
 			// Lambda environment: start SQS event handler.

@@ -17,7 +17,7 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/generator"
 	"github.com/eriksteenman/reign-game/backend/internal/mode"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	puzzlestore "github.com/eriksteenman/reign-game/backend/internal/service/puzzlestore"
 )
 
 // newSeed picks a fresh int64 seed for one generation attempt. Uses
@@ -45,7 +45,7 @@ const generationTimeout = 14 * time.Minute
 
 // PuzzleStore defines the puzzle persistence operations used by the worker.
 type PuzzleStore interface {
-	PutPuzzle(ctx context.Context, puzzle *repository.PuzzleRecord) error
+	StorePuzzle(ctx context.Context, in *puzzlestore.PuzzleInput) error
 }
 
 // SQSConsumerAPI defines the SQS operations used by the local poller.
@@ -128,7 +128,7 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		return fmt.Errorf("generating puzzle ID: %w", err)
 	}
 
-	// Translate generator.Puzzle → repository.PuzzleRecord.
+	// Translate generator.Puzzle → puzzlestore.PuzzleInput.
 	solution := make([][]bool, pz.N)
 	for i := range solution {
 		solution[i] = make([]bool, pz.N)
@@ -137,7 +137,7 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		solution[m.Row][m.Col] = true
 	}
 
-	rec := &repository.PuzzleRecord{
+	in := &puzzlestore.PuzzleInput{
 		GridSize:             req.Size,
 		Mode:                 req.Mode,
 		ID:                   puzzleID,
@@ -153,7 +153,7 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		Seed:                 seed,
 	}
 
-	if err := w.store.PutPuzzle(ctx, rec); err != nil {
+	if err := w.store.StorePuzzle(ctx, in); err != nil {
 		return fmt.Errorf("storing generated puzzle: %w", err)
 	}
 

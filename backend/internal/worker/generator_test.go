@@ -8,16 +8,16 @@ import (
 	"github.com/aws/aws-lambda-go/events"
 
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	puzzlestore "github.com/eriksteenman/reign-game/backend/internal/service/puzzlestore"
 )
 
 // mockPuzzleStore implements PuzzleStore for testing.
 type mockPuzzleStore struct {
-	putPuzzleFunc func(ctx context.Context, puzzle *repository.PuzzleRecord) error
+	storePuzzleFunc func(ctx context.Context, in *puzzlestore.PuzzleInput) error
 }
 
-func (m *mockPuzzleStore) PutPuzzle(ctx context.Context, puzzle *repository.PuzzleRecord) error {
-	return m.putPuzzleFunc(ctx, puzzle)
+func (m *mockPuzzleStore) StorePuzzle(ctx context.Context, in *puzzlestore.PuzzleInput) error {
+	return m.storePuzzleFunc(ctx, in)
 }
 
 func TestHandleSQSEvent(t *testing.T) {
@@ -50,10 +50,10 @@ func TestHandleSQSEvent(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.name == "invalid JSON returns error" {
 				// Arrange
-				var capturedRecord *repository.PuzzleRecord
+				var capturedInput *puzzlestore.PuzzleInput
 				store := &mockPuzzleStore{
-					putPuzzleFunc: func(_ context.Context, puzzle *repository.PuzzleRecord) error {
-						capturedRecord = puzzle
+					storePuzzleFunc: func(_ context.Context, in *puzzlestore.PuzzleInput) error {
+						capturedInput = in
 						return nil
 					},
 				}
@@ -77,17 +77,17 @@ func TestHandleSQSEvent(t *testing.T) {
 				if err == nil {
 					t.Fatal("expected error for invalid JSON, got nil")
 				}
-				if capturedRecord != nil {
-					t.Error("PutPuzzle should not have been called for invalid JSON")
+				if capturedInput != nil {
+					t.Error("StorePuzzle should not have been called for invalid JSON")
 				}
 				return
 			}
 
 			// Arrange
-			var capturedRecord *repository.PuzzleRecord
+			var capturedInput *puzzlestore.PuzzleInput
 			store := &mockPuzzleStore{
-				putPuzzleFunc: func(_ context.Context, puzzle *repository.PuzzleRecord) error {
-					capturedRecord = puzzle
+				storePuzzleFunc: func(_ context.Context, in *puzzlestore.PuzzleInput) error {
+					capturedInput = in
 					return tt.putErr
 				},
 			}
@@ -122,42 +122,42 @@ func TestHandleSQSEvent(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if capturedRecord == nil {
-				t.Fatal("PutPuzzle was not called")
+			if capturedInput == nil {
+				t.Fatal("StorePuzzle was not called")
 			}
-			if capturedRecord.GridSize != tt.wantSize {
-				t.Errorf("GridSize = %d, want %d", capturedRecord.GridSize, tt.wantSize)
+			if capturedInput.GridSize != tt.wantSize {
+				t.Errorf("GridSize = %d, want %d", capturedInput.GridSize, tt.wantSize)
 			}
-			if capturedRecord.Mode != tt.wantMode {
-				t.Errorf("Mode = %q, want %q", capturedRecord.Mode, tt.wantMode)
+			if capturedInput.Mode != tt.wantMode {
+				t.Errorf("Mode = %q, want %q", capturedInput.Mode, tt.wantMode)
 			}
-			if capturedRecord.ID != "test-uuid-001" {
-				t.Errorf("ID = %q, want %q", capturedRecord.ID, "test-uuid-001")
+			if capturedInput.ID != "test-uuid-001" {
+				t.Errorf("ID = %q, want %q", capturedInput.ID, "test-uuid-001")
 			}
-			if capturedRecord.Status != "ready" {
-				t.Errorf("Status = %q, want %q", capturedRecord.Status, "ready")
+			if capturedInput.Status != "ready" {
+				t.Errorf("Status = %q, want %q", capturedInput.Status, "ready")
 			}
-			if capturedRecord.RegionMap == nil {
+			if capturedInput.RegionMap == nil {
 				t.Error("RegionMap should not be nil")
 			}
-			if capturedRecord.Solution == nil {
+			if capturedInput.Solution == nil {
 				t.Error("Solution should not be nil")
 			}
-			if capturedRecord.GenerationDurationMs < 0 {
-				t.Errorf("GenerationDurationMs = %d, want >= 0", capturedRecord.GenerationDurationMs)
+			if capturedInput.GenerationDurationMs < 0 {
+				t.Errorf("GenerationDurationMs = %d, want >= 0", capturedInput.GenerationDurationMs)
 			}
-			if capturedRecord.CreatedAt == "" {
+			if capturedInput.CreatedAt == "" {
 				t.Error("CreatedAt should not be empty")
 			}
 			// Classification data must be populated.
-			if capturedRecord.Difficulty == 0 {
+			if capturedInput.Difficulty == 0 {
 				t.Error("Difficulty = 0 (unknown), want a valid tier")
 			}
-			if capturedRecord.MaxTier == 0 {
+			if capturedInput.MaxTier == 0 {
 				t.Error("MaxTier = 0, want >= 1")
 			}
-			if len(capturedRecord.TierCounts) != 5 {
-				t.Errorf("TierCounts length = %d, want 5", len(capturedRecord.TierCounts))
+			if len(capturedInput.TierCounts) != 5 {
+				t.Errorf("TierCounts length = %d, want 5", len(capturedInput.TierCounts))
 			}
 		})
 	}
