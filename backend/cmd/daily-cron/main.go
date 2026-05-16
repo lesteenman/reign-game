@@ -58,22 +58,6 @@ type dailyService interface {
 	SyncFinalizeForToday(ctx context.Context, today, yesterday string, now time.Time) (*repository.ScheduleRecord, error)
 }
 
-// realService is the production wrapper around the daily package's
-// free functions, parameterized over a Repo. Tests skip this and
-// inject a mock.
-type realService struct {
-	repo          daily.Repo
-	replenishHook func(size int, mode string)
-}
-
-func (r *realService) EnsureCandidate(ctx context.Context, now time.Time) error {
-	return daily.EnsureCandidate(ctx, r.repo, now, r.replenishHook)
-}
-
-func (r *realService) SyncFinalizeForToday(ctx context.Context, today, yesterday string, now time.Time) (*repository.ScheduleRecord, error) {
-	return daily.SyncFinalizeForToday(ctx, r.repo, today, yesterday, now, r.replenishHook)
-}
-
 // handle dispatches an EventBridge event to the right cron handler.
 // `clock` is the time provider — production passes time.Now; tests
 // pin it.
@@ -153,7 +137,7 @@ func main() {
 		log.Printf("WARN: daily cron: SQS_QUEUE_URL unset, reactive replenish disabled")
 	}
 
-	svc := &realService{repo: repo, replenishHook: replenishHook}
+	svc := daily.New(repo, tableName, time.Now, replenishHook)
 
 	lambda.Start(func(ctx context.Context, event EventBridgeScheduledEvent) error {
 		return handle(ctx, event, svc, time.Now)

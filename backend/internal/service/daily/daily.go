@@ -351,7 +351,7 @@ func (s *Service) GetDaily(ctx context.Context, in GetInput) (*DailyView, error)
 			return nil, ErrScheduleNotFinalized
 		}
 		syncStart := time.Now()
-		finalized, syncErr := SyncFinalizeForToday(ctx, s.store, todayStr, yesterdayStr, s.clock(), s.replenishHook)
+		finalized, syncErr := s.SyncFinalizeForToday(ctx, todayStr, yesterdayStr, s.clock())
 		syncMs = time.Since(syncStart).Milliseconds()
 		if errors.Is(syncErr, ErrPoolExhausted) {
 			log.Printf("daily service: 500 pool_exhausted date=%s player=%s sync_ms=%d", in.Date, truncatePlayer(in.PlayerID), syncMs)

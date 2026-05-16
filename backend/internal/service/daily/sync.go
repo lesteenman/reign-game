@@ -22,14 +22,12 @@ import (
 // until approvals catch up. NEVER silently no-op.
 var ErrPoolExhausted = errors.New("daily pool exhausted: no candidate, no yesterday schedule, and approved pool empty")
 
-// Repo is the narrow interface SyncFinalizeForToday needs. The
+// Repo is the narrow interface the sync/cron helpers need. The
 // production *repository.PuzzleRepository satisfies it; tests use
 // a hand-rolled fake in this same package.
 type Repo interface {
 	GetSchedule(ctx context.Context, date string) (*repository.ScheduleRecord, error)
 	GetCandidate(ctx context.Context) (*repository.CandidateRecord, error)
-	FinalizeDailyTransaction(ctx context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error
-
 	ListApprovedPool(ctx context.Context, size int, mode string, excludeRecentlyDailied bool, now time.Time) ([]repository.PuzzleRecord, error)
 	PutCandidateIfAbsent(ctx context.Context, puzzleID, sourcePartition string) error
 }
@@ -49,7 +47,7 @@ type Repo interface {
 //     candidate present AND yesterday missing -> confirm candidate
 //     candidate present AND yesterday.solved == 0 -> recycle yesterday
 //     candidate present AND yesterday.solved > 0 -> confirm candidate
-//  4. FinalizeDailyTransaction with chosen puzzleID, sourcePartition, mode.
+//  4. FinalizeDaily with chosen puzzleID, sourcePartition, mode.
 //  5. ErrScheduleAlreadyFinalized -> race-loser, GetSchedule(today),
 //     return that row.
 //  6. Success -> GetSchedule(today) and return the canonical row
@@ -58,23 +56,17 @@ type Repo interface {
 // `today` and `yesterday` are caller-supplied to keep this package
 // time-zone-agnostic and trivially testable. Caller is responsible
 // for computing them as YYYY-MM-DD UTC.
-//
-// replenishHook is plumbed through to the cold-start bootstrap call
-// of EnsureCandidate; see EnsureCandidate's comment for invocation
-// rules. Pass nil from callers that don't want auto-replenish.
-func SyncFinalizeForToday(
+func (s *Service) SyncFinalizeForToday(
 	ctx context.Context,
-	repo Repo,
 	today, yesterday string,
 	now time.Time,
-	replenishHook func(size int, mode string),
 ) (*repository.ScheduleRecord, error) {
-	yesterdaySchedule, err := repo.GetSchedule(ctx, yesterday)
+	yesterdaySchedule, err := s.store.GetSchedule(ctx, yesterday)
 	if err != nil {
 		return nil, fmt.Errorf("sync finalize for %s: reading yesterday schedule: %w", today, err)
 	}
 
-	candidate, err := repo.GetCandidate(ctx)
+	candidate, err := s.store.GetCandidate(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("sync finalize for %s: reading candidate: %w", today, err)
 	}
@@ -88,13 +80,13 @@ func SyncFinalizeForToday(
 	// unlucky first request: 1 Query + 1 conditional Put + 1 GetItem on
 	// top of the existing path.
 	if candidate == nil && yesterdaySchedule == nil {
-		if err := EnsureCandidate(ctx, repo, now, replenishHook); err != nil {
+		if err := s.EnsureCandidate(ctx, now); err != nil {
 			if errors.Is(err, ErrCandidatePoolEmpty) {
 				return nil, ErrPoolExhausted
 			}
 			return nil, fmt.Errorf("sync finalize for %s: bootstrap candidate: %w", today, err)
 		}
-		candidate, err = repo.GetCandidate(ctx)
+		candidate, err = s.store.GetCandidate(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("sync finalize for %s: re-reading candidate after bootstrap: %w", today, err)
 		}
@@ -112,17 +104,17 @@ func SyncFinalizeForToday(
 		return nil, err
 	}
 
-	finalizeErr := repo.FinalizeDailyTransaction(ctx, today, puzzleID, sourcePartition, mode)
+	finalizeErr := s.FinalizeDaily(ctx, today, puzzleID, sourcePartition, mode)
 	if finalizeErr != nil && !errors.Is(finalizeErr, repository.ErrScheduleAlreadyFinalized) {
 		return nil, fmt.Errorf("sync finalize for %s: %w", today, finalizeErr)
 	}
 
-	canonical, err := repo.GetSchedule(ctx, today)
+	canonical, err := s.store.GetSchedule(ctx, today)
 	if err != nil {
 		return nil, fmt.Errorf("sync finalize for %s: re-reading schedule: %w", today, err)
 	}
 	if canonical == nil {
-		return nil, fmt.Errorf("sync finalize for %s: schedule vanished after FinalizeDailyTransaction commit (race=%t)", today, errors.Is(finalizeErr, repository.ErrScheduleAlreadyFinalized))
+		return nil, fmt.Errorf("sync finalize for %s: schedule vanished after FinalizeDaily commit (race=%t)", today, errors.Is(finalizeErr, repository.ErrScheduleAlreadyFinalized))
 	}
 	return canonical, nil
 }

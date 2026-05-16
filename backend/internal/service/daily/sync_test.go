@@ -3,15 +3,17 @@ package daily
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
 // fakeRepo records the call sequence and returns canned responses, so
-// tests can assert ordering and that FinalizeDailyTransaction is never
-// called when ErrPoolExhausted is the expected outcome.
+// tests can assert ordering and that FinalizeDaily is never called when
+// ErrPoolExhausted is the expected outcome.
 type fakeRepo struct {
 	scheduleByDate map[string]*repository.ScheduleRecord
 	scheduleErr    map[string]error
@@ -19,8 +21,8 @@ type fakeRepo struct {
 	candidate    *repository.CandidateRecord
 	candidateErr error
 
-	finalizeErr  error
-	finalizeCall *finalizeArgs
+	writeTransactionErr error
+	finalizeCall        *finalizeArgs
 
 	// scheduleByDate snapshot returned AFTER the finalize call commits.
 	// Tests use this to simulate the "transaction stamped assignedAt"
@@ -64,15 +66,29 @@ func (f *fakeRepo) GetCandidate(_ context.Context) (*repository.CandidateRecord,
 	return f.candidate, nil
 }
 
-func (f *fakeRepo) FinalizeDailyTransaction(_ context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error {
+// WriteTransaction is called by s.FinalizeDaily. We decode the items
+// to reconstruct the finalize args (date, puzzleID, sourcePartition,
+// mode) so existing assertions keep working. Mode is inferred from
+// item count: 3 items = Confirm (with Delete leg), 2 = Recycle.
+func (f *fakeRepo) WriteTransaction(_ context.Context, items []types.TransactWriteItem) error {
 	f.calls = append(f.calls, "FinalizeDailyTransaction")
-	f.finalizeCall = &finalizeArgs{
-		date:            date,
-		puzzleID:        puzzleID,
-		sourcePartition: sourcePartition,
-		mode:            mode,
+	if len(items) >= 1 && items[0].Put != nil {
+		pk := items[0].Put.Item["PK"].(*types.AttributeValueMemberS).Value
+		date := strings.TrimPrefix(pk, "DAILY#")
+		puzzleID := items[0].Put.Item["puzzleId"].(*types.AttributeValueMemberS).Value
+		sourcePartition := items[0].Put.Item["sourcePartition"].(*types.AttributeValueMemberS).Value
+		mode := repository.FinalizeModeRecycle
+		if len(items) == 3 {
+			mode = repository.FinalizeModeConfirm
+		}
+		f.finalizeCall = &finalizeArgs{
+			date:            date,
+			puzzleID:        puzzleID,
+			sourcePartition: sourcePartition,
+			mode:            mode,
+		}
 	}
-	return f.finalizeErr
+	return f.writeTransactionErr
 }
 
 // ListApprovedPool returns the seeded pool. Cold-start bootstrap
@@ -98,6 +114,34 @@ func (f *fakeRepo) PutCandidateIfAbsent(_ context.Context, puzzleID, sourceParti
 		}
 	}
 	return nil
+}
+
+// Stub methods to satisfy the Store interface — unused by sync tests.
+func (f *fakeRepo) GetPuzzle(_ context.Context, _ int, _, _ string) (*repository.PuzzleRecord, error) {
+	return nil, nil
+}
+func (f *fakeRepo) GetPlay(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
+	return nil, nil
+}
+func (f *fakeRepo) PutPlayStartedIfAbsent(_ context.Context, _, _, _ string, _ time.Time) error {
+	return nil
+}
+func (f *fakeRepo) FinalizeDailyTransaction(_ context.Context, _, _, _ string, _ repository.FinalizeMode) error {
+	return nil
+}
+func (f *fakeRepo) SubmitPlayTransactionally(_ context.Context, _, _ string, _ *repository.SubmitInput) error {
+	return nil
+}
+func (f *fakeRepo) LeaderboardRank(_ context.Context, _ string, _ int64, _ string) (int, error) {
+	return 0, nil
+}
+
+// Compile-time assertion: fakeRepo satisfies the Store interface.
+var _ Store = (*fakeRepo)(nil)
+
+// newTestService constructs a Service backed by the given fakeRepo.
+func newTestService(repo *fakeRepo) *Service {
+	return New(repo, "test-table", time.Now, nil)
 }
 
 func TestSyncFinalizeForToday_ConfirmCandidate_YesterdayHasSolves(t *testing.T) {
@@ -127,16 +171,17 @@ func TestSyncFinalizeForToday_ConfirmCandidate_YesterdayHasSolves(t *testing.T) 
 			},
 		},
 	}
+	svc := newTestService(repo)
 
 	// Act
-	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
+	got, err := svc.SyncFinalizeForToday(context.Background(), today, yesterday, time.Now())
 
 	// Assert
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
 	}
 	if repo.finalizeCall == nil {
-		t.Fatal("expected FinalizeDailyTransaction to be called")
+		t.Fatal("expected FinalizeDaily to be called")
 	}
 	if repo.finalizeCall.mode != repository.FinalizeModeConfirm {
 		t.Errorf("expected mode=confirm, got %q", repo.finalizeCall.mode)
@@ -184,9 +229,10 @@ func TestSyncFinalizeForToday_RecycleYesterday_NoSolves(t *testing.T) {
 			},
 		},
 	}
+	svc := newTestService(repo)
 
 	// Act
-	_, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
+	_, err := svc.SyncFinalizeForToday(context.Background(), today, yesterday, time.Now())
 
 	// Assert
 	if err != nil {
@@ -226,9 +272,10 @@ func TestSyncFinalizeForToday_RecycleYesterday_NoCandidate(t *testing.T) {
 			},
 		},
 	}
+	svc := newTestService(repo)
 
 	// Act
-	_, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
+	_, err := svc.SyncFinalizeForToday(context.Background(), today, yesterday, time.Now())
 
 	// Assert
 	if err != nil {
@@ -261,9 +308,10 @@ func TestSyncFinalizeForToday_ConfirmCandidate_NoYesterday(t *testing.T) {
 			},
 		},
 	}
+	svc := newTestService(repo)
 
 	// Act
-	_, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
+	_, err := svc.SyncFinalizeForToday(context.Background(), today, yesterday, time.Now())
 
 	// Assert
 	if err != nil {
@@ -299,16 +347,17 @@ func TestSyncFinalizeForToday_BothAbsent_BootstrapsFromApprovedPool(t *testing.T
 			},
 		},
 	}
+	svc := newTestService(repo)
 
 	// Act
-	canonical, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
+	canonical, err := svc.SyncFinalizeForToday(context.Background(), today, yesterday, time.Now())
 
 	// Assert
 	if err != nil {
 		t.Fatalf("expected nil error after pool bootstrap, got %v", err)
 	}
 	if repo.finalizeCall == nil {
-		t.Fatal("FinalizeDailyTransaction MUST be called after the cold-start bootstrap")
+		t.Fatal("FinalizeDaily MUST be called after the cold-start bootstrap")
 	}
 	if repo.finalizeCall.mode != repository.FinalizeModeConfirm {
 		t.Errorf("expected mode=confirm (bootstrapped candidate present, yesterday absent), got %q", repo.finalizeCall.mode)
@@ -332,9 +381,10 @@ func TestSyncFinalizeForToday_PoolExhausted(t *testing.T) {
 		scheduleByDate: map[string]*repository.ScheduleRecord{},
 		candidate:      nil,
 	}
+	svc := newTestService(repo)
 
 	// Act
-	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
+	got, err := svc.SyncFinalizeForToday(context.Background(), today, yesterday, time.Now())
 
 	// Assert
 	if !errors.Is(err, ErrPoolExhausted) {
@@ -344,7 +394,7 @@ func TestSyncFinalizeForToday_PoolExhausted(t *testing.T) {
 		t.Errorf("expected nil schedule on pool-exhausted, got %+v", got)
 	}
 	if repo.finalizeCall != nil {
-		t.Error("FinalizeDailyTransaction MUST NOT be called when pool is exhausted")
+		t.Error("FinalizeDaily MUST NOT be called when pool is exhausted")
 	}
 	for _, call := range repo.calls {
 		if call == "FinalizeDailyTransaction" {
@@ -377,11 +427,12 @@ func TestSyncFinalizeForToday_RaceLoser(t *testing.T) {
 			PuzzleID:        "puzzle-candidate",
 			SourcePartition: "9#double",
 		},
-		finalizeErr: repository.ErrScheduleAlreadyFinalized,
+		writeTransactionErr: repository.ErrScheduleAlreadyFinalized,
 	}
+	svc := newTestService(repo)
 
 	// Act
-	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
+	got, err := svc.SyncFinalizeForToday(context.Background(), today, yesterday, time.Now())
 
 	// Assert
 	if err != nil {
@@ -427,11 +478,12 @@ func TestSyncFinalizeForToday_RaceLoser_VanishingSchedule(t *testing.T) {
 			PuzzleID:        "puzzle-candidate",
 			SourcePartition: "9#double",
 		},
-		finalizeErr: repository.ErrScheduleAlreadyFinalized,
+		writeTransactionErr: repository.ErrScheduleAlreadyFinalized,
 	}
+	svc := newTestService(repo)
 
 	// Act
-	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
+	got, err := svc.SyncFinalizeForToday(context.Background(), today, yesterday, time.Now())
 
 	// Assert
 	if err == nil {
@@ -463,11 +515,12 @@ func TestSyncFinalizeForToday_TransactionGenericFailure(t *testing.T) {
 			PuzzleID:        "puzzle-candidate",
 			SourcePartition: "9#double",
 		},
-		finalizeErr: ddbErr,
+		writeTransactionErr: ddbErr,
 	}
+	svc := newTestService(repo)
 
 	// Act
-	got, err := SyncFinalizeForToday(context.Background(), repo, today, yesterday, time.Now(), nil)
+	got, err := svc.SyncFinalizeForToday(context.Background(), today, yesterday, time.Now())
 
 	// Assert
 	if err == nil {

@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
-// fakeCronRepo is the Repo implementation used by cron tests. Mirrors
+// fakeCronRepo is the Store implementation used by cron tests. Mirrors
 // the fakeRepo pattern in sync_test.go but lives in its own type so
 // the two test files can evolve independently. The trackedCalls slice
 // records call ORDER + method NAMES so determinism / "didn't call X"
@@ -29,25 +30,16 @@ type fakeCronRepo struct {
 		now     time.Time
 	}
 	trackedCalls []string
-
-	// unused by cron tests — exist only to satisfy the Repo interface.
-	scheduleByDate map[string]*repository.ScheduleRecord
-	finalizeErr    error
 }
 
-func (f *fakeCronRepo) GetSchedule(_ context.Context, date string) (*repository.ScheduleRecord, error) {
+func (f *fakeCronRepo) GetSchedule(_ context.Context, _ string) (*repository.ScheduleRecord, error) {
 	f.trackedCalls = append(f.trackedCalls, "GetSchedule")
-	return f.scheduleByDate[date], nil
+	return nil, nil
 }
 
 func (f *fakeCronRepo) GetCandidate(_ context.Context) (*repository.CandidateRecord, error) {
 	f.trackedCalls = append(f.trackedCalls, "GetCandidate")
 	return f.candidate, f.candidateErr
-}
-
-func (f *fakeCronRepo) FinalizeDailyTransaction(_ context.Context, _, _, _ string, _ repository.FinalizeMode) error {
-	f.trackedCalls = append(f.trackedCalls, "FinalizeDailyTransaction")
-	return f.finalizeErr
 }
 
 func (f *fakeCronRepo) ListApprovedPool(_ context.Context, size int, mode string, exclude bool, now time.Time) ([]repository.PuzzleRecord, error) {
@@ -67,6 +59,32 @@ func (f *fakeCronRepo) PutCandidateIfAbsent(_ context.Context, puzzleID, sourceP
 	return f.putErr
 }
 
+// Stub methods to satisfy the Store interface — unused by cron tests.
+func (f *fakeCronRepo) GetPuzzle(_ context.Context, _ int, _, _ string) (*repository.PuzzleRecord, error) {
+	return nil, nil
+}
+func (f *fakeCronRepo) GetPlay(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
+	return nil, nil
+}
+func (f *fakeCronRepo) PutPlayStartedIfAbsent(_ context.Context, _, _, _ string, _ time.Time) error {
+	return nil
+}
+func (f *fakeCronRepo) FinalizeDailyTransaction(_ context.Context, _, _, _ string, _ repository.FinalizeMode) error {
+	return nil
+}
+func (f *fakeCronRepo) WriteTransaction(_ context.Context, _ []types.TransactWriteItem) error {
+	return nil
+}
+func (f *fakeCronRepo) SubmitPlayTransactionally(_ context.Context, _, _ string, _ *repository.SubmitInput) error {
+	return nil
+}
+func (f *fakeCronRepo) LeaderboardRank(_ context.Context, _ string, _ int64, _ string) (int, error) {
+	return 0, nil
+}
+
+// Compile-time assertion: fakeCronRepo satisfies the Store interface.
+var _ Store = (*fakeCronRepo)(nil)
+
 func candidateFixture(puzzleID string, queuedAt time.Time) *repository.CandidateRecord {
 	return &repository.CandidateRecord{
 		PuzzleID:        puzzleID,
@@ -83,12 +101,19 @@ func poolPuzzles(ids ...string) []repository.PuzzleRecord {
 	return out
 }
 
+// newCronTestService constructs a Service backed by the given fakeCronRepo,
+// with an optional replenishHook.
+func newCronTestService(repo *fakeCronRepo, hook func(int, string)) *Service {
+	return New(repo, "test-table", time.Now, hook)
+}
+
 func TestEnsureCandidate_FreshExisting_NoOp(t *testing.T) {
 	// Arrange
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
 	repo := &fakeCronRepo{candidate: candidateFixture("puzzle-fresh", now.Add(-1*time.Hour))}
+	svc := newCronTestService(repo, nil)
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now, nil)
+	err := svc.EnsureCandidate(context.Background(), now)
 	// Assert
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -107,8 +132,9 @@ func TestEnsureCandidate_StaleExisting_Replaces(t *testing.T) {
 		candidate: candidateFixture("puzzle-stale", now.Add(-30*time.Hour)),
 		pool:      poolPuzzles("puzzle-b", "puzzle-a"),
 	}
+	svc := newCronTestService(repo, nil)
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now, nil)
+	err := svc.EnsureCandidate(context.Background(), now)
 	// Assert — picked smallest, called Put with sourcePartition 9#standard.
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -128,8 +154,9 @@ func TestEnsureCandidate_NoExisting_Picks(t *testing.T) {
 	// Arrange
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
 	repo := &fakeCronRepo{pool: poolPuzzles("puzzle-c", "puzzle-a", "puzzle-b")}
+	svc := newCronTestService(repo, nil)
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now, nil)
+	err := svc.EnsureCandidate(context.Background(), now)
 	// Assert
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -143,8 +170,9 @@ func TestEnsureCandidate_DeterministicPick(t *testing.T) {
 	// Arrange — same as NoExisting_Picks but explicit about the contract.
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
 	repo := &fakeCronRepo{pool: poolPuzzles("puzzle-zzz", "puzzle-001", "puzzle-mid")}
+	svc := newCronTestService(repo, nil)
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now, nil)
+	err := svc.EnsureCandidate(context.Background(), now)
 	// Assert — lex order: 001 < mid < zzz.
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -158,8 +186,9 @@ func TestEnsureCandidate_EmptyPool_Sentinel(t *testing.T) {
 	// Arrange
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
 	repo := &fakeCronRepo{pool: []repository.PuzzleRecord{}}
+	svc := newCronTestService(repo, nil)
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now, nil)
+	err := svc.EnsureCandidate(context.Background(), now)
 	// Assert
 	if !errors.Is(err, ErrCandidatePoolEmpty) {
 		t.Fatalf("expected ErrCandidatePoolEmpty, got %v", err)
@@ -176,8 +205,9 @@ func TestEnsureCandidate_RaceLoser_Nil(t *testing.T) {
 		pool:   poolPuzzles("puzzle-a"),
 		putErr: repository.ErrCandidateAlreadyExists,
 	}
+	svc := newCronTestService(repo, nil)
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now, nil)
+	err := svc.EnsureCandidate(context.Background(), now)
 	// Assert — race-loser cleanly exits.
 	if err != nil {
 		t.Fatalf("race-loser should return nil, got %v", err)
@@ -189,8 +219,9 @@ func TestEnsureCandidate_PutGenericFailure_Wrapped(t *testing.T) {
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
 	plain := errors.New("ddb broken")
 	repo := &fakeCronRepo{pool: poolPuzzles("puzzle-a"), putErr: plain}
+	svc := newCronTestService(repo, nil)
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now, nil)
+	err := svc.EnsureCandidate(context.Background(), now)
 	// Assert — wrapped, errors.Is finds the underlying.
 	if err == nil {
 		t.Fatalf("expected error, got nil")
@@ -218,9 +249,10 @@ func TestEnsureCandidate_FiresReplenishHookAfterApprovedPoolRead(t *testing.T) {
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
 	repo := &fakeCronRepo{pool: poolPuzzles("puzzle-a")}
 	var calls []hookCall
+	svc := newCronTestService(repo, captureHook(&calls))
 
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now, captureHook(&calls))
+	err := svc.EnsureCandidate(context.Background(), now)
 
 	// Assert
 	if err != nil {
@@ -239,9 +271,10 @@ func TestEnsureCandidate_DoesNotFireHookOnFreshExisting(t *testing.T) {
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
 	repo := &fakeCronRepo{candidate: candidateFixture("puzzle-fresh", now.Add(-1*time.Hour))}
 	var calls []hookCall
+	svc := newCronTestService(repo, captureHook(&calls))
 
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now, captureHook(&calls))
+	err := svc.EnsureCandidate(context.Background(), now)
 
 	// Assert
 	if err != nil {
@@ -257,9 +290,10 @@ func TestEnsureCandidate_DoesNotFireHookOnEmptyPool(t *testing.T) {
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
 	repo := &fakeCronRepo{pool: []repository.PuzzleRecord{}}
 	var calls []hookCall
+	svc := newCronTestService(repo, captureHook(&calls))
 
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now, captureHook(&calls))
+	err := svc.EnsureCandidate(context.Background(), now)
 
 	// Assert
 	if !errors.Is(err, ErrCandidatePoolEmpty) {
@@ -279,9 +313,10 @@ func TestEnsureCandidate_FiresHookEvenOnRaceLoser(t *testing.T) {
 		putErr: repository.ErrCandidateAlreadyExists,
 	}
 	var calls []hookCall
+	svc := newCronTestService(repo, captureHook(&calls))
 
 	// Act
-	err := EnsureCandidate(context.Background(), repo, now, captureHook(&calls))
+	err := svc.EnsureCandidate(context.Background(), now)
 
 	// Assert
 	if err != nil {
@@ -291,9 +326,6 @@ func TestEnsureCandidate_FiresHookEvenOnRaceLoser(t *testing.T) {
 		t.Errorf("hook should fire on the read drain regardless of Put outcome; got %d calls", len(calls))
 	}
 }
-
-// Compile-time assertion: fakeCronRepo satisfies the Repo interface.
-var _ Repo = (*fakeCronRepo)(nil)
 
 // Reference the format helper to make `fmt` import non-empty when
 // every other test happens to drop it during edits.
