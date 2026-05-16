@@ -41,25 +41,6 @@ func TestNew_WithDepsReturnsNonNil(t *testing.T) {
 	}
 }
 
-// TestGetDaily_ReturnsNotImplemented verifies that the skeleton stub
-// returns a non-nil error (the not-implemented sentinel).
-func TestGetDaily_ReturnsNotImplemented(t *testing.T) {
-	// Arrange
-	svc := daily.New(&stubStore{}, "test-table", time.Now, nil)
-	in := daily.GetInput{PlayerID: "player_1", IsAnonymous: false, Date: "2026-05-16"}
-
-	// Act
-	view, err := svc.GetDaily(context.Background(), in)
-
-	// Assert
-	if err == nil {
-		t.Error("GetDaily returned nil error on stub, want non-nil (not implemented)")
-	}
-	if view != nil {
-		t.Errorf("GetDaily returned non-nil view %+v, want nil on stub", view)
-	}
-}
-
 // TestSubmitDaily_ReturnsNotImplemented verifies that the skeleton stub
 // returns a non-nil error (the not-implemented sentinel).
 func TestSubmitDaily_ReturnsNotImplemented(t *testing.T) {

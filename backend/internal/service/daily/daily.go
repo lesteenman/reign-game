@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"time"
 
@@ -298,14 +299,126 @@ func (s *Service) SubmitPlay(ctx context.Context, playerID, date string, submiss
 	return nil
 }
 
-// errNotImplemented is the placeholder body for the two skeleton
-// methods. Tasks 43b (SubmitDaily) and 43c (GetDaily) replace these.
+// errNotImplemented is the placeholder body for the SubmitDaily skeleton.
+// Task 43f replaces it.
 var errNotImplemented = errors.New("not implemented")
 
-// GetDaily returns the daily view for (playerID, date). Implementation
-// in task 43c.
+// GetDaily returns the daily view for (playerID, date). It orchestrates
+// schedule/play reads, sync-fallback finalize on cold-start, puzzle read,
+// and play-row materialization.
+//
+// Sentinel errors:
+//
+//	ErrInvalidDate          — date string does not match YYYY-MM-DD
+//	ErrOutOfWindow          — date is not today or yesterday (UTC)
+//	ErrScheduleNotFinalized — schedule absent for yesterday (can't retro-finalize)
+//	ErrPoolExhausted        — sync-fallback: no puzzle available (500)
+//
+// All other errors are wrapped DDB I/O failures; callers map them to 500.
 func (s *Service) GetDaily(ctx context.Context, in GetInput) (*DailyView, error) {
-	return nil, errNotImplemented
+	start := time.Now()
+
+	parsed, err := time.ParseInLocation(dailyDateLayout, in.Date, time.UTC)
+	if err != nil {
+		log.Printf("daily service: 400 invalid_date date=%q player=%s anon=%t", in.Date, in.PlayerID, in.IsAnonymous)
+		return nil, ErrInvalidDate
+	}
+
+	now := s.clock().UTC()
+	todayUTC := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	yesterdayUTC := todayUTC.AddDate(0, 0, -1)
+	todayStr := todayUTC.Format(dailyDateLayout)
+	yesterdayStr := yesterdayUTC.Format(dailyDateLayout)
+
+	requested := time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC)
+	if requested.Before(yesterdayUTC) || requested.After(todayUTC) {
+		log.Printf("daily service: 404 out_of_window date=%s player=%s anon=%t", in.Date, in.PlayerID, in.IsAnonymous)
+		return nil, ErrOutOfWindow
+	}
+
+	readStart := time.Now()
+	schedule, existingPlay, sErr, pErr := fetchScheduleAndPlay(ctx, s.store, in.Date, in.PlayerID)
+	readMs := time.Since(readStart).Milliseconds()
+	if sErr != nil {
+		log.Printf("daily service: 500 schedule_read_failed date=%s err=%v", in.Date, sErr)
+		return nil, fmt.Errorf("daily service: reading schedule for %s: %w", in.Date, sErr)
+	}
+
+	var syncMs int64
+	if schedule == nil {
+		// DP-05: sync-fallback engages ONLY for today. Yesterday's schedule
+		// should always exist by the time today is being requested — if it
+		// doesn't, the system is in an unrecoverable state and we return
+		// ErrScheduleNotFinalized rather than attempt to retro-finalize.
+		if in.Date != todayStr {
+			log.Printf("daily service: 404 schedule_absent date=%s player=%s", in.Date, truncatePlayer(in.PlayerID))
+			return nil, ErrScheduleNotFinalized
+		}
+		syncStart := time.Now()
+		finalized, syncErr := SyncFinalizeForToday(ctx, s.store, todayStr, yesterdayStr, s.clock(), s.replenishHook)
+		syncMs = time.Since(syncStart).Milliseconds()
+		if errors.Is(syncErr, ErrPoolExhausted) {
+			log.Printf("daily service: 500 pool_exhausted date=%s player=%s sync_ms=%d", in.Date, truncatePlayer(in.PlayerID), syncMs)
+			return nil, ErrPoolExhausted
+		}
+		if syncErr != nil {
+			log.Printf("daily service: 500 sync_finalize_failed date=%s sync_ms=%d err=%v", in.Date, syncMs, syncErr)
+			return nil, fmt.Errorf("daily service: sync finalize for %s: %w", in.Date, syncErr)
+		}
+		schedule = finalized
+	}
+
+	if pErr != nil {
+		log.Printf("daily service: 500 play_read_failed date=%s player=%s err=%v", in.Date, truncatePlayer(in.PlayerID), pErr)
+		return nil, fmt.Errorf("daily service: reading play for %s/%s: %w", in.PlayerID, in.Date, pErr)
+	}
+
+	size, mode, err := parseSourcePartition(schedule.SourcePartition)
+	if err != nil {
+		log.Printf("daily service: 500 source_partition_malformed date=%s sourcePartition=%q err=%v", in.Date, schedule.SourcePartition, err)
+		return nil, fmt.Errorf("daily service: malformed sourcePartition %q for %s: %w", schedule.SourcePartition, in.Date, err)
+	}
+
+	puzzleStart := time.Now()
+	puzzle, err := s.store.GetPuzzle(ctx, size, mode, schedule.PuzzleID)
+	puzzleMs := time.Since(puzzleStart).Milliseconds()
+	if err != nil {
+		log.Printf("daily service: 500 puzzle_read_failed date=%s puzzleId=%s err=%v", in.Date, schedule.PuzzleID, err)
+		return nil, fmt.Errorf("daily service: reading puzzle %s for %s: %w", schedule.PuzzleID, in.Date, err)
+	}
+	if puzzle == nil {
+		// Schedule pointed at a puzzle that does not exist — broken invariant.
+		// Don't return ErrScheduleNotFinalized; that would let a corrupted
+		// schedule masquerade as "no daily today".
+		log.Printf("daily service: 500 puzzle_missing date=%s puzzleId=%s", in.Date, schedule.PuzzleID)
+		return nil, fmt.Errorf("daily service: puzzle %s referenced by schedule for %s does not exist", schedule.PuzzleID, in.Date)
+	}
+
+	play, playMs, err := materializePlayRow(ctx, s.store, existingPlay, in.PlayerID, in.Date, schedule.PuzzleID, s.clock)
+	if err != nil {
+		log.Printf("daily service: 500 play_materialize_failed date=%s player=%s err=%v", in.Date, truncatePlayer(in.PlayerID), err)
+		return nil, fmt.Errorf("daily service: materializing play row for %s/%s: %w", in.PlayerID, in.Date, err)
+	}
+
+	view := &DailyView{
+		PuzzleID:   schedule.PuzzleID,
+		Grid:       puzzle.GridSize,
+		Regions:    puzzle.RegionMap,
+		AssignedAt: play.AssignedAt,
+		Outcome:    play.Outcome,
+	}
+	if play.Outcome == repository.PlayOutcomeSolved {
+		elapsed := play.ServerElapsedMs
+		submittedAt := play.SubmittedAt
+		view.ServerElapsedMs = &elapsed
+		view.SubmittedAt = &submittedAt
+	}
+
+	totalMs := time.Since(start).Milliseconds()
+	log.Printf("daily service: total_ms=%d read_ms=%d sync_ms=%d puzzle_ms=%d play_ms=%d date=%s player=%s",
+		totalMs, readMs, syncMs, puzzleMs, playMs, in.Date, truncatePlayer(in.PlayerID))
+
+	return view, nil
 }
 
 // SubmitDaily records a solved daily play and returns the elapsed time
