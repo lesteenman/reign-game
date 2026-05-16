@@ -13,25 +13,21 @@ import (
 
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
 
-// mockConfigRepo implements handler.ConfigRepo for testing.
-type mockConfigRepo struct {
-	getConfigFunc    func(ctx context.Context, size int, mode string) (*repository.ConfigRecord, error)
-	putConfigFunc    func(ctx context.Context, config *repository.ConfigRecord) error
-	createConfigFunc func(ctx context.Context, config *repository.ConfigRecord) error
+// stubConfigService implements handler.ConfigService for HTTP-boundary tests.
+type stubConfigService struct {
+	updateErr error
+	createErr error
 }
 
-func (m *mockConfigRepo) GetConfig(ctx context.Context, size int, mode string) (*repository.ConfigRecord, error) {
-	return m.getConfigFunc(ctx, size, mode)
+func (s *stubConfigService) Update(_ context.Context, _ *repository.ConfigRecord) error {
+	return s.updateErr
 }
 
-func (m *mockConfigRepo) PutConfig(ctx context.Context, config *repository.ConfigRecord) error {
-	return m.putConfigFunc(ctx, config)
-}
-
-func (m *mockConfigRepo) CreateConfig(ctx context.Context, config *repository.ConfigRecord) error {
-	return m.createConfigFunc(ctx, config)
+func (s *stubConfigService) Create(_ context.Context, _ *repository.ConfigRecord) error {
+	return s.createErr
 }
 
 // validConfigBody returns a valid config JSON body for tests.
@@ -53,160 +49,86 @@ func validCreateBody() string {
 }
 
 func TestUpdateConfigHandler(t *testing.T) {
-	existingConfig := &repository.ConfigRecord{
-		Size:      7,
-		Mode:      "standard",
-		Threshold: 5,
-		Enabled:   true,
-	}
-
 	tests := []struct {
-		name          string
-		size          string
-		mode          string
-		body          string
-		getConfigFunc func(ctx context.Context, size int, mode string) (*repository.ConfigRecord, error)
-		putConfigFunc func(ctx context.Context, config *repository.ConfigRecord) error
-		wantStatus    int
-		wantError     string
-		wantMessage   string
+		name        string
+		size        string
+		mode        string
+		body        string
+		updateErr   error
+		wantStatus  int
+		wantError   string
+		wantMessage string
 	}{
 		{
-			name: "valid update returns 200",
-			size: "7",
-			mode: "standard",
-			body: validConfigBody(),
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return existingConfig, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
+			name:       "valid update returns 200",
+			size:       "7",
+			mode:       "standard",
+			body:       validConfigBody(),
 			wantStatus: http.StatusOK,
 		},
 		{
-			name: "update with maxAttempts returns 200",
-			size: "7",
-			mode: "standard",
-			body: `{"threshold":10,"enabled":true,"maxAttempts":30}`,
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return existingConfig, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
+			name:       "update with maxAttempts returns 200",
+			size:       "7",
+			mode:       "standard",
+			body:       `{"threshold":10,"enabled":true,"maxAttempts":30}`,
 			wantStatus: http.StatusOK,
 		},
 		{
-			name: "config not found returns 404",
-			size: "7",
-			mode: "standard",
-			body: validConfigBody(),
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return nil, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
+			name:        "config not found returns 404",
+			size:        "7",
+			mode:        "standard",
+			body:        validConfigBody(),
+			updateErr:   configsvc.ErrNotFound,
 			wantStatus:  http.StatusNotFound,
 			wantError:   "not_found",
 			wantMessage: "config not found for 7x7 standard",
 		},
 		{
-			name: "invalid size not a number returns 400",
-			size: "abc",
-			mode: "standard",
-			body: validConfigBody(),
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return existingConfig, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
+			name:       "invalid size not a number returns 400",
+			size:       "abc",
+			mode:       "standard",
+			body:       validConfigBody(),
 			wantStatus: http.StatusBadRequest,
 			wantError:  "invalid_params",
 		},
 		{
-			name: "invalid mode returns 400",
-			size: "7",
-			mode: "triple",
-			body: validConfigBody(),
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return existingConfig, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
+			name:       "invalid mode returns 400",
+			size:       "7",
+			mode:       "triple",
+			body:       validConfigBody(),
 			wantStatus: http.StatusBadRequest,
 			wantError:  "invalid_params",
 		},
 		{
-			name: "threshold less than 1 returns 400",
-			size: "7",
-			mode: "standard",
-			body: `{"threshold":0,"enabled":true}`,
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return existingConfig, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
+			name:       "threshold less than 1 returns 400",
+			size:       "7",
+			mode:       "standard",
+			body:       `{"threshold":0,"enabled":true}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "invalid_params",
 		},
 		{
-			name: "threshold above cap returns 400",
-			size: "7",
-			mode: "standard",
-			body: `{"threshold":51,"enabled":true}`,
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return existingConfig, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
+			name:       "threshold above cap returns 400",
+			size:       "7",
+			mode:       "standard",
+			body:       `{"threshold":51,"enabled":true}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "invalid_params",
 		},
 		{
-			name: "negative maxAttempts returns 400",
-			size: "7",
-			mode: "standard",
-			body: `{"threshold":10,"enabled":true,"maxAttempts":-1}`,
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return existingConfig, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
+			name:       "negative maxAttempts returns 400",
+			size:       "7",
+			mode:       "standard",
+			body:       `{"threshold":10,"enabled":true,"maxAttempts":-1}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "invalid_params",
 		},
 		{
-			name: "DynamoDB GetConfig error returns 500",
-			size: "7",
-			mode: "standard",
-			body: validConfigBody(),
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return nil, errors.New("dynamodb error")
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
-			wantStatus: http.StatusInternalServerError,
-			wantError:  "internal_error",
-		},
-		{
-			name: "DynamoDB PutConfig error returns 500",
-			size: "7",
-			mode: "standard",
-			body: validConfigBody(),
-			getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-				return existingConfig, nil
-			},
-			putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return errors.New("dynamodb error")
-			},
+			name:       "service error returns 500",
+			size:       "7",
+			mode:       "standard",
+			body:       validConfigBody(),
+			updateErr:  errors.New("dynamodb error"),
 			wantStatus: http.StatusInternalServerError,
 			wantError:  "internal_error",
 		},
@@ -215,16 +137,10 @@ func TestUpdateConfigHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			repo := &mockConfigRepo{
-				getConfigFunc: tt.getConfigFunc,
-				putConfigFunc: tt.putConfigFunc,
-				createConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-					return nil
-				},
-			}
+			svc := &stubConfigService{updateErr: tt.updateErr}
 
 			r := chi.NewRouter()
-			r.Put("/admin/config/{size}/{mode}", handler.UpdateConfigHandler(repo))
+			r.Put("/admin/config/{size}/{mode}", handler.UpdateConfigHandler(svc))
 
 			req := httptest.NewRequest(http.MethodPut,
 				"/admin/config/"+tt.size+"/"+tt.mode,
@@ -257,7 +173,6 @@ func TestUpdateConfigHandler(t *testing.T) {
 				return
 			}
 
-			// Verify response contains the config fields.
 			var resp map[string]any
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 				t.Fatalf("failed to parse response: %v", err)
@@ -277,46 +192,36 @@ func TestUpdateConfigHandler(t *testing.T) {
 
 func TestCreateConfigHandler(t *testing.T) {
 	tests := []struct {
-		name             string
-		body             string
-		createConfigFunc func(ctx context.Context, config *repository.ConfigRecord) error
-		wantStatus       int
-		wantError        string
-		wantMessage      string
+		name        string
+		body        string
+		createErr   error
+		wantStatus  int
+		wantError   string
+		wantMessage string
 	}{
 		{
-			name: "valid create returns 201",
-			body: validCreateBody(),
-			createConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
+			name:       "valid create returns 201",
+			body:       validCreateBody(),
 			wantStatus: http.StatusCreated,
 		},
 		{
-			name: "duplicate returns 409",
-			body: validCreateBody(),
-			createConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return &repository.ConfigAlreadyExistsError{Size: 7, Mode: "standard"}
-			},
+			name:        "duplicate returns 409",
+			body:        validCreateBody(),
+			createErr:   configsvc.ErrAlreadyExists,
 			wantStatus:  http.StatusConflict,
 			wantError:   "conflict",
 			wantMessage: "config already exists for 7x7 standard",
 		},
 		{
-			name: "invalid fields returns 400",
-			body: `{"size":7,"mode":"standard","threshold":0,"enabled":true}`,
-			createConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return nil
-			},
+			name:       "invalid fields returns 400",
+			body:       `{"size":7,"mode":"standard","threshold":0,"enabled":true}`,
 			wantStatus: http.StatusBadRequest,
 			wantError:  "invalid_params",
 		},
 		{
-			name: "DynamoDB CreateConfig error returns 500",
-			body: validCreateBody(),
-			createConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-				return errors.New("dynamodb error")
-			},
+			name:       "service error returns 500",
+			body:       validCreateBody(),
+			createErr:  errors.New("dynamodb error"),
 			wantStatus: http.StatusInternalServerError,
 			wantError:  "internal_error",
 		},
@@ -325,18 +230,10 @@ func TestCreateConfigHandler(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			repo := &mockConfigRepo{
-				getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-					return nil, nil
-				},
-				putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-					return nil
-				},
-				createConfigFunc: tt.createConfigFunc,
-			}
+			svc := &stubConfigService{createErr: tt.createErr}
 
 			r := chi.NewRouter()
-			r.Post("/admin/config", handler.CreateConfigHandler(repo))
+			r.Post("/admin/config", handler.CreateConfigHandler(svc))
 
 			req := httptest.NewRequest(http.MethodPost,
 				"/admin/config",
@@ -369,7 +266,6 @@ func TestCreateConfigHandler(t *testing.T) {
 				return
 			}
 
-			// Verify response contains the config fields.
 			var resp map[string]any
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 				t.Fatalf("failed to parse response: %v", err)
@@ -394,19 +290,9 @@ func TestCreateConfigHandler_AuthMatrix(t *testing.T) {
 	for _, tc := range adminAuthMatrix {
 		t.Run(tc.name, func(t *testing.T) {
 			// Arrange
-			repo := &mockConfigRepo{
-				getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-					return nil, nil
-				},
-				putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-					return nil
-				},
-				createConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-					return nil
-				},
-			}
+			svc := &stubConfigService{}
 			router := mountAdminWithAuth(func(r chi.Router) {
-				r.Post("/config", handler.CreateConfigHandler(repo))
+				r.Post("/config", handler.CreateConfigHandler(svc))
 			}, roleForState(tc.state))
 
 			wantCode := tc.wantCode
@@ -433,25 +319,9 @@ func TestUpdateConfigHandler_AuthMatrix(t *testing.T) {
 	for _, tc := range adminAuthMatrix {
 		t.Run(tc.name, func(t *testing.T) {
 			// Arrange
-			existing := &repository.ConfigRecord{
-				Size:      7,
-				Mode:      "standard",
-				Threshold: 5,
-				Enabled:   true,
-			}
-			repo := &mockConfigRepo{
-				getConfigFunc: func(_ context.Context, _ int, _ string) (*repository.ConfigRecord, error) {
-					return existing, nil
-				},
-				putConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-					return nil
-				},
-				createConfigFunc: func(_ context.Context, _ *repository.ConfigRecord) error {
-					return nil
-				},
-			}
+			svc := &stubConfigService{}
 			router := mountAdminWithAuth(func(r chi.Router) {
-				r.Put("/config/{size}/{mode}", handler.UpdateConfigHandler(repo))
+				r.Put("/config/{size}/{mode}", handler.UpdateConfigHandler(svc))
 			}, roleForState(tc.state))
 
 			req := newAdminRequest(tc.state, http.MethodPut, "/api/admin/config/7/standard", strings.NewReader(validConfigBody()))

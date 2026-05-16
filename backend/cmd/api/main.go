@@ -25,6 +25,7 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	"github.com/eriksteenman/reign-game/backend/internal/replenish"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configservice "github.com/eriksteenman/reign-game/backend/internal/service/config"
 	serveservice "github.com/eriksteenman/reign-game/backend/internal/service/serve"
 	statusservice "github.com/eriksteenman/reign-game/backend/internal/service/status"
 	"github.com/eriksteenman/reign-game/backend/internal/worker"
@@ -62,12 +63,13 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 		r.Get("/puzzles/generate", handler.GenerateHandler)
 
 		if repo != nil {
+			cfgSvc := configservice.New(repo)
 			r.Get("/puzzles/next", handler.ServeHandler(serveservice.New(repo, replenishHook)))
 			r.Put("/puzzles/{id}/status", handler.StatusHandler(statusservice.New(repo)))
 
 			// Public modes listing for the landing page. Narrower than
 			// /admin/pool — no thresholds, ready counts, or maxAttempts.
-			r.Get("/config/modes", handler.ConfigModesHandler(repo))
+			r.Get("/config/modes", handler.ConfigModesHandler(cfgSvc))
 
 			// Daily challenge routes. Anonymous-or-user via OptionalAuth:
 			// the handlers branch on auth.UserIDFromContext to scope
@@ -89,8 +91,8 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 				r.Use(auth.RequireAdmin)
 
 				r.Get("/pool", handler.AdminPoolHandler(repo))
-				r.Put("/config/{size}/{mode}", handler.UpdateConfigHandler(repo))
-				r.Post("/config", handler.CreateConfigHandler(repo))
+				r.Put("/config/{size}/{mode}", handler.UpdateConfigHandler(cfgSvc))
+				r.Post("/config", handler.CreateConfigHandler(cfgSvc))
 				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
 				if pub != nil {
 					r.Post("/replenish", handler.ReplenishHandler(repo, repo, pub))

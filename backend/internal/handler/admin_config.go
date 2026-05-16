@@ -13,6 +13,7 @@ import (
 
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
 
 // maxConfigThreshold caps how many ready puzzles a single CONFIG item can
@@ -22,15 +23,16 @@ import (
 // arbitrary SQS load. 50 is generous for real pool sizes.
 const maxConfigThreshold = 50
 
-// ConfigRepo defines the repository methods needed by config handlers.
-type ConfigRepo interface {
-	GetConfig(ctx context.Context, size int, mode string) (*repository.ConfigRecord, error)
-	PutConfig(ctx context.Context, config *repository.ConfigRecord) error
-	CreateConfig(ctx context.Context, config *repository.ConfigRecord) error
+// ConfigService is the application surface the admin-config handlers
+// depend on. Update returns configsvc.ErrNotFound when the target row
+// is absent; Create returns configsvc.ErrAlreadyExists on duplicates.
+type ConfigService interface {
+	Update(ctx context.Context, record *repository.ConfigRecord) error
+	Create(ctx context.Context, record *repository.ConfigRecord) error
 }
 
 // UpdateConfigHandler handles PUT /admin/config/{size}/{mode}.
-func UpdateConfigHandler(repo ConfigRepo) http.HandlerFunc {
+func UpdateConfigHandler(svc ConfigService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -61,21 +63,14 @@ func UpdateConfigHandler(repo ConfigRepo) http.HandlerFunc {
 			return
 		}
 
-		existing, err := repo.GetConfig(r.Context(), size, mode)
-		if err != nil {
-			log.Printf("GetConfig error: %v", err)
-			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to check existing config")
-			return
-		}
-		if existing == nil {
-			httperr.WriteError(w, http.StatusNotFound, "not_found",
-				fmt.Sprintf("config not found for %dx%d %s", size, size, mode))
-			return
-		}
-
 		record := req.toRecord(size, mode)
-		if err := repo.PutConfig(r.Context(), record); err != nil {
-			log.Printf("PutConfig error: %v", err)
+		if err := svc.Update(r.Context(), record); err != nil {
+			if errors.Is(err, configsvc.ErrNotFound) {
+				httperr.WriteError(w, http.StatusNotFound, "not_found",
+					fmt.Sprintf("config not found for %dx%d %s", size, size, mode))
+				return
+			}
+			log.Printf("admin config: Update failed for %d#%s: %v", size, mode, err)
 			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to update config")
 			return
 		}
@@ -87,7 +82,7 @@ func UpdateConfigHandler(repo ConfigRepo) http.HandlerFunc {
 }
 
 // CreateConfigHandler handles POST /admin/config.
-func CreateConfigHandler(repo ConfigRepo) http.HandlerFunc {
+func CreateConfigHandler(svc ConfigService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -110,14 +105,13 @@ func CreateConfigHandler(repo ConfigRepo) http.HandlerFunc {
 		}
 
 		record := req.toRecord()
-		if err := repo.CreateConfig(r.Context(), record); err != nil {
-			var alreadyExists *repository.ConfigAlreadyExistsError
-			if errors.As(err, &alreadyExists) {
+		if err := svc.Create(r.Context(), record); err != nil {
+			if errors.Is(err, configsvc.ErrAlreadyExists) {
 				httperr.WriteError(w, http.StatusConflict, "conflict",
 					fmt.Sprintf("config already exists for %dx%d %s", req.Size, req.Size, req.Mode))
 				return
 			}
-			log.Printf("CreateConfig error: %v", err)
+			log.Printf("admin config: Create failed for %d#%s: %v", req.Size, req.Mode, err)
 			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "failed to create config")
 			return
 		}

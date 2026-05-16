@@ -12,25 +12,24 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
-// fakeConfigModesRepo is a minimal stub covering GetAllConfigs for the
-// ConfigModesHandler tests. The landing page's config/modes endpoint
-// does not need CountReady, so no other calls are stubbed.
-type fakeConfigModesRepo struct {
+// stubConfigModesService is a minimal stub covering ListEnabledModes
+// for the ConfigModesHandler HTTP-boundary tests.
+type stubConfigModesService struct {
 	configs []repository.ConfigRecord
 	err     error
 }
 
-func (f *fakeConfigModesRepo) GetAllConfigs(ctx context.Context) ([]repository.ConfigRecord, error) {
-	return f.configs, f.err
+func (s *stubConfigModesService) ListEnabledModes(_ context.Context) ([]repository.ConfigRecord, error) {
+	return s.configs, s.err
 }
 
 func TestConfigModesHandler_EnabledOnly(t *testing.T) {
-	// Arrange
-	repo := &fakeConfigModesRepo{
+	// Arrange — service already filters disabled out; stub returns the
+	// filtered list as the service would.
+	svc := &stubConfigModesService{
 		configs: []repository.ConfigRecord{
 			{Size: 5, Mode: "standard", Enabled: true, Threshold: 3},
 			{Size: 7, Mode: "standard", Enabled: true, Threshold: 3},
-			{Size: 9, Mode: "standard", Enabled: false, Threshold: 3},
 			{Size: 9, Mode: "double", Enabled: true, Threshold: 3},
 		},
 	}
@@ -38,7 +37,7 @@ func TestConfigModesHandler_EnabledOnly(t *testing.T) {
 	rec := httptest.NewRecorder()
 
 	// Act
-	ConfigModesHandler(repo)(rec, req)
+	ConfigModesHandler(svc)(rec, req)
 
 	// Assert
 	if rec.Code != http.StatusOK {
@@ -65,12 +64,12 @@ func TestConfigModesHandler_EnabledOnly(t *testing.T) {
 
 func TestConfigModesHandler_EmptyList(t *testing.T) {
 	// Arrange
-	repo := &fakeConfigModesRepo{configs: nil}
+	svc := &stubConfigModesService{configs: nil}
 	req := httptest.NewRequest(http.MethodGet, "/api/config/modes", http.NoBody)
 	rec := httptest.NewRecorder()
 
 	// Act
-	ConfigModesHandler(repo)(rec, req)
+	ConfigModesHandler(svc)(rec, req)
 
 	// Assert
 	if rec.Code != http.StatusOK {
@@ -91,41 +90,14 @@ func TestConfigModesHandler_EmptyList(t *testing.T) {
 	}
 }
 
-func TestConfigModesHandler_AllDisabled(t *testing.T) {
+func TestConfigModesHandler_ServiceError(t *testing.T) {
 	// Arrange
-	repo := &fakeConfigModesRepo{
-		configs: []repository.ConfigRecord{
-			{Size: 9, Mode: "standard", Enabled: false, Threshold: 3},
-			{Size: 9, Mode: "double", Enabled: false, Threshold: 3},
-		},
-	}
+	svc := &stubConfigModesService{err: errors.New("boom")}
 	req := httptest.NewRequest(http.MethodGet, "/api/config/modes", http.NoBody)
 	rec := httptest.NewRecorder()
 
 	// Act
-	ConfigModesHandler(repo)(rec, req)
-
-	// Assert
-	if rec.Code != http.StatusOK {
-		t.Fatalf("status=%d", rec.Code)
-	}
-	var resp ConfigModesResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if len(resp.Modes) != 0 {
-		t.Errorf("expected zero modes when all disabled, got %+v", resp.Modes)
-	}
-}
-
-func TestConfigModesHandler_RepoError(t *testing.T) {
-	// Arrange
-	repo := &fakeConfigModesRepo{err: errors.New("boom")}
-	req := httptest.NewRequest(http.MethodGet, "/api/config/modes", http.NoBody)
-	rec := httptest.NewRecorder()
-
-	// Act
-	ConfigModesHandler(repo)(rec, req)
+	ConfigModesHandler(svc)(rec, req)
 
 	// Assert
 	if rec.Code != http.StatusInternalServerError {
