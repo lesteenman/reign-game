@@ -9,17 +9,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
 
 // stubConfigModesService is a minimal stub covering ListEnabledModes
 // for the ConfigModesHandler HTTP-boundary tests.
 type stubConfigModesService struct {
-	configs []repository.ConfigRecord
+	configs []configsvc.ConfigView
 	err     error
 }
 
-func (s *stubConfigModesService) ListEnabledModes(_ context.Context) ([]repository.ConfigRecord, error) {
+func (s *stubConfigModesService) ListEnabledModes(_ context.Context) ([]configsvc.ConfigView, error) {
 	return s.configs, s.err
 }
 
@@ -27,7 +27,7 @@ func TestConfigModesHandler_EnabledOnly(t *testing.T) {
 	// Arrange — service already filters disabled out; stub returns the
 	// filtered list as the service would.
 	svc := &stubConfigModesService{
-		configs: []repository.ConfigRecord{
+		configs: []configsvc.ConfigView{
 			{Size: 5, Mode: "standard", Enabled: true, Threshold: 3},
 			{Size: 7, Mode: "standard", Enabled: true, Threshold: 3},
 			{Size: 9, Mode: "double", Enabled: true, Threshold: 3},

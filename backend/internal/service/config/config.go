@@ -28,6 +28,35 @@ type Store interface {
 	GetAllConfigs(ctx context.Context) ([]repository.ConfigRecord, error)
 }
 
+// ConfigView is the read-side projection of a (size, mode) configuration
+// returned by ListEnabledModes.
+type ConfigView struct {
+	Size        int
+	Mode        string
+	Threshold   int
+	Enabled     bool
+	MaxAttempts int
+}
+
+// CreateInput is the plain-field input to Service.Create.
+type CreateInput struct {
+	Size        int
+	Mode        string
+	Threshold   int
+	Enabled     bool
+	MaxAttempts int
+}
+
+// UpdateInput is the plain-field input to Service.Update. Identity
+// (size, mode) is supplied separately from the URL path.
+type UpdateInput struct {
+	Size        int
+	Mode        string
+	Threshold   int
+	Enabled     bool
+	MaxAttempts int
+}
+
 // Service handles config reads, creates, and updates.
 type Service struct {
 	store Store
@@ -41,13 +70,20 @@ func New(store Store) *Service {
 // Update writes the given config record. Returns ErrNotFound when the
 // addressed (size, mode) pair has no existing row — the admin "edit"
 // flow requires an existing target.
-func (s *Service) Update(ctx context.Context, record *repository.ConfigRecord) error {
-	existing, err := s.store.GetConfig(ctx, record.Size, record.Mode)
+func (s *Service) Update(ctx context.Context, in UpdateInput) error {
+	existing, err := s.store.GetConfig(ctx, in.Size, in.Mode)
 	if err != nil {
 		return fmt.Errorf("checking existing config: %w", err)
 	}
 	if existing == nil {
 		return ErrNotFound
+	}
+	record := &repository.ConfigRecord{
+		Size:        in.Size,
+		Mode:        in.Mode,
+		Threshold:   in.Threshold,
+		Enabled:     in.Enabled,
+		MaxAttempts: in.MaxAttempts,
 	}
 	if err := s.store.PutConfig(ctx, record); err != nil {
 		return fmt.Errorf("writing config: %w", err)
@@ -57,7 +93,14 @@ func (s *Service) Update(ctx context.Context, record *repository.ConfigRecord) e
 
 // Create writes a new config record. Returns ErrAlreadyExists when
 // the addressed (size, mode) pair is already present.
-func (s *Service) Create(ctx context.Context, record *repository.ConfigRecord) error {
+func (s *Service) Create(ctx context.Context, in CreateInput) error {
+	record := &repository.ConfigRecord{
+		Size:        in.Size,
+		Mode:        in.Mode,
+		Threshold:   in.Threshold,
+		Enabled:     in.Enabled,
+		MaxAttempts: in.MaxAttempts,
+	}
 	if err := s.store.CreateConfig(ctx, record); err != nil {
 		var alreadyExists *repository.ConfigAlreadyExistsError
 		if errors.As(err, &alreadyExists) {
@@ -70,15 +113,21 @@ func (s *Service) Create(ctx context.Context, record *repository.ConfigRecord) e
 
 // ListEnabledModes returns every enabled config, ordered as returned
 // by the store (the public modes endpoint forwards this verbatim).
-func (s *Service) ListEnabledModes(ctx context.Context) ([]repository.ConfigRecord, error) {
+func (s *Service) ListEnabledModes(ctx context.Context) ([]ConfigView, error) {
 	all, err := s.store.GetAllConfigs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("listing configs: %w", err)
 	}
-	enabled := make([]repository.ConfigRecord, 0, len(all))
+	enabled := make([]ConfigView, 0, len(all))
 	for _, c := range all {
 		if c.Enabled {
-			enabled = append(enabled, c)
+			enabled = append(enabled, ConfigView{
+				Size:        c.Size,
+				Mode:        c.Mode,
+				Threshold:   c.Threshold,
+				Enabled:     c.Enabled,
+				MaxAttempts: c.MaxAttempts,
+			})
 		}
 	}
 	return enabled, nil

@@ -7,14 +7,14 @@ import (
 	"net/http"
 
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
 
 // ConfigModesService is the application surface ConfigModesHandler
 // needs — narrower than ConfigService so a public endpoint can't
 // accidentally call a write method via the same interface.
 type ConfigModesService interface {
-	ListEnabledModes(ctx context.Context) ([]repository.ConfigRecord, error)
+	ListEnabledModes(ctx context.Context) ([]configsvc.ConfigView, error)
 }
 
 // ModeEntry is one {size, mode} pair in the public modes listing.

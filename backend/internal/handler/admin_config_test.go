@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
 	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
 
@@ -22,11 +21,11 @@ type stubConfigService struct {
 	createErr error
 }
 
-func (s *stubConfigService) Update(_ context.Context, _ *repository.ConfigRecord) error {
+func (s *stubConfigService) Update(_ context.Context, _ configsvc.UpdateInput) error {
 	return s.updateErr
 }
 
-func (s *stubConfigService) Create(_ context.Context, _ *repository.ConfigRecord) error {
+func (s *stubConfigService) Create(_ context.Context, _ configsvc.CreateInput) error {
 	return s.createErr
 }
 

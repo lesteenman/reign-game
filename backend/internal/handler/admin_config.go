@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
 	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
 
@@ -26,8 +25,8 @@ const maxConfigThreshold = 50
 // depend on. Update returns configsvc.ErrNotFound when the target row
 // is absent; Create returns configsvc.ErrAlreadyExists on duplicates.
 type ConfigService interface {
-	Update(ctx context.Context, record *repository.ConfigRecord) error
-	Create(ctx context.Context, record *repository.ConfigRecord) error
+	Update(ctx context.Context, in configsvc.UpdateInput) error
+	Create(ctx context.Context, in configsvc.CreateInput) error
 }
 
 // UpdateConfigHandler handles PUT /admin/config/{size}/{mode}.
@@ -62,8 +61,8 @@ func UpdateConfigHandler(svc ConfigService) http.HandlerFunc {
 			return
 		}
 
-		record := req.toRecord(size, mode)
-		if err := svc.Update(r.Context(), record); err != nil {
+		in := req.toUpdateInput(size, mode)
+		if err := svc.Update(r.Context(), in); err != nil {
 			if errors.Is(err, configsvc.ErrNotFound) {
 				httperr.WriteError(w, http.StatusNotFound, "not_found",
 					fmt.Sprintf("config not found for %dx%d %s", size, size, mode))
@@ -74,7 +73,7 @@ func UpdateConfigHandler(svc ConfigService) http.HandlerFunc {
 			return
 		}
 
-		if err := json.NewEncoder(w).Encode(configViewFrom(record)); err != nil {
+		if err := json.NewEncoder(w).Encode(configViewFrom(configsvc.ConfigView(in))); err != nil {
 			log.Printf("write response error: %v", err)
 		}
 	}
@@ -103,8 +102,8 @@ func CreateConfigHandler(svc ConfigService) http.HandlerFunc {
 			return
 		}
 
-		record := req.toRecord()
-		if err := svc.Create(r.Context(), record); err != nil {
+		in := req.toCreateInput()
+		if err := svc.Create(r.Context(), in); err != nil {
 			if errors.Is(err, configsvc.ErrAlreadyExists) {
 				httperr.WriteError(w, http.StatusConflict, "conflict",
 					fmt.Sprintf("config already exists for %dx%d %s", req.Size, req.Size, req.Mode))
@@ -116,7 +115,7 @@ func CreateConfigHandler(svc ConfigService) http.HandlerFunc {
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		if err := json.NewEncoder(w).Encode(configViewFrom(record)); err != nil {
+		if err := json.NewEncoder(w).Encode(configViewFrom(configsvc.ConfigView(in))); err != nil {
 			log.Printf("write response error: %v", err)
 		}
 	}

@@ -42,17 +42,20 @@ func TestUpdate_HappyPathForwardsToPut(t *testing.T) {
 		createConfig: func(_ context.Context, _ *repository.ConfigRecord) error { return nil },
 	}
 	svc := config.New(store)
-	updated := &repository.ConfigRecord{Size: 7, Mode: "standard", Threshold: 10, Enabled: true}
+	in := config.UpdateInput{Size: 7, Mode: "standard", Threshold: 10, Enabled: true}
 
 	// Act
-	err := svc.Update(context.Background(), updated)
+	err := svc.Update(context.Background(), in)
 
 	// Assert
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if store.lastPutRecord != updated {
-		t.Errorf("PutConfig record = %+v, want pointer-equal to updated", store.lastPutRecord)
+	if store.lastPutRecord == nil {
+		t.Fatal("PutConfig was not called")
+	}
+	if store.lastPutRecord.Size != 7 || store.lastPutRecord.Mode != "standard" || store.lastPutRecord.Threshold != 10 {
+		t.Errorf("PutConfig record = %+v, want {Size:7 Mode:standard Threshold:10 Enabled:true}", store.lastPutRecord)
 	}
 }
 
@@ -66,7 +69,7 @@ func TestUpdate_ReturnsNotFoundWhenMissing(t *testing.T) {
 	svc := config.New(store)
 
 	// Act
-	err := svc.Update(context.Background(), &repository.ConfigRecord{Size: 7, Mode: "standard"})
+	err := svc.Update(context.Background(), config.UpdateInput{Size: 7, Mode: "standard"})
 
 	// Assert
 	if !errors.Is(err, config.ErrNotFound) {
@@ -88,7 +91,7 @@ func TestUpdate_WrapsGetConfigError(t *testing.T) {
 	svc := config.New(store)
 
 	// Act
-	err := svc.Update(context.Background(), &repository.ConfigRecord{Size: 7, Mode: "standard"})
+	err := svc.Update(context.Background(), config.UpdateInput{Size: 7, Mode: "standard"})
 
 	// Assert
 	if !errors.Is(err, sentinel) {
@@ -108,7 +111,7 @@ func TestUpdate_WrapsPutConfigError(t *testing.T) {
 	svc := config.New(store)
 
 	// Act
-	err := svc.Update(context.Background(), &repository.ConfigRecord{Size: 7, Mode: "standard"})
+	err := svc.Update(context.Background(), config.UpdateInput{Size: 7, Mode: "standard"})
 
 	// Assert
 	if !errors.Is(err, sentinel) {
@@ -124,17 +127,20 @@ func TestCreate_HappyPathForwards(t *testing.T) {
 		createConfig: func(_ context.Context, _ *repository.ConfigRecord) error { return nil },
 	}
 	svc := config.New(store)
-	rec := &repository.ConfigRecord{Size: 7, Mode: "standard", Threshold: 5, Enabled: true}
+	in := config.CreateInput{Size: 7, Mode: "standard", Threshold: 5, Enabled: true}
 
 	// Act
-	err := svc.Create(context.Background(), rec)
+	err := svc.Create(context.Background(), in)
 
 	// Assert
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if store.lastCreateRec != rec {
-		t.Errorf("CreateConfig record = %+v, want pointer-equal to input", store.lastCreateRec)
+	if store.lastCreateRec == nil {
+		t.Fatal("CreateConfig was not called")
+	}
+	if store.lastCreateRec.Size != 7 || store.lastCreateRec.Mode != "standard" || store.lastCreateRec.Threshold != 5 {
+		t.Errorf("CreateConfig record = %+v, want {Size:7 Mode:standard Threshold:5 Enabled:true}", store.lastCreateRec)
 	}
 }
 
@@ -150,7 +156,7 @@ func TestCreate_TranslatesAlreadyExists(t *testing.T) {
 	svc := config.New(store)
 
 	// Act
-	err := svc.Create(context.Background(), &repository.ConfigRecord{Size: 7, Mode: "standard"})
+	err := svc.Create(context.Background(), config.CreateInput{Size: 7, Mode: "standard"})
 
 	// Assert
 	if !errors.Is(err, config.ErrAlreadyExists) {
@@ -169,7 +175,7 @@ func TestCreate_WrapsOtherErrors(t *testing.T) {
 	svc := config.New(store)
 
 	// Act
-	err := svc.Create(context.Background(), &repository.ConfigRecord{Size: 7, Mode: "standard"})
+	err := svc.Create(context.Background(), config.CreateInput{Size: 7, Mode: "standard"})
 
 	// Assert
 	if !errors.Is(err, sentinel) {

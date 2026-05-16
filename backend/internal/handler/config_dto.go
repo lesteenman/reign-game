@@ -5,14 +5,14 @@ import (
 	"net/http"
 
 	"github.com/eriksteenman/reign-game/backend/internal/mode"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
 
 // The handler layer speaks explicit DTOs for CONFIG items.
-// repository.ConfigRecord is the domain shape stored in DynamoDB; these
+// configsvc.ConfigView is the service-level read projection; these
 // DTOs shape the HTTP request and response surfaces. Mappers at the
 // boundary translate between them so no HTTP concern leaks into the
-// repo and no DynamoDB tag leaks into the API.
+// service and no DynamoDB tag leaks into the API.
 
 // ConfigBody is the subset of a CONFIG row that carries configuration
 // rather than identity (size, mode). Shared by every response and
@@ -48,31 +48,29 @@ type ConfigUpdateRequest struct {
 	ConfigBody
 }
 
-// configBodyFrom builds a ConfigBody from a repository.ConfigRecord.
+// configBodyFrom builds a ConfigBody from a configsvc.ConfigView.
 // Used by any response that nests config (e.g., ComboStatus).
-func configBodyFrom(rec *repository.ConfigRecord) ConfigBody {
+func configBodyFrom(v configsvc.ConfigView) ConfigBody {
 	return ConfigBody{
-		Threshold:   rec.Threshold,
-		Enabled:     rec.Enabled,
-		MaxAttempts: rec.MaxAttempts,
+		Threshold:   v.Threshold,
+		Enabled:     v.Enabled,
+		MaxAttempts: v.MaxAttempts,
 	}
 }
 
-// configViewFrom builds a ConfigView from a repository.ConfigRecord.
-// The view carries size and mode as top-level fields because the
-// repository stores them as DynamoDB keys, not record attributes.
-func configViewFrom(rec *repository.ConfigRecord) ConfigView {
+// configViewFrom builds a handler ConfigView from a configsvc.ConfigView.
+func configViewFrom(v configsvc.ConfigView) ConfigView {
 	return ConfigView{
-		Size:       rec.Size,
-		Mode:       rec.Mode,
-		ConfigBody: configBodyFrom(rec),
+		Size:       v.Size,
+		Mode:       v.Mode,
+		ConfigBody: configBodyFrom(v),
 	}
 }
 
-// toRecord maps a ConfigCreateRequest to a repository.ConfigRecord.
+// toCreateInput maps a ConfigCreateRequest to a configsvc.CreateInput.
 // Size and mode come from the request body for this endpoint.
-func (req *ConfigCreateRequest) toRecord() *repository.ConfigRecord {
-	return &repository.ConfigRecord{
+func (req *ConfigCreateRequest) toCreateInput() configsvc.CreateInput {
+	return configsvc.CreateInput{
 		Size:        req.Size,
 		Mode:        req.Mode,
 		Threshold:   req.Threshold,
@@ -81,10 +79,10 @@ func (req *ConfigCreateRequest) toRecord() *repository.ConfigRecord {
 	}
 }
 
-// toRecord maps a ConfigUpdateRequest to a repository.ConfigRecord
+// toUpdateInput maps a ConfigUpdateRequest to a configsvc.UpdateInput
 // using size and mode supplied by the URL path.
-func (req *ConfigUpdateRequest) toRecord(size int, modeName string) *repository.ConfigRecord {
-	return &repository.ConfigRecord{
+func (req *ConfigUpdateRequest) toUpdateInput(size int, modeName string) configsvc.UpdateInput {
+	return configsvc.UpdateInput{
 		Size:        size,
 		Mode:        modeName,
 		Threshold:   req.Threshold,

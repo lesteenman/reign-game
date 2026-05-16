@@ -49,9 +49,13 @@ func AdminPoolHandler(svc PoolService) http.HandlerFunc {
 		combos := make([]ComboStatus, 0, len(entries))
 		for _, e := range entries {
 			combos = append(combos, ComboStatus{
-				Size:       e.Config.Size,
-				Mode:       e.Config.Mode,
-				Config:     configBodyFrom(&e.Config),
+				Size: e.Config.Size,
+				Mode: e.Config.Mode,
+				Config: ConfigBody{
+					Threshold:   e.Config.Threshold,
+					Enabled:     e.Config.Enabled,
+					MaxAttempts: e.Config.MaxAttempts,
+				},
 				ReadyCount: e.ReadyCount,
 			})
 		}
