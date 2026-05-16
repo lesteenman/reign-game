@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/eriksteenman/reign-game/backend/internal/daily"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	"github.com/eriksteenman/reign-game/backend/internal/service/daily"
 )
 
 type fakeService struct {

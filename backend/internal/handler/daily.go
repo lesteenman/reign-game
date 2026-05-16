@@ -14,8 +14,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/eriksteenman/reign-game/backend/internal/auth"
-	"github.com/eriksteenman/reign-game/backend/internal/daily"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	"github.com/eriksteenman/reign-game/backend/internal/service/daily"
 )
 
 // poolExhaustedMessage is the canonical 500 body phrase emitted when

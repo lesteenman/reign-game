@@ -30,10 +30,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/eriksteenman/reign-game/backend/internal/awsclient"
-	"github.com/eriksteenman/reign-game/backend/internal/daily"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	"github.com/eriksteenman/reign-game/backend/internal/replenish"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	"github.com/eriksteenman/reign-game/backend/internal/service/daily"
 )
 
 // EventBridgeScheduledEvent is the slice of an EventBridge scheduled

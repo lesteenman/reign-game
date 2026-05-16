@@ -23,7 +23,7 @@ import (
 //	ErrInvalidDate          -> 400
 //	ErrOutOfWindow          -> 404
 //	ErrScheduleNotFinalized -> 404 (yesterday's schedule absent)
-//	ErrPoolExhausted        -> 500 ("pool exhausted")
+//	ErrPoolExhausted        -> 500 ("pool exhausted") — declared in sync.go
 //	ErrPlayNotStarted       -> 400 ("play not started")
 //	ErrAlreadySolved        -> 409
 //	ErrInvalidSolution      -> 400
@@ -35,11 +35,11 @@ var (
 	ErrInvalidDate          = errors.New("invalid date")
 	ErrOutOfWindow          = errors.New("out of window")
 	ErrScheduleNotFinalized = errors.New("schedule not finalized")
-	ErrPoolExhausted        = errors.New("daily pool exhausted")
-	ErrPlayNotStarted       = errors.New("play not started")
-	ErrAlreadySolved        = errors.New("already solved")
-	ErrInvalidSolution      = errors.New("invalid solution")
-	ErrNegativeClockSkew    = errors.New("negative clock skew")
+	// ErrPoolExhausted is declared in sync.go (more descriptive message).
+	ErrPlayNotStarted    = errors.New("play not started")
+	ErrAlreadySolved     = errors.New("already solved")
+	ErrInvalidSolution   = errors.New("invalid solution")
+	ErrNegativeClockSkew = errors.New("negative clock skew")
 )
 
 // Store is the persistence surface used by Service. Subset of
