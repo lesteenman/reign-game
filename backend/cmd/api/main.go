@@ -26,6 +26,7 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/replenish"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 	configservice "github.com/eriksteenman/reign-game/backend/internal/service/config"
+	poolservice "github.com/eriksteenman/reign-game/backend/internal/service/pool"
 	serveservice "github.com/eriksteenman/reign-game/backend/internal/service/serve"
 	statusservice "github.com/eriksteenman/reign-game/backend/internal/service/status"
 	"github.com/eriksteenman/reign-game/backend/internal/worker"
@@ -90,7 +91,7 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 				r.Use(auth.RequireAuth(auth.NewClerkSessionVerifier()))
 				r.Use(auth.RequireAdmin)
 
-				r.Get("/pool", handler.AdminPoolHandler(repo))
+				r.Get("/pool", handler.AdminPoolHandler(poolservice.New(repo)))
 				r.Put("/config/{size}/{mode}", handler.UpdateConfigHandler(cfgSvc))
 				r.Post("/config", handler.CreateConfigHandler(cfgSvc))
 				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
