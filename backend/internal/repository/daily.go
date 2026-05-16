@@ -16,7 +16,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -67,9 +66,9 @@ var (
 )
 
 // Schedule counter field constants — the only legal values for the
-// `field` argument to IncrementScheduleCounter. Defined as constants
-// so callers can't fat-finger an arbitrary attribute name and drift
-// the schema.
+// counter field updated via the daily service's WriteTransaction legs.
+// Defined as constants so callers can't fat-finger an arbitrary
+// attribute name and drift the schema.
 const (
 	ScheduleCounterStarted = "started"
 	ScheduleCounterSolved  = "solved"
@@ -84,8 +83,8 @@ const (
 )
 
 // ScheduleRecord is the schedule row shape (PK=DAILY#YYYY-MM-DD).
-// One row per UTC day. Counters are atomically updated via
-// IncrementScheduleCounter; assignedAt is the cron / sync-fallback's
+// One row per UTC day. Counters are atomically updated via the daily
+// service's WriteTransaction; assignedAt is the cron / sync-fallback's
 // stamp and is never overwritten.
 type ScheduleRecord struct {
 	// Date is the UTC date (YYYY-MM-DD), embedded in the PK.
@@ -98,14 +97,14 @@ type ScheduleRecord struct {
 	// from (e.g. "9#standard"). Future-proofs combo rotation without
 	// locking it in.
 	SourcePartition string `dynamodbav:"sourcePartition"`
-	// Counters tracks per-day plays. Updated atomically by
-	// IncrementScheduleCounter. Powers recycle decisions and telemetry.
+	// Counters tracks per-day plays. Updated atomically by the daily
+	// service. Powers recycle decisions and telemetry.
 	Counters ScheduleCounters `dynamodbav:"counters"`
 }
 
 // ScheduleCounters is the {started, solved} pair embedded in the
-// schedule row. Both default to 0; updated atomically via UpdateItem
-// `ADD counters.<field> :one`.
+// schedule row. Both default to 0; updated atomically by the daily
+// service via UpdateItem `ADD counters.<field> :one`.
 type ScheduleCounters struct {
 	Started int64 `dynamodbav:"started" json:"started"`
 	Solved  int64 `dynamodbav:"solved" json:"solved"`
@@ -301,91 +300,6 @@ func (r *PuzzleRepository) PutCandidateIfAbsent(ctx context.Context, puzzleID, s
 	return nil
 }
 
-// DeleteCandidate clears the singleton slot. Used by the T=0 confirm
-// path after the schedule row is finalized. Unconditional —
-// idempotent against duplicate calls because a missing row deletes
-// cleanly.
-func (r *PuzzleRepository) DeleteCandidate(ctx context.Context) error {
-	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: aws.String(r.tableName),
-		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: DailyCandidatePK},
-			"SK": &types.AttributeValueMemberS{Value: DailySingletonSK},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("deleting daily candidate: %w", err)
-	}
-	return nil
-}
-
-// FinalizeSchedule writes today's schedule row. Conditional on the
-// row not yet existing — duplicate T=0 cron firings AND sync-fallback
-// races resolve via ErrScheduleAlreadyFinalized.
-// Counters are initialized to zero. Caller is responsible for the
-// PuzzleRecord lastDailyDate write (separate transactional concern;
-// crons compose the two).
-func (r *PuzzleRepository) FinalizeSchedule(ctx context.Context, date, puzzleID, sourcePartition string) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	item := map[string]types.AttributeValue{
-		"PK":              &types.AttributeValueMemberS{Value: BuildDailySchedulePK(date)},
-		"SK":              &types.AttributeValueMemberS{Value: DailySingletonSK},
-		"puzzleId":        &types.AttributeValueMemberS{Value: puzzleID},
-		"assignedAt":      &types.AttributeValueMemberS{Value: now},
-		"sourcePartition": &types.AttributeValueMemberS{Value: sourcePartition},
-		"counters": &types.AttributeValueMemberM{
-			Value: map[string]types.AttributeValue{
-				"started": &types.AttributeValueMemberN{Value: "0"},
-				"solved":  &types.AttributeValueMemberN{Value: "0"},
-			},
-		},
-	}
-
-	_, err := r.client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName:           aws.String(r.tableName),
-		Item:                item,
-		ConditionExpression: aws.String("attribute_not_exists(PK)"),
-	})
-	if err != nil {
-		var ccfe *types.ConditionalCheckFailedException
-		if errors.As(err, &ccfe) {
-			return ErrScheduleAlreadyFinalized
-		}
-		return fmt.Errorf("finalizing daily schedule for %s: %w", date, err)
-	}
-	return nil
-}
-
-// IncrementScheduleCounter atomically increments counters.{started|solved}
-// on the schedule row by `delta`. `field` must be one of
-// ScheduleCounterStarted / ScheduleCounterSolved — any other value is
-// rejected to keep the schema honest.
-func (r *PuzzleRepository) IncrementScheduleCounter(ctx context.Context, date, field string, delta int64) error {
-	if field != ScheduleCounterStarted && field != ScheduleCounterSolved {
-		return fmt.Errorf("invalid schedule counter field %q", field)
-	}
-
-	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName: aws.String(r.tableName),
-		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: BuildDailySchedulePK(date)},
-			"SK": &types.AttributeValueMemberS{Value: DailySingletonSK},
-		},
-		UpdateExpression: aws.String("ADD #counters.#field :delta"),
-		ExpressionAttributeNames: map[string]string{
-			"#counters": "counters",
-			"#field":    field,
-		},
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":delta": &types.AttributeValueMemberN{Value: strconv.FormatInt(delta, 10)},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("incrementing schedule counter %s.%s: %w", date, field, err)
-	}
-	return nil
-}
-
 // ListApprovedPool returns approved puzzles eligible for daily
 // assignment, scoped to (size, mode). Approval gate is
 // `verdictSummary.up >= 1 AND verdictSummary.down == 0`.
@@ -437,50 +351,6 @@ func (r *PuzzleRepository) ListApprovedPool(ctx context.Context, size int, mode 
 		records = append(records, record)
 	}
 	return records, nil
-}
-
-// MarkPuzzleAsDailyOn sets PuzzleRecord.lastDailyDate to `date`. Idempotent
-// against same-date repeats and refuses to overwrite a newer date —
-// guards against late-arriving cron writes / retries clobbering a
-// fresher value. Returns ErrPuzzleNotFound when the underlying
-// puzzle row is absent so a stale puzzleID does not silently upsert.
-func (r *PuzzleRepository) MarkPuzzleAsDailyOn(ctx context.Context, size int, mode, puzzleID, date string) error {
-	pk := buildPK(size, mode)
-
-	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName: aws.String(r.tableName),
-		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: pk},
-			"SK": &types.AttributeValueMemberS{Value: puzzleID},
-		},
-		UpdateExpression:    aws.String("SET lastDailyDate = :date"),
-		ConditionExpression: aws.String("attribute_exists(PK) AND (attribute_not_exists(lastDailyDate) OR lastDailyDate <= :date)"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":date": &types.AttributeValueMemberS{Value: date},
-		},
-	})
-	if err != nil {
-		var ccfe *types.ConditionalCheckFailedException
-		if errors.As(err, &ccfe) {
-			// Two reasons: (a) row missing → 404; (b) existing
-			// lastDailyDate is newer than ours → silent no-op (idempotent
-			// from the caller's view).
-			//
-			// We cannot distinguish without an extra GetItem, so we
-			// optimistically check existence: if it exists, treat as
-			// silent no-op (newer-date case); else surface ErrPuzzleNotFound.
-			existing, getErr := r.GetPuzzle(ctx, size, mode, puzzleID)
-			if getErr != nil {
-				return fmt.Errorf("verifying puzzle existence after conditional fail %s/%s: %w", pk, puzzleID, getErr)
-			}
-			if existing == nil {
-				return ErrPuzzleNotFound
-			}
-			return nil
-		}
-		return fmt.Errorf("marking puzzle %s/%s as daily on %s: %w", pk, puzzleID, date, err)
-	}
-	return nil
 }
 
 // GetPlay reads the per-player play row for (playerId, date). Returns

@@ -4,30 +4,30 @@ HTTP layer for the Reign backend. Every handler is a chi-compatible `http.Handle
 
 - decodes inputs (path params via `chi.URLParam`, query via `r.URL.Query()`, body via `json.NewDecoder`),
 - validates with package-local helpers (`validateSize`, `validateMode`, `validateConfigBody`, …),
-- delegates to a narrow interface that's satisfied by `*repository.PuzzleRepository` in production and a fake in tests,
+- delegates to a narrow interface that's satisfied by the relevant `internal/service/*` package in production (e.g. `serveservice.Service`, `verdictservice.Service`) and a stub in tests,
 - writes JSON responses with `application/json` Content-Type via either `json.NewEncoder(w).Encode(...)` or `httperr.WriteError(w, status, code, message)`.
 
 ## Data flow
 
 - **In** — JSON over HTTP (API Gateway → Lambda → chi via `aws-lambda-go-api-proxy` in production; chi directly in local dev).
-- **Calls** — Repository interfaces (one per concern) and, for the SQS-touching paths, `queue.Publisher` via the `MessagePublisher` interface. The reactive-replenish goroutine is injected as a `func(size int, mode string)` closure constructed in `cmd/api/main.go::buildReplenishHook` from `replenish.NewAsyncHook`.
+- **Calls** — Service interfaces (one per concern; see `internal/service/`) and, for the SQS-touching paths, `queue.Publisher` via the `MessagePublisher` interface. The reactive-replenish goroutine is injected as a `func(size int, mode string)` closure constructed in `cmd/api/main.go::buildReplenishHook` from `replenish.NewAsyncHook`.
 - **Out** — JSON responses. Errors go through `httperr.WriteError`, which emits `{"error":"<code>","message":"<message>"}`.
 
 ## Auth integration
 
 - Admin routes live behind a chi group whose `Use` chain is `auth.RequireAuth(NewClerkSessionVerifier()) → auth.RequireAdmin`. The chain is wired once in `cmd/api/main.go::newRouter`.
 - The daily endpoints use `auth.OptionalAuth` and branch on `auth.UserFromContextOK` (signed-in users) vs `X-Device-Id` header (anonymous).
-- `VerdictHandler` re-asserts `auth.UserFromContext(r.Context()) != nil` defensively — see VH-06 in the source for the rationale.
+- `VerdictHandler` re-asserts `auth.UserFromContext(r.Context()) != nil` defensively (rater ID must come from the session, never the request body).
 
 ## Key files
 
 | File | Responsibility |
 |---|---|
 | `health.go` | `GET /api/health`. |
-| `generate.go` | `GET /api/puzzles/generate` (debug; inline generation). Also hosts `parseSizeMode` and the local `newUUIDv4` (duplicated in `cmd/api/main.go` — see FINDINGS). |
+| `generate.go` | `GET /api/puzzles/generate` (debug; inline generation). Also hosts `parseSizeMode` and `newUUIDv4` (consolidated in `internal/uuid/`). |
 | `serve.go` | `GET /api/puzzles/next`. Fetches a ready puzzle, marks served, fires reactive replenish. |
 | `status.go` | `PUT /api/puzzles/{id}/status` — accept `solved` / `skipped`. |
-| `daily.go` | `GET /api/daily/{date}` + `POST /api/daily/{date}/result`. 650-line file; flagged in FINDINGS for splitting. |
+| `daily.go` | `GET /api/daily/{date}` + `POST /api/daily/{date}/result`. ~230 lines after Track 3 refactor moved orchestration into `internal/service/daily/`. Parses HTTP inputs and translates `daily.Err*` sentinels to status codes. |
 | `verdict.go` | `PUT /api/admin/puzzles/{id}/verdict`. |
 | `admin_pool.go` | `GET /api/admin/pool` — config + per-combo ready counts with per-step timing. |
 | `admin_config.go` | `PUT /api/admin/config/{size}/{mode}` + `POST /api/admin/config`. |
@@ -39,11 +39,7 @@ HTTP layer for the Reign backend. Every handler is a chi-compatible `http.Handle
 
 ## Layer rules specific to this directory
 
-The documented architecture (`backend/CLAUDE.md`) says handlers should call **services** and never the repository / queue / AWS SDK directly. In practice:
-
-- There is no `internal/service/` directory. Handlers import `internal/repository` directly through narrow interfaces (`PuzzleFetcher`, `ConfigRepo`, `DailyRepo`, `VerdictRepo`, `ConfigAndCountRepo`, `ConfigReader`, `PoolCounter`, `MessagePublisher`, …).
-- `daily.go` and `replenish.go` delegate orchestration to `internal/daily` and `internal/replenish` respectively — those packages play the role a service layer would. They take the repository as an interface dependency.
-- New handlers should keep using narrow per-handler interfaces so tests don't depend on the full `*PuzzleRepository`.
+The documented architecture (`backend/CLAUDE.md`) says handlers should call **services** and never the repository / queue / AWS SDK directly. After the Track 3 refactor, `internal/service/` exists (containing `config`, `daily`, `pool`, `replenish`, `serve`, `status`, `verdict` packages) and the verdict, daily, serve, status, and pool handlers now depend on service interfaces. A handful of handlers (`config_modes`, `serve`, `replenish`, `config_dto`, `admin_config`, `worker`) still import repository for shared DTOs — that drift is tracked as a follow-up (43-48 sweep).
 
 ## Common patterns
 
