@@ -25,9 +25,9 @@ func (f *fakeStore) MarkServed(ctx context.Context, pk, sk string) error {
 
 func TestNextPuzzle_ReturnsPuzzleAndFiresReplenishOnHappyPath(t *testing.T) {
 	// Arrange
-	want := &repository.PuzzleRecord{ID: "p1", GridSize: 9, Mode: "standard"}
+	record := &repository.PuzzleRecord{ID: "p1", GridSize: 9, Mode: "standard"}
 	store := &fakeStore{
-		nextReady:  func(_ context.Context, _ int, _ string) (*repository.PuzzleRecord, error) { return want, nil },
+		nextReady:  func(_ context.Context, _ int, _ string) (*repository.PuzzleRecord, error) { return record, nil },
 		markServed: func(_ context.Context, _, _ string) error { return nil },
 	}
 	var (
@@ -48,8 +48,11 @@ func TestNextPuzzle_ReturnsPuzzleAndFiresReplenishOnHappyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != want {
-		t.Errorf("got puzzle = %+v, want %+v", got, want)
+	if got == nil {
+		t.Fatal("got nil, want a PuzzleView")
+	}
+	if got.ID != "p1" || got.GridSize != 9 || got.Mode != "standard" {
+		t.Errorf("got puzzle = %+v, want ID=p1 GridSize=9 Mode=standard", got)
 	}
 	mu.Lock()
 	defer mu.Unlock()
@@ -171,7 +174,10 @@ func TestNextPuzzle_NilReplenishIsHandledGracefully(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if got != puzzle {
-		t.Errorf("got = %+v, want puzzle", got)
+	if got == nil {
+		t.Fatal("got nil, want a PuzzleView")
+	}
+	if got.ID != "p1" || got.GridSize != 9 || got.Mode != "standard" {
+		t.Errorf("got = %+v, want ID=p1 GridSize=9 Mode=standard", got)
 	}
 }

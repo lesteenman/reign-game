@@ -9,29 +9,27 @@ import (
 	"testing"
 
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	servesvc "github.com/eriksteenman/reign-game/backend/internal/service/serve"
 )
 
 // stubServeService implements handler.ServeService for testing the
 // HTTP boundary. The service-layer behaviors (claim race, replenish
 // hook firing) are covered in internal/service/serve.
 type stubServeService struct {
-	puzzle *repository.PuzzleRecord
+	puzzle *servesvc.PuzzleView
 	err    error
 }
 
-func (s *stubServeService) NextPuzzle(_ context.Context, _ int, _ string) (*repository.PuzzleRecord, error) {
+func (s *stubServeService) NextPuzzle(_ context.Context, _ int, _ string) (*servesvc.PuzzleView, error) {
 	return s.puzzle, s.err
 }
 
 func TestServeHandler(t *testing.T) {
-	readyPuzzle := &repository.PuzzleRecord{
+	readyPuzzle := &servesvc.PuzzleView{
 		GridSize:             7,
 		Mode:                 "standard",
 		ID:                   "puzzle-uuid-123",
-		Status:               "ready",
 		RegionMap:            [][]int{{0, 0, 1}, {0, 1, 1}, {2, 2, 1}},
-		Solution:             [][]bool{{true, false, false}, {false, false, true}, {false, true, false}},
 		Difficulty:           2,
 		MaxTier:              2,
 		TierCounts:           []int{0, 3, 1, 0, 0},
@@ -43,7 +41,7 @@ func TestServeHandler(t *testing.T) {
 	tests := []struct {
 		name       string
 		query      string
-		puzzle     *repository.PuzzleRecord
+		puzzle     *servesvc.PuzzleView
 		svcErr     error
 		wantStatus int
 		wantError  string

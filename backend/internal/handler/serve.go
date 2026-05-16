@@ -9,7 +9,7 @@ import (
 
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/mode"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	servesvc "github.com/eriksteenman/reign-game/backend/internal/service/serve"
 )
 
 // ServeService is the application surface the serve handler depends
@@ -20,7 +20,7 @@ import (
 // the pool is empty or another replica won the claim race. The handler
 // maps that to 404 either way.
 type ServeService interface {
-	NextPuzzle(ctx context.Context, size int, mode string) (*repository.PuzzleRecord, error)
+	NextPuzzle(ctx context.Context, size int, mode string) (*servesvc.PuzzleView, error)
 }
 
 // serveMetadata is the metadata object included in the serve response.

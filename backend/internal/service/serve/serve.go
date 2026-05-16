@@ -11,6 +11,23 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
+// PuzzleView is the plain-field projection of a puzzle returned by
+// NextPuzzle. Defined here so the HTTP handler can talk to the service
+// without importing internal/repository.
+type PuzzleView struct {
+	ID                   string
+	Mode                 string
+	GridSize             int
+	RegionMap            [][]int
+	Difficulty           int
+	MaxTier              int
+	TierCounts           []int
+	TraceLen             int
+	GenerationDurationMs int64
+	CreatedAt            string
+	Seed                 int64
+}
+
 // PuzzleStore is the persistence surface used by Service.
 type PuzzleStore interface {
 	NextReady(ctx context.Context, size int, mode string) (*repository.PuzzleRecord, error)
@@ -42,7 +59,7 @@ func New(store PuzzleStore, replenish ReplenishNotifier) *Service {
 // won the NextReady→MarkServed race. The handler maps both to 404
 // "no puzzles available" — the player retries either way, so collapsing
 // them at the service boundary keeps the HTTP layer simple.
-func (s *Service) NextPuzzle(ctx context.Context, size int, mode string) (*repository.PuzzleRecord, error) {
+func (s *Service) NextPuzzle(ctx context.Context, size int, mode string) (*PuzzleView, error) {
 	puzzle, err := s.store.NextReady(ctx, size, mode)
 	if err != nil {
 		return nil, fmt.Errorf("fetching next ready puzzle: %w", err)
@@ -63,5 +80,17 @@ func (s *Service) NextPuzzle(ctx context.Context, size int, mode string) (*repos
 		s.replenish(size, mode)
 	}
 
-	return puzzle, nil
+	return &PuzzleView{
+		ID:                   puzzle.ID,
+		Mode:                 puzzle.Mode,
+		GridSize:             puzzle.GridSize,
+		RegionMap:            puzzle.RegionMap,
+		Difficulty:           puzzle.Difficulty,
+		MaxTier:              puzzle.MaxTier,
+		TierCounts:           puzzle.TierCounts,
+		TraceLen:             puzzle.TraceLen,
+		GenerationDurationMs: puzzle.GenerationDurationMs,
+		CreatedAt:            puzzle.CreatedAt,
+		Seed:                 puzzle.Seed,
+	}, nil
 }
