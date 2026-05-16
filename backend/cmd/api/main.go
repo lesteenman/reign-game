@@ -29,6 +29,7 @@ import (
 	poolservice "github.com/eriksteenman/reign-game/backend/internal/service/pool"
 	serveservice "github.com/eriksteenman/reign-game/backend/internal/service/serve"
 	statusservice "github.com/eriksteenman/reign-game/backend/internal/service/status"
+	verdictservice "github.com/eriksteenman/reign-game/backend/internal/service/verdict"
 	"github.com/eriksteenman/reign-game/backend/internal/worker"
 )
 
@@ -94,7 +95,7 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 				r.Get("/pool", handler.AdminPoolHandler(poolservice.New(repo)))
 				r.Put("/config/{size}/{mode}", handler.UpdateConfigHandler(cfgSvc))
 				r.Post("/config", handler.CreateConfigHandler(cfgSvc))
-				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
+				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(verdictservice.New(repo)))
 				if pub != nil {
 					r.Post("/replenish", handler.ReplenishHandler(repo, repo, pub))
 				}

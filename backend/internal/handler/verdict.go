@@ -12,16 +12,14 @@ import (
 
 	"github.com/eriksteenman/reign-game/backend/internal/auth"
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	verdictsvc "github.com/eriksteenman/reign-game/backend/internal/service/verdict"
 )
 
-// VerdictRepo is the minimal repository surface VerdictHandler depends on.
-// Defined as an interface so tests substitute a fake without spinning up
-// a real DynamoDB client.
-type VerdictRepo interface {
-	GetPuzzle(ctx context.Context, size int, mode, puzzleID string) (*repository.PuzzleRecord, error)
-	PutVerdict(ctx context.Context, v *repository.VerdictRecord) error
-	RecomputeVerdictSummary(ctx context.Context, size int, mode, puzzleID string) (repository.VerdictSummary, error)
+// VerdictService is the application surface VerdictHandler depends on.
+// Defined as an interface so tests substitute a stub without spinning up
+// a real DynamoDB-backed service.
+type VerdictService interface {
+	Submit(ctx context.Context, in *verdictsvc.SubmitInput) (verdictsvc.Summary, error)
 }
 
 // verdictRequest is the decoded JSON body for PUT verdict (VH-03).
@@ -34,11 +32,20 @@ type verdictRequest struct {
 	ClientVersion string `json:"clientVersion"`
 }
 
+// verdictSummaryDTO is the JSON shape of the recomputed summary returned
+// to the frontend. Kept as plain fields so the handler doesn't need to
+// import repository.VerdictSummary.
+type verdictSummaryDTO struct {
+	Up            int    `json:"up"`
+	Down          int    `json:"down"`
+	LastUpdatedAt string `json:"lastUpdatedAt"`
+}
+
 // verdictResponse is the success envelope returned to the frontend (VH-08).
 // Carries the recomputed summary so the UI can render the new totals
 // without a follow-up GET.
 type verdictResponse struct {
-	Summary repository.VerdictSummary `json:"summary"`
+	Summary verdictSummaryDTO `json:"summary"`
 }
 
 // VerdictHandler creates the HTTP handler for
@@ -48,7 +55,7 @@ type verdictResponse struct {
 // RequireAdmin run once at the group level (VH-01). The handler trusts
 // the middleware to have already proven the caller is signed in and
 // holds the admin role; it does not re-check.
-func VerdictHandler(repo VerdictRepo) http.HandlerFunc {
+func VerdictHandler(svc VerdictService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
@@ -122,25 +129,14 @@ func VerdictHandler(repo VerdictRepo) http.HandlerFunc {
 		}
 		raterID := user.ID
 
-		// VH-05: 404 if the puzzle does not exist before writing a
-		// verdict row.
-		puzzle, err := repo.GetPuzzle(r.Context(), size, mode, puzzleID)
-		if err != nil {
-			log.Printf("verdict: get puzzle failed puzzle=%s err=%v", puzzleID, err)
-			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to look up puzzle.")
-			return
-		}
-		if puzzle == nil {
-			httperr.WriteError(w, http.StatusNotFound, "not_found", "puzzle not found")
-			return
-		}
-
 		// VH-07: raterRole is hard-coded "admin" this phase. When a
 		// public-rater role lands, this becomes one line:
 		//     raterRole := getClerkRole(user)
 		const raterRole = "admin"
 
-		v := &repository.VerdictRecord{
+		// VH-05 + VH-10: delegate to the service. ErrPuzzleNotFound
+		// translates to 404; any other error is a 500.
+		summary, err := svc.Submit(r.Context(), &verdictsvc.SubmitInput{
 			GridSize:      size,
 			Mode:          mode,
 			PuzzleID:      puzzleID,
@@ -150,37 +146,28 @@ func VerdictHandler(repo VerdictRepo) http.HandlerFunc {
 			PlayTimeMs:    req.PlayTimeMs,
 			Outcome:       req.Outcome,
 			ClientVersion: req.ClientVersion,
-		}
-
-		// VH-10: PutVerdict is unconditional; SK collision overwrites.
-		if err := repo.PutVerdict(r.Context(), v); err != nil {
-			log.Printf("verdict: put failed puzzle=%s rater=%s err=%v", puzzleID, raterID, err)
+		})
+		if err != nil {
+			if errors.Is(err, verdictsvc.ErrPuzzleNotFound) {
+				httperr.WriteError(w, http.StatusNotFound, "not_found", "puzzle not found")
+				return
+			}
+			log.Printf("verdict: submit failed puzzle=%s rater=%s err=%v", puzzleID, raterID, err)
 			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to record verdict.")
 			return
-		}
-
-		// VH-08 + VH-09: recompute the cached summary projection.
-		// Recompute failure does NOT fail the request — the row family
-		// is canonical, the summary is a cached projection that re-
-		// converges on the next vote.
-		summary, recomputeErr := repo.RecomputeVerdictSummary(r.Context(), size, mode, puzzleID)
-		if recomputeErr != nil {
-			// ConditionalCheckFailed (puzzle deleted between PutVerdict
-			// and RecomputeVerdictSummary) is a benign race — the row
-			// family still has our verdict; the projection will be
-			// reconciled when Phase 9's analysis agent runs.
-			if errors.Is(recomputeErr, repository.ErrPuzzleNotFound) {
-				log.Printf("WARN: verdict: summary recompute hit ErrPuzzleNotFound (race) puzzle=%s rater=%s", puzzleID, raterID)
-			} else {
-				log.Printf("WARN: verdict: summary recompute failed puzzle=%s rater=%s err=%v", puzzleID, raterID, recomputeErr)
-			}
 		}
 
 		// VH-11: log success with rater + value, never the session token.
 		log.Printf("verdict: write puzzle=%s rater=%s value=%s outcome=%s", puzzleID, raterID, req.Value, req.Outcome)
 
 		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(verdictResponse{Summary: summary}); err != nil {
+		if err := json.NewEncoder(w).Encode(verdictResponse{
+			Summary: verdictSummaryDTO{
+				Up:            summary.Up,
+				Down:          summary.Down,
+				LastUpdatedAt: summary.LastUpdatedAt,
+			},
+		}); err != nil {
 			log.Printf("verdict: write response failed puzzle=%s err=%v", puzzleID, err)
 		}
 	}

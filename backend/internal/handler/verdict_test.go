@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,81 +12,42 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	verdictsvc "github.com/eriksteenman/reign-game/backend/internal/service/verdict"
 )
 
-// fakeVerdictRepo is a hand-rolled in-memory VerdictRepo. It honors the
-// row-family + summary-projection contract described in repository.md
-// (VR-01..VR-10) so the handler tests exercise the same semantics the
-// real DynamoDB repository implements.
-type fakeVerdictRepo struct {
-	puzzles  map[string]*repository.PuzzleRecord            // key = "size#mode#id"
-	verdicts map[string]map[string]repository.VerdictRecord // outer = "size#mode#id", inner = SK ("role#raterId")
+// stubVerdictService is a hand-rolled handler.VerdictService used to keep
+// the handler tests focused on HTTP-level concerns (param validation, body
+// validation, auth-context plumbing, error-code translation, response
+// envelope). Stateful semantics like last-write-wins idempotency and
+// multi-rater aggregation are exercised at the repository layer
+// (puzzle_test.go) and the orchestration layer (verdict_test.go in
+// internal/service/verdict).
+type stubVerdictService struct {
+	// summary is the success result returned by Submit when submitErr is nil.
+	summary verdictsvc.Summary
+	// submitErr is the error returned by Submit (nil on the happy path).
+	submitErr error
 
-	// Failure injection knobs for VH-09 + error-propagation tests.
-	getPuzzleErr  error
-	putVerdictErr error
-	recomputeErr  error
+	// Observation.
+	submitCalled bool
+	lastInput    verdictsvc.SubmitInput
 }
 
-func newFakeVerdictRepo() *fakeVerdictRepo {
-	return &fakeVerdictRepo{
-		puzzles:  map[string]*repository.PuzzleRecord{},
-		verdicts: map[string]map[string]repository.VerdictRecord{},
-	}
-}
-
-func (f *fakeVerdictRepo) seed(size int, mode, id string) {
-	key := fmt.Sprintf("%d#%s#%s", size, mode, id)
-	f.puzzles[key] = &repository.PuzzleRecord{GridSize: size, Mode: mode, ID: id, Status: "ready"}
-}
-
-func (f *fakeVerdictRepo) GetPuzzle(_ context.Context, size int, mode, puzzleID string) (*repository.PuzzleRecord, error) {
-	if f.getPuzzleErr != nil {
-		return nil, f.getPuzzleErr
-	}
-	return f.puzzles[fmt.Sprintf("%d#%s#%s", size, mode, puzzleID)], nil
-}
-
-func (f *fakeVerdictRepo) PutVerdict(_ context.Context, v *repository.VerdictRecord) error {
-	if f.putVerdictErr != nil {
-		return f.putVerdictErr
-	}
-	puzKey := fmt.Sprintf("%d#%s#%s", v.GridSize, v.Mode, v.PuzzleID)
-	if f.verdicts[puzKey] == nil {
-		f.verdicts[puzKey] = map[string]repository.VerdictRecord{}
-	}
-	sk := fmt.Sprintf("%s#%s", v.RaterRole, v.RaterID)
-	f.verdicts[puzKey][sk] = *v
-	return nil
-}
-
-func (f *fakeVerdictRepo) RecomputeVerdictSummary(_ context.Context, size int, mode, puzzleID string) (repository.VerdictSummary, error) {
-	if f.recomputeErr != nil {
-		return repository.VerdictSummary{}, f.recomputeErr
-	}
-	puzKey := fmt.Sprintf("%d#%s#%s", size, mode, puzzleID)
-	summary := repository.VerdictSummary{LastUpdatedAt: "2026-04-26T12:00:00Z"}
-	// Iterate keys and index back into the map rather than `for _, v
-	// := range f.verdicts[puzKey]` so the 144-byte VerdictRecord is
-	// not copied per iteration (gocritic rangeValCopy).
-	rows := f.verdicts[puzKey]
-	for k := range rows {
-		switch rows[k].Value {
-		case "up":
-			summary.Up++
-		case "down":
-			summary.Down++
-		}
-	}
-	return summary, nil
+func (s *stubVerdictService) Submit(_ context.Context, in *verdictsvc.SubmitInput) (verdictsvc.Summary, error) {
+	s.submitCalled = true
+	s.lastInput = *in
+	return s.summary, s.submitErr
 }
 
 // verdictResponseJSON mirrors the handler's response envelope for
 // decoding in tests. Kept in this file (not the production code)
 // because tests are the only consumer of the JSON shape.
 type verdictResponseJSON struct {
-	Summary repository.VerdictSummary `json:"summary"`
+	Summary struct {
+		Up            int    `json:"up"`
+		Down          int    `json:"down"`
+		LastUpdatedAt string `json:"lastUpdatedAt"`
+	} `json:"summary"`
 }
 
 // validVerdictBody returns a body that passes all VH-03 checks.
@@ -102,10 +62,11 @@ func TestVerdictHandler_AuthMatrix(t *testing.T) {
 	for _, tc := range adminAuthMatrix {
 		t.Run(tc.name, func(t *testing.T) {
 			// Arrange
-			repo := newFakeVerdictRepo()
-			repo.seed(7, "standard", "abc")
+			svc := &stubVerdictService{
+				summary: verdictsvc.Summary{Up: 1, Down: 0, LastUpdatedAt: "2026-05-16T10:00:00Z"},
+			}
 			router := mountAdminWithAuth(func(r chi.Router) {
-				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
+				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(svc))
 			}, roleForState(tc.state))
 
 			req := newAdminRequest(tc.state, http.MethodPut, "/api/admin/puzzles/abc/verdict?size=7&mode=standard", validVerdictBody())
@@ -148,10 +109,9 @@ func TestVerdictHandler_Validation(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			repo := newFakeVerdictRepo()
-			repo.seed(7, "standard", "abc")
+			svc := &stubVerdictService{}
 			router := mountAdminWithAuth(func(r chi.Router) {
-				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
+				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(svc))
 			}, "admin")
 
 			req := newAdminRequest(fakeAuthAdminRole, http.MethodPut, tt.path, bytes.NewBufferString(tt.body))
@@ -165,18 +125,19 @@ func TestVerdictHandler_Validation(t *testing.T) {
 			if rec.Code != tt.want {
 				t.Errorf("status = %d, want %d; body = %s", rec.Code, tt.want, rec.Body.String())
 			}
+			if svc.submitCalled {
+				t.Error("Submit must NOT be called when the request is rejected during validation")
+			}
 		})
 	}
 }
 
-// VH-05: 404 when the puzzle row does not exist. The verdict row family
-// stays empty after the failed call.
+// VH-05: ErrPuzzleNotFound from the service translates to 404.
 func TestVerdictHandler_PuzzleNotFound(t *testing.T) {
 	// Arrange
-	repo := newFakeVerdictRepo()
-	// no seed — GetPuzzle returns (nil, nil)
+	svc := &stubVerdictService{submitErr: verdictsvc.ErrPuzzleNotFound}
 	router := mountAdminWithAuth(func(r chi.Router) {
-		r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
+		r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(svc))
 	}, "admin")
 
 	req := newAdminRequest(fakeAuthAdminRole, http.MethodPut, "/api/admin/puzzles/missing/verdict?size=7&mode=standard", validVerdictBody())
@@ -190,129 +151,18 @@ func TestVerdictHandler_PuzzleNotFound(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404; body = %s", rec.Code, rec.Body.String())
 	}
-	if got := repo.verdicts; len(got) != 0 {
-		t.Errorf("expected no verdict rows on 404 path; got %d puzzles with verdicts", len(got))
-	}
-}
-
-// VH-08 + VH-10: same admin submitting up → down → up ends with one row
-// holding value="up" and a summary of {up: 1, down: 0}.
-func TestVerdictHandler_Idempotency(t *testing.T) {
-	// Arrange
-	repo := newFakeVerdictRepo()
-	repo.seed(7, "standard", "abc")
-	router := mountAdminWithAuth(func(r chi.Router) {
-		r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
-	}, "admin")
-
-	send := func(value string) *httptest.ResponseRecorder {
-		body := fmt.Sprintf(`{"value":%q,"playTimeMs":1,"outcome":"solved","clientVersion":"0.1.0"}`, value)
-		req := newAdminRequest(fakeAuthAdminRole, http.MethodPut, "/api/admin/puzzles/abc/verdict?size=7&mode=standard", bytes.NewBufferString(body))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
-		return rec
-	}
-
-	// Act
-	for _, v := range []string{"up", "down", "up"} {
-		rec := send(v)
-		if rec.Code != http.StatusOK {
-			t.Fatalf("submit %q failed: %d %s", v, rec.Code, rec.Body.String())
-		}
-	}
-
-	// Assert: exactly one row, last value wins.
-	puzKey := fmt.Sprintf("%d#%s#%s", 7, "standard", "abc")
-	rows := repo.verdicts[puzKey]
-	if len(rows) != 1 {
-		t.Fatalf("expected exactly 1 verdict row after up/down/up; got %d", len(rows))
-	}
-	for _, row := range rows {
-		if row.Value != "up" {
-			t.Errorf("last-write value = %q, want \"up\"", row.Value)
-		}
-	}
-
-	// Final response carries the recomputed summary {up:1, down:0}.
-	rec := send("up")
-	var resp verdictResponseJSON
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode final response: %v", err)
-	}
-	if resp.Summary.Up != 1 || resp.Summary.Down != 0 {
-		t.Errorf("final summary = %+v, want Up=1 Down=0", resp.Summary)
-	}
-}
-
-// VH-08: two distinct admins voting → two rows, summary reflects both.
-func TestVerdictHandler_MultiRater(t *testing.T) {
-	// Arrange — two routers, each mounted with a different test admin
-	// identity. Same fake repo across both so the verdict rows
-	// accumulate.
-	repo := newFakeVerdictRepo()
-	repo.seed(7, "standard", "abc")
-
-	send := func(role, value string) *httptest.ResponseRecorder {
-		// roleForState only knows two real states; we want two
-		// distinct admin user IDs, so we override the verifier path
-		// directly via mountAdminWithAuth's role argument and hand-
-		// craft the cookie state.
-		router := mountAdminWithAuth(func(r chi.Router) {
-			r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
-		}, role)
-		body := fmt.Sprintf(`{"value":%q,"playTimeMs":1,"outcome":"solved","clientVersion":"0.1.0"}`, value)
-		req := newAdminRequest(fakeAuthAdminRole, http.MethodPut, "/api/admin/puzzles/abc/verdict?size=7&mode=standard", bytes.NewBufferString(body))
-		req.Header.Set("Content-Type", "application/json")
-		rec := httptest.NewRecorder()
-		router.ServeHTTP(rec, req)
-		return rec
-	}
-
-	// fakeAuthVerifier produces a different sub for "admin" vs "user";
-	// to get two distinct admin identities we need a stronger fake. As
-	// a workaround for this test, write directly via the repo (bypassing
-	// the handler) for the second rater — the handler-level multi-rater
-	// path is exercised in the repository-level multi-rater test
-	// (puzzle_test.go TestRecomputeVerdictSummary "mixed ups and downs").
-	rec := send("admin", "up")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("first admin verdict failed: %d %s", rec.Code, rec.Body.String())
-	}
-	// Second rater via repo seam.
-	_ = repo.PutVerdict(context.Background(), &repository.VerdictRecord{
-		GridSize: 7, Mode: "standard", PuzzleID: "abc",
-		RaterRole: "admin", RaterID: "user_other_admin",
-		Value: "down", PlayTimeMs: 1, Outcome: "solved", ClientVersion: "0.1.0",
-	})
-
-	// Act: third admin submission triggers a recompute that should
-	// reflect both rows. Use the same admin as #1 — should not double-
-	// count (idempotency).
-	rec = send("admin", "up")
-	if rec.Code != http.StatusOK {
-		t.Fatalf("re-submit failed: %d %s", rec.Code, rec.Body.String())
-	}
-	var resp verdictResponseJSON
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-
-	// Assert
-	if resp.Summary.Up != 1 || resp.Summary.Down != 1 {
-		t.Errorf("summary = %+v, want Up=1 Down=1", resp.Summary)
-	}
 }
 
 // VH-06: a malicious caller adding a `raterId` field to the JSON body
-// must NOT influence the persisted row's SK. The persisted raterId
-// always comes from the Clerk session.
+// must NOT influence the RaterID that the handler passes to the service.
+// The handler must derive RaterID exclusively from the Clerk session.
 func TestVerdictHandler_RaterIDFromSessionNotBody(t *testing.T) {
 	// Arrange
-	repo := newFakeVerdictRepo()
-	repo.seed(7, "standard", "abc")
+	svc := &stubVerdictService{
+		summary: verdictsvc.Summary{Up: 1, Down: 0, LastUpdatedAt: "2026-05-16T10:00:00Z"},
+	}
 	router := mountAdminWithAuth(func(r chi.Router) {
-		r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
+		r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(svc))
 	}, "admin")
 
 	body := `{"value":"up","playTimeMs":1,"outcome":"solved","clientVersion":"0.1.0","raterId":"imposter"}`
@@ -327,31 +177,28 @@ func TestVerdictHandler_RaterIDFromSessionNotBody(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
 	}
-	puzKey := fmt.Sprintf("%d#%s#%s", 7, "standard", "abc")
-	rows := repo.verdicts[puzKey]
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
+	if !svc.submitCalled {
+		t.Fatal("Submit was not invoked")
 	}
-	for sk, row := range rows {
-		if row.RaterID == "imposter" {
-			t.Error("RaterID was sourced from the request body — VH-06 violated")
-		}
-		if sk != "admin#"+testAdminSub {
-			t.Errorf("SK = %q, want %q", sk, "admin#"+testAdminSub)
-		}
+	if svc.lastInput.RaterID == "imposter" {
+		t.Error("RaterID was sourced from the request body — VH-06 violated")
+	}
+	if svc.lastInput.RaterID != testAdminSub {
+		t.Errorf("RaterID = %q, want %q (from Clerk session)", svc.lastInput.RaterID, testAdminSub)
+	}
+	if svc.lastInput.RaterRole != "admin" {
+		t.Errorf("RaterRole = %q, want %q", svc.lastInput.RaterRole, "admin")
 	}
 }
 
-// VH-09: PutVerdict succeeds, RecomputeVerdictSummary fails. Handler
-// still returns 200 — the verdict row is canonical, the summary is a
-// cached projection that re-converges on the next vote.
-func TestVerdictHandler_RecomputeFailureStill200(t *testing.T) {
+// VH-09: when the service returns success with an empty summary
+// (best-effort recompute swallowed a transient failure or benign race),
+// the handler still returns 200. The user-visible action succeeded.
+func TestVerdictHandler_EmptySummaryStill200(t *testing.T) {
 	// Arrange
-	repo := newFakeVerdictRepo()
-	repo.seed(7, "standard", "abc")
-	repo.recomputeErr = errors.New("dynamodb transient error")
+	svc := &stubVerdictService{summary: verdictsvc.Summary{}}
 	router := mountAdminWithAuth(func(r chi.Router) {
-		r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
+		r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(svc))
 	}, "admin")
 
 	req := newAdminRequest(fakeAuthAdminRole, http.MethodPut, "/api/admin/puzzles/abc/verdict?size=7&mode=standard", validVerdictBody())
@@ -363,25 +210,17 @@ func TestVerdictHandler_RecomputeFailureStill200(t *testing.T) {
 
 	// Assert
 	if rec.Code != http.StatusOK {
-		t.Errorf("status = %d, want 200 (recompute failure must not fail the request); body = %s", rec.Code, rec.Body.String())
-	}
-	// And the verdict row IS in the repo — the user-visible action
-	// succeeded.
-	puzKey := fmt.Sprintf("%d#%s#%s", 7, "standard", "abc")
-	if len(repo.verdicts[puzKey]) != 1 {
-		t.Errorf("expected verdict row to be present despite recompute failure; got %d", len(repo.verdicts[puzKey]))
+		t.Errorf("status = %d, want 200 (empty summary must not fail the request); body = %s", rec.Code, rec.Body.String())
 	}
 }
 
-// PutVerdict failure → 500. The user-visible action did NOT succeed; we
-// surface that.
-func TestVerdictHandler_PutFailure500(t *testing.T) {
+// A generic Submit error (e.g. PutVerdict failure wrapped by the service)
+// translates to 500.
+func TestVerdictHandler_ServiceErrorReturns500(t *testing.T) {
 	// Arrange
-	repo := newFakeVerdictRepo()
-	repo.seed(7, "standard", "abc")
-	repo.putVerdictErr = errors.New("dynamodb write failed")
+	svc := &stubVerdictService{submitErr: errors.New("dynamodb write failed")}
 	router := mountAdminWithAuth(func(r chi.Router) {
-		r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
+		r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(svc))
 	}, "admin")
 
 	req := newAdminRequest(fakeAuthAdminRole, http.MethodPut, "/api/admin/puzzles/abc/verdict?size=7&mode=standard", validVerdictBody())
@@ -397,15 +236,16 @@ func TestVerdictHandler_PutFailure500(t *testing.T) {
 	}
 }
 
-// VH-04 cross-flow: a successful verdict write does NOT change the
-// puzzle's status attribute.
-func TestVerdictHandler_DoesNotMutatePuzzleStatus(t *testing.T) {
+// VH-08: the response envelope carries the recomputed summary as plain
+// fields {up, down, lastUpdatedAt} so the UI can render new totals
+// without a follow-up GET.
+func TestVerdictHandler_HappyPathResponseShape(t *testing.T) {
 	// Arrange
-	repo := newFakeVerdictRepo()
-	repo.seed(7, "standard", "abc")
-	originalStatus := repo.puzzles[fmt.Sprintf("%d#%s#%s", 7, "standard", "abc")].Status
+	svc := &stubVerdictService{
+		summary: verdictsvc.Summary{Up: 3, Down: 1, LastUpdatedAt: "2026-05-16T10:00:00Z"},
+	}
 	router := mountAdminWithAuth(func(r chi.Router) {
-		r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
+		r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(svc))
 	}, "admin")
 
 	req := newAdminRequest(fakeAuthAdminRole, http.MethodPut, "/api/admin/puzzles/abc/verdict?size=7&mode=standard", validVerdictBody())
@@ -417,10 +257,31 @@ func TestVerdictHandler_DoesNotMutatePuzzleStatus(t *testing.T) {
 
 	// Assert
 	if rec.Code != http.StatusOK {
-		t.Fatalf("verdict failed: %d %s", rec.Code, rec.Body.String())
+		t.Fatalf("status = %d, want 200; body = %s", rec.Code, rec.Body.String())
 	}
-	gotStatus := repo.puzzles[fmt.Sprintf("%d#%s#%s", 7, "standard", "abc")].Status
-	if gotStatus != originalStatus {
-		t.Errorf("puzzle status mutated by verdict write: got %q, want %q", gotStatus, originalStatus)
+	var resp verdictResponseJSON
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if resp.Summary.Up != 3 {
+		t.Errorf("response Summary.up = %d, want 3", resp.Summary.Up)
+	}
+	if resp.Summary.Down != 1 {
+		t.Errorf("response Summary.down = %d, want 1", resp.Summary.Down)
+	}
+	if resp.Summary.LastUpdatedAt != "2026-05-16T10:00:00Z" {
+		t.Errorf("response Summary.lastUpdatedAt = %q, want %q", resp.Summary.LastUpdatedAt, "2026-05-16T10:00:00Z")
+	}
+
+	// And the handler passed the URL/body fields through to the service.
+	if !svc.submitCalled {
+		t.Fatal("Submit was not invoked")
+	}
+	if svc.lastInput.GridSize != 7 || svc.lastInput.Mode != "standard" || svc.lastInput.PuzzleID != "abc" {
+		t.Errorf("SubmitInput key = (%d,%s,%s), want (7,standard,abc)", svc.lastInput.GridSize, svc.lastInput.Mode, svc.lastInput.PuzzleID)
+	}
+	if svc.lastInput.Value != "up" || svc.lastInput.Outcome != "solved" || svc.lastInput.PlayTimeMs != 42000 || svc.lastInput.ClientVersion != "0.1.0" {
+		t.Errorf("SubmitInput body fields = (%s,%s,%d,%s), want (up,solved,42000,0.1.0)",
+			svc.lastInput.Value, svc.lastInput.Outcome, svc.lastInput.PlayTimeMs, svc.lastInput.ClientVersion)
 	}
 }
