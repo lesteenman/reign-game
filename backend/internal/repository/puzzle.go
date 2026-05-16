@@ -163,6 +163,13 @@ func NewPuzzleRepository(client DynamoDBAPI, tableName string) *PuzzleRepository
 	}
 }
 
+// TableName returns the DynamoDB table name this repository targets.
+// Exposed so the daily service can supply it to its own constructor
+// without re-reading the env var.
+func (r *PuzzleRepository) TableName() string {
+	return r.tableName
+}
+
 // buildPK constructs the partition key from grid size and mode.
 func buildPK(size int, mode string) string {
 	return fmt.Sprintf("%d#%s", size, mode)

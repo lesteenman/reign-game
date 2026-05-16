@@ -26,6 +26,7 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/replenish"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 	configservice "github.com/eriksteenman/reign-game/backend/internal/service/config"
+	dailyservice "github.com/eriksteenman/reign-game/backend/internal/service/daily"
 	poolservice "github.com/eriksteenman/reign-game/backend/internal/service/pool"
 	serveservice "github.com/eriksteenman/reign-game/backend/internal/service/serve"
 	statusservice "github.com/eriksteenman/reign-game/backend/internal/service/status"
@@ -80,8 +81,9 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 			// handler factories return http.Handler, not http.HandlerFunc.
 			r.Route("/daily", func(r chi.Router) {
 				r.Use(auth.OptionalAuth(auth.NewClerkSessionVerifier()))
-				r.Method(http.MethodGet, "/{date}", handler.DailyGetHandler(repo, time.Now, replenishHook))
-				r.Method(http.MethodPost, "/{date}/result", handler.DailySubmitHandler(repo, time.Now))
+				dailySvc := dailyservice.New(repo, repo.TableName(), time.Now, replenishHook)
+				r.Method(http.MethodGet, "/{date}", handler.DailyGetHandler(dailySvc))
+				r.Method(http.MethodPost, "/{date}/result", handler.DailySubmitHandler(dailySvc))
 			})
 
 			// Admin routes live behind the Clerk auth middleware chain.
