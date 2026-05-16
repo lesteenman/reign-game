@@ -299,10 +299,6 @@ func (s *Service) SubmitPlay(ctx context.Context, playerID, date string, submiss
 	return nil
 }
 
-// errNotImplemented is the placeholder body for the SubmitDaily skeleton.
-// Task 43f replaces it.
-var errNotImplemented = errors.New("not implemented")
-
 // GetDaily returns the daily view for (playerID, date). It orchestrates
 // schedule/play reads, sync-fallback finalize on cold-start, puzzle read,
 // and play-row materialization.
@@ -422,7 +418,153 @@ func (s *Service) GetDaily(ctx context.Context, in GetInput) (*DailyView, error)
 }
 
 // SubmitDaily records a solved daily play and returns the elapsed time
-// + leaderboard rank. Implementation in task 43b.
+// + leaderboard rank.
+//
+// Sentinel errors:
+//
+//	ErrInvalidDate        — date string does not match YYYY-MM-DD
+//	ErrOutOfWindow        — date is not today or yesterday (UTC)
+//	ErrInvalidSolution    — solution shape invalid or cells don't match puzzle
+//	ErrPlayNotStarted     — no play row for this player/date
+//	ErrAlreadySolved      — play already in solved state (inc. race-loser)
+//	ErrNegativeClockSkew  — server clock predates the play row's assignedAt
+//
+// All other errors are wrapped I/O failures; callers map them to 500.
 func (s *Service) SubmitDaily(ctx context.Context, in SubmitInput) (*SubmitResult, error) {
-	return nil, errNotImplemented
+	start := time.Now()
+
+	// 1. Validate date format + window.
+	parsed, err := time.ParseInLocation(dailyDateLayout, in.Date, time.UTC)
+	if err != nil {
+		log.Printf("daily service: submit 400 invalid_date date=%q player=%s", in.Date, truncatePlayer(in.PlayerID))
+		return nil, ErrInvalidDate
+	}
+	now := s.clock().UTC()
+	todayUTC := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	yesterdayUTC := todayUTC.AddDate(0, 0, -1)
+	requested := time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 0, 0, 0, 0, time.UTC)
+	if requested.Before(yesterdayUTC) || requested.After(todayUTC) {
+		log.Printf("daily service: submit 404 out_of_window date=%s player=%s", in.Date, truncatePlayer(in.PlayerID))
+		return nil, ErrOutOfWindow
+	}
+
+	// 2. Validate solution shape.
+	if !solutionShapeValid(in.Solution) {
+		log.Printf("daily service: submit 400 invalid_solution_shape date=%s player=%s", in.Date, truncatePlayer(in.PlayerID))
+		return nil, ErrInvalidSolution
+	}
+
+	// 3. Fetch schedule + play in parallel.
+	readStart := time.Now()
+	schedule, play, sErr, pErr := fetchScheduleAndPlay(ctx, s.store, in.Date, in.PlayerID)
+	readMs := time.Since(readStart).Milliseconds()
+
+	// 4. Play state checks.
+	if pErr != nil {
+		log.Printf("daily service: submit 500 play_read_failed date=%s player=%s err=%v", in.Date, truncatePlayer(in.PlayerID), pErr)
+		return nil, fmt.Errorf("daily service: submit reading play for %s/%s: %w", in.PlayerID, in.Date, pErr)
+	}
+	if play == nil {
+		log.Printf("daily service: submit 400 play_not_started date=%s player=%s", in.Date, truncatePlayer(in.PlayerID))
+		return nil, ErrPlayNotStarted
+	}
+	if play.Outcome == repository.PlayOutcomeSolved {
+		log.Printf("daily service: submit 409 already_solved date=%s player=%s", in.Date, truncatePlayer(in.PlayerID))
+		return nil, ErrAlreadySolved
+	}
+
+	// 5. Schedule must exist — play row being present is the invariant guard.
+	if sErr != nil {
+		log.Printf("daily service: submit 500 schedule_read_failed date=%s err=%v", in.Date, sErr)
+		return nil, fmt.Errorf("daily service: submit reading schedule for %s: %w", in.Date, sErr)
+	}
+	if schedule == nil {
+		log.Printf("daily service: submit 500 schedule_missing_for_play date=%s player=%s", in.Date, truncatePlayer(in.PlayerID))
+		return nil, fmt.Errorf("daily service: submit schedule missing for %s but play exists (invariant violation)", in.Date)
+	}
+
+	// 6. Parse sourcePartition → size + mode.
+	size, mode, err := parseSourcePartition(schedule.SourcePartition)
+	if err != nil {
+		log.Printf("daily service: submit 500 source_partition_malformed date=%s sourcePartition=%q err=%v", in.Date, schedule.SourcePartition, err)
+		return nil, fmt.Errorf("daily service: submit malformed sourcePartition %q for %s: %w", schedule.SourcePartition, in.Date, err)
+	}
+
+	// 7. Fetch puzzle.
+	puzzleStart := time.Now()
+	puzzle, err := s.store.GetPuzzle(ctx, size, mode, schedule.PuzzleID)
+	puzzleMs := time.Since(puzzleStart).Milliseconds()
+	if err != nil {
+		log.Printf("daily service: submit 500 puzzle_read_failed date=%s puzzleId=%s err=%v", in.Date, schedule.PuzzleID, err)
+		return nil, fmt.Errorf("daily service: submit reading puzzle %s for %s: %w", schedule.PuzzleID, in.Date, err)
+	}
+	if puzzle == nil {
+		log.Printf("daily service: submit 500 puzzle_missing date=%s puzzleId=%s", in.Date, schedule.PuzzleID)
+		return nil, fmt.Errorf("daily service: submit puzzle %s referenced by schedule for %s does not exist", schedule.PuzzleID, in.Date)
+	}
+
+	// 8. Verify solution matches puzzle.
+	if !solutionMatches(in.Solution, puzzle.Solution) {
+		log.Printf("daily service: submit 400 invalid_solution date=%s player=%s puzzleId=%s", in.Date, truncatePlayer(in.PlayerID), schedule.PuzzleID)
+		return nil, ErrInvalidSolution
+	}
+
+	// 9. Parse play.AssignedAt.
+	assignedAt, err := time.Parse(time.RFC3339, play.AssignedAt)
+	if err != nil {
+		log.Printf("daily service: submit 500 assignedAt_parse_failed date=%s assignedAt=%q err=%v", in.Date, play.AssignedAt, err)
+		return nil, fmt.Errorf("daily service: submit parsing assignedAt %q for %s: %w", play.AssignedAt, in.Date, err)
+	}
+
+	// 10. Compute serverElapsedMs; reject negative clock skew.
+	serverElapsedMs := now.Sub(assignedAt).Milliseconds()
+	if serverElapsedMs < 0 {
+		log.Printf("daily service: submit 500 negative_clock_skew date=%s assignedAt=%s now=%s delta_ms=%d player=%s",
+			in.Date, assignedAt.Format(time.RFC3339), now.Format(time.RFC3339), serverElapsedMs, truncatePlayer(in.PlayerID))
+		return nil, ErrNegativeClockSkew
+	}
+
+	// 11. Build submission and call SubmitPlay.
+	submitInput := repository.SubmitInput{
+		PuzzleID:    schedule.PuzzleID,
+		AssignedAt:  assignedAt,
+		SubmittedAt: now,
+		ClientMs:    in.PlayTimeMs,
+		IsAnonymous: in.IsAnonymous,
+	}
+	if !in.IsAnonymous {
+		submitInput.UserID = in.PlayerID
+	}
+
+	submitStart := time.Now()
+	submitErr := s.SubmitPlay(ctx, in.PlayerID, in.Date, &submitInput)
+	submitMs := time.Since(submitStart).Milliseconds()
+	if submitErr != nil {
+		if errors.Is(submitErr, repository.ErrPlayNotInStartedState) {
+			log.Printf("daily service: submit 409 race_loser date=%s player=%s", in.Date, truncatePlayer(in.PlayerID))
+			return nil, ErrAlreadySolved
+		}
+		log.Printf("daily service: submit 500 transaction_failed date=%s player=%s err=%v", in.Date, truncatePlayer(in.PlayerID), submitErr)
+		return nil, fmt.Errorf("daily service: submit transaction for %s/%s: %w", in.PlayerID, in.Date, submitErr)
+	}
+
+	// 12. Fetch leaderboard rank (best-effort; signed-in only).
+	result := &SubmitResult{ServerElapsedMs: serverElapsedMs}
+	var rankMs int64
+	if !in.IsAnonymous {
+		rankStart := time.Now()
+		rank, rankErr := s.store.LeaderboardRank(ctx, in.Date, serverElapsedMs, in.PlayerID)
+		rankMs = time.Since(rankStart).Milliseconds()
+		if rankErr != nil {
+			log.Printf("WARN: daily service: submit rank_fetch_failed date=%s player=%s err=%v", in.Date, truncatePlayer(in.PlayerID), rankErr)
+		} else {
+			result.LeaderboardRank = &rank
+		}
+	}
+
+	totalMs := time.Since(start).Milliseconds()
+	log.Printf("daily service: submit total_ms=%d read_ms=%d puzzle_ms=%d submit_ms=%d rank_ms=%d date=%s player=%s",
+		totalMs, readMs, puzzleMs, submitMs, rankMs, in.Date, truncatePlayer(in.PlayerID))
+
+	return result, nil
 }

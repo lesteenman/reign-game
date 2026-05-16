@@ -113,6 +113,53 @@ func parseSourcePartition(sp string) (size int, mode string, err error) {
 	return size, parts[1], nil
 }
 
+// solutionShapeValid checks that solution is a non-empty rectangular
+// grid whose cells are 0 or 1. Returns false for empty grids,
+// jagged rows, or out-of-range cells. Mismatch against the puzzle's
+// expected solution is checked separately by solutionMatches once we
+// know the puzzle's actual size.
+func solutionShapeValid(solution [][]int) bool {
+	if len(solution) == 0 {
+		return false
+	}
+	width := len(solution[0])
+	if width == 0 {
+		return false
+	}
+	for _, row := range solution {
+		if len(row) != width {
+			return false
+		}
+		for _, cell := range row {
+			if cell != 0 && cell != 1 {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// solutionMatches returns true iff the player's submitted grid equals
+// the puzzle's expected solution: same dimensions, and each submitted
+// 1 corresponds to expected true (0 ↔ false).
+func solutionMatches(submitted [][]int, expected [][]bool) bool {
+	if len(submitted) != len(expected) {
+		return false
+	}
+	for i, row := range submitted {
+		if len(row) != len(expected[i]) {
+			return false
+		}
+		for j, cell := range row {
+			want := expected[i][j]
+			if (cell == 1) != want {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // truncatePlayer keeps the first 8 chars of playerID for log lines.
 // The full ID can be a deviceId (UUID-shaped) and we don't want those
 // in plaintext logs by accident.
