@@ -48,7 +48,7 @@ func fetchScheduleAndPlay(
 
 // materializePlayRow returns the PLAY row for (playerID, date),
 // creating it on first GET. On the race-loser branch it re-reads the
-// row so the caller surfaces the winner's assignedAt — DP-19's
+// row so the caller surfaces the winner's assignedAt — the
 // "assignedAt is set once, never overwritten" invariant lives here.
 // existingPlay is the result of an upstream GetPlay (typically from
 // fetchScheduleAndPlay's parallel fan-out); when non-nil the function
@@ -84,7 +84,7 @@ func materializePlayRow(
 
 	// Race-loser: another request created the row between our GetPlay
 	// and our PutPlayStartedIfAbsent. Re-read so the caller surfaces
-	// the winner's assignedAt (DP-19).
+	// the winner's assignedAt.
 	winner, err := store.GetPlay(ctx, playerID, date)
 	if err != nil {
 		return nil, time.Since(playStart).Milliseconds(), err

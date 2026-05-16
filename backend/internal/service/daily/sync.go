@@ -33,9 +33,8 @@ type Repo interface {
 }
 
 // SyncFinalizeForToday runs the T=0 finalize algorithm for `today`
-// when the schedule row is missing (DP-05). It is invoked by the GET
-// handler (chunk 3c) and is also the algorithm the T=0 cron will use
-// (chunk 5 — extracted here for sharing).
+// when the schedule row is missing. It is invoked by the daily GET
+// handler and is also the algorithm the T=0 cron uses.
 //
 // Algorithm (design §4 T=0 cron, decision tree at step 4):
 //

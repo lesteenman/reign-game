@@ -3,9 +3,8 @@ package generator
 import "testing"
 
 // BenchmarkSolutionSample measures raw throughput of sampleSolution across
-// the supported (N, k) grid. Per PG-03 and input-spec §8 the floor is
-// N=Nmin=6 at k=1 and N=9 at k=2 (content-dead below that, see
-// bench/n-feasibility.md).
+// the supported (N, k) grid. Per input-spec §8 the floor is N=Nmin=6 at
+// k=1 and N=9 at k=2 (content-dead below that, see bench/n-feasibility.md).
 func BenchmarkSolutionSample(b *testing.B) {
 	cases := []struct {
 		name string

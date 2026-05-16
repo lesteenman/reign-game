@@ -15,7 +15,7 @@
 //     goroutine can log it once.
 //
 // See openspec/changes/auto-replenish-puzzle-pool/design.md for the
-// locked decisions (D1-D6) behind this surface.
+// locked design decisions behind this surface.
 package replenish
 
 import (
@@ -31,12 +31,12 @@ import (
 
 // DefaultWindow is the default per-combo debounce duration for reactive
 // top-ups. Picked to match the order-of-magnitude of one generator
-// cycle for a 9x9 Standard puzzle (design D2).
+// cycle for a 9x9 Standard puzzle.
 const DefaultWindow = 60 * time.Second
 
 // DefaultGoroutineTimeout caps the SQS publish goroutine launched per
 // drain-site invocation, so the goroutine doesn't sit idle when the
-// Lambda runtime is about to freeze (design D4).
+// Lambda runtime is about to freeze.
 const DefaultGoroutineTimeout = 2 * time.Second
 
 // ErrSkippedDebounced is the sentinel returned by TryReactiveTopUp when
@@ -58,8 +58,7 @@ type ConfigGetter interface {
 }
 
 // PoolCounter counts ready puzzles for a given size+mode partition.
-// Used only by Sweep — TryReactiveTopUp deliberately skips the count
-// (design D3).
+// Used only by Sweep — TryReactiveTopUp deliberately skips the count.
 type PoolCounter interface {
 	CountReady(ctx context.Context, size int, mode string) (int, error)
 }
@@ -85,7 +84,7 @@ type SweepDeps struct {
 
 // ReactiveDeps is the dependency bundle for TryReactiveTopUp. Distinct
 // from SweepDeps because the reactive path needs Claimer but not Counter,
-// and Sweep needs Counter but not Claimer (design D5).
+// and Sweep needs Counter but not Claimer.
 type ReactiveDeps struct {
 	Configs   ConfigGetter
 	Claimer   AutoReplenishClaimer
@@ -197,7 +196,7 @@ func Sweep(ctx context.Context, deps SweepDeps, filter Filter) (Result, error) {
 //     - Error -> propagated.
 //  3. Publish exactly Threshold generation requests. Generator workers'
 //     consume-time threshold check bounds over-generation server-side
-//     (design D3 — skip-count, fixed-batch).
+//     (skip-count, fixed-batch).
 //  4. First publisher error -> return wrapped err. The caller is the
 //     drain-site goroutine and logs it once.
 func TryReactiveTopUp(ctx context.Context, deps ReactiveDeps, size int, mode string) error {

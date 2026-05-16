@@ -19,8 +19,8 @@ import (
 
 // sessionCookieName is the cookie that Clerk's browser SDK sets for
 // the session JWT when hosted on a first-party domain (same-origin or
-// via CloudFront behavior forwarding cookies). BM-10 / CloudFront
-// cookie forwarding is wired in the devops slice (R-089).
+// via CloudFront behavior forwarding cookies). CloudFront
+// cookie forwarding is wired in the devops infra slice.
 const sessionCookieName = "__session"
 
 // userContextKey is the unexported type used as the request-context
@@ -39,7 +39,7 @@ type sessionVerifier interface {
 	// Verify decodes and verifies a Clerk session JWT. Any non-nil
 	// error is treated by the middleware as "session invalid" (401)
 	// regardless of its underlying cause (expired, bad signature,
-	// malformed, network failure). BM-09 mandates fail-closed.
+	// malformed, network failure). The middleware always fails closed.
 	Verify(ctx context.Context, token string) (*clerk.SessionClaims, error)
 	// GetUser fetches the full Clerk user record for a subject ID.
 	// The middleware needs this to read publicMetadata.role — the
@@ -130,7 +130,7 @@ func (c *cachedSessionVerifier) GetUser(ctx context.Context, id string) (*clerk.
 }
 
 // RequireAuth returns HTTP middleware that enforces Clerk session
-// validity on every non-OPTIONS request. See BM-01, BM-08, BM-09.
+// validity on every non-OPTIONS request.
 //
 // The returned middleware:
 //   - lets OPTIONS requests pass straight through (CORS preflight),
@@ -145,7 +145,7 @@ func (c *cachedSessionVerifier) GetUser(ctx context.Context, id string) (*clerk.
 func RequireAuth(verifier sessionVerifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// BM-08: OPTIONS (CORS preflight) skips auth entirely.
+			// OPTIONS (CORS preflight) skips auth entirely.
 			if r.Method == http.MethodOptions {
 				next.ServeHTTP(w, r)
 				return
@@ -160,25 +160,24 @@ func RequireAuth(verifier sessionVerifier) func(http.Handler) http.Handler {
 
 			// Per-step timing to surface slow paths in the dev log.
 			// Verify is JWT validation (cached JWKS); GetUser is the
-			// Clerk user fetch (cached after R-7-02 perf commit). When
-			// the dev experience feels slow, these millis tell us
-			// whether the bottleneck is one of these or further down
-			// in the handler / DDB layer.
+			// Clerk user fetch (TTL-cached). When the dev experience
+			// feels slow, these millis tell us whether the bottleneck
+			// is one of these or further down in the handler / DDB layer.
 			verifyStart := time.Now()
 			claims, err := verifier.Verify(r.Context(), cookie.Value)
 			verifyMs := time.Since(verifyStart).Milliseconds()
 			if err != nil {
-				// BM-07: do NOT log the cookie value or the full
-				// error object — the error string from jwt.Verify
-				// doesn't include the token, but %v on deep SDK
-				// errors could. Log only err.Error() which is the
-				// verifier's human-readable reason.
+				// Do NOT log the cookie value or the full error
+				// object — the error string from jwt.Verify doesn't
+				// include the token, but %v on deep SDK errors could.
+				// Log only err.Error() which is the verifier's
+				// human-readable reason.
 				//
-				// BM-01: distinguish an expired session from other
+				// Distinguish an expired session from other
 				// verification failures so the client can render
-				// "session expired, please sign in again" rather
-				// than a generic error. Clerk's jwt.Verify delegates
-				// to go-jose's ValidateWithLeeway, which returns
+				// "session expired, please sign in again" rather than
+				// a generic error. Clerk's jwt.Verify delegates to
+				// go-jose's ValidateWithLeeway, which returns
 				// gojwt.ErrExpired on expiry — matchable via
 				// errors.Is. Every other verify error maps to
 				// "invalid session".
@@ -235,7 +234,7 @@ func withUser(ctx context.Context, u *clerk.User) context.Context {
 //
 // This middleware is the entry point for routes that allow both User
 // and Anonymous access (the daily-puzzle GET / POST under
-// /api/daily/{date}, per DP-14). RequireAuth still owns the
+// /api/daily/{date}). RequireAuth still owns the
 // must-be-signed-in path (e.g. /api/admin/*).
 //
 // Failure modes: every failure path is silent — no logs, no metrics —
@@ -277,15 +276,15 @@ type publicMetadataRole struct {
 
 // RequireAdmin is middleware that admits a request only if the user
 // attached to the request context has publicMetadata.role == "admin".
-// Runs after RequireAuth (see BM-02, BM-03, BM-04).
+// Must run after RequireAuth — panics on first call if RequireAuth was skipped.
 //
 // Case sensitive. String equality. No fallback. "Admin",
 // "administrator", and missing role all produce 403.
 func RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// BM-04: UserFromContext panics on a request that was not
-		// preceded by RequireAuth. The panic surfaces a programmer
-		// error (wrong middleware order) at development time.
+		// UserFromContext panics when RequireAuth did not run.
+		// The panic surfaces a programmer error (wrong middleware
+		// order) at development time.
 		u := UserFromContext(r.Context())
 
 		var meta publicMetadataRole
@@ -308,7 +307,7 @@ func RequireAdmin(next http.Handler) http.Handler {
 // UserFromContext returns the authenticated Clerk user from the
 // request context. Panics when the context has no user — this is a
 // programmer error (RequireAuth was not wired before the handler),
-// never a runtime condition. See BM-04.
+// never a runtime condition.
 func UserFromContext(ctx context.Context) *clerk.User {
 	u, ok := UserFromContextOK(ctx)
 	if !ok {
@@ -338,15 +337,14 @@ func WithUserForTest(ctx context.Context, u *clerk.User) context.Context {
 	return context.WithValue(ctx, userContextKey{}, u)
 }
 
-// writeUnauth emits the canonical 401 response shape expected by BM-01.
+// writeUnauth emits the canonical 401 response shape.
 // All auth rejections go through this one function so the client sees
 // a single body shape: {"error":"unauthorized","message":"..."}.
 func writeUnauth(w http.ResponseWriter, message string) {
 	httperr.WriteError(w, http.StatusUnauthorized, "unauthorized", message)
 }
 
-// writeForbidden emits the canonical 403 response shape expected by
-// BM-02.
+// writeForbidden emits the canonical 403 response shape.
 func writeForbidden(w http.ResponseWriter, message string) {
 	httperr.WriteError(w, http.StatusForbidden, "forbidden", message)
 }

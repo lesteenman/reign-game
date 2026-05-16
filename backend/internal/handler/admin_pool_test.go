@@ -147,7 +147,7 @@ type adminPoolResponseJSON struct {
 
 // TestAdminPoolHandler_AuthMatrix proves the route returns 401 for
 // an anonymous request, 403 for a signed-in non-admin, and 200 for
-// an admin — the three states BM-01/BM-02/BM-05 must enforce on
+// an admin — the three states RequireAuth + RequireAdmin enforce on
 // every admin route.
 func TestAdminPoolHandler_AuthMatrix(t *testing.T) {
 	for _, tc := range adminAuthMatrix {

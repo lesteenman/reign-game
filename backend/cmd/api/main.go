@@ -52,7 +52,7 @@ func newUUIDv4() (string, error) {
 //
 // Public /api/* routes run anonymously; admin routes are grouped under
 // /api/admin and wrapped in auth.RequireAuth + auth.RequireAdmin so every
-// admin route inherits the middleware chain by construction (BM-05). Adding
+// admin route inherits the middleware chain by construction. Adding
 // a new admin route is a single r.Method(...) call inside the admin group.
 func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux {
 	// Build the reactive-replenish hook once. nil when SQS is not
@@ -87,7 +87,7 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 			})
 
 			// Admin routes live behind the Clerk auth middleware chain.
-			// Middleware order is (RequireAuth, RequireAdmin) per BM-03 —
+			// Middleware order is (RequireAuth, RequireAdmin) —
 			// reversed or missing pieces panic on first admin request so
 			// the mistake surfaces immediately in tests.
 			r.Route("/admin", func(r chi.Router) {
@@ -231,7 +231,7 @@ func main() {
 
 		// Clerk must be initialized before the first request arrives.
 		// Local dev reads CLERK_SECRET_KEY from backend/.env.local; a
-		// missing or empty value causes log.Fatal by design (BM-10).
+		// missing or empty value causes log.Fatal by design.
 		initClerk(ctx)
 
 		// Warm up the DDB client by issuing one throwaway Query before

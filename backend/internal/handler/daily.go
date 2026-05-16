@@ -14,13 +14,12 @@ import (
 )
 
 // poolExhaustedMessage is the canonical 500 body phrase emitted when
-// sync-fallback hits daily.ErrPoolExhausted (DP-16). Stable phrase: a
-// future R-8-02 frontend will key off it for a "we're working on it"
-// graceful UI.
+// sync-fallback hits daily.ErrPoolExhausted. Stable phrase: the
+// frontend keys off it for a "we're working on it" graceful UI.
 const poolExhaustedMessage = "pool exhausted"
 
 // dailyDeviceHeader is the header carrying the anonymous device
-// identifier when no Clerk session cookie is present (DP-08).
+// identifier when no Clerk session cookie is present.
 const dailyDeviceHeader = "X-Device-Id"
 
 // playNotStartedMessage maps to HTTP 400 — the player must call GET
@@ -35,8 +34,8 @@ type DailyService interface {
 	SubmitDaily(ctx context.Context, in dailysvc.SubmitInput) (*dailysvc.SubmitResult, error)
 }
 
-// dailyResponse is the GET 200 response shape (DP-09). ServerElapsedMs
-// and SubmittedAt are pointer-typed so `omitempty` drops them entirely
+// dailyResponse is the GET 200 response shape. ServerElapsedMs and
+// SubmittedAt are pointer-typed so `omitempty` drops them entirely
 // when outcome != solved.
 type dailyResponse struct {
 	PuzzleID        string  `json:"puzzleId"`
@@ -48,9 +47,9 @@ type dailyResponse struct {
 	SubmittedAt     *string `json:"submittedAt,omitempty"`
 }
 
-// dailySubmitRequest is the POST /api/daily/{date}/result body shape
-// per DP-11. Decoded into pointers so the handler can distinguish
-// missing fields from zero values.
+// dailySubmitRequest is the POST /api/daily/{date}/result body shape.
+// Decoded into pointers so the handler can distinguish missing fields
+// from zero values.
 type dailySubmitRequest struct {
 	Outcome    *string `json:"outcome"`
 	PlayTimeMs *int64  `json:"playTimeMs"`
@@ -124,9 +123,9 @@ func writeDailyGetError(w http.ResponseWriter, err error) {
 	}
 }
 
-// DailySubmitHandler creates the POST /api/daily/{date}/result handler
-// per DP-11..DP-14. It decodes the body, enforces the outcome field
-// check (HTTP-level concern), then delegates to svc.SubmitDaily.
+// DailySubmitHandler creates the POST /api/daily/{date}/result handler.
+// It decodes the body, enforces the outcome field check (HTTP-level
+// concern), then delegates to svc.SubmitDaily.
 func DailySubmitHandler(svc DailyService) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -203,10 +202,10 @@ func writeDailySubmitError(w http.ResponseWriter, err error) {
 	}
 }
 
-// resolveDailyPlayer maps a request to (playerID, isAnonymous, ok)
-// per DP-08/DP-10/DP-14. A signed-in Clerk user wins over X-Device-Id
-// so users who happen to send both end up with their stable user ID.
-// Returns ok=false when neither identifier is present — caller emits 401.
+// resolveDailyPlayer maps a request to (playerID, isAnonymous, ok).
+// A signed-in Clerk user wins over X-Device-Id so users who happen to
+// send both end up with their stable user ID. Returns ok=false when
+// neither identifier is present — caller emits 401.
 func resolveDailyPlayer(r *http.Request) (playerID string, isAnonymous, ok bool) {
 	if u, present := auth.UserFromContextOK(r.Context()); present && u != nil && u.ID != "" {
 		return u.ID, false, true

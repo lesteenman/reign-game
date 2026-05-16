@@ -57,27 +57,27 @@ var (
 	ErrScheduleAlreadyFinalized = errors.New("daily schedule already finalized")
 	// ErrPlayAlreadyExists is returned by PutPlayStartedIfAbsent when a
 	// PLAY row exists for (playerId, date). Caller follows up with GetPlay
-	// to read the existing assignedAt — never overwrite (DP-19).
+	// to read the existing assignedAt — never overwrite.
 	ErrPlayAlreadyExists = errors.New("daily play row already exists")
 	// ErrPlayNotInStartedState is returned by Service.SubmitPlay in
 	// internal/service/daily when the PLAY row is missing or its outcome
 	// is not "started" (e.g. a duplicate submission of an already-solved
-	// row). Maps to HTTP 409 per DP-12.
+	// row). Maps to HTTP 409.
 	ErrPlayNotInStartedState = errors.New("daily play row not in started state")
 )
 
 // Schedule counter field constants — the only legal values for the
-// `field` argument to IncrementScheduleCounter (DP-06). Defined as
-// constants so callers can't fat-finger an arbitrary attribute name and
-// drift the schema.
+// `field` argument to IncrementScheduleCounter. Defined as constants
+// so callers can't fat-finger an arbitrary attribute name and drift
+// the schema.
 const (
 	ScheduleCounterStarted = "started"
 	ScheduleCounterSolved  = "solved"
 )
 
 // PlayOutcomeStarted / PlayOutcomeSolved are the only legal values for
-// PlayRecord.Outcome (D9). No "skipped" on dailies — the daily/packs UI
-// does not surface a Skip action.
+// PlayRecord.Outcome. No "skipped" on dailies — the daily/packs UI does
+// not surface a Skip action.
 const (
 	PlayOutcomeStarted = "started"
 	PlayOutcomeSolved  = "solved"
@@ -86,7 +86,7 @@ const (
 // ScheduleRecord is the schedule row shape (PK=DAILY#YYYY-MM-DD).
 // One row per UTC day. Counters are atomically updated via
 // IncrementScheduleCounter; assignedAt is the cron / sync-fallback's
-// stamp and is never overwritten (DP-01).
+// stamp and is never overwritten.
 type ScheduleRecord struct {
 	// Date is the UTC date (YYYY-MM-DD), embedded in the PK.
 	Date string `dynamodbav:"-"`
@@ -96,11 +96,10 @@ type ScheduleRecord struct {
 	AssignedAt string `dynamodbav:"assignedAt"`
 	// SourcePartition is the puzzle-pool partition the puzzle was drawn
 	// from (e.g. "9#standard"). Future-proofs combo rotation without
-	// locking it in (D12).
+	// locking it in.
 	SourcePartition string `dynamodbav:"sourcePartition"`
 	// Counters tracks per-day plays. Updated atomically by
-	// IncrementScheduleCounter (DP-06). Powers recycle decisions and
-	// telemetry (D10).
+	// IncrementScheduleCounter. Powers recycle decisions and telemetry.
 	Counters ScheduleCounters `dynamodbav:"counters"`
 }
 
@@ -114,7 +113,7 @@ type ScheduleCounters struct {
 
 // CandidateRecord is the singleton candidate-slot row
 // (PK=DAILY-CANDIDATE). Persists across days when a recycle leaves it
-// unconsumed (D7, DP-02).
+// unconsumed.
 type CandidateRecord struct {
 	// PuzzleID is the candidate puzzle UUID.
 	PuzzleID string `dynamodbav:"puzzleId"`
@@ -127,7 +126,7 @@ type CandidateRecord struct {
 
 // PlayRecord is the per-player daily play row
 // (PK=PLAY#{playerId}, SK=DAILY#YYYY-MM-DD). `playerId` is `userId` for
-// signed-in players, `deviceId` for anonymous (DP-10).
+// signed-in players, `deviceId` for anonymous.
 type PlayRecord struct {
 	// PlayerID is `userId` for signed-in or `deviceId` for anonymous.
 	// Embedded in the PK; not stored as a separate attribute.
@@ -135,11 +134,11 @@ type PlayRecord struct {
 	// Date is the UTC date (YYYY-MM-DD), embedded in the SK.
 	Date string `dynamodbav:"-"`
 	// Outcome is "started" on first GET and "solved" on submission.
-	// "skipped" is intentionally not used on dailies (D9).
+	// "skipped" is intentionally not used on dailies.
 	Outcome string `dynamodbav:"outcome"`
 	// AssignedAt is the server-stamped first-GET timestamp. Never
 	// overwritten — refresh, second-device, second-GET all return this
-	// (DP-19, anti-cheat).
+	// (anti-cheat: assignedAt is set once, never overwritten).
 	AssignedAt string `dynamodbav:"assignedAt"`
 	// SubmittedAt is the RFC 3339 timestamp of the solve submission.
 	// Empty until outcome=solved.
@@ -149,17 +148,17 @@ type PlayRecord struct {
 	// every GET.
 	PuzzleID string `dynamodbav:"puzzleId"`
 	// ServerElapsedMs is `submittedAt - assignedAt` in milliseconds.
-	// Source of truth for any future ranking surface (DP-20).
+	// Source of truth for any future ranking surface.
 	ServerElapsedMs int64 `dynamodbav:"serverElapsedMs,omitempty"`
 	// ClientClaimedMs is the player-claimed playTimeMs. Captured for
-	// telemetry only — never authoritative (DP-20).
+	// telemetry only — never authoritative.
 	ClientClaimedMs int64 `dynamodbav:"clientClaimedMs,omitempty"`
 }
 
 // SubmitInput bundles the fields the handler captures from a valid
 // POST /api/daily/{date}/result request and forwards to
 // Service.SubmitPlay in internal/service/daily. Solution validation
-// is the handler's job (DP-11) — by the time we get here the
+// is the handler's job — by the time we get here the
 // submission is structurally and semantically valid.
 type SubmitInput struct {
 	// PuzzleID is the schedule row's puzzle (used for the leaderboard
@@ -167,7 +166,7 @@ type SubmitInput struct {
 	PuzzleID string
 	// AssignedAt is the PLAY row's authoritative start timestamp
 	// (RFC 3339). Used both to compute `serverElapsedMs` and to derive
-	// the play-origin date for cross-midnight submissions (DP-13).
+	// the play-origin date for cross-midnight submissions.
 	AssignedAt time.Time
 	// SubmittedAt is when the submission landed on the server.
 	SubmittedAt time.Time
@@ -175,7 +174,7 @@ type SubmitInput struct {
 	// Telemetry only.
 	ClientMs int64
 	// IsAnonymous is true for `deviceId`-keyed players. When true,
-	// Service.SubmitPlay skips the leaderboard leg (D13).
+	// Service.SubmitPlay skips the leaderboard leg for anonymous players.
 	IsAnonymous bool
 	// UserID is the Clerk user ID, used as the leaderboard SK suffix.
 	// Ignored when IsAnonymous=true.
@@ -222,8 +221,7 @@ func BuildLeaderboardSK(elapsedMs int64, userID string) string {
 }
 
 // GetSchedule reads the schedule row for date. Returns (nil, nil) when
-// absent — caller decides whether to engage the sync fallback (DP-05)
-// or 404.
+// absent — caller decides whether to engage the sync fallback or 404.
 func (r *PuzzleRepository) GetSchedule(ctx context.Context, date string) (*ScheduleRecord, error) {
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
@@ -249,7 +247,7 @@ func (r *PuzzleRepository) GetSchedule(ctx context.Context, date string) (*Sched
 
 // GetCandidate reads the singleton candidate slot. Returns (nil, nil)
 // when empty — caller (T=0 cron, sync fallback) treats empty as a
-// recycle trigger (DP-04).
+// recycle trigger.
 func (r *PuzzleRepository) GetCandidate(ctx context.Context) (*CandidateRecord, error) {
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
@@ -273,7 +271,7 @@ func (r *PuzzleRepository) GetCandidate(ctx context.Context) (*CandidateRecord, 
 }
 
 // PutCandidateIfAbsent writes a fresh candidate puzzle into the
-// singleton slot. Conditional on the slot being empty (DP-03's race
+// singleton slot. Conditional on the slot being empty (race
 // guard) — duplicate T-6h cron firings see ErrCandidateAlreadyExists
 // and exit cleanly. The same conditional handles the case where a
 // recycle left an older candidate in place: T-6h would log+exit, and
@@ -304,7 +302,7 @@ func (r *PuzzleRepository) PutCandidateIfAbsent(ctx context.Context, puzzleID, s
 }
 
 // DeleteCandidate clears the singleton slot. Used by the T=0 confirm
-// path after the schedule row is finalized (DP-04). Unconditional —
+// path after the schedule row is finalized. Unconditional —
 // idempotent against duplicate calls because a missing row deletes
 // cleanly.
 func (r *PuzzleRepository) DeleteCandidate(ctx context.Context) error {
@@ -323,7 +321,7 @@ func (r *PuzzleRepository) DeleteCandidate(ctx context.Context) error {
 
 // FinalizeSchedule writes today's schedule row. Conditional on the
 // row not yet existing — duplicate T=0 cron firings AND sync-fallback
-// races resolve via ErrScheduleAlreadyFinalized (DP-04, DP-05).
+// races resolve via ErrScheduleAlreadyFinalized.
 // Counters are initialized to zero. Caller is responsible for the
 // PuzzleRecord lastDailyDate write (separate transactional concern;
 // crons compose the two).
@@ -359,7 +357,7 @@ func (r *PuzzleRepository) FinalizeSchedule(ctx context.Context, date, puzzleID,
 }
 
 // IncrementScheduleCounter atomically increments counters.{started|solved}
-// on the schedule row by `delta` (DP-06). `field` must be one of
+// on the schedule row by `delta`. `field` must be one of
 // ScheduleCounterStarted / ScheduleCounterSolved — any other value is
 // rejected to keep the schema honest.
 func (r *PuzzleRepository) IncrementScheduleCounter(ctx context.Context, date, field string, delta int64) error {
@@ -390,7 +388,7 @@ func (r *PuzzleRepository) IncrementScheduleCounter(ctx context.Context, date, f
 
 // ListApprovedPool returns approved puzzles eligible for daily
 // assignment, scoped to (size, mode). Approval gate is
-// `verdictSummary.up >= 1 AND verdictSummary.down == 0` (DP-15).
+// `verdictSummary.up >= 1 AND verdictSummary.down == 0`.
 // When excludeRecentlyDailied=true, also rejects puzzles whose
 // `lastDailyDate` falls within the DailyRecycleWindowDays-day
 // rolling window relative to `now`.
@@ -444,7 +442,7 @@ func (r *PuzzleRepository) ListApprovedPool(ctx context.Context, size int, mode 
 // MarkPuzzleAsDailyOn sets PuzzleRecord.lastDailyDate to `date`. Idempotent
 // against same-date repeats and refuses to overwrite a newer date —
 // guards against late-arriving cron writes / retries clobbering a
-// fresher value (DP-18). Returns ErrPuzzleNotFound when the underlying
+// fresher value. Returns ErrPuzzleNotFound when the underlying
 // puzzle row is absent so a stale puzzleID does not silently upsert.
 func (r *PuzzleRepository) MarkPuzzleAsDailyOn(ctx context.Context, size int, mode, puzzleID, date string) error {
 	pk := buildPK(size, mode)
@@ -487,7 +485,7 @@ func (r *PuzzleRepository) MarkPuzzleAsDailyOn(ctx context.Context, size int, mo
 
 // GetPlay reads the per-player play row for (playerId, date). Returns
 // (nil, nil) when absent — caller branches to PutPlayStartedIfAbsent on
-// first GET (DP-08).
+// first GET.
 func (r *PuzzleRepository) GetPlay(ctx context.Context, playerID, date string) (*PlayRecord, error) {
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
@@ -513,8 +511,8 @@ func (r *PuzzleRepository) GetPlay(ctx context.Context, playerID, date string) (
 }
 
 // PutPlayStartedIfAbsent creates a fresh PLAY row with outcome=started
-// and the server-stamped assignedAt. Conditional on absence — DP-19's
-// anti-cheat invariant says assignedAt is set once and never overwritten,
+// and the server-stamped assignedAt. Conditional on absence — assignedAt
+// is set once and never overwritten,
 // so a duplicate first-GET race must NOT update the existing row.
 // Caller responds to ErrPlayAlreadyExists by calling GetPlay and using
 // the winner's assignedAt.

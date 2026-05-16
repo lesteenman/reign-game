@@ -8,9 +8,8 @@ import (
 )
 
 // TestStep7Gate measures the end-to-end Generate success rate across the
-// supported (N, k) grid. PG-11's committed gate points are (N=12, k=1)
-// and (N=9, k=2) at >=80%, both LIVE. Other combos are reported for
-// visibility.
+// supported (N, k) grid. The committed gate points are (N=12, k=1) and
+// (N=9, k=2) at >=80%, both LIVE. Other combos are reported for visibility.
 //
 // This test is NOT run with -short.
 func TestStep7Gate(t *testing.T) {

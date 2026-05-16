@@ -32,7 +32,7 @@ import (
 //
 // Approved opts the fixture into a pre-populated verdictSummary block
 // ({up:1, down:0}) so daily-flow specs that filter on
-// "verdictSummary.up >= 1 AND verdictSummary.down == 0" (DP-15) can
+// "verdictSummary.up >= 1 AND verdictSummary.down == 0" can
 // pick the row up out of a fresh e2e pool. Defaults false; non-daily
 // fixtures stay summary-less and match the not-yet-rated default.
 type fixture struct {
@@ -100,9 +100,9 @@ var fixtures = []fixture{
 	{
 		// 9x9 Standard, pre-approved for the daily flow. The daily
 		// pool selection filter requires verdictSummary.up >= 1 AND
-		// verdictSummary.down == 0 (DP-15); without an approved 9#
-		// standard fixture the e2e daily endpoint can't resolve a
-		// puzzle on a fresh LocalStack. Used by daily-flow.spec.ts.
+		// verdictSummary.down == 0; without an approved 9#standard
+		// fixture the e2e daily endpoint can't resolve a puzzle on a
+		// fresh LocalStack. Used by daily-flow.spec.ts.
 		ID:       "e2e0000-0000-4000-9000-000000000001",
 		Size:     9,
 		K:        1,
@@ -203,7 +203,7 @@ func writeFixture(dir string, f fixture) error {
 // When approved is true the item carries a pre-populated
 // verdictSummary {up:1, down:0, lastUpdatedAt:""} block matching the
 // shape RecomputeVerdictSummary writes (M with N+S members). Daily
-// pool selection (DP-15) requires verdictSummary.up >= 1 AND
+// pool selection requires verdictSummary.up >= 1 AND
 // verdictSummary.down == 0; the fixed lastUpdatedAt keeps regeneration
 // deterministic.
 func puzzleItem(pk, sk string, seed int64, p *generator.Puzzle, solution [][]bool, approved bool) map[string]any {

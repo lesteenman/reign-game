@@ -50,14 +50,14 @@ type verdictResponseJSON struct {
 	} `json:"summary"`
 }
 
-// validVerdictBody returns a body that passes all VH-03 checks.
+// validVerdictBody returns a body that passes all body-decode checks.
 func validVerdictBody() *bytes.Buffer {
 	return bytes.NewBufferString(`{"value":"up","playTimeMs":42000,"outcome":"solved","clientVersion":"0.1.0"}`)
 }
 
-// TestVerdictHandler_AuthMatrix exercises the BM-01/BM-02 matrix that
-// every /api/admin/* route inherits from RequireAuth + RequireAdmin
-// (VH-01). Anonymous → 401, signed-in non-admin → 403, admin → 200.
+// TestVerdictHandler_AuthMatrix exercises the auth matrix that every
+// /api/admin/* route inherits from RequireAuth + RequireAdmin.
+// Anonymous → 401, signed-in non-admin → 403, admin → 200.
 func TestVerdictHandler_AuthMatrix(t *testing.T) {
 	for _, tc := range adminAuthMatrix {
 		t.Run(tc.name, func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestVerdictHandler_Validation(t *testing.T) {
 		{"unknown mode", "/api/admin/puzzles/abc/verdict?size=7&mode=triple", `{"value":"up","playTimeMs":1,"outcome":"solved","clientVersion":"0.1.0"}`, http.StatusBadRequest},
 		{"value uppercase rejected", "/api/admin/puzzles/abc/verdict?size=7&mode=standard", `{"value":"UP","playTimeMs":1,"outcome":"solved","clientVersion":"0.1.0"}`, http.StatusBadRequest},
 		{"value=upvote rejected", "/api/admin/puzzles/abc/verdict?size=7&mode=standard", `{"value":"upvote","playTimeMs":1,"outcome":"solved","clientVersion":"0.1.0"}`, http.StatusBadRequest},
-		{"VH-04: skip rejected from verdict surface", "/api/admin/puzzles/abc/verdict?size=7&mode=standard", `{"value":"skip","playTimeMs":1,"outcome":"solved","clientVersion":"0.1.0"}`, http.StatusBadRequest},
+		{"skip rejected from verdict surface", "/api/admin/puzzles/abc/verdict?size=7&mode=standard", `{"value":"skip","playTimeMs":1,"outcome":"solved","clientVersion":"0.1.0"}`, http.StatusBadRequest},
 		{"negative playTimeMs", "/api/admin/puzzles/abc/verdict?size=7&mode=standard", `{"value":"up","playTimeMs":-1,"outcome":"solved","clientVersion":"0.1.0"}`, http.StatusBadRequest},
 		{"playTimeMs as string", "/api/admin/puzzles/abc/verdict?size=7&mode=standard", `{"value":"up","playTimeMs":"50","outcome":"solved","clientVersion":"0.1.0"}`, http.StatusBadRequest},
 		{"outcome=completed rejected", "/api/admin/puzzles/abc/verdict?size=7&mode=standard", `{"value":"up","playTimeMs":1,"outcome":"completed","clientVersion":"0.1.0"}`, http.StatusBadRequest},
@@ -132,7 +132,7 @@ func TestVerdictHandler_Validation(t *testing.T) {
 	}
 }
 
-// VH-05: ErrPuzzleNotFound from the service translates to 404.
+// ErrPuzzleNotFound from the service translates to 404.
 func TestVerdictHandler_PuzzleNotFound(t *testing.T) {
 	// Arrange
 	svc := &stubVerdictService{submitErr: verdictsvc.ErrPuzzleNotFound}
@@ -153,9 +153,9 @@ func TestVerdictHandler_PuzzleNotFound(t *testing.T) {
 	}
 }
 
-// VH-06: a malicious caller adding a `raterId` field to the JSON body
-// must NOT influence the RaterID that the handler passes to the service.
-// The handler must derive RaterID exclusively from the Clerk session.
+// A malicious caller adding a `raterId` field to the JSON body must NOT
+// influence the RaterID that the handler passes to the service. The handler
+// derives RaterID exclusively from the Clerk session.
 func TestVerdictHandler_RaterIDFromSessionNotBody(t *testing.T) {
 	// Arrange
 	svc := &stubVerdictService{
@@ -181,7 +181,7 @@ func TestVerdictHandler_RaterIDFromSessionNotBody(t *testing.T) {
 		t.Fatal("Submit was not invoked")
 	}
 	if svc.lastInput.RaterID == "imposter" {
-		t.Error("RaterID was sourced from the request body — VH-06 violated")
+		t.Error("RaterID was sourced from the request body, want Clerk session ID")
 	}
 	if svc.lastInput.RaterID != testAdminSub {
 		t.Errorf("RaterID = %q, want %q (from Clerk session)", svc.lastInput.RaterID, testAdminSub)
@@ -191,9 +191,9 @@ func TestVerdictHandler_RaterIDFromSessionNotBody(t *testing.T) {
 	}
 }
 
-// VH-09: when the service returns success with an empty summary
-// (best-effort recompute swallowed a transient failure or benign race),
-// the handler still returns 200. The user-visible action succeeded.
+// When the service returns success with an empty summary (best-effort
+// recompute swallowed a transient failure or benign race), the handler
+// still returns 200. The user-visible action succeeded.
 func TestVerdictHandler_EmptySummaryStill200(t *testing.T) {
 	// Arrange
 	svc := &stubVerdictService{summary: verdictsvc.Summary{}}
@@ -236,9 +236,9 @@ func TestVerdictHandler_ServiceErrorReturns500(t *testing.T) {
 	}
 }
 
-// VH-08: the response envelope carries the recomputed summary as plain
-// fields {up, down, lastUpdatedAt} so the UI can render new totals
-// without a follow-up GET.
+// The response envelope carries the recomputed summary as plain fields
+// {up, down, lastUpdatedAt} so the UI can render new totals without a
+// follow-up GET.
 func TestVerdictHandler_HappyPathResponseShape(t *testing.T) {
 	// Arrange
 	svc := &stubVerdictService{

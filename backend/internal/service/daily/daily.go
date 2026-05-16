@@ -203,18 +203,17 @@ func (s *Service) FinalizeDaily(
 }
 
 // SubmitPlay commits a daily-puzzle solve via a single transaction with
-// up to three legs (DP-12, D14):
+// up to three legs:
 //
 //  1. UpdateItem PLAY → outcome=solved, submittedAt, serverElapsedMs,
 //     clientClaimedMs. Conditional on outcome=started for idempotency —
 //     a duplicate submission produces repository.ErrPlayNotInStartedState
 //     (caller maps to HTTP 409).
 //  2. UpdateItem schedule row → ADD counters.solved 1. Date keys off
-//     submission.AssignedAt (DP-13: cross-midnight submissions credit the
+//     submission.AssignedAt (cross-midnight submissions credit the
 //     prior date's counter).
 //  3. PutItem leaderboard row at DAILY-LEADERBOARD#{playOriginDate} —
-//     signed-in only. Anonymous (deviceId-keyed) submissions skip this
-//     leg (D13).
+//     signed-in only. Anonymous (deviceId-keyed) submissions skip this leg.
 //
 // Delegates the actual TransactWriteItems call to s.store.WriteTransaction,
 // keeping orchestration in service/ per the architecture rule.
@@ -338,7 +337,7 @@ func (s *Service) GetDaily(ctx context.Context, in GetInput) (*DailyView, error)
 
 	var syncMs int64
 	if schedule == nil {
-		// DP-05: sync-fallback engages ONLY for today. Yesterday's schedule
+		// Sync-fallback engages ONLY for today. Yesterday's schedule
 		// should always exist by the time today is being requested — if it
 		// doesn't, the system is in an unrecoverable state and we return
 		// ErrScheduleNotFinalized rather than attempt to retro-finalize.

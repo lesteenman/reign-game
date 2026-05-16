@@ -265,7 +265,7 @@ func abs(x int) int {
 // are among the reachable cells).
 //
 // A weaker version of this check that only verified seed reachability was
-// the source of R-067-era disconnected regions: at k=1 a region has a
+// the source of historical disconnected-region bugs: at k=1 a region has a
 // single seed, so the seed trivially remains its own connected component
 // while non-seed tail cells get orphaned. We now count cells too.
 //

@@ -17,8 +17,8 @@ import (
 const CandidateFreshnessWindow = 24 * time.Hour
 
 // CandidatePoolSize / CandidatePoolMode scope candidate selection to
-// the single canonical 9x9 Standard daily (D1). Constants — change
-// when D1 rotation lands.
+// the single canonical 9x9 Standard daily. Constants — change when
+// combo rotation lands.
 const (
 	CandidatePoolSize = 9
 	CandidatePoolMode = "standard"
@@ -26,9 +26,9 @@ const (
 
 // ErrCandidatePoolEmpty is returned by EnsureCandidate when the
 // approved pool has no eligible puzzles. Caller logs and exits;
-// T=0 will recycle yesterday (Finding 9, DP-16). Distinct from
-// ErrPoolExhausted in sync.go because at T-6h we have the option
-// of deferring to T=0 instead of failing loudly.
+// T=0 will recycle yesterday. Distinct from ErrPoolExhausted in
+// sync.go because at T-6h we have the option of deferring to T=0
+// instead of failing loudly.
 var ErrCandidatePoolEmpty = errors.New("approved candidate pool is empty")
 
 // EnsureCandidate runs the T-6h cron algorithm (design §4 T-6h cron).

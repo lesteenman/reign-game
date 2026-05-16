@@ -22,9 +22,9 @@ type VerdictService interface {
 	Submit(ctx context.Context, in *verdictsvc.SubmitInput) (verdictsvc.Summary, error)
 }
 
-// verdictRequest is the decoded JSON body for PUT verdict (VH-03).
-// raterId is intentionally NOT a field — VH-06 requires the rater ID to
-// come from the authenticated session, never from caller-controlled input.
+// verdictRequest is the decoded JSON body for PUT verdict.
+// raterId is intentionally NOT a field — the rater ID must come from
+// the authenticated session, never from caller-controlled input.
 type verdictRequest struct {
 	Value         string `json:"value"`
 	PlayTimeMs    int64  `json:"playTimeMs"`
@@ -41,7 +41,7 @@ type verdictSummaryDTO struct {
 	LastUpdatedAt string `json:"lastUpdatedAt"`
 }
 
-// verdictResponse is the success envelope returned to the frontend (VH-08).
+// verdictResponse is the success envelope returned to the frontend.
 // Carries the recomputed summary so the UI can render the new totals
 // without a follow-up GET.
 type verdictResponse struct {
@@ -52,14 +52,14 @@ type verdictResponse struct {
 // PUT /api/admin/puzzles/{id}/verdict.
 //
 // Mounted inside the existing /api/admin route group so RequireAuth +
-// RequireAdmin run once at the group level (VH-01). The handler trusts
-// the middleware to have already proven the caller is signed in and
-// holds the admin role; it does not re-check.
+// RequireAdmin run once at the group level. The handler trusts the
+// middleware to have already proven the caller is signed in and holds
+// the admin role; it does not re-check.
 func VerdictHandler(svc VerdictService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		// VH-02: required path + query parameters.
+		// Required path + query parameters.
 		puzzleID := chi.URLParam(r, "id")
 		if puzzleID == "" {
 			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "puzzle ID is required")
@@ -91,17 +91,17 @@ func VerdictHandler(svc VerdictService) http.HandlerFunc {
 			return
 		}
 
-		// VH-03: decode + validate the body. DisallowUnknownFields is NOT
-		// used — VH-03 says unknown fields are ignored (so a body that
-		// includes a stray `raterId` decodes cleanly without it landing
-		// on the verdict row, satisfying VH-06).
+		// Decode + validate the body. DisallowUnknownFields is NOT used —
+		// unknown fields are silently ignored so a body that includes a
+		// stray `raterId` decodes cleanly without it landing on the verdict
+		// row (rater ID always comes from the session, not the body).
 		var req verdictRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "invalid request body")
 			return
 		}
 
-		// VH-03 + VH-04: case-sensitive value, skip rejected.
+		// Value is case-sensitive; "skip" is not accepted here.
 		if req.Value != "up" && req.Value != "down" {
 			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "value must be 'up' or 'down'")
 			return
@@ -115,8 +115,8 @@ func VerdictHandler(svc VerdictService) http.HandlerFunc {
 			return
 		}
 
-		// VH-06: rater ID comes from the Clerk session via the auth
-		// middleware. Never the request body.
+		// Rater ID comes from the Clerk session via the auth
+		// middleware, never from the request body.
 		user := auth.UserFromContext(r.Context())
 		if user == nil {
 			// Defense-in-depth: RequireAuth should have returned 401 long
@@ -129,13 +129,13 @@ func VerdictHandler(svc VerdictService) http.HandlerFunc {
 		}
 		raterID := user.ID
 
-		// VH-07: raterRole is hard-coded "admin" this phase. When a
+		// raterRole is hard-coded "admin" in this phase. When a
 		// public-rater role lands, this becomes one line:
 		//     raterRole := getClerkRole(user)
 		const raterRole = "admin"
 
-		// VH-05 + VH-10: delegate to the service. ErrPuzzleNotFound
-		// translates to 404; any other error is a 500.
+		// Delegate to the service. ErrPuzzleNotFound translates to 404;
+		// any other error is a 500.
 		summary, err := svc.Submit(r.Context(), &verdictsvc.SubmitInput{
 			GridSize:      size,
 			Mode:          mode,
@@ -157,7 +157,7 @@ func VerdictHandler(svc VerdictService) http.HandlerFunc {
 			return
 		}
 
-		// VH-11: log success with rater + value, never the session token.
+		// Log success with rater + value, never the session token.
 		log.Printf("verdict: write puzzle=%s rater=%s value=%s outcome=%s", puzzleID, raterID, req.Value, req.Outcome)
 
 		w.WriteHeader(http.StatusOK)

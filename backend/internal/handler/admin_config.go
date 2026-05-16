@@ -18,9 +18,8 @@ import (
 
 // maxConfigThreshold caps how many ready puzzles a single CONFIG item can
 // demand. Replenish enqueues one SQS message per unit of threshold-minus-count,
-// so an unbounded threshold combined with an unauthenticated admin surface
-// (see KI-009) would let any caller amplify a single HTTP request into
-// arbitrary SQS load. 50 is generous for real pool sizes.
+// so an unbounded threshold would let any caller amplify a single HTTP request
+// into arbitrary SQS load. 50 is generous for real pool sizes.
 const maxConfigThreshold = 50
 
 // ConfigService is the application surface the admin-config handlers

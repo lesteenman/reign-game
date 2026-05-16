@@ -12,9 +12,9 @@ import (
 // makes the remaining state solvable by deductive rules. The benchmark
 // measures one solve() call from this partial state.
 //
-// Per PG-06: target <50 µs/op, zero allocations after warm-up. On N=14
-// the typical state is large (14×14 grid, 14 regions of 14 cells each);
-// this benchmark flags pathological regressions.
+// Target <50 µs/op, zero allocations after warm-up. On N=14 the typical
+// state is large (14×14 grid, 14 regions of 14 cells each); this
+// benchmark flags pathological regressions.
 func BenchmarkSolverFixedPoint(b *testing.B) {
 	// Build a mid-generation state: N=14 k=1 row-stripes, all row marks
 	// placed except row 0's. Row 0 then needs R3 + R1 + R2 to drive the
