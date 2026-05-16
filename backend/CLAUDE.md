@@ -10,10 +10,10 @@ The backend has two "edge" subsystems (`handler/` for HTTP, `worker/` for SQS), 
 |---|---|---|---|
 | **Edge: HTTP** | `internal/handler/` | service, mode, httperr, generator (debug only) | repository, queue, AWS SDK directly |
 | **Edge: SQS consumer** | `internal/worker/` | service, mode, generator | handler, repository, queue directly |
-| **Service** (application) | `internal/service/` | repository, queue, domain, mode, generator, replenish, awsclient | handler, worker |
+| **Service** (application) | `internal/service/` | repository, queue, domain, mode, generator, awsclient | handler, worker |
 | **Persistence** | `internal/repository/`, `internal/queue/` | AWS SDK, domain, mode | handler, worker, service |
 | **Pure / domain** | `internal/mode/`, `internal/generator/` (and `internal/domain/` if created) | external libs only | anything else under `internal/` |
-| **Infra adapters** | `internal/awsclient/`, `internal/auth/`, `internal/httperr/`, `internal/replenish/` | AWS SDK, external libs, domain | handler, worker (callable but not imported) |
+| **Infra adapters** | `internal/awsclient/`, `internal/auth/`, `internal/httperr/` | AWS SDK, external libs, domain | handler, worker (callable but not imported) |
 
 Key rules:
 - **Multi-leg DDB transactions live in `service/`, not `repository/`.** Repository methods are single transactions of single-row scope OR a single `TransactWriteItems`/`TransactGetItems` call with no orchestration logic.

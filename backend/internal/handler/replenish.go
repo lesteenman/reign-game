@@ -9,8 +9,8 @@ import (
 
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/replenish"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	"github.com/eriksteenman/reign-game/backend/internal/service/replenish"
 )
 
 // ConfigReader is the narrow surface ReplenishHandler needs. It matches

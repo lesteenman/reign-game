@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/replenish"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	"github.com/eriksteenman/reign-game/backend/internal/service/replenish"
 )
 
 // fakeConfigReader stubs ConfigReader (both GetAllConfigs + GetConfig).

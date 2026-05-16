@@ -31,9 +31,9 @@ import (
 
 	"github.com/eriksteenman/reign-game/backend/internal/awsclient"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/replenish"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 	"github.com/eriksteenman/reign-game/backend/internal/service/daily"
+	"github.com/eriksteenman/reign-game/backend/internal/service/replenish"
 )
 
 // EventBridgeScheduledEvent is the slice of an EventBridge scheduled

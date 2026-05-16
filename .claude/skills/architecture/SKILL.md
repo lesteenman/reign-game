@@ -22,10 +22,10 @@ Entry points (`cmd/*/main.go`) compose dependencies and dispatch to the appropri
 |---|---|---|---|
 | **Edge: HTTP** | `backend/internal/handler/` | service, mode, httperr, generator (only for the `/api/puzzles/generate` debug endpoint) | repository, queue, AWS SDK directly |
 | **Edge: SQS consumer** | `backend/internal/worker/` | service, mode, generator | handler, repository, queue directly |
-| **Service** (application) | `backend/internal/service/` | repository, queue, domain, mode, generator, replenish, awsclient | handler, worker |
+| **Service** (application) | `backend/internal/service/` | repository, queue, domain, mode, generator, awsclient | handler, worker |
 | **Persistence** | `backend/internal/repository/`, `backend/internal/queue/` | AWS SDK, domain, mode | handler, worker, service |
 | **Pure / domain** | `backend/internal/domain/` (if created), `backend/internal/mode/`, `backend/internal/generator/` | external libs only | anything else under `internal/` |
-| **Infra adapters** | `backend/internal/awsclient/`, `backend/internal/auth/`, `backend/internal/httperr/`, `backend/internal/replenish/` | AWS SDK, external libs, domain | handler, worker (callable but not imported) |
+| **Infra adapters** | `backend/internal/awsclient/`, `backend/internal/auth/`, `backend/internal/httperr/` | AWS SDK, external libs, domain | handler, worker (callable but not imported) |
 
 **Notes on the moves codified by Track 3:**
 - `MarksPerUnitFromMode`, `ModeStandard`, `ModeDouble`, `isMode` live in `backend/internal/mode/`. Both `handler/` and `worker/` import them from there.
