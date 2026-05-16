@@ -32,11 +32,6 @@ var ErrBruteInvalidInput = errors.New("bruteSolveAll: invalid input")
 // Input contract: n in [1, nMax], k in {1, 2}, maxSolutions > 0, regionMap
 // shaped exactly [n][n] with region ids in [0, n). Violations return
 // ErrBruteInvalidInput.
-//
-// TODO(R-065): the per-call regOf initialization + per-recursion-level
-// bruteKCombos allocation dominate when the region-grower scores many
-// candidate maps. Pool state + share the combo enumerator with sample.go's
-// enumerateKCombos when the deductive solver lands in R-064.
 func bruteSolveAll(regionMap [][]int, n, k, maxSolutions int) ([][]Mark, error) {
 	if n < 1 || n > nMax {
 		return nil, fmt.Errorf("n=%d (must be in [1, %d]): %w", n, nMax, ErrBruteInvalidInput)

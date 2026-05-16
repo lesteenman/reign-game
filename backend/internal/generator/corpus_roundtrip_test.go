@@ -43,9 +43,9 @@ func TestCorpusRoundtrip(t *testing.T) {
 		assertDeductiveBruteAgree(t, path, &p)
 		checked++
 	}
-	// TODO: once R-068b's corpus-generator has been run and testdata/
-	// puzzles committed, flip this skip to t.Fatalf — silent no-op is a
-	// regression canary hazard if the committed corpus is ever deleted.
+	// TODO: once the corpus-generator has been run and testdata/puzzles
+	// committed, flip this skip to t.Fatalf — silent no-op is a regression
+	// canary hazard if the committed corpus is ever deleted.
 	if checked == 0 {
 		t.Skip("no puzzles in testdata/puzzles — corpus not yet generated")
 	}

@@ -1,10 +1,8 @@
 package handler
 
 import (
-	"crypto/rand"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -13,6 +11,7 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
 	"github.com/eriksteenman/reign-game/backend/internal/mode"
 	"github.com/eriksteenman/reign-game/backend/internal/model"
+	"github.com/eriksteenman/reign-game/backend/internal/uuid"
 )
 
 // GenerateHandler handles GET /api/puzzles/generate. The debug endpoint
@@ -51,7 +50,7 @@ func GenerateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	puzzleID, err := newUUIDv4()
+	puzzleID, err := uuid.NewV4()
 	if err != nil {
 		httperr.WriteError(w, http.StatusInternalServerError, "generation_failed", "failed to generate puzzle ID")
 		return
@@ -104,16 +103,4 @@ func parseSizeMode(r *http.Request) (size int, modeName string, status int, errC
 	}
 
 	return size, modeName, 0, "", ""
-}
-
-// newUUIDv4 returns a freshly-generated UUID v4 string. Bits per RFC 4122 §4.4.
-func newUUIDv4() (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("reading random bytes: %w", err)
-	}
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }

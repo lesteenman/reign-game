@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"log"
 	"net/http"
@@ -31,20 +30,9 @@ import (
 	serveservice "github.com/eriksteenman/reign-game/backend/internal/service/serve"
 	statusservice "github.com/eriksteenman/reign-game/backend/internal/service/status"
 	verdictservice "github.com/eriksteenman/reign-game/backend/internal/service/verdict"
+	"github.com/eriksteenman/reign-game/backend/internal/uuid"
 	"github.com/eriksteenman/reign-game/backend/internal/worker"
 )
-
-// newUUIDv4 generates a UUID v4 string using crypto/rand.
-func newUUIDv4() (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("reading random bytes: %w", err)
-	}
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
-}
 
 // newRouter builds and returns the application router with all routes mounted
 // under the /api prefix. The prefix separates API traffic from SPA routes
@@ -153,7 +141,7 @@ func main() {
 
 		dynamoClient := awsclient.NewDynamoDBClient(&cfg)
 		repo := repository.NewPuzzleRepository(dynamoClient, tableName)
-		w := worker.NewGeneratorWorker(repo, newUUIDv4)
+		w := worker.NewGeneratorWorker(repo, uuid.NewV4)
 
 		if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
 			// Lambda environment: start SQS event handler.
