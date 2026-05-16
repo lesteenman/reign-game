@@ -14,6 +14,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -199,6 +200,100 @@ func (s *Service) FinalizeDaily(
 			return repository.ErrScheduleAlreadyFinalized
 		}
 		return fmt.Errorf("finalizing daily transaction for %s (mode=%s): %w", date, mode, err)
+	}
+	return nil
+}
+
+// SubmitPlay commits a daily-puzzle solve via a single transaction with
+// up to three legs (DP-12, D14):
+//
+//  1. UpdateItem PLAY → outcome=solved, submittedAt, serverElapsedMs,
+//     clientClaimedMs. Conditional on outcome=started for idempotency —
+//     a duplicate submission produces repository.ErrPlayNotInStartedState
+//     (caller maps to HTTP 409).
+//  2. UpdateItem schedule row → ADD counters.solved 1. Date keys off
+//     submission.AssignedAt (DP-13: cross-midnight submissions credit the
+//     prior date's counter).
+//  3. PutItem leaderboard row at DAILY-LEADERBOARD#{playOriginDate} —
+//     signed-in only. Anonymous (deviceId-keyed) submissions skip this
+//     leg (D13).
+//
+// Mirrors repository.SubmitPlayTransactionally in logic but delegates
+// the actual TransactWriteItems call to s.store.WriteTransaction,
+// keeping orchestration in service/ per the architecture rule.
+func (s *Service) SubmitPlay(ctx context.Context, playerID, date string, submission *repository.SubmitInput) error {
+	playOriginDate := submission.AssignedAt.UTC().Format("2006-01-02")
+	submittedAt := submission.SubmittedAt.UTC().Format(time.RFC3339)
+	elapsedMs := submission.SubmittedAt.Sub(submission.AssignedAt).Milliseconds()
+	if elapsedMs < 0 {
+		return fmt.Errorf("invalid submission: submittedAt before assignedAt (delta=%dms)", elapsedMs)
+	}
+
+	items := []types.TransactWriteItem{
+		{
+			Update: &types.Update{
+				TableName: aws.String(s.tableName),
+				Key: map[string]types.AttributeValue{
+					"PK": &types.AttributeValueMemberS{Value: repository.BuildPlayPK(playerID)},
+					"SK": &types.AttributeValueMemberS{Value: repository.BuildPlaySK(date)},
+				},
+				UpdateExpression: aws.String(
+					"SET #outcome = :solved, submittedAt = :submittedAt, " +
+						"serverElapsedMs = :serverMs, clientClaimedMs = :clientMs",
+				),
+				ConditionExpression: aws.String("#outcome = :started"),
+				ExpressionAttributeNames: map[string]string{
+					"#outcome": "outcome",
+				},
+				ExpressionAttributeValues: map[string]types.AttributeValue{
+					":solved":      &types.AttributeValueMemberS{Value: repository.PlayOutcomeSolved},
+					":started":     &types.AttributeValueMemberS{Value: repository.PlayOutcomeStarted},
+					":submittedAt": &types.AttributeValueMemberS{Value: submittedAt},
+					":serverMs":    &types.AttributeValueMemberN{Value: strconv.FormatInt(elapsedMs, 10)},
+					":clientMs":    &types.AttributeValueMemberN{Value: strconv.FormatInt(submission.ClientMs, 10)},
+				},
+			},
+		},
+		{
+			Update: &types.Update{
+				TableName: aws.String(s.tableName),
+				Key: map[string]types.AttributeValue{
+					"PK": &types.AttributeValueMemberS{Value: repository.BuildDailySchedulePK(playOriginDate)},
+					"SK": &types.AttributeValueMemberS{Value: repository.DailySingletonSK},
+				},
+				UpdateExpression: aws.String("ADD #counters.#solved :one"),
+				ExpressionAttributeNames: map[string]string{
+					"#counters": "counters",
+					"#solved":   repository.ScheduleCounterSolved,
+				},
+				ExpressionAttributeValues: map[string]types.AttributeValue{
+					":one": &types.AttributeValueMemberN{Value: "1"},
+				},
+			},
+		},
+	}
+
+	if !submission.IsAnonymous {
+		items = append(items, types.TransactWriteItem{
+			Put: &types.Put{
+				TableName: aws.String(s.tableName),
+				Item: map[string]types.AttributeValue{
+					"PK":              &types.AttributeValueMemberS{Value: repository.BuildDailyLeaderboardPK(playOriginDate)},
+					"SK":              &types.AttributeValueMemberS{Value: repository.BuildLeaderboardSK(elapsedMs, submission.UserID)},
+					"userId":          &types.AttributeValueMemberS{Value: submission.UserID},
+					"serverElapsedMs": &types.AttributeValueMemberN{Value: strconv.FormatInt(elapsedMs, 10)},
+					"submittedAt":     &types.AttributeValueMemberS{Value: submittedAt},
+					"puzzleId":        &types.AttributeValueMemberS{Value: submission.PuzzleID},
+				},
+			},
+		})
+	}
+
+	if err := s.store.WriteTransaction(ctx, items); err != nil {
+		if repository.IsConditionalCheckFailureOnLeg(err, 0) {
+			return repository.ErrPlayNotInStartedState
+		}
+		return fmt.Errorf("submitting daily play %s/%s: %w", playerID, date, err)
 	}
 	return nil
 }

@@ -188,30 +188,35 @@ func BuildDailySchedulePK(date string) string {
 	return "DAILY#" + date
 }
 
-// buildDailyLeaderboardPK constructs DAILY-LEADERBOARD#YYYY-MM-DD.
-func buildDailyLeaderboardPK(date string) string {
+// BuildDailyLeaderboardPK constructs DAILY-LEADERBOARD#YYYY-MM-DD.
+// Exported so the service layer can build keys for transaction legs
+// without re-encoding the prefix.
+func BuildDailyLeaderboardPK(date string) string {
 	return "DAILY-LEADERBOARD#" + date
 }
 
-// buildPlayPK constructs PLAY#{playerId}. `playerId` is opaque — it can
+// BuildPlayPK constructs PLAY#{playerId}. `playerId` is opaque — it can
 // be a Clerk userID or a deviceId; the prefix scopes both into the same
-// row family without collision risk.
-func buildPlayPK(playerID string) string {
+// row family without collision risk. Exported so the service layer can
+// assemble transaction legs.
+func BuildPlayPK(playerID string) string {
 	return "PLAY#" + playerID
 }
 
-// buildPlaySK constructs DAILY#YYYY-MM-DD as the PLAY row sort key.
+// BuildPlaySK constructs DAILY#YYYY-MM-DD as the PLAY row sort key.
 // The shape mirrors the schedule PK on purpose so future per-player
-// surfaces (packs, etc.) can extend with sibling SK prefixes.
-func buildPlaySK(date string) string {
+// surfaces (packs, etc.) can extend with sibling SK prefixes. Exported
+// so the service layer can assemble transaction legs.
+func BuildPlaySK(date string) string {
 	return "DAILY#" + date
 }
 
-// buildLeaderboardSK constructs the leaderboard SK as
+// BuildLeaderboardSK constructs the leaderboard SK as
 // {paddedMs:8d}#{userId}. Eight digits → max ~27.7 hours, ample
 // headroom for any legitimate solve time. Ascending lexicographic Query
-// returns fastest first.
-func buildLeaderboardSK(elapsedMs int64, userID string) string {
+// returns fastest first. Exported so the service layer can assemble
+// transaction legs.
+func BuildLeaderboardSK(elapsedMs int64, userID string) string {
 	return fmt.Sprintf("%08d#%s", elapsedMs, userID)
 }
 
@@ -486,8 +491,8 @@ func (r *PuzzleRepository) GetPlay(ctx context.Context, playerID, date string) (
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: buildPlayPK(playerID)},
-			"SK": &types.AttributeValueMemberS{Value: buildPlaySK(date)},
+			"PK": &types.AttributeValueMemberS{Value: BuildPlayPK(playerID)},
+			"SK": &types.AttributeValueMemberS{Value: BuildPlaySK(date)},
 		},
 	})
 	if err != nil {
@@ -514,8 +519,8 @@ func (r *PuzzleRepository) GetPlay(ctx context.Context, playerID, date string) (
 // the winner's assignedAt.
 func (r *PuzzleRepository) PutPlayStartedIfAbsent(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error {
 	item := map[string]types.AttributeValue{
-		"PK":         &types.AttributeValueMemberS{Value: buildPlayPK(playerID)},
-		"SK":         &types.AttributeValueMemberS{Value: buildPlaySK(date)},
+		"PK":         &types.AttributeValueMemberS{Value: BuildPlayPK(playerID)},
+		"SK":         &types.AttributeValueMemberS{Value: BuildPlaySK(date)},
 		"outcome":    &types.AttributeValueMemberS{Value: PlayOutcomeStarted},
 		"assignedAt": &types.AttributeValueMemberS{Value: assignedAt.UTC().Format(time.RFC3339)},
 		"puzzleId":   &types.AttributeValueMemberS{Value: puzzleID},
@@ -568,8 +573,8 @@ func (r *PuzzleRepository) SubmitPlayTransactionally(ctx context.Context, player
 			Update: &types.Update{
 				TableName: aws.String(r.tableName),
 				Key: map[string]types.AttributeValue{
-					"PK": &types.AttributeValueMemberS{Value: buildPlayPK(playerID)},
-					"SK": &types.AttributeValueMemberS{Value: buildPlaySK(date)},
+					"PK": &types.AttributeValueMemberS{Value: BuildPlayPK(playerID)},
+					"SK": &types.AttributeValueMemberS{Value: BuildPlaySK(date)},
 				},
 				UpdateExpression: aws.String(
 					"SET #outcome = :solved, submittedAt = :submittedAt, " +
@@ -612,8 +617,8 @@ func (r *PuzzleRepository) SubmitPlayTransactionally(ctx context.Context, player
 			Put: &types.Put{
 				TableName: aws.String(r.tableName),
 				Item: map[string]types.AttributeValue{
-					"PK":              &types.AttributeValueMemberS{Value: buildDailyLeaderboardPK(playOriginDate)},
-					"SK":              &types.AttributeValueMemberS{Value: buildLeaderboardSK(elapsedMs, submission.UserID)},
+					"PK":              &types.AttributeValueMemberS{Value: BuildDailyLeaderboardPK(playOriginDate)},
+					"SK":              &types.AttributeValueMemberS{Value: BuildLeaderboardSK(elapsedMs, submission.UserID)},
 					"userId":          &types.AttributeValueMemberS{Value: submission.UserID},
 					"serverElapsedMs": &types.AttributeValueMemberN{Value: strconv.FormatInt(elapsedMs, 10)},
 					"submittedAt":     &types.AttributeValueMemberS{Value: submittedAt},
@@ -801,7 +806,7 @@ func (r *PuzzleRepository) LeaderboardRank(
 	elapsedMs int64,
 	userID string,
 ) (int, error) {
-	playerSK := buildLeaderboardSK(elapsedMs, userID)
+	playerSK := BuildLeaderboardSK(elapsedMs, userID)
 	output, err := r.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(r.tableName),
 		KeyConditionExpression: aws.String("#pk = :pk AND #sk <= :playerSK"),
@@ -810,7 +815,7 @@ func (r *PuzzleRepository) LeaderboardRank(
 			"#sk": "SK",
 		},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk":       &types.AttributeValueMemberS{Value: buildDailyLeaderboardPK(date)},
+			":pk":       &types.AttributeValueMemberS{Value: BuildDailyLeaderboardPK(date)},
 			":playerSK": &types.AttributeValueMemberS{Value: playerSK},
 		},
 		Select: types.SelectCount,

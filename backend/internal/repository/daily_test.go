@@ -1397,7 +1397,7 @@ func TestSubmitPlayTransactionally(t *testing.T) {
 				if pk := leg2.Put.Item["PK"].(*types.AttributeValueMemberS).Value; pk != "DAILY-LEADERBOARD#"+tt.date {
 					t.Errorf("leg 2 PK = %q, want %q", pk, "DAILY-LEADERBOARD#"+tt.date)
 				}
-				wantSK := buildLeaderboardSK(10000, tt.submission.UserID)
+				wantSK := BuildLeaderboardSK(10000, tt.submission.UserID)
 				if sk := leg2.Put.Item["SK"].(*types.AttributeValueMemberS).Value; sk != wantSK {
 					t.Errorf("leg 2 SK = %q, want %q", sk, wantSK)
 				}
