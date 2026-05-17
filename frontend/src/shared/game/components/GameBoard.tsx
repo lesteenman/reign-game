@@ -4,7 +4,7 @@ import { useUser } from '@clerk/react';
 import { Grid } from '../../../components/grid/Grid';
 import { useGame } from '../../../hooks/useGame';
 import { useTimer } from '../../../hooks/useTimer';
-import { updatePuzzleStatus } from '../../../services/puzzleService';
+import { useUpdatePuzzleStatus } from '../hooks/useUpdatePuzzleStatus';
 import { PageShell } from '../../../components/common/PageShell';
 import { PrimaryButton, SecondaryButton, GhostButton } from '../../../components/common/Button';
 import { getClerkUserRole } from '../../../components/auth/role';
@@ -140,6 +140,8 @@ export function GameBoard({
   const [showCompletion, setShowCompletion] = useState(false);
   const [completionTime, setCompletionTime] = useState(0);
   const [showSkipModal, setShowSkipModal] = useState(false);
+
+  const updatePuzzleStatusMutation = useUpdatePuzzleStatus();
 
   // Admin-only verdict surface + Skip button gating per FB-01 / FB-10.
   // Reads from the same Clerk hook used by UserMenu / ProtectedAdminRoute
@@ -292,7 +294,7 @@ export function GameBoard({
         completedAt: Date.now(),
       });
       void clearState(flowType, flowId);
-      void updatePuzzleStatus(puzzle.puzzleId, puzzle.gridSize, puzzle.mode, 'solved');
+      void updatePuzzleStatusMutation.mutateAsync({ puzzleId: puzzle.puzzleId, size: puzzle.gridSize, mode: puzzle.mode, status: 'solved' }).catch(() => {});
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSolved]);

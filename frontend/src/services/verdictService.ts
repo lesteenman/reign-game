@@ -1,25 +1,7 @@
-import type { Mode } from '../engine/types';
 import { apiPut, ApiError } from './api';
+import type { SubmitVerdictArgs } from '../shared/types/verdict';
 
-/**
- * Payload for submitVerdict. The persisted DynamoDB row carries every
- * field except `puzzleId` / `size` / `mode` (which determine the URL
- * and query params).
- */
-export interface SubmitVerdictArgs {
-  puzzleId: string;
-  size: number;
-  mode: Mode;
-  value: 'up' | 'down';
-  playTimeMs: number;
-  outcome: 'solved' | 'skipped';
-  /**
-   * Frontend git SHA for forensic correlation between a verdict row
-   * and the build it came from. Defaults to the `VITE_GIT_SHA` env
-   * var, then to `'dev'` when neither is set (local dev).
-   */
-  clientVersion?: string;
-}
+export type { SubmitVerdictArgs };
 
 /**
  * Submit an admin verdict for a puzzle. Calls the

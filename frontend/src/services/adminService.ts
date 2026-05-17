@@ -8,8 +8,6 @@ import type {
   ReplenishResult,
 } from '../shared/types/admin';
 
-export { MODES, isMode } from '../engine/types';
-
 /** Fetch the current pool status for all combos. */
 export async function fetchPoolStatus(): Promise<PoolStatus> {
   return apiFetch<PoolStatus>('/api/admin/pool');
