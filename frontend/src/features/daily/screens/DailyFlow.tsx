@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PageShell } from '../components/common/PageShell';
-import { PrimaryButton, SecondaryButton } from '../components/common/Button';
-import { ApiError } from '../services/api';
+import { PageShell } from '../../../components/common/PageShell';
+import { PrimaryButton, SecondaryButton } from '../../../components/common/Button';
+import { ApiError } from '../../../services/api';
 import {
   getDaily,
   submitDailyResult,
   type DailyPuzzlePayload,
   type DailySubmitResponse,
-} from '../services/dailyService';
+} from '../../../services/dailyService';
 import { DailyGameBoard } from './DailyGameBoard';
 import { PostCompletionScreen } from './PostCompletionScreen';
-import { useGameStorage } from '../hooks/useGameStorage';
-import type { GameState } from '../storage/types';
-import type { CellState } from '../engine/types';
+import { useGameStorage } from '../../../hooks/useGameStorage';
+import type { GameState } from '../../../storage/types';
+import type { CellState } from '../../../engine/types';
 
 /**
  * Daily Puzzle flow chrome (R-8-02 chunks 3 + 6).

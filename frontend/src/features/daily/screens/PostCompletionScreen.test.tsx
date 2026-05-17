@@ -1,6 +1,6 @@
-import { render, screen, cleanup, act } from '../test-utils';
+import { render, screen, cleanup, act } from '../../../test-utils';
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { ThemeProvider } from '../theme/ThemeContext';
+import { ThemeProvider } from '../../../theme/ThemeContext';
 import { MemoryRouter } from 'react-router-dom';
 import { PostCompletionScreen } from './PostCompletionScreen';
 

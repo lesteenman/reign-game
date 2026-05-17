@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GameBoard } from './GamePage';
-import { useGameStorage } from '../hooks/useGameStorage';
-import { EMPTY_HISTORY } from '../storage/types';
-import type { GameHistory, GameState } from '../storage/types';
-import type { CellState, PuzzleData } from '../engine/types';
-import type { DailyPuzzlePayload } from '../services/dailyService';
+import { GameBoard } from '../../../pages/GamePage';
+import { useGameStorage } from '../../../hooks/useGameStorage';
+import { EMPTY_HISTORY } from '../../../storage/types';
+import type { GameHistory, GameState } from '../../../storage/types';
+import type { CellState, PuzzleData } from '../../../engine/types';
+import type { DailyPuzzlePayload } from '../../../services/dailyService';
 
 /**
  * Daily-flow grid host (R-8-02 chunk 7 — real GameBoard integration).

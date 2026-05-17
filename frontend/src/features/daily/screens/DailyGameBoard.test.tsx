@@ -1,12 +1,12 @@
-import { render, screen, cleanup, waitFor } from '../test-utils';
+import { render, screen, cleanup, waitFor } from '../../../test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ThemeProvider } from '../theme/ThemeContext';
+import { ThemeProvider } from '../../../theme/ThemeContext';
 import { DailyGameBoard } from './DailyGameBoard';
-import type { DailyPuzzlePayload } from '../services/dailyService';
-import type { GameBoardProps } from './GamePage';
-import type { GameState } from '../storage/types';
-import type { CellState } from '../engine/types';
+import type { DailyPuzzlePayload } from '../../../services/dailyService';
+import type { GameBoardProps } from '../../../pages/GamePage';
+import type { GameState } from '../../../storage/types';
+import type { CellState } from '../../../engine/types';
 
 // Storage stub — DailyGameBoard reads `loadState('daily', flowId)` on
 // mount (DP-32 restore). Keeping the mock here means the test asserts
@@ -15,7 +15,7 @@ const mockSaveState = vi.fn(async () => {});
 const mockLoadState = vi.fn<(...args: [unknown, unknown]) => Promise<GameState | null>>(async () => null);
 const mockClearState = vi.fn(async () => {});
 const mockAddCompletion = vi.fn(async () => {});
-vi.mock('../hooks/useGameStorage', () => ({
+vi.mock('../../../hooks/useGameStorage', () => ({
   useGameStorage: () => ({
     saveState: mockSaveState,
     loadState: mockLoadState,
@@ -34,8 +34,8 @@ const STUB_SOLUTION = [
   [0, 1, 0],
 ];
 const STUB_ELAPSED_MS = 8_000;
-vi.mock('./GamePage', async () => {
-  const actual = await vi.importActual<typeof import('./GamePage')>('./GamePage');
+vi.mock('../../../pages/GamePage', async () => {
+  const actual = await vi.importActual<typeof import('../../../pages/GamePage')>('../../../pages/GamePage');
   return {
     ...actual,
     GameBoard: (props: GameBoardProps) => {

@@ -15,7 +15,7 @@ import type { Mode, PuzzleData, CellState } from '../engine/types';
 import { isMode } from '../engine/types';
 import type { FlowType, GameState, GameHistory, CompletionRecord } from '../storage/types';
 import { EMPTY_HISTORY, buildCurationFlowId, parseFlowType } from '../storage/types';
-import { DailyFlow } from './DailyFlow';
+import { DailyFlow } from '../features/daily/screens/DailyFlow';
 
 /** Format seconds as MM:SS. */
 function formatTime(seconds: number): string {
