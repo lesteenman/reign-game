@@ -36,7 +36,7 @@ Provisions the asynchronous puzzle-generation pipeline: an SQS queue (with DLQ),
 
 ## Gotchas
 
-- **`batch_size = 1`** — each SQS message triggers a fresh Lambda invocation. Correct for heavy puzzle generation; would be a cost smell for cheap work. See `FINDINGS.md`.
+- **`batch_size = 1`** — each SQS message triggers a fresh Lambda invocation. Correct for heavy puzzle generation; would be a cost smell for cheap work.
 - **15-minute timeout.** The Lambda max — accommodates worst-case generator runs (large N + property tests). If usage drops, drop the timeout.
 - **Generator's DynamoDB policy is intentionally narrower than the API Lambda's** (write-only-ish: `PutItem`, `Query`, `UpdateItem`). New access patterns require explicit policy updates.
 - **No CloudWatch log group resource.** Same gotcha as the API module — Lambda auto-creates with `Never expire` retention.

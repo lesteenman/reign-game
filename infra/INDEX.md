@@ -34,7 +34,6 @@ There is NO VPC, NO RDS, NO ECS — pure serverless.
 ```
 infra/
 ├── INDEX.md                  ← this file (Phase 0 deliverable)
-├── FINDINGS.md               ← categorized findings (Phase 0 deliverable)
 ├── CLAUDE.md                 ← infra-specific conventions (cost, security, CI/CD symmetry)
 ├── main.tf                   ← top-level module composition (database → generation → api → frontend → daily_cron)
 ├── variables.tf              ← root variables (aws_region, project_name, environment, lambda zip paths, Clerk keys, domain aliases, ACM cert ARN)
@@ -109,4 +108,4 @@ CI plan passes the same `TF_VAR_*` set as CD apply: `clerk_publishable_key`, `cl
 
 - `infra/CLAUDE.md` — per-subproject conventions (cost, security, CI/CD symmetry, Terraform + CI/CD + dev-tooling checklists)
 - `.claude/skills/architecture/SKILL.md` — canonical layered rules (modules-vs-envs, CI/CD symmetry)
-- [`infra/FINDINGS.md`](FINDINGS.md) — Phase 0 categorized findings
+- Per-module findings (cost smells, deprecated patterns, dead outputs) are documented inline in each module's `README.md`.

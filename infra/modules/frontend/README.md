@@ -35,9 +35,9 @@ Provisions the public frontend delivery surface: a private S3 bucket for the SPA
 ## Gotchas
 
 - **`aliases` and `viewer_certificate` are conditionally gated on `acm_certificate_arn != ""`.** CloudFront rejects aliases without a matching cert. The empty-string default keeps a first-time apply working on `*.cloudfront.net`. This is the "intermediate state" pattern documented in the variable + resource comments — don't refactor away the conditional.
-- **`/api/*` uses the deprecated `forwarded_values` block** instead of a modern managed-policy ID. The default behavior on line 98 uses `cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"` (Managed-CachingOptimized) — this asymmetry is called out in `infra/CLAUDE.md` Terraform Review Checklist item 1 and tracked in `FINDINGS.md` (P1 clean-code smell).
+- **`/api/*` uses the deprecated `forwarded_values` block** instead of a modern managed-policy ID. The default behavior on line 98 uses `cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"` (Managed-CachingOptimized) — this asymmetry is called out in `infra/CLAUDE.md` Terraform Review Checklist item 1. Tracked as a P1 follow-up clean-code smell.
 - **`/api/*` cookie forwarding is whitelist-only** (`__session`, `__client_uat`). Adding unrelated cookies would poison CloudFront's cache key for any future cacheable `/api/*` response. Today the TTLs are all 0 so caching is off, but the whitelist is defense in depth.
 - **SPA fallback maps 403 + 404 → 200 / `/index.html`.** This is what makes client-side routes like `/admin/curate` work. Don't remove without coordinating with the frontend router.
 - **No `response_headers_policy_id` attached** — issue #114. Missing HSTS / X-Content-Type-Options / CSP at the edge.
-- **No tags on any resource in this module.** Inconsistent with the rest of the codebase (api/database/generation/daily-cron all tag). See `FINDINGS.md`.
+- **No tags on any resource in this module.** Inconsistent with the rest of the codebase (api/database/generation/daily-cron all tag). Tracked as a follow-up consistency fix.
 - **The CloudFront distribution's `comment` is `"<project> <env> frontend"`** — fine for ops UX. Don't put PII or runtime data there.

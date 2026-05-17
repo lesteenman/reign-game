@@ -20,7 +20,7 @@ Provisions the daily-puzzle scheduler. A separate Go Lambda (`cmd/daily-cron`) i
 
 | Output | Consumer |
 |---|---|
-| `lambda_function_name` | (not consumed — see `FINDINGS.md`) |
+| `lambda_function_name` | (not consumed — operator-facing) |
 | `lambda_function_arn` | (not consumed) |
 | `t6h_rule_name` | (not consumed) |
 | `t0_rule_name` | (not consumed) |
