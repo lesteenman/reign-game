@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import { DailyFlow } from './DailyFlow';
-import { ApiError } from '../../../services/api';
+import { ApiError } from '../../../shared/api-errors';
 import type { DailyPuzzlePayload, DailySubmitResponse } from '../../../shared/types/daily';
 
 // Mock the daily service so the component's data-fetch + submit

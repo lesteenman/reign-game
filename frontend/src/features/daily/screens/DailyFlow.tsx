@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageShell } from '../../../components/common/PageShell';
 import { PrimaryButton, SecondaryButton } from '../../../components/common/Button';
-import { ApiError } from '../../../services/api';
+import { ApiError } from '../../../shared/api-errors';
 import { useDailyService } from '../hooks/useDailyService';
 import type { DailyPuzzlePayload, DailySubmitResponse } from '../../../shared/types/daily';
 import { DailyGameBoard } from './DailyGameBoard';
