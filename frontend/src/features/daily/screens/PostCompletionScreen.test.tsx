@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { PostCompletionScreen } from './PostCompletionScreen';
 
 /**
- * Tests for the daily post-completion screen (R-8-02 chunk 5).
+ * Tests for the daily post-completion screen.
  *
  * Pure presentational component — no service mocks needed. Countdown
  * uses fake timers via Vitest; submitted-at rendering pins UTC + a
@@ -79,7 +79,7 @@ describe('PostCompletionScreen', () => {
     // Arrange + Act
     renderScreen(BASE_PROPS);
 
-    // Assert — anonymous players see no rank line (DP-13)
+    // Assert — anonymous players see no rank line
     expect(screen.queryByTestId('daily-leaderboard-rank')).not.toBeInTheDocument();
   });
 

@@ -31,9 +31,9 @@ export function GamePage() {
   const [loadStatus, setLoadStatus] = useState<LoadState>({ status: 'loading' });
   const [fetchKey, setFetchKey] = useState(0);
 
-  // R-8-02 chunk 3: when the URL says `?flow=daily`, delegate the
-  // entire flow to DailyFlow. The existing pool/practice/curation
-  // path below remains untouched for non-daily flows.
+  // When the URL says `?flow=daily`, delegate the entire flow to
+  // DailyFlow. The existing pool/practice/curation path below remains
+  // untouched for non-daily flows.
   const isDailyFlow = searchParams.get('flow') === 'daily';
 
   /** Force a re-fetch of the current Flow Slot (used by Retry / Play Again). */

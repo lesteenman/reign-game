@@ -4,8 +4,7 @@ import { apiPut, ApiError } from './api';
 /**
  * Payload for submitVerdict. The persisted DynamoDB row carries every
  * field except `puzzleId` / `size` / `mode` (which determine the URL
- * and query params); see specs/admin-handler.md VH-03 for the wire
- * shape.
+ * and query params).
  */
 export interface SubmitVerdictArgs {
   puzzleId: string;
@@ -24,8 +23,7 @@ export interface SubmitVerdictArgs {
 
 /**
  * Submit an admin verdict for a puzzle. Calls the
- * `PUT /api/admin/puzzles/{id}/verdict?size=N&mode=M` endpoint
- * with a JSON body shape defined by VH-03.
+ * `PUT /api/admin/puzzles/{id}/verdict?size=N&mode=M` endpoint.
  *
  * Resolves silently on 401 / 403 (FB-05): the role check that rendered
  * the surface should have prevented this, but if the admin's role was

@@ -1,11 +1,11 @@
-// Daily Puzzle service — implements DP-28, DP-29, DP-30.
+// Daily Puzzle service.
 //
-// X-Device-Id contract (DP-10): anonymous identity is keyed by a
-// deviceId stored in localStorage. The service reads it on every
-// request; mints a new one on first invocation if missing. On a 401
-// (server says "missing auth + missing deviceId") the service silently
-// rotates the deviceId and retries once — the original was likely
-// rejected as malformed; a fresh UUID is the cheap recovery (DP-30).
+// X-Device-Id contract: anonymous identity is keyed by a deviceId
+// stored in localStorage. The service reads it on every request; mints
+// a new one on first invocation if missing. On a 401 (server says
+// "missing auth + missing deviceId") the service silently rotates the
+// deviceId and retries once — the original was likely rejected as
+// malformed; a fresh UUID is the cheap recovery.
 //
 // Requests go through api.ts (apiFetch / apiPost) with X-Device-Id
 // injected via the options.headers surface.
@@ -93,7 +93,8 @@ export async function getDaily(date?: string): Promise<DailyPuzzlePayload> {
 
 /**
  * Submit a solved daily result. The path's date is derived from
- * `assignedAt` (DP-29 cross-midnight contract — never from `now`).
+ * `assignedAt` — never from `now`, so cross-midnight submits land on
+ * the correct day's result endpoint.
  */
 export async function submitDailyResult(
   args: DailySubmitArgs,

@@ -186,9 +186,9 @@ export function VerdictSurface(props: VerdictSurfaceProps) {
     if (props.variant !== 'skip') return Promise.resolve();
     const onAfterVerdict = props.onAfterVerdict;
     return runSubmission(
-      // Parallel — VH-04 says verdict + status are orthogonal flows;
-      // running in parallel saves a round-trip and the two writes
-      // touch independent DynamoDB row families.
+      // Parallel — verdict + status are orthogonal flows; running in
+      // parallel saves a round-trip and the two writes touch
+      // independent DynamoDB row families.
       async () => {
         await Promise.all([
           updatePuzzleStatusMutation.mutateAsync({ puzzleId, size, mode, status: 'skipped' }),

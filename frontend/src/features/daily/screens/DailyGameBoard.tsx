@@ -8,13 +8,13 @@ import type { CellState, PuzzleData } from '../../../engine/types';
 import type { DailyPuzzlePayload } from '../../../services/dailyService';
 
 /**
- * Daily-flow grid host (R-8-02 chunk 7 — real GameBoard integration).
+ * Daily-flow grid host.
  *
  * Adapts the daily-payload shape to the GameBoard contract used by the
  * curation flow. Owns:
  *   - the `PuzzleData` adapter (DailyPuzzlePayload → PuzzleData),
- *   - per-flow IndexedDB resume (DP-32: refresh / second device picks
- *     up the same puzzle and the same `assignedAt`),
+ *   - per-flow IndexedDB resume (refresh / second device picks up the
+ *     same puzzle and the same `assignedAt`),
  *   - the solve-event delegate that converts GameBoard's internal
  *     marker grid + elapsed timer into the (solution, elapsedMs)
  *     tuple DailyFlow's submit handler expects.
@@ -32,7 +32,7 @@ export interface DailyGameBoardProps {
    * Fired when the player completes the puzzle. The `solution` is a
    * 0/1 marker grid (1 = player placed a marker; 0 = empty/excluded);
    * `elapsedMs` is total play time in milliseconds. Both flow into
-   * `submitDailyResult` per DP-29.
+   * `submitDailyResult`.
    */
   onSolved: (solution: number[][], elapsedMs: number) => void;
 }
@@ -65,8 +65,8 @@ export function DailyGameBoard({ payload, onSolved }: DailyGameBoardProps) {
   const { saveState, loadState, clearState, addCompletion } = useGameStorage();
 
   // Adapter: derive a PuzzleData object from the daily payload. The
-  // daily mode is fixed to 'standard' per design D1 — daily is always
-  // 9×9 Standard for now. `metadata` is intentionally omitted: the
+  // daily mode is fixed to 'standard' — daily is always 9×9 Standard
+  // for now. `metadata` is intentionally omitted: the
   // engine's PuzzleMetadata type is strict (difficulty, tierCounts,
   // ...) and the daily payload doesn't carry those fields. Adding an
   // `assignedAt` extension would ripple through every consumer of
@@ -87,9 +87,9 @@ export function DailyGameBoard({ payload, onSolved }: DailyGameBoardProps) {
     [payload.assignedAt],
   );
 
-  // Restore in-progress state from the per-flow IDB slot on mount
-  // (DP-32). A solved row never reaches this component — DailyFlow's
-  // chunk-7 short-circuit lifts the loading-state to `solved` before
+  // Restore in-progress state from the per-flow IDB slot on mount.
+  // A solved row never reaches this component — DailyFlow's
+  // short-circuit lifts the loading-state to `solved` before
   // DailyGameBoard would render. Defensively, we still treat any
   // unexpected `status === 'solved'` row as "no restore" so the player
   // gets a fresh canvas rather than a frozen pre-solved grid.

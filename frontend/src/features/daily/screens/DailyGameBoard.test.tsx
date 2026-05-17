@@ -9,8 +9,8 @@ import type { GameState } from '../../../storage/types';
 import type { CellState } from '../../../engine/types';
 
 // Storage stub — DailyGameBoard reads `loadState('daily', flowId)` on
-// mount (DP-32 restore). Keeping the mock here means the test asserts
-// the call shape without standing up fake-indexeddb.
+// mount. Keeping the mock here means the test asserts the call shape
+// without standing up fake-indexeddb.
 const mockSaveState = vi.fn(async () => {});
 const mockLoadState = vi.fn<(...args: [unknown, unknown]) => Promise<GameState | null>>(async () => null);
 const mockClearState = vi.fn(async () => {});
@@ -179,7 +179,7 @@ describe('DailyGameBoard', () => {
     expect(props.startedAt).toBe(1_700_000_000_000);
   });
 
-  it('forwards payload.assignedAt to GameBoard as the wall-clock anchor (KI-025)', async () => {
+  it('forwards payload.assignedAt to GameBoard as the wall-clock anchor', async () => {
     // Arrange — default storage mock returns null (no restore).
 
     // Act

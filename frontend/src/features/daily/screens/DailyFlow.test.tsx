@@ -11,7 +11,7 @@ import {
 
 // Mock the daily service so the component's data-fetch + submit
 // effects are observable. The default `mockResolvedValue` is replaced
-// per test to drive each branch of DP-31's state machine.
+// per test to drive each branch of the daily-flow state machine.
 const mockGetDaily = vi.fn();
 const mockSubmitDailyResult = vi.fn();
 vi.mock('../../../services/dailyService', async () => {
@@ -397,12 +397,12 @@ describe('DailyFlow', () => {
     );
   });
 
-  // --- Chunk 7: DP-27 short-circuit on persisted solved state -----------
+  // --- Short-circuit on persisted solved state --------------------------------
 
   it('short-circuits to PostCompletionScreen from persisted solved state without calling getDaily', async () => {
     // Arrange — seed the storage mock with a solved daily row that
-    // carries a canonical serverElapsedMs. The DP-27 path reads this
-    // on mount and renders PostCompletionScreen straight from
+    // carries a canonical serverElapsedMs. The short-circuit reads
+    // this on mount and renders PostCompletionScreen straight from
     // persisted state.
     const todayUtc = new Date().toISOString().slice(0, 10);
     mockLoadState.mockResolvedValue({

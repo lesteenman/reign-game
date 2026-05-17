@@ -89,7 +89,7 @@ function renderBoard(overrides: Partial<GameBoardProps> = {}) {
   );
 }
 
-describe('GameBoard wall-clock-anchored timer (KI-025)', () => {
+describe('GameBoard wall-clock-anchored timer', () => {
   beforeEach(() => {
     // Fake only the wall-clock and the interval timer used by the
     // wall-clock-tick effect. Leaving setTimeout/microtasks on real
@@ -116,7 +116,7 @@ describe('GameBoard wall-clock-anchored timer (KI-025)', () => {
     expect(timer).toHaveTextContent('00:45');
   });
 
-  it('does not reset to 00:00 when the board unmounts and remounts (the KI-025 symptom)', async () => {
+  it('does not reset to 00:00 when the board unmounts and remounts', async () => {
     // Arrange — assignedAt 30s in the past on first mount.
     const assignedAt = '2026-05-11T12:00:15Z'; // 30s before fake now
 

@@ -1,11 +1,7 @@
-// TODO(R-8-02 follow-up): Recycle-day copy is spec'd in DP-25 but
-// the backend responses do not yet expose recycle metadata
-// (DP-09 / POST response don't carry an isRecycle flag).
-// When backend adds the metadata, surface it as an optional prop
-// `isRecycle?: boolean` and render an additional line:
-//   "Today's puzzle is a recycle of yesterday's — fresh puzzle
-//   tomorrow."
-// Spec reference: design.md §7 residual risk mitigation.
+// TODO: Recycle-day copy — the backend POST response doesn't yet carry an
+// isRecycle flag. When backend adds the metadata, surface it as an optional
+// prop `isRecycle?: boolean` and render an additional line:
+//   "Today's puzzle is a recycle of yesterday's — fresh puzzle tomorrow."
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -15,7 +11,7 @@ import { SecondaryButton } from '../../../components/common/Button';
 export interface PostCompletionScreenProps {
   serverElapsedMs: number;
   submittedAt: string; // RFC3339
-  leaderboardRank?: number; // present only for signed-in (DP-13)
+  leaderboardRank?: number; // present only for signed-in users
   /**
    * Optional injection point for "now" so countdown logic is
    * deterministic in tests. Defaults to `new Date()`.
@@ -73,7 +69,7 @@ function formatCountdown(ms: number): string {
 }
 
 /**
- * Daily post-completion screen (DP-25).
+ * Daily post-completion screen.
  *
  * Pure presentational component — no service calls, no state machine.
  * Renders solve time, optional leaderboard rank (signed-in only),

@@ -16,12 +16,12 @@ import type { GameState } from '../../../storage/types';
 import type { CellState } from '../../../engine/types';
 
 /**
- * Daily Puzzle flow chrome (R-8-02 chunks 3 + 6).
+ * Daily Puzzle flow chrome.
  *
- * Owns the daily-flow state machine per DP-31:
+ * Owns the daily-flow state machine:
  *   loading      → playing                 on getDaily() success
- *   loading      → solved (chunk-3 stub)   on getDaily() returning outcome=solved
- *   loading      → error                   on getDaily() failure (DP-30)
+ *   loading      → solved                  on getDaily() returning outcome=solved
+ *   loading      → error                   on getDaily() failure
  *   playing      → submitting              on the GameBoard's onSolved event
  *   submitting   → solved                  on POST 200 (DailySubmitResponse)
  *   submitting   → solved                  on POST 409 (server has canonical state)
@@ -54,7 +54,7 @@ type FlowState =
       message: string;
     };
 
-/** Maps a thrown error to user-facing copy per DP-30. */
+/** Maps a thrown error to user-facing copy. */
 function loadErrorCopy(state: { httpStatus: number | null }): string {
   if (state.httpStatus === 404) return 'No daily available right now';
   if (state.httpStatus === 500) return 'Something went wrong, try again';
@@ -142,7 +142,7 @@ export function DailyFlow() {
   const stateRef = useRef<FlowState>(state);
   stateRef.current = state;
 
-  /** Re-runs the fetch effect (DP-30 retry affordance). */
+  /** Re-runs the fetch effect (retry affordance). */
   const retryFetch = useCallback(() => {
     setState({ kind: 'loading' });
     setFetchKey((k) => k + 1);
@@ -155,14 +155,14 @@ export function DailyFlow() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      // DP-27 short-circuit. Read the per-flow IDB row for today's
-      // UTC date BEFORE the GET. If we have a solved row with a
-      // canonical `serverElapsedMs`, render PostCompletionScreen
-      // straight from persisted state — no network round-trip,
-      // observable as a missing /api/daily/* request in Playwright.
-      // A solved row missing `serverElapsedMs` (older partial write
-      // shape) falls through to `getDaily()` so the server's solved
-      // payload drives the post-completion render.
+      // Short-circuit: read the per-flow IDB row for today's UTC date
+      // BEFORE the GET. If we have a solved row with a canonical
+      // `serverElapsedMs`, render PostCompletionScreen straight from
+      // persisted state — no network round-trip, observable as a
+      // missing /api/daily/* request in Playwright. A solved row missing
+      // `serverElapsedMs` (older partial write shape) falls through to
+      // `getDaily()` so the server's solved payload drives the
+      // post-completion render.
       try {
         const persisted = await loadState('daily', todayUtcDate());
         if (cancelled) return;
@@ -259,8 +259,8 @@ export function DailyFlow() {
    * Submit handler — fired by `<DailyGameBoard onSolved>`. Drives the
    * playing → submitting → (solved | submit-error) transition. On
    * success persists the solved row to the per-flow IDB slot
-   * `(daily, YYYY-MM-DD)` so a subsequent visit short-circuits via
-   * DP-27 (chunk 7).
+   * `(daily, YYYY-MM-DD)` so a subsequent visit short-circuits to
+   * PostCompletionScreen without re-fetching.
    */
   const handleSolved = useCallback(
     async (solution: number[][], elapsedMs: number) => {
@@ -282,11 +282,11 @@ export function DailyFlow() {
         });
         const submittedAt = new Date().toISOString();
 
-        // Persist the solved row to the per-flow store. Lesson 16:
-        // the persisted shape lives in storage/, so we route through
-        // useGameStorage's saveState rather than redeclaring a daily
-        // row layout here. The minimal GameState shape is enough to
-        // satisfy DP-27's short-circuit read on the next visit.
+        // Persist the solved row to the per-flow store. The shape lives
+        // in storage/, so we route through useGameStorage's saveState
+        // rather than redeclaring a daily row layout here. The minimal
+        // GameState shape is enough to satisfy the short-circuit read
+        // on the next visit.
         const flowId = dateFromAssignedAt(activePayload.assignedAt);
         const persistedState: GameState = {
           id: `daily:${flowId}`,
@@ -305,10 +305,9 @@ export function DailyFlow() {
           },
           status: 'solved',
           startedAt: Date.now() - result.serverElapsedMs,
-          // R-8-02 chunk 7: persist the canonical solve fields so a
-          // subsequent visit short-circuits via DP-27 with the same
-          // PostCompletionScreen content (no second GET, no second
-          // POST).
+          // Persist the canonical solve fields so a subsequent visit
+          // short-circuits to the same PostCompletionScreen content
+          // (no second GET, no second POST).
           serverElapsedMs: result.serverElapsedMs,
           submittedAt,
           leaderboardRank: result.leaderboardRank,
@@ -324,9 +323,9 @@ export function DailyFlow() {
       } catch (err) {
         if (err instanceof ApiError && err.status === 409) {
           // 409 = server says already solved. Treat as terminal solved
-          // state per DP-30. Server didn't return a fresh body shape,
-          // so use sensible defaults; chunk 7 will read the canonical
-          // solved row back from the GET endpoint on the next visit.
+          // state. Server didn't return a fresh body shape, so use
+          // sensible defaults; the canonical solved row is readable
+          // from the GET endpoint on the next visit.
           setState({
             kind: 'solved',
             payload: activePayload,

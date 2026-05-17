@@ -39,13 +39,13 @@ export interface GameBoardProps {
    * When set, the timer renders `Date.now() − assignedAt` and the
    * useTimer lifecycle (restore / start / pause-on-visibility / save)
    * is skipped — there is no client state to lose, and the displayed
-   * value matches the leaderboard's server-authoritative
-   * `serverElapsedMs = submittedAt − assignedAt` (DP-19 invariant:
-   * `assignedAt` is set once on first GET and never overwritten).
+   * value matches the leaderboard's server-authoritative elapsed time
+   * (`submittedAt − assignedAt`; `assignedAt` is set once on first GET
+   * and never overwritten).
    *
    * RFC3339 timestamp; parsed to epoch ms on receipt. Used only by
-   * the daily flow today (KI-025 — closing the timer-restarts-on-
-   * navigate-back gap).
+   * the daily flow — prevents the timer resetting to 00:00 on
+   * navigate-back.
    */
   assignedAt?: string;
   navigate: ReturnType<typeof useNavigate>;
@@ -63,10 +63,10 @@ export interface GameBoardProps {
    * placed a marker; 0 elsewhere) and `elapsedMs` is the timer's
    * elapsed milliseconds at the moment of solve.
    *
-   * R-8-02 chunk 7: the daily flow uses this hook so DailyFlow's
-   * state machine takes over (POST submit → PostCompletionScreen)
-   * instead of GameBoard's built-in completion overlay + completion
-   * record write, which is curation/practice-shaped.
+   * The daily flow uses this so DailyFlow's state machine takes over
+   * (POST submit → PostCompletionScreen) instead of GameBoard's
+   * built-in completion overlay + completion record write, which is
+   * curation/practice-shaped.
    */
   onSolveDetected?: (solution: number[][], elapsedMs: number) => void;
 }
@@ -157,7 +157,7 @@ export function GameBoard({
   // Daily flows are wall-clock-anchored — they read elapsed straight
   // off `Date.now() − assignedAt` instead of restoring + resuming
   // useTimer state, so they skip this whole effect. See
-  // `isWallClockAnchored` above and KI-025.
+  // `isWallClockAnchored` above.
   //
   // Ordering for the non-daily path: restore first so the elapsed
   // display reflects any saved progress; then start() (idempotent if
@@ -260,7 +260,7 @@ export function GameBoard({
   // the solve UX entirely: no completion overlay, no addCompletion/
   // clearState/updatePuzzleStatus side-effects. The caller (e.g.
   // DailyFlow via DailyGameBoard) receives the solution + elapsed and
-  // owns the post-solve experience. R-8-02 chunk 7.
+  // owns the post-solve experience.
   useEffect(() => {
     if (isSolved && !completionHandledRef.current) {
       completionHandledRef.current = true;
