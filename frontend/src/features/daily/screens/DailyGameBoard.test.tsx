@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import { DailyGameBoard } from './DailyGameBoard';
 import type { DailyPuzzlePayload } from '../../../services/dailyService';
-import type { GameBoardProps } from '../../../pages/GamePage';
+import type { GameBoardProps } from '../../../shared/game/components/GameBoard';
 import type { GameState } from '../../../storage/types';
 import type { CellState } from '../../../engine/types';
 
@@ -34,8 +34,8 @@ const STUB_SOLUTION = [
   [0, 1, 0],
 ];
 const STUB_ELAPSED_MS = 8_000;
-vi.mock('../../../pages/GamePage', async () => {
-  const actual = await vi.importActual<typeof import('../../../pages/GamePage')>('../../../pages/GamePage');
+vi.mock('../../../shared/game/components/GameBoard', async () => {
+  const actual = await vi.importActual<typeof import('../../../shared/game/components/GameBoard')>('../../../shared/game/components/GameBoard');
   return {
     ...actual,
     GameBoard: (props: GameBoardProps) => {

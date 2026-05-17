@@ -5,19 +5,31 @@ import {
   type RenderOptions,
   type RenderHookOptions,
 } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 /**
  * Re-exports @testing-library/react with `render` and `renderHook` wrapped
- * in React.StrictMode. StrictMode double-invokes state updaters and effects
- * to surface impure-updater bugs (e.g. nested setState inside a reducer
- * updater) at unit-test time instead of waiting for Playwright.
+ * in React.StrictMode and a fresh QueryClientProvider per test. StrictMode
+ * double-invokes state updaters and effects to surface impure-updater bugs
+ * (e.g. nested setState inside a reducer updater) at unit-test time instead
+ * of waiting for Playwright.
  *
  * Tests that need to opt out can import `render` / `renderHook` directly
  * from '@testing-library/react', but the default should be this module.
  */
 
+function makeQueryClient() {
+  return new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+}
+
 function StrictModeWrapper({ children }: { children: ReactNode }) {
-  return <StrictMode>{children}</StrictMode>;
+  return (
+    <StrictMode>
+      <QueryClientProvider client={makeQueryClient()}>{children}</QueryClientProvider>
+    </StrictMode>
+  );
 }
 
 export function render(ui: ReactElement, options?: RenderOptions) {
@@ -25,7 +37,9 @@ export function render(ui: ReactElement, options?: RenderOptions) {
   const Wrapper = UserWrapper
     ? ({ children }: { children: ReactNode }) => (
         <StrictMode>
-          <UserWrapper>{children}</UserWrapper>
+          <QueryClientProvider client={makeQueryClient()}>
+            <UserWrapper>{children}</UserWrapper>
+          </QueryClientProvider>
         </StrictMode>
       )
     : StrictModeWrapper;
@@ -40,7 +54,9 @@ export function renderHook<Result, Props>(
   const Wrapper = UserWrapper
     ? ({ children }: { children: ReactNode }) => (
         <StrictMode>
-          <UserWrapper>{children}</UserWrapper>
+          <QueryClientProvider client={makeQueryClient()}>
+            <UserWrapper>{children}</UserWrapper>
+          </QueryClientProvider>
         </StrictMode>
       )
     : StrictModeWrapper;

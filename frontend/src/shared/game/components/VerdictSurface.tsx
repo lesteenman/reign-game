@@ -1,8 +1,8 @@
 import { useCallback, useState, type CSSProperties } from 'react';
-import type { Mode } from '../../engine/types';
-import { submitVerdict } from '../../services/verdictService';
-import { updatePuzzleStatus } from '../../services/puzzleService';
-import { PrimaryButton, SecondaryButton, GhostButton } from '../common/Button';
+import type { Mode } from '../../../engine/types';
+import { useSubmitVerdict } from '../hooks/useSubmitVerdict';
+import { useUpdatePuzzleStatus } from '../hooks/useUpdatePuzzleStatus';
+import { PrimaryButton, SecondaryButton, GhostButton } from '../../../components/common/Button';
 
 /**
  * Verdict surface for admin curation. Renders different button sets
@@ -134,6 +134,9 @@ export function VerdictSurface(props: VerdictSurfaceProps) {
   const [wasSubmittedAtMount] = useState(() => isSubmitted(puzzleId));
   const [status, setStatus] = useState<SubmissionStatus>({ kind: 'idle' });
 
+  const submitVerdictMutation = useSubmitVerdict();
+  const updatePuzzleStatusMutation = useUpdatePuzzleStatus();
+
   // Status-machine wrapper. `work` is the variant-specific API call;
   // success → markSubmitted + optional onSuccess hook + done. Failure
   // re-stores `action` as the retry so the error-state Retry button
@@ -159,7 +162,7 @@ export function VerdictSurface(props: VerdictSurfaceProps) {
   const submitCompletionVerdict = useCallback(
     (value: 'up' | 'down') =>
       runSubmission(() =>
-        submitVerdict({
+        submitVerdictMutation.mutateAsync({
           puzzleId,
           size,
           mode,
@@ -168,7 +171,7 @@ export function VerdictSurface(props: VerdictSurfaceProps) {
           outcome: 'solved',
         }),
       ),
-    [runSubmission, puzzleId, size, mode, playTimeMs],
+    [runSubmission, submitVerdictMutation, puzzleId, size, mode, playTimeMs],
   );
 
   // Both skip handlers narrow the union via `props.variant === 'skip'`
@@ -188,8 +191,8 @@ export function VerdictSurface(props: VerdictSurfaceProps) {
       // touch independent DynamoDB row families.
       async () => {
         await Promise.all([
-          updatePuzzleStatus(puzzleId, size, mode, 'skipped'),
-          submitVerdict({
+          updatePuzzleStatusMutation.mutateAsync({ puzzleId, size, mode, status: 'skipped' }),
+          submitVerdictMutation.mutateAsync({
             puzzleId,
             size,
             mode,
@@ -201,16 +204,16 @@ export function VerdictSurface(props: VerdictSurfaceProps) {
       },
       onAfterVerdict,
     );
-  }, [runSubmission, props, puzzleId, size, mode, playTimeMs]);
+  }, [runSubmission, updatePuzzleStatusMutation, submitVerdictMutation, props, puzzleId, size, mode, playTimeMs]);
 
   const submitJustSkip = useCallback(() => {
     if (props.variant !== 'skip') return Promise.resolve();
     const onAfterVerdict = props.onAfterVerdict;
     return runSubmission(
-      () => updatePuzzleStatus(puzzleId, size, mode, 'skipped'),
+      () => updatePuzzleStatusMutation.mutateAsync({ puzzleId, size, mode, status: 'skipped' }),
       onAfterVerdict,
     );
-  }, [runSubmission, props, puzzleId, size, mode]);
+  }, [runSubmission, updatePuzzleStatusMutation, props, puzzleId, size, mode]);
 
   // FB-07 cache check, captured once at mount. Hides the surface on
   // re-mount within the same tab session (e.g. an admin re-completes

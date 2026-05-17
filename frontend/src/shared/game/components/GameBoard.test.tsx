@@ -1,12 +1,12 @@
 import 'fake-indexeddb/auto';
-import { render, screen, cleanup, waitFor } from '../test-utils';
+import { render, screen, cleanup, waitFor } from '../../../test-utils';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ThemeProvider } from '../theme/ThemeContext';
-import { GameBoard } from './GamePage';
-import { FALLBACK_PUZZLE } from '../App';
-import { EMPTY_HISTORY } from '../storage/types';
-import type { CellState } from '../engine/types';
+import { ThemeProvider } from '../../../theme/ThemeContext';
+import { GameBoard } from './GameBoard';
+import { FALLBACK_PUZZLE } from '../../../App';
+import { EMPTY_HISTORY } from '../../../storage/types';
+import type { CellState } from '../../../engine/types';
 
 // Mock the Clerk hook so admin/non-admin branches are exercisable
 // without booting Clerk. Default to signed-out; tests override per case.
@@ -24,12 +24,12 @@ vi.mock('@clerk/react', () => ({
 }));
 
 const mockUpdateStatus = vi.fn().mockResolvedValue(undefined);
-vi.mock('../services/puzzleService', () => ({
+vi.mock('../../../services/puzzleService', () => ({
   updatePuzzleStatus: (...args: unknown[]) => mockUpdateStatus(...args),
 }));
 
 // We don't care about VerdictSurface internals here — stub it.
-vi.mock('../components/game/VerdictSurface', () => ({
+vi.mock('./VerdictSurface', () => ({
   VerdictSurface: () => null,
 }));
 

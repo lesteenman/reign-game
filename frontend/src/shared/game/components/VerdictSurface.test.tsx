@@ -1,24 +1,24 @@
-import { render, screen, cleanup, waitFor } from '../../test-utils';
+import { render, screen, cleanup, waitFor } from '../../../test-utils';
 import { fireEvent } from '@testing-library/react';
 import { describe, it, test, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const submitVerdictMock = vi.fn();
 const updatePuzzleStatusMock = vi.fn();
 
-vi.mock('../../services/verdictService', () => ({
-  submitVerdict: (...args: unknown[]) => submitVerdictMock(...args),
+// Mock the hooks rather than the services: the hooks wrap services in
+// useMutation, so mocking at the service layer requires waiting for
+// TanStack's async mutation pipeline. Mocking the hooks gives direct
+// control over mutateAsync's resolved/rejected value.
+vi.mock('../hooks/useSubmitVerdict', () => ({
+  useSubmitVerdict: () => ({ mutateAsync: (...args: unknown[]) => submitVerdictMock(...args) }),
 }));
 
-vi.mock('../../services/puzzleService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../services/puzzleService')>();
-  return {
-    ...actual,
-    updatePuzzleStatus: (...args: unknown[]) => updatePuzzleStatusMock(...args),
-  };
-});
+vi.mock('../hooks/useUpdatePuzzleStatus', () => ({
+  useUpdatePuzzleStatus: () => ({ mutateAsync: (...args: unknown[]) => updatePuzzleStatusMock(...args) }),
+}));
 
 import { VerdictSurface } from './VerdictSurface';
-import { ApiError } from '../../services/api';
+import { ApiError } from '../../../services/api';
 
 const baseProps = {
   puzzleId: 'puz-test-123',
@@ -60,7 +60,9 @@ render(<VerdictSurface variant="completion" outcome="solved" {...baseProps} />);
     fireEvent.click(screen.getByRole('button', { name: 'Good puzzle' }));
 
     // Assert
-    expect(submitVerdictMock).toHaveBeenCalledTimes(1);
+    await waitFor(() => {
+      expect(submitVerdictMock).toHaveBeenCalledTimes(1);
+    });
     expect(submitVerdictMock).toHaveBeenCalledWith(
       expect.objectContaining({
         puzzleId: 'puz-test-123',
@@ -82,9 +84,11 @@ render(<VerdictSurface variant="completion" outcome="solved" {...baseProps} />);
     fireEvent.click(screen.getByRole('button', { name: 'Bad puzzle' }));
 
     // Assert
-    expect(submitVerdictMock).toHaveBeenCalledWith(
-      expect.objectContaining({ value: 'down', outcome: 'solved' }),
-    );
+    await waitFor(() => {
+      expect(submitVerdictMock).toHaveBeenCalledWith(
+        expect.objectContaining({ value: 'down', outcome: 'solved' }),
+      );
+    });
   });
 
   test('success → done state shows "Thanks — recorded.", buttons gone', async () => {
@@ -117,7 +121,9 @@ submitVerdictMock.mockRejectedValueOnce(new ApiError('boom', 500));
 
     // Retry succeeds (default mock)
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(submitVerdictMock).toHaveBeenCalledTimes(2);
+    await waitFor(() => {
+      expect(submitVerdictMock).toHaveBeenCalledTimes(2);
+    });
     expect(submitVerdictMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ value: 'down', outcome: 'solved' }),
     );
@@ -135,7 +141,9 @@ render(<VerdictSurface variant="completion" outcome="solved" {...baseProps} />);
     fireEvent.click(screen.getByRole('button', { name: 'Good puzzle' }));
 
     // Assert
-    expect(screen.getByRole('button', { name: 'Good puzzle' })).toBeDisabled();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Good puzzle' })).toBeDisabled();
+    });
     expect(screen.getByRole('button', { name: 'Bad puzzle' })).toBeDisabled();
   });
 
@@ -221,10 +229,12 @@ const onAfterVerdict = vi.fn();
       expect(submitVerdictMock).toHaveBeenCalledTimes(1);
     });
     expect(updatePuzzleStatusMock).toHaveBeenCalledWith(
-      'puz-test-123',
-      7,
-      'standard',
-      'skipped',
+      expect.objectContaining({
+        puzzleId: 'puz-test-123',
+        size: 7,
+        mode: 'standard',
+        status: 'skipped',
+      }),
     );
     expect(submitVerdictMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -311,7 +321,9 @@ render(
     fireEvent.click(screen.getByRole('button', { name: 'Just skip' }));
 
     // Assert
-    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    });
     expect(screen.getByRole('button', { name: 'I hate this' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Just skip' })).toBeDisabled();
   });
