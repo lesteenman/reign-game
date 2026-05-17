@@ -16,8 +16,7 @@ export async function fetchNextPuzzle(
 ): Promise<PuzzleData> {
   try {
     return await apiFetch<PuzzleData>('/api/puzzles/next', {
-      size: String(size),
-      mode,
+      params: { size: String(size), mode },
     });
   } catch (err) {
     if (err instanceof ApiError && err.status === 404) {
@@ -37,6 +36,6 @@ export async function updatePuzzleStatus(
   await apiPut<Record<string, never>>(
     `/api/puzzles/${puzzleId}/status`,
     { status },
-    { size: String(size), mode },
+    { params: { size: String(size), mode } },
   );
 }

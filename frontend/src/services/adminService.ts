@@ -43,5 +43,5 @@ export async function triggerReplenish(
   if (mode !== undefined) {
     params.mode = mode;
   }
-  return apiPost<ReplenishResult>('/api/admin/replenish', {}, params);
+  return apiPost<ReplenishResult>('/api/admin/replenish', {}, { params });
 }

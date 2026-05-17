@@ -3,8 +3,8 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider } from '../theme/ThemeContext';
 import { DailyFlow } from './DailyFlow';
+import { ApiError } from '../services/api';
 import {
-  DailyApiError,
   type DailyPuzzlePayload,
   type DailySubmitResponse,
 } from '../services/dailyService';
@@ -162,9 +162,9 @@ describe('DailyFlow', () => {
     expect(screen.getAllByRole('heading', { name: /reign/i })).toHaveLength(1);
   });
 
-  it('renders 404 error UI when getDaily throws DailyApiError with status 404', async () => {
+  it('renders 404 error UI when getDaily throws ApiError with status 404', async () => {
     // Arrange
-    mockGetDaily.mockRejectedValue(new DailyApiError('not found', 404));
+    mockGetDaily.mockRejectedValue(new ApiError('not found', 404));
 
     // Act
     renderDailyFlow();
@@ -177,9 +177,9 @@ describe('DailyFlow', () => {
     expect(screen.getByTestId('daily-retry')).toBeInTheDocument();
   });
 
-  it('renders 500 error UI when getDaily throws DailyApiError with status 500', async () => {
+  it('renders 500 error UI when getDaily throws ApiError with status 500', async () => {
     // Arrange
-    mockGetDaily.mockRejectedValue(new DailyApiError('server boom', 500));
+    mockGetDaily.mockRejectedValue(new ApiError('server boom', 500));
 
     // Act
     renderDailyFlow();
@@ -209,7 +209,7 @@ describe('DailyFlow', () => {
 
   it('retry button re-invokes getDaily()', async () => {
     // Arrange
-    mockGetDaily.mockRejectedValueOnce(new DailyApiError('boom', 500));
+    mockGetDaily.mockRejectedValueOnce(new ApiError('boom', 500));
     mockGetDaily.mockResolvedValueOnce(MOCK_PAYLOAD);
     renderDailyFlow();
     await waitFor(() => {
@@ -303,7 +303,7 @@ describe('DailyFlow', () => {
     // Arrange
     mockGetDaily.mockResolvedValue(MOCK_PAYLOAD);
     mockSubmitDailyResult.mockRejectedValue(
-      new DailyApiError('already solved', 409),
+      new ApiError('already solved', 409),
     );
     renderDailyFlow();
     await waitFor(() => {
@@ -323,7 +323,7 @@ describe('DailyFlow', () => {
     // Arrange
     mockGetDaily.mockResolvedValue(MOCK_PAYLOAD);
     mockSubmitDailyResult.mockRejectedValueOnce(
-      new DailyApiError('server boom', 500),
+      new ApiError('server boom', 500),
     );
     mockSubmitDailyResult.mockResolvedValueOnce(MOCK_SUBMIT_RESPONSE);
     renderDailyFlow();

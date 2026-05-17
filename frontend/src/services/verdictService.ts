@@ -61,7 +61,7 @@ export async function submitVerdict(args: SubmitVerdictArgs): Promise<void> {
         outcome,
         clientVersion: resolvedClientVersion,
       },
-      { size: String(size), mode },
+      { params: { size: String(size), mode } },
     );
   } catch (err) {
     if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {

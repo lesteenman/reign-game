@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageShell } from '../components/common/PageShell';
 import { PrimaryButton, SecondaryButton } from '../components/common/Button';
+import { ApiError } from '../services/api';
 import {
-  DailyApiError,
   getDaily,
   submitDailyResult,
   type DailyPuzzlePayload,
@@ -232,7 +232,7 @@ export function DailyFlow() {
         setState({ kind: 'playing', payload });
       } catch (err) {
         if (cancelled) return;
-        if (err instanceof DailyApiError) {
+        if (err instanceof ApiError) {
           setState({
             kind: 'error',
             httpStatus: err.status,
@@ -318,7 +318,7 @@ export function DailyFlow() {
           submittedAt,
         });
       } catch (err) {
-        if (err instanceof DailyApiError && err.status === 409) {
+        if (err instanceof ApiError && err.status === 409) {
           // 409 = server says already solved. Treat as terminal solved
           // state per DP-30. Server didn't return a fresh body shape,
           // so use sensible defaults; chunk 7 will read the canonical
@@ -331,7 +331,7 @@ export function DailyFlow() {
           });
           return;
         }
-        if (err instanceof DailyApiError) {
+        if (err instanceof ApiError) {
           setState({
             kind: 'submit-error',
             payload: activePayload,

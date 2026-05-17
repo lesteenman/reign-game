@@ -18,18 +18,25 @@ export class ApiError extends Error {
   }
 }
 
+export interface ApiOptions {
+  params?: Record<string, string>;
+  headers?: Record<string, string>;
+}
+
 /** Fetch JSON from the backend API. Throws ApiError on non-2xx responses. */
 export async function apiFetch<T>(
   path: string,
-  params?: Record<string, string>,
+  options?: ApiOptions,
 ): Promise<T> {
   const url = new URL(path, API_BASE_URL || window.location.origin);
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
+  if (options?.params) {
+    for (const [key, value] of Object.entries(options.params)) {
       url.searchParams.set(key, value);
     }
   }
-  const response = await fetch(url.toString());
+  const response = await fetch(url.toString(), {
+    headers: { ...options?.headers },
+  });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new ApiError(
@@ -45,17 +52,17 @@ export async function apiFetch<T>(
 export async function apiPut<T>(
   path: string,
   body: unknown,
-  params?: Record<string, string>,
+  options?: ApiOptions,
 ): Promise<T> {
   const url = new URL(path, API_BASE_URL || window.location.origin);
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
+  if (options?.params) {
+    for (const [key, value] of Object.entries(options.params)) {
       url.searchParams.set(key, value);
     }
   }
   const response = await fetch(url.toString(), {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
@@ -75,17 +82,17 @@ export async function apiPut<T>(
 export async function apiPost<T>(
   path: string,
   body: unknown,
-  params?: Record<string, string>,
+  options?: ApiOptions,
 ): Promise<T> {
   const url = new URL(path, API_BASE_URL || window.location.origin);
-  if (params) {
-    for (const [key, value] of Object.entries(params)) {
+  if (options?.params) {
+    for (const [key, value] of Object.entries(options.params)) {
       url.searchParams.set(key, value);
     }
   }
   const response = await fetch(url.toString(), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
