@@ -1,9 +1,9 @@
 package generator
 
 // This file contains the test-only deductive-vs-brute cross-check harness
-// per PG-16 / locked decision #8. It runs only under `go test` (never at
-// release runtime). No build tag is needed because `_test.go` files are
-// excluded from the release build by default.
+// (locked decision #8). It runs only under `go test` (never at release
+// runtime). No build tag is needed because `_test.go` files are excluded
+// from the release build by default.
 
 import (
 	"sort"
@@ -12,8 +12,8 @@ import (
 
 // TestDeductiveBruteCrossCheck generates a corpus of puzzles at test time
 // and, for each, compares the deductive solver's output to the brute
-// solver's. Divergence is a hard failure (per PG-07 / locked decision #8 —
-// a mismatch means a rule is unsound).
+// solver's. Divergence is a hard failure (locked decision #8 — a mismatch
+// means a rule is unsound).
 //
 // Corpus construction: for each (n, k) in a rotation, use the sampler to
 // produce a solution. Then try region-map construction strategies until
@@ -107,9 +107,9 @@ type crossCheckEntry struct {
 // buildCrossCheckCorpus assembles up to `target` (region_map, solution)
 // pairs where the region map has exactly one brute-verifiable solution.
 //
-// Primary strategy: the R-063 known-unique 5x5 fixture plus its 7 D4
-// symmetry transforms (identity, rotate 90/180/270, reflect horiz, reflect
-// vert, transpose, anti-transpose). That gives 8 base fixtures. For each,
+// Primary strategy: a known-unique 5x5 fixture plus its 7 D4 symmetry
+// transforms (identity, rotate 90/180/270, reflect horiz, reflect vert,
+// transpose, anti-transpose). That gives 8 base fixtures. For each,
 // we add partial-state variants where k-1 solution marks are pre-placed,
 // simulating mid-solve conditions. 8 × 6 = 48. Add 2 extras from
 // symmetry-transformed versions of a hand-crafted 6x6 fixture for 50+.

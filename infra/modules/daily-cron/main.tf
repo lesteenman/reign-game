@@ -44,7 +44,7 @@ resource "aws_iam_role_policy" "daily_cron_logs" {
 }
 
 # DynamoDB access policy — Daily-Puzzle access patterns on puzzle-pool only.
-# No GSI access required by this slice (R-8-01).
+# No GSI access required for the daily-cron Lambda's IAM scope.
 resource "aws_iam_role_policy" "daily_cron_dynamodb" {
   name = "${local.function_name}-dynamodb"
   role = aws_iam_role.daily_cron_exec.id

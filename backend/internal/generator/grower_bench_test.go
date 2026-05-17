@@ -21,8 +21,7 @@ func preSampleSeeds(b *testing.B, g *Generator, n, k, count int) [][][]Mark {
 
 // BenchmarkRegionGrow measures the cheap grower (growRegions) alone, with
 // sampler+pair-seed work moved outside the timed loop. Seeds are pre-
-// sampled per b.N so the inner loop times only growRegions. Per PG-08 and
-// input-spec §8.
+// sampled per b.N so the inner loop times only growRegions (input-spec §8).
 func BenchmarkRegionGrow(b *testing.B) {
 	cases := []struct {
 		name string

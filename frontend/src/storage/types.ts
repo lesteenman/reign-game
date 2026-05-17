@@ -65,9 +65,9 @@ export interface GameState {
   history?: GameHistory;
   /**
    * Server-canonical solve time in milliseconds. Optional and only
-   * populated for solved daily rows (R-8-02 chunk 7) so the DP-27
-   * short-circuit can render PostCompletionScreen without re-fetching
-   * `getDaily()`. Other flows ignore this field.
+   * populated for solved daily rows so the short-circuit can render
+   * PostCompletionScreen without re-fetching `getDaily()`. Other flows
+   * ignore this field.
    */
   serverElapsedMs?: number;
   /**
@@ -78,8 +78,8 @@ export interface GameState {
   submittedAt?: string;
   /**
    * Player's leaderboard rank from the daily POST response, if the
-   * server returned one (signed-in identities only per DP-13).
-   * Optional and only populated for solved daily rows.
+   * server returned one (signed-in identities only). Optional and
+   * only populated for solved daily rows.
    */
   leaderboardRank?: number;
 }

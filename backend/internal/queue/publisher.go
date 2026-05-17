@@ -8,20 +8,14 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+
+	"github.com/eriksteenman/reign-game/backend/internal/message"
 )
 
 // SQSAPI defines the SQS operations used by Publisher.
 // Keeping this minimal makes testing straightforward via mock implementations.
 type SQSAPI interface {
 	SendMessage(ctx context.Context, params *sqs.SendMessageInput, optFns ...func(*sqs.Options)) (*sqs.SendMessageOutput, error)
-}
-
-// GenerationRequest represents an SQS message for puzzle generation.
-// Fields match the SQS message schema from the design document.
-type GenerationRequest struct {
-	Size        int    `json:"size"`
-	Mode        string `json:"mode"`
-	MaxAttempts int    `json:"maxAttempts,omitempty"`
 }
 
 // Publisher sends puzzle generation requests to an SQS queue.
@@ -40,7 +34,7 @@ func NewPublisher(client SQSAPI, queueURL string) *Publisher {
 
 // PublishGenerationRequest serializes a generation request to JSON and sends
 // it to the configured SQS queue.
-func (p *Publisher) PublishGenerationRequest(ctx context.Context, req *GenerationRequest) error {
+func (p *Publisher) PublishGenerationRequest(ctx context.Context, req *message.GenerationRequest) error {
 	body, err := json.Marshal(req)
 	if err != nil {
 		return fmt.Errorf("marshaling generation request: %w", err)

@@ -194,8 +194,8 @@ type Generator struct {
 	// it never needs to grow. Callers use g.growFrontierBuf[:0] to reset.
 	growFrontierBuf []int
 	// traceBuf backs solver.trace during the final classification pass. The
-	// mutator's probe passes keep solver.trace == nil (NF3: zero alloc in
-	// the hot loop).
+	// mutator's probe passes keep solver.trace == nil (zero alloc in the
+	// hot loop).
 	traceBuf ruleTrace
 }
 
@@ -205,7 +205,7 @@ type Generator struct {
 // We size the pre-allocated scratch buffer to exactly this bound;
 // enumerateKCombos panics if over-emission is ever attempted so that any
 // future k=3 path (or off-by-one) fails loudly instead of silently
-// reallocating onto the heap and defeating NF3 (zero-alloc hot loop).
+// reallocating onto the heap and defeating the zero-alloc hot loop.
 const maxCombosPerRow = 120
 
 // New constructs a Generator. n must be in [1, 16] and marksPerUnit must be 1
@@ -282,7 +282,7 @@ func shouldUseSolverGuided(attempt, n, k int) bool {
 }
 
 // Generate produces one puzzle. Runs up to g.cfg.maxAttempts iterations of
-// the pipeline described in PG-11 / input-spec §11 Step 8:
+// the pipeline (input-spec §11 Step 8):
 //
 //	sample -> pair -> grow -> solve+mutate -> brute-uniqueness ->
 //	  classify -> (optional difficulty filter) -> convert
@@ -333,12 +333,11 @@ func (g *Generator) Generate(ctx context.Context) (Puzzle, error) {
 			continue
 		}
 
-		// R-067b safety net (R-06C). Kept as belt-and-suspenders.
-		// KI-021 (R-06D) traced the original under-size region report
-		// to an orphan pre-R-067b worker, not a real rule leak, but
-		// the guard stays because it's cheap and catches regressions.
-		// The counter is surfaced via Metrics.SafetyNetTrips and the
-		// worker emits a WARN line when > 0 (the generator package
+		// Safety net for under-size regions — belt-and-suspenders check.
+		// Kept because it's cheap and catches regressions; the original
+		// bug was traced to an orphan worker, not a real rule leak, but
+		// the guard stays. The counter is surfaced via Metrics.SafetyNetTrips
+		// and the worker emits a WARN line when > 0 (the generator package
 		// intentionally does no logging of its own).
 		if !regionsSatisfyMinSize(rm, g.n) {
 			safetyNetTrips++

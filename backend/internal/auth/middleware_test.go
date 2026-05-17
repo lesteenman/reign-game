@@ -90,7 +90,7 @@ func (s *sentinelHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
-// BM-01: RequireAuth rejection modes
+// RequireAuth rejection modes
 // ---------------------------------------------------------------------------
 
 func TestRequireAuth_NoCookie_Returns401(t *testing.T) {
@@ -142,7 +142,7 @@ func TestRequireAuth_InvalidCookie_Returns401(t *testing.T) {
 }
 
 func TestRequireAuth_ExpiredSession_Returns401WithExpiredMessage(t *testing.T) {
-	// BM-01: an expired-but-otherwise-valid session must surface as
+	// An expired-but-otherwise-valid session must surface as
 	// "session expired" so the client can prompt re-sign-in, not a
 	// generic "invalid session" that looks like tampering.
 
@@ -228,7 +228,7 @@ func TestRequireAuth_UserNotFound_Returns401(t *testing.T) {
 	}
 }
 
-// BM-09: Clerk SDK errors fail closed — they produce 401, never 500.
+// Clerk SDK errors fail closed — they produce 401, never 500.
 func TestRequireAuth_ClerkSDKError_LogsWarnAnd401(t *testing.T) {
 	// Arrange
 	buf := captureLogs(t)
@@ -295,9 +295,9 @@ func TestRequireAuth_ValidSession_CallsNextWithUser(t *testing.T) {
 	}
 }
 
-// BM-08: OPTIONS skips auth regardless of cookie state. The browser
-// sends preflight without cookies, so rejecting it would kill the
-// flow before the real request ever goes out.
+// OPTIONS skips auth regardless of cookie state. The browser sends
+// preflight without cookies, so rejecting it would kill the flow
+// before the real request ever goes out.
 func TestRequireAuth_Options_BypassesAuthEntirely(t *testing.T) {
 	// Arrange
 	next := &sentinelHandler{}
@@ -327,7 +327,7 @@ func TestRequireAuth_Options_BypassesAuthEntirely(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// BM-02: RequireAdmin role check
+// RequireAdmin role check
 // ---------------------------------------------------------------------------
 
 func TestRequireAdmin_RoleAdmin_CallsNext(t *testing.T) {
@@ -385,8 +385,8 @@ func TestRequireAdmin_NonAdminRoles_Return403(t *testing.T) {
 	}
 }
 
-// BM-04: RequireAdmin panics when RequireAuth did not run. The panic
-// is a programmer-error signal, not a runtime path.
+// RequireAdmin panics when RequireAuth did not run. The panic is a
+// programmer-error signal, not a runtime path.
 func TestRequireAdmin_WithoutRequireAuth_Panics(t *testing.T) {
 	// Arrange
 	next := &sentinelHandler{}
@@ -409,8 +409,8 @@ func TestRequireAdmin_WithoutRequireAuth_Panics(t *testing.T) {
 	mw.ServeHTTP(rec, req)
 }
 
-// BM-04 inverse: UserFromContext panics when called without the
-// middleware having attached a user.
+// UserFromContext panics when called without the middleware having
+// attached a user.
 func TestUserFromContext_NoUser_Panics(t *testing.T) {
 	defer func() {
 		r := recover()
@@ -436,7 +436,7 @@ func TestUserFromContext_WithUser_Returns(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// BM-07: Logs must not leak tokens, cookies, or full user objects.
+// Logs must not leak tokens, cookies, or full user objects.
 // ---------------------------------------------------------------------------
 
 func TestRequireAuth_DoesNotLogSessionTokenOrCookie(t *testing.T) {
@@ -467,18 +467,18 @@ func TestRequireAuth_DoesNotLogSessionTokenOrCookie(t *testing.T) {
 	if strings.Contains(out, tokenSecret) {
 		t.Errorf("session token appeared in log output:\n%s", out)
 	}
-	// Clerk user IDs are fine to log (BM-07 explicitly allows
-	// the `sub` claim). We just want to make sure raw cookie
-	// bodies and verbose %+v dumps stay out.
+	// Clerk user IDs are fine to log (the `sub` claim is allowed).
+	// We just want to make sure raw cookie bodies and verbose
+	// %+v dumps stay out.
 	if strings.Contains(out, "PublicMetadata") || strings.Contains(out, "EmailAddresses") {
 		t.Errorf("user struct fields leaked into log output:\n%s", out)
 	}
 }
 
 // ---------------------------------------------------------------------------
-// BM-05/BM-06: covered in the handler-package tests that wire the chi
-// router group with real middleware (admin_pool_test.go,
-// admin_config_test.go, replenish_test.go).
+// The auth-matrix (anon → 401, non-admin → 403, admin → 200) is covered in
+// handler-package tests that wire the chi router group with real middleware
+// (admin_pool_test.go, admin_config_test.go, replenish_test.go).
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
@@ -651,7 +651,7 @@ func TestCachedVerifier_Verify_PassesThrough(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// OptionalAuth: anon-or-user middleware (DP-14).
+// OptionalAuth: anon-or-user middleware.
 //
 // Routes like /api/daily/{date} accept Anonymous OR User auth. The
 // handler decides which one applies (signed-in user via context, or

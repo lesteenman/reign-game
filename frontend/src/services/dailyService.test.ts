@@ -225,7 +225,7 @@ describe('dailyService', () => {
       expect(calls[0]?.method).toBe('POST');
     });
 
-    it('body shape matches DP-11 (outcome, playTimeMs, solution)', async () => {
+    it('body shape contains outcome, playTimeMs, solution', async () => {
       // Arrange
       const { calls } = recordFetch([
         makeJsonResponse(200, { serverElapsedMs: 100 }),

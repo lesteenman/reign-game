@@ -4,15 +4,22 @@ This file is auto-loaded by Claude Code when working on files under `backend/`. 
 
 ## Layered Architecture
 
-The backend follows a strict three-layer architecture. The `architecture` skill enforces this at design time and review time.
+The backend has two "edge" subsystems (`handler/` for HTTP, `worker/` for SQS), a `service/` application layer for orchestration, persistence (`repository/`, `queue/`), and pure domain (`domain/`, `mode/`, `generator/`). The `architecture` skill is the canonical spec.
 
 | Layer | Directory | Allowed callees | Forbidden callees |
 |---|---|---|---|
-| **Handler** (frontend) | `backend/internal/handler/` | service | repository, queue, AWS SDK |
-| **Service** (application) | `backend/internal/service/` | domain, repository | handler |
-| **Domain** (generic + repository-callers) | `backend/internal/domain/`, `backend/internal/repository/` | AWS SDK, external libs | handler, service |
+| **Edge: HTTP** | `internal/handler/` | service, mode, httperr, generator (debug only) | repository, queue, AWS SDK directly |
+| **Edge: SQS consumer** | `internal/worker/` | service, mode, generator | handler, repository, queue directly |
+| **Service** (application) | `internal/service/` | repository, queue, domain, mode, generator, awsclient | handler, worker |
+| **Persistence** | `internal/repository/`, `internal/queue/` | AWS SDK, domain, mode | handler, worker, service |
+| **Pure / domain** | `internal/mode/`, `internal/generator/` (and `internal/domain/` if created) | external libs only | anything else under `internal/` |
+| **Infra adapters** | `internal/awsclient/`, `internal/auth/`, `internal/httperr/` | AWS SDK, external libs, domain | handler, worker (callable but not imported) |
 
-Drift detection: `grep -rn "internal/repository\|internal/queue" backend/internal/handler/` must return nothing. Any handler importing a repository directly is a violation.
+Key rules:
+- **Multi-leg DDB transactions live in `service/`, not `repository/`.** Repository methods are single transactions of single-row scope OR a single `TransactWriteItems`/`TransactGetItems` call with no orchestration logic.
+- **`MarksPerUnitFromMode` and friends live in `internal/mode/`** — imported by both handler and worker. No worker → handler imports.
+
+Drift detection: see `.claude/skills/architecture/SKILL.md` backend section for the full grep set.
 
 ## Go Conventions
 

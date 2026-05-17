@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
+
+	"github.com/eriksteenman/reign-game/backend/internal/message"
 )
 
 // mockSQSClient implements SQSAPI for testing.
@@ -21,13 +23,13 @@ func (m *mockSQSClient) SendMessage(ctx context.Context, params *sqs.SendMessage
 func TestPublishGenerationRequest(t *testing.T) {
 	tests := []struct {
 		name    string
-		req     GenerationRequest
+		req     message.GenerationRequest
 		sendErr error
 		wantErr bool
 	}{
 		{
 			name: "sends correct JSON message",
-			req: GenerationRequest{
+			req: message.GenerationRequest{
 				Size: 7,
 				Mode: "standard",
 			},
@@ -35,7 +37,7 @@ func TestPublishGenerationRequest(t *testing.T) {
 		},
 		{
 			name: "sends double mode request",
-			req: GenerationRequest{
+			req: message.GenerationRequest{
 				Size:        9,
 				Mode:        "double",
 				MaxAttempts: 30,
@@ -44,7 +46,7 @@ func TestPublishGenerationRequest(t *testing.T) {
 		},
 		{
 			name: "propagates SQS error",
-			req: GenerationRequest{
+			req: message.GenerationRequest{
 				Size: 5,
 				Mode: "standard",
 			},
@@ -86,7 +88,7 @@ func TestPublishGenerationRequest(t *testing.T) {
 			}
 
 			// Verify JSON body matches expected shape.
-			var parsed GenerationRequest
+			var parsed message.GenerationRequest
 			if err := json.Unmarshal([]byte(*capturedInput.MessageBody), &parsed); err != nil {
 				t.Fatalf("failed to parse message body: %v", err)
 			}

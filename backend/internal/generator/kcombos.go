@@ -17,7 +17,7 @@ import (
 // Pure function. The returned slice is the caller-owned slice with the new
 // masks appended. If appending would exceed cap(dst), panic — undersized
 // scratch buffers surface as loud bugs instead of silent heap reallocation
-// that would defeat NF3 (zero-alloc hot loops).
+// that would defeat the zero-alloc hot loops.
 //
 // This is the single canonical k-combo enumerator for the package. Historical
 // separate implementations in sample.go (enumerateKCombos) and brute.go

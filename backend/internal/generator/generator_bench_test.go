@@ -62,10 +62,10 @@ func BenchmarkGenerateOne(b *testing.B) {
 // throughput. This is the number the consumer uses to pick between a
 // Lambda-backed or local-batch deployment (§8).
 //
-// The PG-12 / R-066 solver-guided grower clones solver state per probe,
-// so parallel throughput does not scale quite as well as the single-
-// threaded benchmark would suggest — running this is the only honest
-// way to size the Lambda concurrency.
+// The solver-guided grower clones solver state per probe, so parallel
+// throughput does not scale quite as well as the single-threaded
+// benchmark would suggest — running this is the only honest way to
+// size the Lambda concurrency.
 func BenchmarkGenerateParallel(b *testing.B) {
 	cases := []struct {
 		name string

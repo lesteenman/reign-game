@@ -890,11 +890,11 @@ func ruleRegionPairExclusion(s *solverState) bool {
 // pins the demonstrated unsoundness) AND as the starting point for a
 // future soundness repair.
 //
-// TODO(post-R-068): either repair R9's precondition (likely: tighten to
-// require no adjacency between the K combined candidate cells across the
-// two regions) or delete this function plus the fixture test. Leaving it
-// as an unreferenced shadow would rot; leaving it as a tracked TODO is
-// honest documentation that Tier 4 classification is currently empty.
+// TODO: either repair R9's precondition (likely: tighten to require no
+// adjacency between the K combined candidate cells across the two regions)
+// or delete this function plus the fixture test. Leaving it as an
+// unreferenced shadow would rot; tracking it as a TODO is honest
+// documentation that Tier 4 classification is currently empty.
 //
 // Not registered in defaultRuleset.
 func ruleRegionPairExclusionOriginal(s *solverState) bool {

@@ -5,7 +5,7 @@ import { GhostButton } from '../components/common/Button';
 import { PuzzleSelector } from '../components/landing/PuzzleSelector';
 import type { PuzzleSelection } from '../components/landing/PuzzleSelector';
 import { fetchEnabledModes } from '../services/landingService';
-import type { ModeEntry } from '../services/landingService';
+import type { ModeEntry } from '../shared/types/modes';
 
 /**
  * Curation route — admin-only, mounted under <ProtectedAdminRoute>.

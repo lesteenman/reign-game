@@ -1,47 +1,22 @@
-// Daily Puzzle service — implements DP-28, DP-29, DP-30.
+// Daily Puzzle service.
 //
-// X-Device-Id contract (DP-10): anonymous identity is keyed by a
-// deviceId stored in localStorage. The service reads it on every
-// request; mints a new one on first invocation if missing. On a 401
-// (server says "missing auth + missing deviceId") the service silently
-// rotates the deviceId and retries once — the original was likely
-// rejected as malformed; a fresh UUID is the cheap recovery (DP-30).
+// X-Device-Id contract: anonymous identity is keyed by a deviceId
+// stored in localStorage. The service reads it on every request; mints
+// a new one on first invocation if missing. On a 401 (server says
+// "missing auth + missing deviceId") the service silently rotates the
+// deviceId and retries once — the original was likely rejected as
+// malformed; a fresh UUID is the cheap recovery.
 //
-// Why direct fetch instead of api.ts: api.ts has no header-injection
-// surface today, and this slice intentionally avoids touching the
-// shared client (out of scope for R-8-02). Mirrors api.ts's URL
-// construction (VITE_API_URL fallback to same-origin) and ApiError
-// shape so callers can use the same `.status` branching.
+// Requests go through api.ts (apiFetch / apiPost) with X-Device-Id
+// injected via the options.headers surface.
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+import { apiFetch, apiPost, ApiError } from './api';
+import { todayUtcDate, dateFromAssignedAt } from '../shared/dates';
+import type { DailyPuzzlePayload, DailySubmitResponse } from '../shared/types/daily';
+
+export type { DailyPuzzlePayload, DailySubmitResponse };
 
 export const DAILY_DEVICE_ID_STORAGE_KEY = 'reign.deviceId';
-
-/** Error thrown on non-2xx daily API responses; carries HTTP status. */
-export class DailyApiError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-  ) {
-    super(message);
-    this.name = 'DailyApiError';
-  }
-}
-
-export interface DailyPuzzlePayload {
-  puzzleId: string;
-  grid: number;
-  regions: number[][];
-  assignedAt: string;
-  outcome: 'started' | 'solved';
-  serverElapsedMs?: number;
-  submittedAt?: string;
-}
-
-export interface DailySubmitResponse {
-  serverElapsedMs: number;
-  leaderboardRank?: number;
-}
 
 interface DailySubmitArgs {
   assignedAt: string;
@@ -51,17 +26,6 @@ interface DailySubmitArgs {
 }
 
 // --- Private helpers ---------------------------------------------------
-
-/** Returns YYYY-MM-DD for the current UTC date. */
-function todayUTC(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
-}
-
-/** Extracts YYYY-MM-DD from an RFC3339 timestamp's UTC date component. */
-function dateFromAssignedAt(assignedAt: string): string {
-  // RFC3339 / ISO8601 — Date parses Z and offset suffixes consistently.
-  return new Date(assignedAt).toISOString().slice(0, 10);
-}
 
 /** Reads deviceId from localStorage; mints a UUID if missing. */
 function getOrMintDeviceId(): string {
@@ -79,21 +43,6 @@ function mintNewDeviceId(): string {
   return fresh;
 }
 
-function buildUrl(path: string): string {
-  return new URL(path, API_BASE_URL || window.location.origin).toString();
-}
-
-async function parseError(response: Response): Promise<DailyApiError> {
-  const body = (await response.json().catch(() => ({}))) as Record<
-    string,
-    string
-  >;
-  return new DailyApiError(
-    body.message || `API error: ${response.status}`,
-    response.status,
-  );
-}
-
 // --- Public API --------------------------------------------------------
 
 /**
@@ -103,51 +52,42 @@ async function parseError(response: Response): Promise<DailyApiError> {
  * rotated once and the call retried — the second 401 surfaces.
  */
 export async function getDaily(date?: string): Promise<DailyPuzzlePayload> {
-  const target = date ?? todayUTC();
-  const url = buildUrl(`/api/daily/${target}`);
-
+  const target = date ?? todayUtcDate();
   let deviceId = getOrMintDeviceId();
-  let response = await fetch(url, {
-    method: 'GET',
-    headers: { 'X-Device-Id': deviceId },
-  });
-
-  if (response.status === 401) {
-    deviceId = mintNewDeviceId();
-    response = await fetch(url, {
-      method: 'GET',
+  try {
+    return await apiFetch<DailyPuzzlePayload>(`/api/daily/${target}`, {
       headers: { 'X-Device-Id': deviceId },
     });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) {
+      deviceId = mintNewDeviceId();
+      return await apiFetch<DailyPuzzlePayload>(`/api/daily/${target}`, {
+        headers: { 'X-Device-Id': deviceId },
+      });
+    }
+    throw err;
   }
-
-  if (!response.ok) throw await parseError(response);
-  return (await response.json()) as DailyPuzzlePayload;
 }
 
 /**
  * Submit a solved daily result. The path's date is derived from
- * `assignedAt` (DP-29 cross-midnight contract — never from `now`).
+ * `assignedAt` — never from `now`, so cross-midnight submits land on
+ * the correct day's result endpoint.
  */
 export async function submitDailyResult(
   args: DailySubmitArgs,
 ): Promise<DailySubmitResponse> {
   const date = dateFromAssignedAt(args.assignedAt);
-  const url = buildUrl(`/api/daily/${date}/result`);
   const deviceId = getOrMintDeviceId();
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-Device-Id': deviceId,
-    },
-    body: JSON.stringify({
+  return await apiPost<DailySubmitResponse>(
+    `/api/daily/${date}/result`,
+    {
       outcome: args.outcome,
       playTimeMs: args.playTimeMs,
       solution: args.solution,
-    }),
-  });
-
-  if (!response.ok) throw await parseError(response);
-  return (await response.json()) as DailySubmitResponse;
+    },
+    {
+      headers: { 'X-Device-Id': deviceId },
+    },
+  );
 }

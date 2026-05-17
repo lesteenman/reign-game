@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"crypto/rand"
 	"fmt"
 	"log"
 	"net/http"
@@ -23,22 +22,23 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/awsclient"
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/replenish"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configservice "github.com/eriksteenman/reign-game/backend/internal/service/config"
+	dailyservice "github.com/eriksteenman/reign-game/backend/internal/service/daily"
+	poolservice "github.com/eriksteenman/reign-game/backend/internal/service/pool"
+	puzzlestoresvc "github.com/eriksteenman/reign-game/backend/internal/service/puzzlestore"
+	"github.com/eriksteenman/reign-game/backend/internal/service/replenish"
+	serveservice "github.com/eriksteenman/reign-game/backend/internal/service/serve"
+	statusservice "github.com/eriksteenman/reign-game/backend/internal/service/status"
+	verdictservice "github.com/eriksteenman/reign-game/backend/internal/service/verdict"
+	"github.com/eriksteenman/reign-game/backend/internal/uuid"
 	"github.com/eriksteenman/reign-game/backend/internal/worker"
 )
 
-// newUUIDv4 generates a UUID v4 string using crypto/rand.
-func newUUIDv4() (string, error) {
-	var b [16]byte
-	if _, err := rand.Read(b[:]); err != nil {
-		return "", fmt.Errorf("reading random bytes: %w", err)
-	}
-	b[6] = (b[6] & 0x0f) | 0x40
-	b[8] = (b[8] & 0x3f) | 0x80
-	return fmt.Sprintf("%08x-%04x-%04x-%04x-%012x",
-		b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
-}
+// Compile-time guarantee that *queue.Publisher satisfies the duck-typed
+// replenish.MessagePublisher interface. Catches signature drift at
+// unit-test compile rather than at integration time (backend lesson #5).
+var _ replenish.MessagePublisher = (*queue.Publisher)(nil)
 
 // newRouter builds and returns the application router with all routes mounted
 // under the /api prefix. The prefix separates API traffic from SPA routes
@@ -46,13 +46,17 @@ func newUUIDv4() (string, error) {
 //
 // Public /api/* routes run anonymously; admin routes are grouped under
 // /api/admin and wrapped in auth.RequireAuth + auth.RequireAdmin so every
-// admin route inherits the middleware chain by construction (BM-05). Adding
+// admin route inherits the middleware chain by construction. Adding
 // a new admin route is a single r.Method(...) call inside the admin group.
 func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux {
-	// Build the reactive-replenish hook once. nil when SQS is not
-	// configured — the drain handlers treat nil as no-op so the player
-	// path keeps working in local-dev without LocalStack SQS.
-	replenishHook := buildReplenishHook(repo, pub)
+	// Build cfgSvc and the reactive-replenish hook before mounting routes.
+	// cfgSvc is nil when repo is nil (local-dev without LocalStack DDB).
+	var cfgSvc *configservice.Service
+	if repo != nil {
+		cfgSvc = configservice.New(repo)
+	}
+	// nil when SQS is not configured — drain handlers treat nil as no-op.
+	replenishHook := buildReplenishHook(repo, cfgSvc, pub)
 
 	r := chi.NewRouter()
 	r.Route("/api", func(r chi.Router) {
@@ -60,12 +64,12 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 		r.Get("/puzzles/generate", handler.GenerateHandler)
 
 		if repo != nil {
-			r.Get("/puzzles/next", handler.ServeHandler(repo, replenishHook))
-			r.Put("/puzzles/{id}/status", handler.StatusHandler(repo))
+			r.Get("/puzzles/next", handler.ServeHandler(serveservice.New(repo, replenishHook)))
+			r.Put("/puzzles/{id}/status", handler.StatusHandler(statusservice.New(repo)))
 
 			// Public modes listing for the landing page. Narrower than
 			// /admin/pool — no thresholds, ready counts, or maxAttempts.
-			r.Get("/config/modes", handler.ConfigModesHandler(repo))
+			r.Get("/config/modes", handler.ConfigModesHandler(cfgSvc))
 
 			// Daily challenge routes. Anonymous-or-user via OptionalAuth:
 			// the handlers branch on auth.UserIDFromContext to scope
@@ -74,24 +78,25 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 			// handler factories return http.Handler, not http.HandlerFunc.
 			r.Route("/daily", func(r chi.Router) {
 				r.Use(auth.OptionalAuth(auth.NewClerkSessionVerifier()))
-				r.Method(http.MethodGet, "/{date}", handler.DailyGetHandler(repo, time.Now, replenishHook))
-				r.Method(http.MethodPost, "/{date}/result", handler.DailySubmitHandler(repo, time.Now))
+				dailySvc := dailyservice.New(repo, repo.TableName(), time.Now, replenishHook)
+				r.Method(http.MethodGet, "/{date}", handler.DailyGetHandler(dailySvc))
+				r.Method(http.MethodPost, "/{date}/result", handler.DailySubmitHandler(dailySvc))
 			})
 
 			// Admin routes live behind the Clerk auth middleware chain.
-			// Middleware order is (RequireAuth, RequireAdmin) per BM-03 —
+			// Middleware order is (RequireAuth, RequireAdmin) —
 			// reversed or missing pieces panic on first admin request so
 			// the mistake surfaces immediately in tests.
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(auth.RequireAuth(auth.NewClerkSessionVerifier()))
 				r.Use(auth.RequireAdmin)
 
-				r.Get("/pool", handler.AdminPoolHandler(repo))
-				r.Put("/config/{size}/{mode}", handler.UpdateConfigHandler(repo))
-				r.Post("/config", handler.CreateConfigHandler(repo))
-				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(repo))
+				r.Get("/pool", handler.AdminPoolHandler(poolservice.New(repo)))
+				r.Put("/config/{size}/{mode}", handler.UpdateConfigHandler(cfgSvc))
+				r.Post("/config", handler.CreateConfigHandler(cfgSvc))
+				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(verdictservice.New(repo)))
 				if pub != nil {
-					r.Post("/replenish", handler.ReplenishHandler(repo, repo, pub))
+					r.Post("/replenish", handler.ReplenishHandler(cfgSvc, repo, pub))
 				}
 			})
 		}
@@ -145,7 +150,8 @@ func main() {
 
 		dynamoClient := awsclient.NewDynamoDBClient(&cfg)
 		repo := repository.NewPuzzleRepository(dynamoClient, tableName)
-		w := worker.NewGeneratorWorker(repo, newUUIDv4)
+		puzzleSvc := puzzlestoresvc.New(repo)
+		w := worker.NewGeneratorWorker(puzzleSvc, uuid.NewV4)
 
 		if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
 			// Lambda environment: start SQS event handler.
@@ -223,7 +229,7 @@ func main() {
 
 		// Clerk must be initialized before the first request arrives.
 		// Local dev reads CLERK_SECRET_KEY from backend/.env.local; a
-		// missing or empty value causes log.Fatal by design (BM-10).
+		// missing or empty value causes log.Fatal by design.
 		initClerk(ctx)
 
 		// Warm up the DDB client by issuing one throwaway Query before
@@ -274,12 +280,12 @@ func runLocalPoller(ctx context.Context, sqsClient worker.SQSConsumerAPI, queueU
 // reactive top-up goroutine. Returns nil when repo or pub is nil so
 // local-dev runs without SQS keep working — drain handlers are
 // nil-tolerant.
-func buildReplenishHook(repo *repository.PuzzleRepository, pub *queue.Publisher) func(size int, mode string) {
+func buildReplenishHook(repo *repository.PuzzleRepository, cfgSvc *configservice.Service, pub *queue.Publisher) func(size int, mode string) {
 	if repo == nil || pub == nil {
 		return nil
 	}
 	return replenish.NewAsyncHook(replenish.ReactiveDeps{
-		Configs:   repo,
+		Configs:   cfgSvc,
 		Claimer:   repo,
 		Publisher: pub,
 	}, "reactive replenish")

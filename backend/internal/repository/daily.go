@@ -16,7 +16,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -32,13 +31,13 @@ import (
 // by an order of magnitude.
 const DailyRecycleWindowDays = 14
 
-// dailyCandidatePK / dailyCandidateSK / dailySingletonSK are the keys
-// used for fixed-shape rows (singleton candidate slot, single-row schedule
-// partitions). Centralising them avoids string-literal drift across
-// methods.
+// DailyCandidatePK / DailySingletonSK are the keys used for fixed-shape
+// rows (singleton candidate slot, single-row schedule partitions).
+// Exported so the service layer can reference them when assembling
+// multi-leg transactions without importing private implementation detail.
 const (
-	dailyCandidatePK = "DAILY-CANDIDATE"
-	dailySingletonSK = "<single>"
+	DailyCandidatePK = "DAILY-CANDIDATE"
+	DailySingletonSK = "<single>"
 )
 
 // Sentinel errors surfaced by the daily repository so callers (handlers,
@@ -49,43 +48,44 @@ var (
 	// the singleton DAILY-CANDIDATE slot is already occupied. Expected on
 	// duplicate T-6h cron firings — caller logs and exits.
 	ErrCandidateAlreadyExists = errors.New("daily candidate already exists")
-	// ErrScheduleAlreadyFinalized is returned by FinalizeSchedule when
-	// today's DAILY#date row already exists. Expected on duplicate T=0
-	// cron firings or when the sync fallback races a cron — caller falls
-	// back to GetSchedule and reads the winner's row.
+	// ErrScheduleAlreadyFinalized is returned by Service.FinalizeDaily in
+	// internal/service/daily when today's DAILY#date row already exists.
+	// Expected on duplicate T=0 cron firings or when the sync fallback
+	// races a cron — caller falls back to GetSchedule and reads the
+	// winner's row.
 	ErrScheduleAlreadyFinalized = errors.New("daily schedule already finalized")
 	// ErrPlayAlreadyExists is returned by PutPlayStartedIfAbsent when a
 	// PLAY row exists for (playerId, date). Caller follows up with GetPlay
-	// to read the existing assignedAt — never overwrite (DP-19).
+	// to read the existing assignedAt — never overwrite.
 	ErrPlayAlreadyExists = errors.New("daily play row already exists")
-	// ErrPlayNotInStartedState is returned by SubmitPlayTransactionally
-	// when the PLAY row is missing or its outcome is not "started" (e.g.
-	// a duplicate submission of an already-solved row). Maps to HTTP 409
-	// per DP-12.
+	// ErrPlayNotInStartedState is returned by Service.SubmitPlay in
+	// internal/service/daily when the PLAY row is missing or its outcome
+	// is not "started" (e.g. a duplicate submission of an already-solved
+	// row). Maps to HTTP 409.
 	ErrPlayNotInStartedState = errors.New("daily play row not in started state")
 )
 
 // Schedule counter field constants — the only legal values for the
-// `field` argument to IncrementScheduleCounter (DP-06). Defined as
-// constants so callers can't fat-finger an arbitrary attribute name and
-// drift the schema.
+// counter field updated via the daily service's WriteTransaction legs.
+// Defined as constants so callers can't fat-finger an arbitrary
+// attribute name and drift the schema.
 const (
 	ScheduleCounterStarted = "started"
 	ScheduleCounterSolved  = "solved"
 )
 
 // PlayOutcomeStarted / PlayOutcomeSolved are the only legal values for
-// PlayRecord.Outcome (D9). No "skipped" on dailies — the daily/packs UI
-// does not surface a Skip action.
+// PlayRecord.Outcome. No "skipped" on dailies — the daily/packs UI does
+// not surface a Skip action.
 const (
 	PlayOutcomeStarted = "started"
 	PlayOutcomeSolved  = "solved"
 )
 
 // ScheduleRecord is the schedule row shape (PK=DAILY#YYYY-MM-DD).
-// One row per UTC day. Counters are atomically updated via
-// IncrementScheduleCounter; assignedAt is the cron / sync-fallback's
-// stamp and is never overwritten (DP-01).
+// One row per UTC day. Counters are atomically updated via the daily
+// service's WriteTransaction; assignedAt is the cron / sync-fallback's
+// stamp and is never overwritten.
 type ScheduleRecord struct {
 	// Date is the UTC date (YYYY-MM-DD), embedded in the PK.
 	Date string `dynamodbav:"-"`
@@ -95,17 +95,16 @@ type ScheduleRecord struct {
 	AssignedAt string `dynamodbav:"assignedAt"`
 	// SourcePartition is the puzzle-pool partition the puzzle was drawn
 	// from (e.g. "9#standard"). Future-proofs combo rotation without
-	// locking it in (D12).
+	// locking it in.
 	SourcePartition string `dynamodbav:"sourcePartition"`
-	// Counters tracks per-day plays. Updated atomically by
-	// IncrementScheduleCounter (DP-06). Powers recycle decisions and
-	// telemetry (D10).
+	// Counters tracks per-day plays. Updated atomically by the daily
+	// service. Powers recycle decisions and telemetry.
 	Counters ScheduleCounters `dynamodbav:"counters"`
 }
 
 // ScheduleCounters is the {started, solved} pair embedded in the
-// schedule row. Both default to 0; updated atomically via UpdateItem
-// `ADD counters.<field> :one`.
+// schedule row. Both default to 0; updated atomically by the daily
+// service via UpdateItem `ADD counters.<field> :one`.
 type ScheduleCounters struct {
 	Started int64 `dynamodbav:"started" json:"started"`
 	Solved  int64 `dynamodbav:"solved" json:"solved"`
@@ -113,7 +112,7 @@ type ScheduleCounters struct {
 
 // CandidateRecord is the singleton candidate-slot row
 // (PK=DAILY-CANDIDATE). Persists across days when a recycle leaves it
-// unconsumed (D7, DP-02).
+// unconsumed.
 type CandidateRecord struct {
 	// PuzzleID is the candidate puzzle UUID.
 	PuzzleID string `dynamodbav:"puzzleId"`
@@ -126,7 +125,7 @@ type CandidateRecord struct {
 
 // PlayRecord is the per-player daily play row
 // (PK=PLAY#{playerId}, SK=DAILY#YYYY-MM-DD). `playerId` is `userId` for
-// signed-in players, `deviceId` for anonymous (DP-10).
+// signed-in players, `deviceId` for anonymous.
 type PlayRecord struct {
 	// PlayerID is `userId` for signed-in or `deviceId` for anonymous.
 	// Embedded in the PK; not stored as a separate attribute.
@@ -134,11 +133,11 @@ type PlayRecord struct {
 	// Date is the UTC date (YYYY-MM-DD), embedded in the SK.
 	Date string `dynamodbav:"-"`
 	// Outcome is "started" on first GET and "solved" on submission.
-	// "skipped" is intentionally not used on dailies (D9).
+	// "skipped" is intentionally not used on dailies.
 	Outcome string `dynamodbav:"outcome"`
 	// AssignedAt is the server-stamped first-GET timestamp. Never
 	// overwritten — refresh, second-device, second-GET all return this
-	// (DP-19, anti-cheat).
+	// (anti-cheat: assignedAt is set once, never overwritten).
 	AssignedAt string `dynamodbav:"assignedAt"`
 	// SubmittedAt is the RFC 3339 timestamp of the solve submission.
 	// Empty until outcome=solved.
@@ -148,25 +147,25 @@ type PlayRecord struct {
 	// every GET.
 	PuzzleID string `dynamodbav:"puzzleId"`
 	// ServerElapsedMs is `submittedAt - assignedAt` in milliseconds.
-	// Source of truth for any future ranking surface (DP-20).
+	// Source of truth for any future ranking surface.
 	ServerElapsedMs int64 `dynamodbav:"serverElapsedMs,omitempty"`
 	// ClientClaimedMs is the player-claimed playTimeMs. Captured for
-	// telemetry only — never authoritative (DP-20).
+	// telemetry only — never authoritative.
 	ClientClaimedMs int64 `dynamodbav:"clientClaimedMs,omitempty"`
 }
 
 // SubmitInput bundles the fields the handler captures from a valid
 // POST /api/daily/{date}/result request and forwards to
-// SubmitPlayTransactionally. Solution validation is the handler's job
-// (DP-11) — by the time we get here the submission is structurally and
-// semantically valid.
+// Service.SubmitPlay in internal/service/daily. Solution validation
+// is the handler's job — by the time we get here the
+// submission is structurally and semantically valid.
 type SubmitInput struct {
 	// PuzzleID is the schedule row's puzzle (used for the leaderboard
 	// row's correlation/debug — not strictly required for ranking).
 	PuzzleID string
 	// AssignedAt is the PLAY row's authoritative start timestamp
 	// (RFC 3339). Used both to compute `serverElapsedMs` and to derive
-	// the play-origin date for cross-midnight submissions (DP-13).
+	// the play-origin date for cross-midnight submissions.
 	AssignedAt time.Time
 	// SubmittedAt is when the submission landed on the server.
 	SubmittedAt time.Time
@@ -174,54 +173,60 @@ type SubmitInput struct {
 	// Telemetry only.
 	ClientMs int64
 	// IsAnonymous is true for `deviceId`-keyed players. When true,
-	// SubmitPlayTransactionally skips the leaderboard leg (D13).
+	// Service.SubmitPlay skips the leaderboard leg for anonymous players.
 	IsAnonymous bool
 	// UserID is the Clerk user ID, used as the leaderboard SK suffix.
 	// Ignored when IsAnonymous=true.
 	UserID string
 }
 
-// buildDailySchedulePK constructs DAILY#YYYY-MM-DD.
-func buildDailySchedulePK(date string) string {
+// BuildDailySchedulePK constructs DAILY#YYYY-MM-DD. Exported so the
+// service layer can build keys for transaction legs without re-encoding
+// the prefix.
+func BuildDailySchedulePK(date string) string {
 	return "DAILY#" + date
 }
 
-// buildDailyLeaderboardPK constructs DAILY-LEADERBOARD#YYYY-MM-DD.
-func buildDailyLeaderboardPK(date string) string {
+// BuildDailyLeaderboardPK constructs DAILY-LEADERBOARD#YYYY-MM-DD.
+// Exported so the service layer can build keys for transaction legs
+// without re-encoding the prefix.
+func BuildDailyLeaderboardPK(date string) string {
 	return "DAILY-LEADERBOARD#" + date
 }
 
-// buildPlayPK constructs PLAY#{playerId}. `playerId` is opaque — it can
+// BuildPlayPK constructs PLAY#{playerId}. `playerId` is opaque — it can
 // be a Clerk userID or a deviceId; the prefix scopes both into the same
-// row family without collision risk.
-func buildPlayPK(playerID string) string {
+// row family without collision risk. Exported so the service layer can
+// assemble transaction legs.
+func BuildPlayPK(playerID string) string {
 	return "PLAY#" + playerID
 }
 
-// buildPlaySK constructs DAILY#YYYY-MM-DD as the PLAY row sort key.
+// BuildPlaySK constructs DAILY#YYYY-MM-DD as the PLAY row sort key.
 // The shape mirrors the schedule PK on purpose so future per-player
-// surfaces (packs, etc.) can extend with sibling SK prefixes.
-func buildPlaySK(date string) string {
+// surfaces (packs, etc.) can extend with sibling SK prefixes. Exported
+// so the service layer can assemble transaction legs.
+func BuildPlaySK(date string) string {
 	return "DAILY#" + date
 }
 
-// buildLeaderboardSK constructs the leaderboard SK as
+// BuildLeaderboardSK constructs the leaderboard SK as
 // {paddedMs:8d}#{userId}. Eight digits → max ~27.7 hours, ample
 // headroom for any legitimate solve time. Ascending lexicographic Query
-// returns fastest first.
-func buildLeaderboardSK(elapsedMs int64, userID string) string {
+// returns fastest first. Exported so the service layer can assemble
+// transaction legs.
+func BuildLeaderboardSK(elapsedMs int64, userID string) string {
 	return fmt.Sprintf("%08d#%s", elapsedMs, userID)
 }
 
 // GetSchedule reads the schedule row for date. Returns (nil, nil) when
-// absent — caller decides whether to engage the sync fallback (DP-05)
-// or 404.
+// absent — caller decides whether to engage the sync fallback or 404.
 func (r *PuzzleRepository) GetSchedule(ctx context.Context, date string) (*ScheduleRecord, error) {
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: buildDailySchedulePK(date)},
-			"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
+			"PK": &types.AttributeValueMemberS{Value: BuildDailySchedulePK(date)},
+			"SK": &types.AttributeValueMemberS{Value: DailySingletonSK},
 		},
 	})
 	if err != nil {
@@ -241,13 +246,13 @@ func (r *PuzzleRepository) GetSchedule(ctx context.Context, date string) (*Sched
 
 // GetCandidate reads the singleton candidate slot. Returns (nil, nil)
 // when empty — caller (T=0 cron, sync fallback) treats empty as a
-// recycle trigger (DP-04).
+// recycle trigger.
 func (r *PuzzleRepository) GetCandidate(ctx context.Context) (*CandidateRecord, error) {
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: dailyCandidatePK},
-			"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
+			"PK": &types.AttributeValueMemberS{Value: DailyCandidatePK},
+			"SK": &types.AttributeValueMemberS{Value: DailySingletonSK},
 		},
 	})
 	if err != nil {
@@ -265,7 +270,7 @@ func (r *PuzzleRepository) GetCandidate(ctx context.Context) (*CandidateRecord, 
 }
 
 // PutCandidateIfAbsent writes a fresh candidate puzzle into the
-// singleton slot. Conditional on the slot being empty (DP-03's race
+// singleton slot. Conditional on the slot being empty (race
 // guard) — duplicate T-6h cron firings see ErrCandidateAlreadyExists
 // and exit cleanly. The same conditional handles the case where a
 // recycle left an older candidate in place: T-6h would log+exit, and
@@ -273,8 +278,8 @@ func (r *PuzzleRepository) GetCandidate(ctx context.Context) (*CandidateRecord, 
 func (r *PuzzleRepository) PutCandidateIfAbsent(ctx context.Context, puzzleID, sourcePartition string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	item := map[string]types.AttributeValue{
-		"PK":              &types.AttributeValueMemberS{Value: dailyCandidatePK},
-		"SK":              &types.AttributeValueMemberS{Value: dailySingletonSK},
+		"PK":              &types.AttributeValueMemberS{Value: DailyCandidatePK},
+		"SK":              &types.AttributeValueMemberS{Value: DailySingletonSK},
 		"puzzleId":        &types.AttributeValueMemberS{Value: puzzleID},
 		"queuedAt":        &types.AttributeValueMemberS{Value: now},
 		"sourcePartition": &types.AttributeValueMemberS{Value: sourcePartition},
@@ -295,94 +300,9 @@ func (r *PuzzleRepository) PutCandidateIfAbsent(ctx context.Context, puzzleID, s
 	return nil
 }
 
-// DeleteCandidate clears the singleton slot. Used by the T=0 confirm
-// path after the schedule row is finalized (DP-04). Unconditional —
-// idempotent against duplicate calls because a missing row deletes
-// cleanly.
-func (r *PuzzleRepository) DeleteCandidate(ctx context.Context) error {
-	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: aws.String(r.tableName),
-		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: dailyCandidatePK},
-			"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("deleting daily candidate: %w", err)
-	}
-	return nil
-}
-
-// FinalizeSchedule writes today's schedule row. Conditional on the
-// row not yet existing — duplicate T=0 cron firings AND sync-fallback
-// races resolve via ErrScheduleAlreadyFinalized (DP-04, DP-05).
-// Counters are initialized to zero. Caller is responsible for the
-// PuzzleRecord lastDailyDate write (separate transactional concern;
-// crons compose the two).
-func (r *PuzzleRepository) FinalizeSchedule(ctx context.Context, date, puzzleID, sourcePartition string) error {
-	now := time.Now().UTC().Format(time.RFC3339)
-	item := map[string]types.AttributeValue{
-		"PK":              &types.AttributeValueMemberS{Value: buildDailySchedulePK(date)},
-		"SK":              &types.AttributeValueMemberS{Value: dailySingletonSK},
-		"puzzleId":        &types.AttributeValueMemberS{Value: puzzleID},
-		"assignedAt":      &types.AttributeValueMemberS{Value: now},
-		"sourcePartition": &types.AttributeValueMemberS{Value: sourcePartition},
-		"counters": &types.AttributeValueMemberM{
-			Value: map[string]types.AttributeValue{
-				"started": &types.AttributeValueMemberN{Value: "0"},
-				"solved":  &types.AttributeValueMemberN{Value: "0"},
-			},
-		},
-	}
-
-	_, err := r.client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName:           aws.String(r.tableName),
-		Item:                item,
-		ConditionExpression: aws.String("attribute_not_exists(PK)"),
-	})
-	if err != nil {
-		var ccfe *types.ConditionalCheckFailedException
-		if errors.As(err, &ccfe) {
-			return ErrScheduleAlreadyFinalized
-		}
-		return fmt.Errorf("finalizing daily schedule for %s: %w", date, err)
-	}
-	return nil
-}
-
-// IncrementScheduleCounter atomically increments counters.{started|solved}
-// on the schedule row by `delta` (DP-06). `field` must be one of
-// ScheduleCounterStarted / ScheduleCounterSolved — any other value is
-// rejected to keep the schema honest.
-func (r *PuzzleRepository) IncrementScheduleCounter(ctx context.Context, date, field string, delta int64) error {
-	if field != ScheduleCounterStarted && field != ScheduleCounterSolved {
-		return fmt.Errorf("invalid schedule counter field %q", field)
-	}
-
-	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName: aws.String(r.tableName),
-		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: buildDailySchedulePK(date)},
-			"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
-		},
-		UpdateExpression: aws.String("ADD #counters.#field :delta"),
-		ExpressionAttributeNames: map[string]string{
-			"#counters": "counters",
-			"#field":    field,
-		},
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":delta": &types.AttributeValueMemberN{Value: strconv.FormatInt(delta, 10)},
-		},
-	})
-	if err != nil {
-		return fmt.Errorf("incrementing schedule counter %s.%s: %w", date, field, err)
-	}
-	return nil
-}
-
 // ListApprovedPool returns approved puzzles eligible for daily
 // assignment, scoped to (size, mode). Approval gate is
-// `verdictSummary.up >= 1 AND verdictSummary.down == 0` (DP-15).
+// `verdictSummary.up >= 1 AND verdictSummary.down == 0`.
 // When excludeRecentlyDailied=true, also rejects puzzles whose
 // `lastDailyDate` falls within the DailyRecycleWindowDays-day
 // rolling window relative to `now`.
@@ -433,59 +353,15 @@ func (r *PuzzleRepository) ListApprovedPool(ctx context.Context, size int, mode 
 	return records, nil
 }
 
-// MarkPuzzleAsDailyOn sets PuzzleRecord.lastDailyDate to `date`. Idempotent
-// against same-date repeats and refuses to overwrite a newer date —
-// guards against late-arriving cron writes / retries clobbering a
-// fresher value (DP-18). Returns ErrPuzzleNotFound when the underlying
-// puzzle row is absent so a stale puzzleID does not silently upsert.
-func (r *PuzzleRepository) MarkPuzzleAsDailyOn(ctx context.Context, size int, mode, puzzleID, date string) error {
-	pk := buildPK(size, mode)
-
-	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName: aws.String(r.tableName),
-		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: pk},
-			"SK": &types.AttributeValueMemberS{Value: puzzleID},
-		},
-		UpdateExpression:    aws.String("SET lastDailyDate = :date"),
-		ConditionExpression: aws.String("attribute_exists(PK) AND (attribute_not_exists(lastDailyDate) OR lastDailyDate <= :date)"),
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":date": &types.AttributeValueMemberS{Value: date},
-		},
-	})
-	if err != nil {
-		var ccfe *types.ConditionalCheckFailedException
-		if errors.As(err, &ccfe) {
-			// Two reasons: (a) row missing → 404; (b) existing
-			// lastDailyDate is newer than ours → silent no-op (idempotent
-			// from the caller's view).
-			//
-			// We cannot distinguish without an extra GetItem, so we
-			// optimistically check existence: if it exists, treat as
-			// silent no-op (newer-date case); else surface ErrPuzzleNotFound.
-			existing, getErr := r.GetPuzzle(ctx, size, mode, puzzleID)
-			if getErr != nil {
-				return fmt.Errorf("verifying puzzle existence after conditional fail %s/%s: %w", pk, puzzleID, getErr)
-			}
-			if existing == nil {
-				return ErrPuzzleNotFound
-			}
-			return nil
-		}
-		return fmt.Errorf("marking puzzle %s/%s as daily on %s: %w", pk, puzzleID, date, err)
-	}
-	return nil
-}
-
 // GetPlay reads the per-player play row for (playerId, date). Returns
 // (nil, nil) when absent — caller branches to PutPlayStartedIfAbsent on
-// first GET (DP-08).
+// first GET.
 func (r *PuzzleRepository) GetPlay(ctx context.Context, playerID, date string) (*PlayRecord, error) {
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
-			"PK": &types.AttributeValueMemberS{Value: buildPlayPK(playerID)},
-			"SK": &types.AttributeValueMemberS{Value: buildPlaySK(date)},
+			"PK": &types.AttributeValueMemberS{Value: BuildPlayPK(playerID)},
+			"SK": &types.AttributeValueMemberS{Value: BuildPlaySK(date)},
 		},
 	})
 	if err != nil {
@@ -505,15 +381,15 @@ func (r *PuzzleRepository) GetPlay(ctx context.Context, playerID, date string) (
 }
 
 // PutPlayStartedIfAbsent creates a fresh PLAY row with outcome=started
-// and the server-stamped assignedAt. Conditional on absence — DP-19's
-// anti-cheat invariant says assignedAt is set once and never overwritten,
+// and the server-stamped assignedAt. Conditional on absence — assignedAt
+// is set once and never overwritten,
 // so a duplicate first-GET race must NOT update the existing row.
 // Caller responds to ErrPlayAlreadyExists by calling GetPlay and using
 // the winner's assignedAt.
 func (r *PuzzleRepository) PutPlayStartedIfAbsent(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error {
 	item := map[string]types.AttributeValue{
-		"PK":         &types.AttributeValueMemberS{Value: buildPlayPK(playerID)},
-		"SK":         &types.AttributeValueMemberS{Value: buildPlaySK(date)},
+		"PK":         &types.AttributeValueMemberS{Value: BuildPlayPK(playerID)},
+		"SK":         &types.AttributeValueMemberS{Value: BuildPlaySK(date)},
 		"outcome":    &types.AttributeValueMemberS{Value: PlayOutcomeStarted},
 		"assignedAt": &types.AttributeValueMemberS{Value: assignedAt.UTC().Format(time.RFC3339)},
 		"puzzleId":   &types.AttributeValueMemberS{Value: puzzleID},
@@ -534,223 +410,28 @@ func (r *PuzzleRepository) PutPlayStartedIfAbsent(ctx context.Context, playerID,
 	return nil
 }
 
-// SubmitPlayTransactionally commits a daily-puzzle solve via a single
-// TransactWriteItems with up to three legs (DP-12, D14):
-//
-//  1. UpdateItem PLAY → outcome=solved, submittedAt, serverElapsedMs,
-//     clientClaimedMs. Conditional on outcome=started for idempotency —
-//     a duplicate submission produces ErrPlayNotInStartedState (caller
-//     maps to HTTP 409, no double-count).
-//  2. UpdateItem schedule row → ADD counters.solved 1. Date keys off
-//     submission.AssignedAt (Finding 7 / DP-13: cross-midnight
-//     submissions credit the prior date's counter).
-//  3. PutItem leaderboard row at DAILY-LEADERBOARD#{playOriginDate} —
-//     signed-in only. Anonymous (deviceId-keyed) submissions skip this
-//     leg (D13).
-//
-// All legs commit or none do. DDB's transaction guarantees rule out
-// partial writes (DP-22).
-func (r *PuzzleRepository) SubmitPlayTransactionally(ctx context.Context, playerID, date string, submission *SubmitInput) error {
-	playOriginDate := submission.AssignedAt.UTC().Format("2006-01-02")
-	submittedAt := submission.SubmittedAt.UTC().Format(time.RFC3339)
-	elapsedMs := submission.SubmittedAt.Sub(submission.AssignedAt).Milliseconds()
-	if elapsedMs < 0 {
-		// Defensive: clock skew or bad input would otherwise produce a
-		// negative leaderboard SK, which sorts before legitimate plays
-		// and corrupts ranking. Refuse the transaction.
-		return fmt.Errorf("invalid submission: submittedAt before assignedAt (delta=%dms)", elapsedMs)
-	}
-
-	items := []types.TransactWriteItem{
-		{
-			Update: &types.Update{
-				TableName: aws.String(r.tableName),
-				Key: map[string]types.AttributeValue{
-					"PK": &types.AttributeValueMemberS{Value: buildPlayPK(playerID)},
-					"SK": &types.AttributeValueMemberS{Value: buildPlaySK(date)},
-				},
-				UpdateExpression: aws.String(
-					"SET #outcome = :solved, submittedAt = :submittedAt, " +
-						"serverElapsedMs = :serverMs, clientClaimedMs = :clientMs",
-				),
-				ConditionExpression: aws.String("#outcome = :started"),
-				ExpressionAttributeNames: map[string]string{
-					"#outcome": "outcome",
-				},
-				ExpressionAttributeValues: map[string]types.AttributeValue{
-					":solved":      &types.AttributeValueMemberS{Value: PlayOutcomeSolved},
-					":started":     &types.AttributeValueMemberS{Value: PlayOutcomeStarted},
-					":submittedAt": &types.AttributeValueMemberS{Value: submittedAt},
-					":serverMs":    &types.AttributeValueMemberN{Value: strconv.FormatInt(elapsedMs, 10)},
-					":clientMs":    &types.AttributeValueMemberN{Value: strconv.FormatInt(submission.ClientMs, 10)},
-				},
-			},
-		},
-		{
-			Update: &types.Update{
-				TableName: aws.String(r.tableName),
-				Key: map[string]types.AttributeValue{
-					"PK": &types.AttributeValueMemberS{Value: buildDailySchedulePK(playOriginDate)},
-					"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
-				},
-				UpdateExpression: aws.String("ADD #counters.#solved :one"),
-				ExpressionAttributeNames: map[string]string{
-					"#counters": "counters",
-					"#solved":   ScheduleCounterSolved,
-				},
-				ExpressionAttributeValues: map[string]types.AttributeValue{
-					":one": &types.AttributeValueMemberN{Value: "1"},
-				},
-			},
-		},
-	}
-
-	if !submission.IsAnonymous {
-		items = append(items, types.TransactWriteItem{
-			Put: &types.Put{
-				TableName: aws.String(r.tableName),
-				Item: map[string]types.AttributeValue{
-					"PK":              &types.AttributeValueMemberS{Value: buildDailyLeaderboardPK(playOriginDate)},
-					"SK":              &types.AttributeValueMemberS{Value: buildLeaderboardSK(elapsedMs, submission.UserID)},
-					"userId":          &types.AttributeValueMemberS{Value: submission.UserID},
-					"serverElapsedMs": &types.AttributeValueMemberN{Value: strconv.FormatInt(elapsedMs, 10)},
-					"submittedAt":     &types.AttributeValueMemberS{Value: submittedAt},
-					"puzzleId":        &types.AttributeValueMemberS{Value: submission.PuzzleID},
-				},
-			},
-		})
-	}
-
-	_, err := r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
-		TransactItems: items,
-	})
-	if err != nil {
-		// TransactionCanceledException with a ConditionalCheckFailed
-		// reason on leg 1 means the PLAY row was already solved (or
-		// missing). Surface ErrPlayNotInStartedState so the handler
-		// returns 409 (DP-12 idempotency).
-		if isConditionalCheckFailureOnLeg(err, 0) {
-			return ErrPlayNotInStartedState
-		}
-		return fmt.Errorf("submitting daily play %s/%s: %w", playerID, date, err)
-	}
-	return nil
-}
-
 // FinalizeMode discriminates the two T=0 finalize paths (design §4):
 // confirm consumes the singleton candidate slot; recycle reuses
 // yesterday's puzzle and skips the candidate delete entirely.
 type FinalizeMode string
 
 // FinalizeModeConfirm / FinalizeModeRecycle are the only legal values
-// for FinalizeMode. Any other value is rejected by FinalizeDailyTransaction
-// before any DDB call so a typo can't silently flow through.
+// for FinalizeMode. Any other value is rejected by Service.FinalizeDaily
+// in internal/service/daily before any DDB call so a typo can't
+// silently flow through.
 const (
 	FinalizeModeConfirm FinalizeMode = "confirm"
 	FinalizeModeRecycle FinalizeMode = "recycle"
 )
 
-// FinalizeDailyTransaction wraps the T=0 finalize legs in a single
-// TransactWriteItems per design §4 step 5. The legs are:
-//
-//  1. Put schedule row (PK=DAILY#date) with attribute_not_exists(PK) —
-//     ErrScheduleAlreadyFinalized on race-loser, callers GetSchedule
-//     and use the winner's row.
-//  2. Update PuzzleRecord at (PK=sourcePartition, SK=puzzleID) setting
-//     lastDailyDate=date (DP-17, DP-18). On the recycle path this
-//     advances yesterday's puzzle's lastDailyDate to today (Finding 6).
-//  3. Confirm-mode only: Delete DAILY-CANDIDATE row, conditional on
-//     its puzzleId still matching the value we just consumed — guards
-//     against a different candidate having been swapped in between
-//     the cron's GetCandidate read and this transaction.
-//
-// All legs commit or none do. The candidate-delete condition uses
-// puzzleId, not unconditional delete, to make a 3-process race
-// (T-6h cron, T=0 cron, sync fallback) fail closed instead of
-// silently consuming the wrong row.
-func (r *PuzzleRepository) FinalizeDailyTransaction(
-	ctx context.Context,
-	date, puzzleID, sourcePartition string,
-	mode FinalizeMode,
-) error {
-	if mode != FinalizeModeConfirm && mode != FinalizeModeRecycle {
-		return fmt.Errorf("invalid finalize mode %q", mode)
-	}
-
-	now := time.Now().UTC().Format(time.RFC3339)
-
-	items := []types.TransactWriteItem{
-		{
-			Put: &types.Put{
-				TableName: aws.String(r.tableName),
-				Item: map[string]types.AttributeValue{
-					"PK":              &types.AttributeValueMemberS{Value: buildDailySchedulePK(date)},
-					"SK":              &types.AttributeValueMemberS{Value: dailySingletonSK},
-					"puzzleId":        &types.AttributeValueMemberS{Value: puzzleID},
-					"assignedAt":      &types.AttributeValueMemberS{Value: now},
-					"sourcePartition": &types.AttributeValueMemberS{Value: sourcePartition},
-					"counters": &types.AttributeValueMemberM{
-						Value: map[string]types.AttributeValue{
-							"started": &types.AttributeValueMemberN{Value: "0"},
-							"solved":  &types.AttributeValueMemberN{Value: "0"},
-						},
-					},
-				},
-				ConditionExpression: aws.String("attribute_not_exists(PK)"),
-			},
-		},
-		{
-			Update: &types.Update{
-				TableName: aws.String(r.tableName),
-				Key: map[string]types.AttributeValue{
-					"PK": &types.AttributeValueMemberS{Value: sourcePartition},
-					"SK": &types.AttributeValueMemberS{Value: puzzleID},
-				},
-				UpdateExpression: aws.String("SET lastDailyDate = :date"),
-				ExpressionAttributeValues: map[string]types.AttributeValue{
-					":date": &types.AttributeValueMemberS{Value: date},
-				},
-			},
-		},
-	}
-
-	if mode == FinalizeModeConfirm {
-		items = append(items, types.TransactWriteItem{
-			Delete: &types.Delete{
-				TableName: aws.String(r.tableName),
-				Key: map[string]types.AttributeValue{
-					"PK": &types.AttributeValueMemberS{Value: dailyCandidatePK},
-					"SK": &types.AttributeValueMemberS{Value: dailySingletonSK},
-				},
-				ConditionExpression: aws.String("puzzleId = :pid"),
-				ExpressionAttributeValues: map[string]types.AttributeValue{
-					":pid": &types.AttributeValueMemberS{Value: puzzleID},
-				},
-			},
-		})
-	}
-
-	_, err := r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
-		TransactItems: items,
-	})
-	if err != nil {
-		// Leg-0 conditional failure → schedule row already exists; surface
-		// the sentinel so callers (T=0 cron, sync fallback) can read the
-		// winner's row and proceed.
-		if isConditionalCheckFailureOnLeg(err, 0) {
-			return ErrScheduleAlreadyFinalized
-		}
-		return fmt.Errorf("finalizing daily transaction for %s (mode=%s): %w", date, mode, err)
-	}
-	return nil
-}
-
-// isConditionalCheckFailureOnLeg returns true when err is a
+// IsConditionalCheckFailureOnLeg returns true when err is a
 // TransactionCanceledException whose CancellationReasons indicate the
-// leg at `legIndex` failed its ConditionExpression. DDB's Go SDK v2
+// leg at legIndex failed its ConditionExpression. DDB's Go SDK v2
 // returns this as a typed error with a CancellationReasons slice whose
-// indices align 1:1 with the input TransactItems.
-func isConditionalCheckFailureOnLeg(err error, legIndex int) bool {
+// indices align 1:1 with the input TransactItems. Exported so the
+// service layer can inspect transaction errors without re-implementing
+// the detection logic.
+func IsConditionalCheckFailureOnLeg(err error, legIndex int) bool {
 	var tce *types.TransactionCanceledException
 	if !errors.As(err, &tce) {
 		return false
@@ -760,6 +441,19 @@ func isConditionalCheckFailureOnLeg(err error, legIndex int) bool {
 	}
 	reason := tce.CancellationReasons[legIndex]
 	return reason.Code != nil && strings.EqualFold(*reason.Code, "ConditionalCheckFailed")
+}
+
+// WriteTransaction executes the given transact items as a single
+// DynamoDB TransactWriteItems call. Used by the daily application
+// service to assemble multi-row atomic writes whose orchestration
+// (which legs to include, when) lives in service/ per the
+// architecture rule. No DDB error translation here — callers use
+// IsConditionalCheckFailureOnLeg on the returned error.
+func (r *PuzzleRepository) WriteTransaction(ctx context.Context, items []types.TransactWriteItem) error {
+	_, err := r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+		TransactItems: items,
+	})
+	return err
 }
 
 // LeaderboardRank returns the player's 1-based rank on the daily
@@ -784,7 +478,7 @@ func (r *PuzzleRepository) LeaderboardRank(
 	elapsedMs int64,
 	userID string,
 ) (int, error) {
-	playerSK := buildLeaderboardSK(elapsedMs, userID)
+	playerSK := BuildLeaderboardSK(elapsedMs, userID)
 	output, err := r.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(r.tableName),
 		KeyConditionExpression: aws.String("#pk = :pk AND #sk <= :playerSK"),
@@ -793,7 +487,7 @@ func (r *PuzzleRepository) LeaderboardRank(
 			"#sk": "SK",
 		},
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk":       &types.AttributeValueMemberS{Value: buildDailyLeaderboardPK(date)},
+			":pk":       &types.AttributeValueMemberS{Value: BuildDailyLeaderboardPK(date)},
 			":playerSK": &types.AttributeValueMemberS{Value: playerSK},
 		},
 		Select: types.SelectCount,

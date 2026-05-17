@@ -30,10 +30,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/eriksteenman/reign-game/backend/internal/awsclient"
-	"github.com/eriksteenman/reign-game/backend/internal/daily"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/replenish"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
+	"github.com/eriksteenman/reign-game/backend/internal/service/daily"
+	"github.com/eriksteenman/reign-game/backend/internal/service/replenish"
 )
 
 // EventBridgeScheduledEvent is the slice of an EventBridge scheduled
@@ -56,22 +57,6 @@ const (
 type dailyService interface {
 	EnsureCandidate(ctx context.Context, now time.Time) error
 	SyncFinalizeForToday(ctx context.Context, today, yesterday string, now time.Time) (*repository.ScheduleRecord, error)
-}
-
-// realService is the production wrapper around the daily package's
-// free functions, parameterized over a Repo. Tests skip this and
-// inject a mock.
-type realService struct {
-	repo          daily.Repo
-	replenishHook func(size int, mode string)
-}
-
-func (r *realService) EnsureCandidate(ctx context.Context, now time.Time) error {
-	return daily.EnsureCandidate(ctx, r.repo, now, r.replenishHook)
-}
-
-func (r *realService) SyncFinalizeForToday(ctx context.Context, today, yesterday string, now time.Time) (*repository.ScheduleRecord, error) {
-	return daily.SyncFinalizeForToday(ctx, r.repo, today, yesterday, now, r.replenishHook)
 }
 
 // handle dispatches an EventBridge event to the right cron handler.
@@ -131,6 +116,7 @@ func main() {
 		log.Fatal("daily cron: PUZZLE_POOL_TABLE not set")
 	}
 	repo := repository.NewPuzzleRepository(ddb, tableName)
+	cfgSvc := configsvc.New(repo)
 
 	// Auto-replenish: when SQS_QUEUE_URL is wired, install a hook that
 	// drives replenish.TryReactiveTopUp from a goroutine on every
@@ -144,7 +130,7 @@ func main() {
 		sqsClient := sqs.NewFromConfig(cfg)
 		pub := queue.NewPublisher(sqsClient, queueURL)
 		replenishHook = replenish.NewAsyncHook(replenish.ReactiveDeps{
-			Configs:   repo,
+			Configs:   cfgSvc,
 			Claimer:   repo,
 			Publisher: pub,
 		}, "daily cron: reactive replenish")
@@ -153,7 +139,7 @@ func main() {
 		log.Printf("WARN: daily cron: SQS_QUEUE_URL unset, reactive replenish disabled")
 	}
 
-	svc := &realService{repo: repo, replenishHook: replenishHook}
+	svc := daily.New(repo, tableName, time.Now, replenishHook)
 
 	lambda.Start(func(ctx context.Context, event EventBridgeScheduledEvent) error {
 		return handle(ctx, event, svc, time.Now)

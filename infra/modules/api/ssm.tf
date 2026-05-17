@@ -1,4 +1,4 @@
-# Clerk authentication secrets (Phase 6, R-089).
+# Clerk authentication secrets.
 #
 # The Lambda reads the secret key via auth.LoadClerkSecret, which prefers
 # CLERK_SECRET_KEY from env (dev path) and falls back to fetching the
@@ -11,8 +11,7 @@
 # the change on the next apply. The initial value is supplied via the
 # clerk_publishable_key / clerk_secret_key root variables (TF_VAR_* in CI).
 
-# SSM parameter names follow the path convention `/reign/<env>/<key>`,
-# matching the spec (openspec/changes/phase-6-admin-auth/tasks.md R-089).
+# SSM parameter names follow the path convention `/reign/<env>/<key>`.
 # The `reign` namespace is the short product name (var.project_name is
 # "reign-game" — the longer slug used for AWS resource names — but SSM
 # paths conventionally use the shorter human-friendly product name).

@@ -8,11 +8,6 @@ output "queue_arn" {
   value       = aws_sqs_queue.generation.arn
 }
 
-output "dlq_url" {
-  description = "SQS puzzle generation dead-letter queue URL"
-  value       = aws_sqs_queue.generation_dlq.url
-}
-
 output "generator_function_name" {
   description = "Generator Lambda function name"
   value       = aws_lambda_function.generator.function_name

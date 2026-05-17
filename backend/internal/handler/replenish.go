@@ -8,16 +8,16 @@ import (
 	"strconv"
 
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
-	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/replenish"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	"github.com/eriksteenman/reign-game/backend/internal/message"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
+	"github.com/eriksteenman/reign-game/backend/internal/service/replenish"
 )
 
 // ConfigReader is the narrow surface ReplenishHandler needs. It matches
 // replenish.AllConfigsLister so callers can pass any list-all
 // implementation directly.
 type ConfigReader interface {
-	GetAllConfigs(ctx context.Context) ([]repository.ConfigRecord, error)
+	GetAllConfigs(ctx context.Context) ([]configsvc.ConfigView, error)
 }
 
 // PoolCounter is the per-combo "ready" count interface used by the
@@ -28,7 +28,7 @@ type PoolCounter interface {
 
 // MessagePublisher publishes generation requests to the SQS queue.
 type MessagePublisher interface {
-	PublishGenerationRequest(ctx context.Context, req *queue.GenerationRequest) error
+	PublishGenerationRequest(ctx context.Context, req *message.GenerationRequest) error
 }
 
 // ReplenishHandler creates an HTTP handler for POST /admin/replenish.

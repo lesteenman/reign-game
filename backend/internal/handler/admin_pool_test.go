@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,52 +12,41 @@ import (
 
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	poolsvc "github.com/eriksteenman/reign-game/backend/internal/service/pool"
 )
 
-// mockConfigAndCountRepo implements handler.ConfigAndCountRepo for testing.
-type mockConfigAndCountRepo struct {
-	configs       []repository.ConfigRecord
-	configsErr    error
-	readyCounts   map[string]int
-	countReadyErr error
+// stubPoolService implements handler.PoolService for testing the HTTP
+// boundary. The service-layer behaviors (DDB calls, timing logs) are
+// covered in internal/service/pool.
+type stubPoolService struct {
+	entries []poolsvc.ComboEntry
+	err     error
 }
 
-func (m *mockConfigAndCountRepo) GetAllConfigs(_ context.Context) ([]repository.ConfigRecord, error) {
-	return m.configs, m.configsErr
-}
-
-func (m *mockConfigAndCountRepo) CountReady(_ context.Context, size int, mode string) (int, error) {
-	if m.countReadyErr != nil {
-		return 0, m.countReadyErr
-	}
-	key := fmt.Sprintf("%d#%s", size, mode)
-	return m.readyCounts[key], nil
+func (s *stubPoolService) LoadPool(_ context.Context) ([]poolsvc.ComboEntry, error) {
+	return s.entries, s.err
 }
 
 func TestAdminPoolHandler(t *testing.T) {
 	tests := []struct {
-		name          string
-		configs       []repository.ConfigRecord
-		configsErr    error
-		readyCounts   map[string]int
-		countReadyErr error
-		wantStatus    int
-		wantError     string
-		wantCombos    int
-		checkCombos   func(t *testing.T, combos []comboStatusJSON)
+		name        string
+		entries     []poolsvc.ComboEntry
+		svcErr      error
+		wantStatus  int
+		wantError   string
+		wantCombos  int
+		checkCombos func(t *testing.T, combos []comboStatusJSON)
 	}{
 		{
 			name: "mixed enabled and disabled combos",
-			configs: []repository.ConfigRecord{
-				{Size: 5, Mode: "standard", Threshold: 3, Enabled: true},
-				{Size: 7, Mode: "standard", Threshold: 5, Enabled: false},
+			entries: []poolsvc.ComboEntry{
+				{Config: repository.ConfigRecord{Size: 5, Mode: "standard", Threshold: 3, Enabled: true}, ReadyCount: 3},
+				{Config: repository.ConfigRecord{Size: 7, Mode: "standard", Threshold: 5, Enabled: false}, ReadyCount: 0},
 			},
-			readyCounts: map[string]int{"5#standard": 3},
-			wantStatus:  http.StatusOK,
-			wantCombos:  2,
+			wantStatus: http.StatusOK,
+			wantCombos: 2,
 			checkCombos: func(t *testing.T, combos []comboStatusJSON) {
 				t.Helper()
-				// First combo: enabled, should have real count
 				if combos[0].Size != 5 || combos[0].Mode != "standard" {
 					t.Errorf("combo[0] size/mode = %d/%s, want 5/standard", combos[0].Size, combos[0].Mode)
 				}
@@ -68,7 +56,6 @@ func TestAdminPoolHandler(t *testing.T) {
 				if !combos[0].Config.Enabled {
 					t.Error("combo[0] config.enabled = false, want true")
 				}
-				// Second combo: disabled, should have count 0
 				if combos[1].Size != 7 || combos[1].Mode != "standard" {
 					t.Errorf("combo[1] size/mode = %d/%s, want 7/standard", combos[1].Size, combos[1].Mode)
 				}
@@ -81,56 +68,24 @@ func TestAdminPoolHandler(t *testing.T) {
 			},
 		},
 		{
-			name: "all configs disabled returns zero counts",
-			configs: []repository.ConfigRecord{
-				{Size: 5, Mode: "standard", Enabled: false},
-				{Size: 7, Mode: "double", Enabled: false},
-			},
-			readyCounts: map[string]int{},
-			wantStatus:  http.StatusOK,
-			wantCombos:  2,
-			checkCombos: func(t *testing.T, combos []comboStatusJSON) {
-				t.Helper()
-				for i, c := range combos {
-					if c.ReadyCount != 0 {
-						t.Errorf("combo[%d] readyCount = %d, want 0", i, c.ReadyCount)
-					}
-				}
-			},
-		},
-		{
-			name:       "empty config list returns empty combos",
-			configs:    []repository.ConfigRecord{},
+			name:       "empty pool returns empty combos",
+			entries:    []poolsvc.ComboEntry{},
 			wantStatus: http.StatusOK,
 			wantCombos: 0,
 		},
 		{
-			name:       "GetAllConfigs error returns 500",
-			configsErr: errors.New("dynamo error"),
+			name:       "service error returns 500",
+			svcErr:     errors.New("service failure"),
 			wantStatus: http.StatusInternalServerError,
 			wantError:  "internal_error",
-		},
-		{
-			name: "CountReady error returns 500",
-			configs: []repository.ConfigRecord{
-				{Size: 5, Mode: "standard", Enabled: true},
-			},
-			countReadyErr: errors.New("dynamo error"),
-			wantStatus:    http.StatusInternalServerError,
-			wantError:     "internal_error",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
-			repo := &mockConfigAndCountRepo{
-				configs:       tt.configs,
-				configsErr:    tt.configsErr,
-				readyCounts:   tt.readyCounts,
-				countReadyErr: tt.countReadyErr,
-			}
-			h := handler.AdminPoolHandler(repo)
+			svc := &stubPoolService{entries: tt.entries, err: tt.svcErr}
+			h := handler.AdminPoolHandler(svc)
 
 			req := httptest.NewRequest(http.MethodGet, "/admin/pool", http.NoBody)
 			rec := httptest.NewRecorder()
@@ -192,15 +147,15 @@ type adminPoolResponseJSON struct {
 
 // TestAdminPoolHandler_AuthMatrix proves the route returns 401 for
 // an anonymous request, 403 for a signed-in non-admin, and 200 for
-// an admin — the three states BM-01/BM-02/BM-05 must enforce on
+// an admin — the three states RequireAuth + RequireAdmin enforce on
 // every admin route.
 func TestAdminPoolHandler_AuthMatrix(t *testing.T) {
 	for _, tc := range adminAuthMatrix {
 		t.Run(tc.name, func(t *testing.T) {
 			// Arrange
-			repo := &mockConfigAndCountRepo{} // no data needed — admin case reaches the handler and returns 200 with empty combos
+			svc := &stubPoolService{} // no data needed — admin case returns 200 with empty combos
 			router := mountAdminWithAuth(func(r chi.Router) {
-				r.Get("/pool", handler.AdminPoolHandler(repo))
+				r.Get("/pool", handler.AdminPoolHandler(svc))
 			}, roleForState(tc.state))
 
 			req := newAdminRequest(tc.state, http.MethodGet, "/api/admin/pool", nil)

@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, cleanup } from '../../test-utils';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { PuzzleSelector } from './PuzzleSelector';
-import type { ModeEntry } from '../../services/landingService';
+import type { ModeEntry } from '../../shared/types/modes';
 
 const DEFAULT_MODES: ModeEntry[] = [
   { size: 5, mode: 'standard' },

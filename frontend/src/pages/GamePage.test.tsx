@@ -56,9 +56,9 @@ vi.mock('../services/verdictService', () => ({
   submitVerdict: (...args: unknown[]) => mockSubmitVerdict(...args),
 }));
 
-// R-8-02 chunk 3: GamePage delegates to <DailyFlow /> for `flow=daily`.
-// Stub getDaily() so the delegated component renders without hitting
-// the network — the delegation test only asserts the wrapper is mounted.
+// GamePage delegates to <DailyFlow /> for `flow=daily`. Stub getDaily()
+// so the delegated component renders without hitting the network — the
+// delegation test only asserts the wrapper is mounted.
 vi.mock('../services/dailyService', async () => {
   const actual = await vi.importActual<typeof import('../services/dailyService')>(
     '../services/dailyService',
@@ -680,7 +680,7 @@ describe('GamePage — Skip modal flow (FB-02 §2)', () => {
   });
 });
 
-describe('GamePage — Flow Slot URL contract (R-7-03)', () => {
+describe('GamePage — Flow Slot URL contract', () => {
   const emptyGrid5 = (): ('empty' | 'excluded' | 'marked')[][] =>
     Array.from({ length: 5 }, () => Array(5).fill('empty'));
 
@@ -845,7 +845,7 @@ describe('GamePage — Flow Slot URL contract (R-7-03)', () => {
   });
 });
 
-describe('GamePage daily delegation (R-8-02 chunk 3)', () => {
+describe('GamePage daily delegation', () => {
   it('delegates to DailyFlow when flow=daily search param is set', async () => {
     // Arrange + Act
     renderGamePage('/play?flow=daily');

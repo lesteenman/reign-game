@@ -23,7 +23,7 @@ import (
 // multi-minute hangs during sampler smoke. Grid-order visiting plus combo
 // shuffling preserves the spec's diversity goal without the pruning
 // regression; see design.md §4 "Implementation note — grid-order visiting"
-// for the full rationale. PG-03 was updated to reflect this.
+// for the full rationale.
 //
 // No heap allocation inside the backtracker: all scratch storage lives on
 // the Generator and is reused across calls. The returned slice is the one

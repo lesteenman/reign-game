@@ -106,7 +106,7 @@ describe('LandingPage — tile visibility across Clerk states', () => {
     expect(screen.queryByTestId('tile-curation')).not.toBeInTheDocument();
   });
 
-  it('tile-daily is no longer in the "coming soon" disabled state (R-8-02 DP-23)', () => {
+  it('tile-daily is no longer in the "coming soon" disabled state', () => {
     // Arrange
     useUserMock.mockReturnValue({ isLoaded: true, isSignedIn: false, user: null });
 
@@ -122,7 +122,7 @@ describe('LandingPage — tile visibility across Clerk states', () => {
 });
 
 describe('LandingPage — tile click behaviour', () => {
-  it('clicking the Daily tile navigates to /play?flow=daily (R-8-02 DP-23)', () => {
+  it('clicking the Daily tile navigates to /play?flow=daily', () => {
     // Arrange
     useUserMock.mockReturnValue({ isLoaded: true, isSignedIn: false, user: null });
     renderLandingPage();

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CellState, Conflict, PuzzleData } from '../../engine/types';
-import { cellKey } from '../../hooks/useGame';
+import { cellKey } from '../../engine/cellKey';
 import { Cell } from './Cell';
 import { RegionBorderOverlay } from './RegionBorderOverlay';
 

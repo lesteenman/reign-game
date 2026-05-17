@@ -56,8 +56,7 @@ func (e *ConfigAlreadyExistsError) Error() string {
 // VerdictSummary is the denormalized projection of admin verdict
 // counts on a puzzle. The row family at PK="VERDICT#{size}#{mode}#{id}"
 // is canonical; this summary is recomputed from that row family on
-// every write so it stays consistent with no transactional cost. See
-// VR-05 / VR-06 in specs/repository.md.
+// every write so it stays consistent with no transactional cost.
 type VerdictSummary struct {
 	// Up is the number of admins who voted "up" on this puzzle.
 	Up int `dynamodbav:"up" json:"up"`
@@ -73,7 +72,7 @@ type VerdictSummary struct {
 // The PK/SK component fields (PuzzleID, GridSize, Mode, RaterID,
 // RaterRole) are derived from the keys at write/read time and not
 // stored as separate attributes — matching the PuzzleRecord and
-// ConfigRecord conventions in this file. See VR-01 / VR-02.
+// ConfigRecord conventions in this file.
 type VerdictRecord struct {
 	// PuzzleID is the puzzle UUID, embedded in the PK.
 	PuzzleID string `dynamodbav:"-"`
@@ -118,9 +117,9 @@ type PuzzleRecord struct {
 	VerdictSummary VerdictSummary `dynamodbav:"verdictSummary"`
 	// LastDailyDate is the most recent UTC date (YYYY-MM-DD) on which
 	// this puzzle was assigned as the daily puzzle. Set atomically by
-	// the T=0 daily-puzzle finalize transaction (DP-17, DP-18). Empty
-	// or absent on puzzles that have never been a daily. Single date,
-	// not an array (D11) — sufficient for cross-feature exclusion.
+	// the T=0 daily-puzzle finalize transaction. Empty or absent on
+	// puzzles that have never been a daily. Single date, not an array —
+	// sufficient for cross-feature exclusion.
 	LastDailyDate string `dynamodbav:"lastDailyDate,omitempty" json:"lastDailyDate,omitempty"`
 	// RegionMap is a 2D array of region IDs defining which region each cell belongs to.
 	RegionMap [][]int `dynamodbav:"regionMap"`
@@ -161,6 +160,13 @@ func NewPuzzleRepository(client DynamoDBAPI, tableName string) *PuzzleRepository
 		client:    client,
 		tableName: tableName,
 	}
+}
+
+// TableName returns the DynamoDB table name this repository targets.
+// Exposed so the daily service can supply it to its own constructor
+// without re-reading the env var.
+func (r *PuzzleRepository) TableName() string {
+	return r.tableName
 }
 
 // buildPK constructs the partition key from grid size and mode.
@@ -431,21 +437,21 @@ func (r *PuzzleRepository) CreateConfig(ctx context.Context, config *ConfigRecor
 }
 
 // buildVerdictPK constructs the verdict row partition key for a
-// (size, mode, puzzleID) tuple. See VR-01.
+// (size, mode, puzzleID) tuple.
 func buildVerdictPK(size int, mode, puzzleID string) string {
 	return fmt.Sprintf("VERDICT#%d#%s#%s", size, mode, puzzleID)
 }
 
 // buildVerdictSK constructs the verdict row sort key for a given
 // rater. The shape is "{raterRole}#{raterId}" so the row family scales
-// to multiple rater roles without a re-key. See VR-01.
+// to multiple rater roles without a re-key.
 func buildVerdictSK(raterRole, raterID string) string {
 	return fmt.Sprintf("%s#%s", raterRole, raterID)
 }
 
 // GetPuzzle returns the puzzle row at PK="{size}#{mode}", SK="{id}".
 // Returns (nil, nil) if the row is absent — used by VerdictHandler
-// for the 404 check before writing a verdict. See VR-10 / VH-05.
+// for the 404 check before writing a verdict.
 func (r *PuzzleRepository) GetPuzzle(ctx context.Context, size int, mode, puzzleID string) (*PuzzleRecord, error) {
 	pk := buildPK(size, mode)
 
@@ -478,7 +484,7 @@ func (r *PuzzleRepository) GetPuzzle(ctx context.Context, size int, mode, puzzle
 // PutVerdict writes a verdict row to the puzzle-pool table. The PK is
 // derived from (GridSize, Mode, PuzzleID); the SK from (RaterRole,
 // RaterID). The write is unconditional — re-submission by the same
-// rater overwrites the prior row, matching PUT semantics (VR-03).
+// rater overwrites the prior row, matching PUT semantics.
 // SubmittedAt is set on the record before marshaling so callers don't
 // have to remember to stamp it.
 func (r *PuzzleRepository) PutVerdict(ctx context.Context, v *VerdictRecord) error {
@@ -507,9 +513,9 @@ func (r *PuzzleRepository) PutVerdict(ctx context.Context, v *VerdictRecord) err
 	return nil
 }
 
-// ListVerdictsForPuzzle returns every verdict row for the given
-// puzzle. Issues a single Query against the verdict partition. Returns
-// an empty slice when no rows exist. See VR-04.
+// ListVerdictsForPuzzle returns every verdict row for the given puzzle.
+// Issues a single Query against the verdict partition. Returns an empty
+// slice when no rows exist.
 func (r *PuzzleRepository) ListVerdictsForPuzzle(ctx context.Context, size int, mode, puzzleID string) ([]VerdictRecord, error) {
 	pk := buildVerdictPK(size, mode, puzzleID)
 
@@ -559,7 +565,7 @@ func (r *PuzzleRepository) ListVerdictsForPuzzle(ctx context.Context, size int, 
 // (so a missing puzzle row produces ErrPuzzleNotFound, not a silent
 // upsert). Returns the recomputed summary regardless of whether the
 // projection write succeeded — the row family is canonical, the
-// summary is a cached projection (VR-05 / VH-09).
+// summary is a cached projection.
 func (r *PuzzleRepository) RecomputeVerdictSummary(ctx context.Context, size int, mode, puzzleID string) (VerdictSummary, error) {
 	verdicts, err := r.ListVerdictsForPuzzle(ctx, size, mode, puzzleID)
 	if err != nil {
@@ -624,7 +630,7 @@ func (r *PuzzleRepository) RecomputeVerdictSummary(ctx context.Context, size int
 // Missing CONFIG records also fail the conditional check (no
 // last_auto_replenish_ts attribute and no row to attach it to). Callers
 // treat that as a quiet skip — we intentionally do not create CONFIG
-// records reactively (auto_replenish-puzzle-pool design D2).
+// records reactively.
 func (r *PuzzleRepository) TryClaimAutoReplenish(ctx context.Context, size int, mode string, now time.Time, window time.Duration) (bool, error) {
 	sk := buildPK(size, mode)
 	nowStr := now.UTC().Format(time.RFC3339Nano)

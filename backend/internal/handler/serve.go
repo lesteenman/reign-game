@@ -3,20 +3,24 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	"github.com/eriksteenman/reign-game/backend/internal/mode"
+	servesvc "github.com/eriksteenman/reign-game/backend/internal/service/serve"
 )
 
-// PuzzleFetcher retrieves and marks puzzles from the pool.
-type PuzzleFetcher interface {
-	NextReady(ctx context.Context, size int, mode string) (*repository.PuzzleRecord, error)
-	MarkServed(ctx context.Context, pk, sk string) error
+// ServeService is the application surface the serve handler depends
+// on. The handler stays unaware of persistence, race handling, and
+// reactive replenish — all of that lives in internal/service/serve.
+//
+// NextPuzzle returns (nil, nil) when no puzzle is available, whether
+// the pool is empty or another replica won the claim race. The handler
+// maps that to 404 either way.
+type ServeService interface {
+	NextPuzzle(ctx context.Context, size int, mode string) (*servesvc.PuzzleView, error)
 }
 
 // serveMetadata is the metadata object included in the serve response.
@@ -42,21 +46,14 @@ type serveResponse struct {
 	Metadata  serveMetadata `json:"metadata"`
 }
 
-// ServeHandler creates an HTTP handler for GET /puzzles/next.
-// It retrieves the next ready puzzle for the requested size and mode,
-// marks it as served, and returns it without the solution.
-//
-// replenishHook, if non-nil, is invoked synchronously after a
-// successful MarkServed with the served puzzle's (size, mode). Wiring
-// in cmd/api/main.go installs a hook that spawns a goroutine running
-// replenish.TryReactiveTopUp under a 2s timeout; tests pass a counting
-// fake. nil is supported for callers that don't wire the auto-replenish
-// path (older test sites; the local-dev fallback when SQS is absent).
-func ServeHandler(fetcher PuzzleFetcher, replenishHook func(size int, mode string)) http.HandlerFunc {
+// ServeHandler creates an HTTP handler for GET /puzzles/next. The
+// handler validates query parameters and delegates orchestration to
+// the serve service; on success it maps the puzzle record to a JSON
+// response without the solution.
+func ServeHandler(svc ServeService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 
-		// Validate size parameter.
 		sizeStr := r.URL.Query().Get("size")
 		if sizeStr == "" {
 			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "size parameter is required")
@@ -68,51 +65,25 @@ func ServeHandler(fetcher PuzzleFetcher, replenishHook func(size int, mode strin
 			return
 		}
 
-		// Validate mode parameter.
-		mode := r.URL.Query().Get("mode")
-		if mode == "" {
+		modeName := r.URL.Query().Get("mode")
+		if modeName == "" {
 			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "mode parameter is required")
 			return
 		}
-		if mode != ModeStandard && mode != ModeDouble {
+		if !mode.IsValid(modeName) {
 			httperr.WriteError(w, http.StatusBadRequest, "invalid_params", "mode must be 'standard' or 'double'")
 			return
 		}
 
-		// Fetch next ready puzzle.
-		puzzle, err := fetcher.NextReady(r.Context(), size, mode)
+		puzzle, err := svc.NextPuzzle(r.Context(), size, modeName)
 		if err != nil {
-			log.Printf("error fetching next puzzle for %dx%d %s: %v", size, size, mode, err)
+			log.Printf("serve handler: NextPuzzle failed for %dx%d %s: %v", size, size, modeName, err)
 			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to fetch puzzle")
 			return
 		}
-
 		if puzzle == nil {
 			httperr.WriteError(w, http.StatusNotFound, "no_puzzles_available", "No puzzles available for this size and mode. Try again shortly.")
 			return
-		}
-
-		// Mark as served. ErrPuzzleNotFound here is the NextReady→MarkServed
-		// race (another replica consumed the row between the two calls);
-		// surface it as "no puzzles available" so the client retries.
-		pk := fmt.Sprintf("%d#%s", size, mode)
-		if err := fetcher.MarkServed(r.Context(), pk, puzzle.ID); err != nil {
-			if errors.Is(err, repository.ErrPuzzleNotFound) {
-				httperr.WriteError(w, http.StatusNotFound, "no_puzzles_available", "No puzzles available for this size and mode. Try again shortly.")
-				return
-			}
-			log.Printf("error marking puzzle %s as served: %v", puzzle.ID, err)
-			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to serve puzzle")
-			return
-		}
-
-		// Reactive replenish: fire after a successful drain. The hook
-		// is responsible for its own async dispatch + timeout — keeping
-		// the handler synchronous here makes tests trivial and matches
-		// the daily-flow / serve-flow injection pattern (clock,
-		// replenishHook, etc.).
-		if replenishHook != nil {
-			replenishHook(size, mode)
 		}
 
 		metadata := serveMetadata{

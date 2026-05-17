@@ -7,15 +7,14 @@ import (
 	"net/http"
 
 	"github.com/eriksteenman/reign-game/backend/internal/httperr"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
 
-// ConfigModesRepo is the minimal repo surface ConfigModesHandler needs.
-// Intentionally narrower than ConfigAndCountRepo (the admin pool handler's
-// interface) — the public modes endpoint does not read ready counts or
-// admin-only fields and should not accept a wider dependency.
-type ConfigModesRepo interface {
-	GetAllConfigs(ctx context.Context) ([]repository.ConfigRecord, error)
+// ConfigModesService is the application surface ConfigModesHandler
+// needs — narrower than ConfigService so a public endpoint can't
+// accidentally call a write method via the same interface.
+type ConfigModesService interface {
+	ListEnabledModes(ctx context.Context) ([]configsvc.ConfigView, error)
 }
 
 // ModeEntry is one {size, mode} pair in the public modes listing.
@@ -38,7 +37,7 @@ type ConfigModesResponse struct {
 // endpoint is public by design; it carries no information that has
 // not already been publicly observable via /api/puzzles/next lookups
 // by size+mode.
-func ConfigModesHandler(repo ConfigModesRepo) http.HandlerFunc {
+func ConfigModesHandler(svc ConfigModesService) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		// Short cache lets a CDN absorb repeat hits from the landing
@@ -47,9 +46,9 @@ func ConfigModesHandler(repo ConfigModesRepo) http.HandlerFunc {
 		// well within freshness expectations.
 		w.Header().Set("Cache-Control", "public, max-age=60")
 
-		configs, err := repo.GetAllConfigs(r.Context())
+		configs, err := svc.ListEnabledModes(r.Context())
 		if err != nil {
-			log.Printf("config modes: failed to get configs: %v", err)
+			log.Printf("config modes: ListEnabledModes failed: %v", err)
 			httperr.WriteError(w, http.StatusInternalServerError, "internal_error", "Failed to retrieve configured modes.")
 			return
 		}
@@ -57,9 +56,6 @@ func ConfigModesHandler(repo ConfigModesRepo) http.HandlerFunc {
 		// Always non-nil so encoding yields `"modes":[]` not `"modes":null`.
 		modes := make([]ModeEntry, 0, len(configs))
 		for _, cfg := range configs {
-			if !cfg.Enabled {
-				continue
-			}
 			modes = append(modes, ModeEntry{Size: cfg.Size, Mode: cfg.Mode})
 		}
 

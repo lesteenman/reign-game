@@ -10,23 +10,28 @@ This file is auto-loaded by Claude Code when working on files under `frontend/`.
 frontend/src/
   app/          app-level composition: router, providers, entry, framework config
   engine/       domain layer — pure TS, no React, no I/O (→ @reign/core later)
-  features/     product features (each: components/hooks/services/types/__tests__/)
-    auth/  game/  daily/  curation/  admin/  landing/
-  shared/       cross-cutting reusables
-    components/ Tamagui-wrapped Button, PageShell, etc.
-    hooks/      useDarkMode, etc.
-    lib/        api.ts base, fetch utilities
-    types/      cross-feature types
-  theme/        design tokens (tactile.ts, theme types — → @reign/core later)
+  features/     product features (each one self-contained)
+    auth/
+      pages/        components mounted by the router (one or a few)
+      screens/      OPTIONAL — sub-flow components used inside a page, NOT routed
+      components/   leaf components specific to this feature
+      hooks/        feature-specific hooks (own I/O via useQuery/useMutation)
+      services/     OPTIONAL — feature-specific API surface (or skip; wire useQuery directly)
+      types/        feature-specific types
+    game/  daily/  curation/  admin/  landing/  (same shape)
+  shared/       cross-cutting reusables (Tamagui-wrapped chrome, generic hooks, api base, cross-feature types)
+  theme/        design tokens (→ @reign/core later)
   storage/      IndexedDB wrapper
 ```
 
 ### Import rules
 
-- **`features/X` must not import from `features/Y`.** Cross-feature dependencies go through `shared/`, `engine/`, or `theme/`.
-- **`pages` (inside features) may import from the same feature's components/hooks/services. Nothing else from another feature.**
-- **No `services/*` imports below a feature's `pages/`.** Leaf components consume hooks; hooks own the I/O. `useSubmitVerdict()` is fine in a leaf; `import { submitVerdict } from '...services/verdictService'` in a leaf is a violation.
-- **`engine/` may only be imported, never depend on anything except external libs.** It is the pure domain.
+- **No cross-feature imports.** `features/X` never imports from `features/Y`. Cross-feature dependencies go through `shared/`, `engine/`, or `theme/`.
+- **`pages/` are routes only.** `features/X/pages/` holds ONLY components mounted by the router. Sub-flow components (intermediate screens within a flow) live under `features/X/screens/`. Leaf components live under `features/X/components/`.
+- **No page-to-page imports.** A page never imports another page, even within the same feature. Shared sub-flow goes under `screens/`.
+- **No `services/*` imports below `pages/`.** Leaf components and screens consume hooks; hooks own I/O. `useSubmitVerdict()` in a leaf is fine; `import { submitVerdict } from '...services/...'` in a leaf is a violation.
+- **No type imports from `services/*`.** Type definitions belong in `types/` or `engine/`; services may re-export types but consumers must import from the source.
+- **`engine/` is pure.** No React, no I/O, no DOM, no `fetch`. Only external libs.
 - **`app/` is the top of the import graph.** Nothing imports from `app/`.
 
 Drift detection grep examples (the architecture skill codifies these):

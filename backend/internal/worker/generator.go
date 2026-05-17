@@ -15,9 +15,9 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/eriksteenman/reign-game/backend/internal/generator"
-	"github.com/eriksteenman/reign-game/backend/internal/handler"
-	"github.com/eriksteenman/reign-game/backend/internal/queue"
-	"github.com/eriksteenman/reign-game/backend/internal/repository"
+	"github.com/eriksteenman/reign-game/backend/internal/message"
+	"github.com/eriksteenman/reign-game/backend/internal/mode"
+	puzzlestore "github.com/eriksteenman/reign-game/backend/internal/service/puzzlestore"
 )
 
 // newSeed picks a fresh int64 seed for one generation attempt. Uses
@@ -45,7 +45,7 @@ const generationTimeout = 14 * time.Minute
 
 // PuzzleStore defines the puzzle persistence operations used by the worker.
 type PuzzleStore interface {
-	PutPuzzle(ctx context.Context, puzzle *repository.PuzzleRecord) error
+	StorePuzzle(ctx context.Context, in *puzzlestore.PuzzleInput) error
 }
 
 // SQSConsumerAPI defines the SQS operations used by the local poller.
@@ -87,7 +87,7 @@ func (w *GeneratorWorker) HandleSQSEvent(ctx context.Context, event events.SQSEv
 
 // processMessage handles a single SQS message.
 func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQSMessage) error {
-	var req queue.GenerationRequest
+	var req message.GenerationRequest
 	if err := json.Unmarshal([]byte(record.Body), &req); err != nil {
 		return fmt.Errorf("deserializing generation request: %w", err)
 	}
@@ -105,7 +105,7 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		opts = append(opts, generator.WithMaxAttempts(req.MaxAttempts))
 	}
 
-	g, err := generator.New(req.Size, handler.MarksPerUnitFromMode(req.Mode), opts...)
+	g, err := generator.New(req.Size, mode.MarksPerUnit(req.Mode), opts...)
 	if err != nil {
 		return fmt.Errorf("constructing generator (size=%d, mode=%s): %w", req.Size, req.Mode, err)
 	}
@@ -128,7 +128,7 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		return fmt.Errorf("generating puzzle ID: %w", err)
 	}
 
-	// Translate generator.Puzzle → repository.PuzzleRecord.
+	// Translate generator.Puzzle → puzzlestore.PuzzleInput.
 	solution := make([][]bool, pz.N)
 	for i := range solution {
 		solution[i] = make([]bool, pz.N)
@@ -137,7 +137,7 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		solution[m.Row][m.Col] = true
 	}
 
-	rec := &repository.PuzzleRecord{
+	in := &puzzlestore.PuzzleInput{
 		GridSize:             req.Size,
 		Mode:                 req.Mode,
 		ID:                   puzzleID,
@@ -153,7 +153,7 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		Seed:                 seed,
 	}
 
-	if err := w.store.PutPuzzle(ctx, rec); err != nil {
+	if err := w.store.StorePuzzle(ctx, in); err != nil {
 		return fmt.Errorf("storing generated puzzle: %w", err)
 	}
 
@@ -167,7 +167,7 @@ func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQS
 		// replays the exact same sequence so the leak can be diagnosed.
 		log.Printf("WARN: generator: safety-net fired %d time(s) on puzzle %s (size=%d, mode=%s, seed=%d) — reproduce with `task reproduce -- --seed=%d --n=%d --k=%d`",
 			pz.Metrics.SafetyNetTrips, puzzleID, req.Size, req.Mode, seed,
-			seed, req.Size, handler.MarksPerUnitFromMode(req.Mode))
+			seed, req.Size, mode.MarksPerUnit(req.Mode))
 	}
 
 	return nil

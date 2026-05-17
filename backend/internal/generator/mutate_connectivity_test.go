@@ -6,9 +6,9 @@ import (
 )
 
 // TestGenerateProducesConnectedRegions: end-to-end invariant that every
-// Generate output has 4-connected regions. Regression for the R-067-era
-// bug where the mutator's fromRegionConnectedWithoutCell only verified
-// seed reachability, allowing non-seed cells to be orphaned by a swap.
+// Generate output has 4-connected regions. Regression test for the bug
+// where the mutator's fromRegionConnectedWithoutCell only verified seed
+// reachability, allowing non-seed cells to be orphaned by a swap.
 // Observed live on 9x9 Standard puzzles served from the dev pool.
 //
 // We exercise every supported (N, k) with enough samples that any

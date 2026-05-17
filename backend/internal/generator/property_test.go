@@ -30,11 +30,11 @@ var propertyCorpusKnownDead = map[ruleID]string{
 	ruleR9: "Tier 4; Expert yield too low in current corpus to exercise",
 }
 
-// TestPropertyCorpus verifies two PG-14 properties on a ~500-puzzle
-// corpus drawn from the supported (N, k) grid:
+// TestPropertyCorpus verifies two properties on a ~500-puzzle corpus
+// drawn from the supported (N, k) grid:
 //
 //  1. Every generated puzzle's deductive solution equals its brute
-//     solution (PG-05 cross-check, repeated under load).
+//     solution (cross-check, repeated under load).
 //  2. Every rule in R1..R9 fires at least once, unless it is listed
 //     in propertyCorpusKnownDead.
 //

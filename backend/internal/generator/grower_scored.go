@@ -89,8 +89,8 @@ func (g *Generator) pickSmallestUndersized(gs *growState, cr, cc int) int {
 	return chosen
 }
 
-// growRegionsSolverGuided is the R-066 expensive variant of the region
-// grower (input-spec.md §4.3 Step B / PG-12). It differs from the cheap
+// growRegionsSolverGuided is the expensive solver-guided variant of the
+// region grower (input-spec.md §4.3 Step B). It differs from the cheap
 // variant only in how a frontier cell's candidate region is chosen: the
 // cheap variant picks by inverse-size weight; the solver-guided variant
 // evaluates each candidate by tentatively assigning the cell, completing
@@ -101,14 +101,13 @@ func (g *Generator) pickSmallestUndersized(gs *growState, cr, cc int) int {
 // variant and reuses initGrowState. The frontier walk also reuses the
 // cheap loop's bitmask union trick.
 //
-// Efficiency contract (critical; called out in PG-12 and review-local
-// R-065 finding MAJOR #1):
+// Efficiency contract (critical):
 //   - Solver state is cloned via *dst = *src — no initFromRegionMap on
 //     each probe.
 //   - grow-state scratch is a fixed-size struct copied the same way.
-//   - Trace recording is OFF during scoring (NF3: zero alloc in the hot
-//     loop). The orchestrator re-enables it for the final classification
-//     pass on g.solver.
+//   - Trace recording is OFF during scoring (zero alloc in the hot loop).
+//     The orchestrator re-enables it for the final classification pass
+//     on g.solver.
 //
 // When a frontier cell has only one candidate region, the probe is
 // skipped entirely — there is nothing to choose. This short-circuit is

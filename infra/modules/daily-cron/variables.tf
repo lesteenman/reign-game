@@ -19,12 +19,6 @@ variable "lambda_zip_path" {
   default     = ""
 }
 
-variable "lambda_zip_hash" {
-  description = "Optional override for source_code_hash. Empty default falls back to filebase64sha256(lambda_zip_path) when the file exists. Reserved for the deploy pipeline."
-  type        = string
-  default     = ""
-}
-
 variable "tags" {
   description = "Tags applied to every resource created by this module"
   type        = map(string)

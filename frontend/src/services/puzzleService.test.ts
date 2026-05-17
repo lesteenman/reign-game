@@ -56,8 +56,7 @@ describe('apiFetch', () => {
 
     const { apiFetch } = await import('./api');
     const result = await apiFetch<PuzzleData>('/api/puzzles/generate', {
-      size: '5',
-      mode: 'standard',
+      params: { size: '5', mode: 'standard' },
     });
 
     expect(result).toEqual(MOCK_PUZZLE);
