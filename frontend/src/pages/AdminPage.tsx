@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageShell } from '../components/common/PageShell';
+import type { Mode } from '../engine/types';
 import type {
   ComboStatus,
   ConfigBody,
   ConfigCreateRequest,
-  Mode,
-} from '../services/adminService';
+} from '../shared/types/admin';
 import {
   MODES,
   fetchPoolStatus,
