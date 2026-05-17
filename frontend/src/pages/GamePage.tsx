@@ -217,6 +217,3 @@ function RedirectToHome() {
   useEffect(() => { navigate('/', { replace: true }); }, [navigate]);
   return null;
 }
-
-// Re-exported for backward-compat. Canonical location: shared/game/components/GameBoard.
-export { GameBoard, type GameBoardProps } from '../shared/game/components/GameBoard';
