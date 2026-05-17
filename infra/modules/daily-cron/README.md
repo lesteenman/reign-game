@@ -12,7 +12,6 @@ Provisions the daily-puzzle scheduler. A separate Go Lambda (`cmd/daily-cron`) i
 | `puzzle_pool_table_name` | string | (required) | DynamoDB puzzle-pool table name; set as `PUZZLE_POOL_TABLE` env var. |
 | `puzzle_pool_table_arn` | string | (required) | DynamoDB puzzle-pool table ARN; scopes the daily-cron's DynamoDB IAM policy. |
 | `lambda_zip_path` | string | `""` | Path to the daily-cron Lambda zip (built by `task build:lambda`). Empty default keeps `terraform plan` working in CI without the artifact. |
-| `lambda_zip_hash` | string | `""` | **Declared but unused inside this module.** See `FINDINGS.md` (dead-code P2). |
 | `generation_queue_arn` | string | (required) | Scopes the daily-cron's `sqs:SendMessage` policy to the single generation queue. |
 | `generation_queue_url` | string | (required) | Passed as `SQS_QUEUE_URL` env var so the Lambda can publish reactive replenish messages. |
 | `tags` | map(string) | `{}` | Tags applied to every resource created by this module. |
@@ -46,7 +45,6 @@ Provisions the daily-puzzle scheduler. A separate Go Lambda (`cmd/daily-cron`) i
 
 ## Gotchas
 
-- **`lambda_zip_hash` variable is dead code.** Declared in this module's variables.tf, threaded from root, but `source_code_hash` always computes from `filebase64sha256(var.lambda_zip_path)` directly. Don't trust the "Reserved for the deploy pipeline" comment — nothing uses it. See `FINDINGS.md`.
 - **DynamoDB IAM policy includes `DeleteItem` + `TransactWriteItems`.** Re-audit at slice close — the daily-cron may or may not actually delete rows in production. If it never deletes, drop `dynamodb:DeleteItem` to tighten least-privilege.
 - **Event-bus dispatch via JSON literal `{"detail-type": "..."}`.** This is consumed by the Go dispatcher in `cmd/daily-cron`. Rename of the detail-type string is a cross-cutting rename (Lambda code + Terraform). Grep for `"t-6h-ensure"` / `"t-0-finalize"` together.
 - **Tags come from `var.tags` (root passes `{Project, Environment}`).** Only role + lambda + the two rules are tagged; role policies + event targets + lambda permissions can't be tagged (AWS limitation).

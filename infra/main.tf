@@ -49,7 +49,6 @@ module "daily_cron" {
   generation_queue_arn   = module.generation.queue_arn
   generation_queue_url   = module.generation.queue_url
   lambda_zip_path        = var.daily_cron_lambda_zip_path
-  lambda_zip_hash        = var.daily_cron_lambda_zip_hash
 
   tags = {
     Project     = var.project_name

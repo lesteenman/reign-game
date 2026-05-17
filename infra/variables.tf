@@ -26,12 +26,6 @@ variable "daily_cron_lambda_zip_path" {
   default     = ""
 }
 
-variable "daily_cron_lambda_zip_hash" {
-  description = "Optional override for the daily-cron source_code_hash. Empty default falls back to filebase64sha256(daily_cron_lambda_zip_path) when the file exists."
-  type        = string
-  default     = ""
-}
-
 variable "clerk_publishable_key" {
   description = "Clerk publishable key (browser-safe). Supplied via TF_VAR_clerk_publishable_key in CI for the initial apply only — rotations happen directly in SSM (lifecycle ignore_changes). Default empty so terraform plan succeeds without the secret in CI for non-deploy contexts."
   type        = string

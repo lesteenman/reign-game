@@ -21,8 +21,6 @@ Provisions the asynchronous puzzle-generation pipeline: an SQS queue (with DLQ),
 | `queue_url` | Root `main.tf` → `api` module (`sqs_queue_url`, the API's `SQS_QUEUE_URL` env var) + `daily_cron` module (`generation_queue_url`, reactive replenish publish target). Also surfaced at root `outputs.tf` as `sqs_queue_url`. |
 | `queue_arn` | Root `main.tf` → `api` module (`sqs_queue_arn`, to scope API's `sqs:SendMessage` policy) + `daily_cron` module (`generation_queue_arn`, same purpose). |
 | `generator_function_name` | Root `outputs.tf` → `generator_function_name`. (Not currently consumed by any workflow.) |
-| `dlq_url` | (not consumed — candidate cleanup or surface to root for operational visibility; see `FINDINGS.md`) |
-
 ## AWS resources created
 
 | Resource | Purpose |

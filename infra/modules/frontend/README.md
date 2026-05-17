@@ -22,8 +22,6 @@ Provisions the public frontend delivery surface: a private S3 bucket for the SPA
 | `cloudfront_domain` | Root `outputs.tf` → `cloudfront_url`. |
 | `s3_bucket_name` | Root `outputs.tf` → `frontend_bucket_name` → `cd.yml:107` (`aws s3 sync frontend/dist/`). |
 | `cloudfront_distribution_id` | Root `outputs.tf` → `frontend_distribution_id` → `cd.yml:112` (`aws cloudfront create-invalidation`). |
-| `s3_bucket_arn` | (not consumed — candidate cleanup; see `FINDINGS.md`) |
-
 ## AWS resources created
 
 | Resource | Purpose |

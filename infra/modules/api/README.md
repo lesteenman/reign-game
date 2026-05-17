@@ -26,7 +26,6 @@ Provisions the public HTTPS API: a single Go Lambda (`cmd/api`), a REST API Gate
 | `api_gateway_domain` | Root `main.tf` → `frontend` module (`api_gateway_domain`) — used as the API origin in CloudFront. |
 | `api_gateway_stage` | Root `main.tf` → `frontend` module (`api_gateway_stage`) — used as the API origin's `origin_path`. |
 | `clerk_publishable_key_param_name` | Root `outputs.tf` → `cd.yml:89` reads this with `terraform output -raw` to fetch the publishable key from SSM at frontend-build time. |
-| `lambda_function_name` | (not consumed — candidate cleanup; see `FINDINGS.md`) |
 | `clerk_secret_key_param_name` | (not consumed — candidate cleanup) |
 
 ## AWS resources created
