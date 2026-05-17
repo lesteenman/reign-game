@@ -63,6 +63,9 @@ When your changes create orphans:
 
 The test: every changed line should trace directly to the user's request. A rename or path migration that ripples across the repo IS surgical — every site references the renamed identifier. Cleaning up unrelated dead code you happen to see is not.
 
+Important exception: no "test failed on pre-existing issue, ignoring". If we encounter broken code, always assume it's part of the
+required changes. If it feels needed, involve the user again to check before implementing or researching.
+
 ### 4. Goal-Driven Execution
 
 **Define success criteria. Loop until verified.**
@@ -96,7 +99,7 @@ Every change — feature, fix, or refactor — follows this pipeline. The full p
 5. TDD execution          → Superpowers `subagent-driven-development` or `executing-plans`, gated by `test-driven-development`. Subagents auto-load the relevant subdirectory CLAUDE.md (`backend/CLAUDE.md`, `frontend/CLAUDE.md`, `infra/CLAUDE.md`) based on the file paths they touch.
 6. Inter-task review      → Superpowers `requesting-code-review` + the `architecture` skill's review-time drift greps. Findings get a SWEEP grep command — fix agents fix ALL matches, not just the reported file.
 7. Security gate          → `security-review-final` agent (always; deep-review trigger list in the Security section below)
-8. Finish branch          → Superpowers `finishing-a-development-branch`. PR description includes a "Key Decisions" section listing intentional design choices.
+8. Finish branch          → Superpowers `finishing-a-development-branch`. **PRECONDITION (HARD GATE): steps 6 + 7 MUST have run on the current branch's diff before this step is invoked.** No PR opens without `requesting-code-review` on the diff + `security-review-final` (when triggers met). Finding this step skipped post-hoc — as in Track 3 — is itself a workflow bug to flag in the next retro. PR description includes a "Key Decisions" section listing intentional design choices.
 9. CD/Dependabot          → monitored by the `Reign CD + Dependabot monitor` Claude routine (twice daily, 09:00 + 21:00 Europe/Amsterdam = `0 7,19 * * *` UTC). Failures auto-open a `priority:p0`+`area:devops`+`type:bug`+`status:blocks-prod` GitHub issue. No inline post-merge watch.
 10. Retro                 → `retro` skill on shipped features
 ```

@@ -128,12 +128,19 @@ done
 # Page-to-page imports — forbidden
 grep -rn "from .*pages/" frontend/src/features/*/pages/ 2>/dev/null
 
-# Leaf I/O (components / screens importing services) — forbidden
-find frontend/src/features/*/components frontend/src/features/*/screens -name "*.tsx" 2>/dev/null \
+# Leaf I/O (components / screens importing services) — forbidden.
+# `shared/` is included because shared leaf components (e.g. shared/game/components/)
+# are subject to the same rule — Track 3 review M1 found a violation slipping
+# through when only features/ was scoped.
+find frontend/src/features/*/components frontend/src/features/*/screens frontend/src/shared/*/components -name "*.tsx" 2>/dev/null \
   | xargs grep -l "from .*services/" 2>/dev/null
 
-# Type imports from services — forbidden
-grep -rn "import type .* from .*services/" frontend/src/ 2>/dev/null
+# Type imports from services — forbidden. Both forms:
+#   import type { Foo } from 'services/...'    (whole-import)
+#   import { bar, type Foo } from 'services/...'   (mixed-syntax)
+# The whole-import grep alone misses the mixed form — Track 3 review M2 found
+# one slipping through via `useSubmitVerdict.ts: import { submitVerdict, type SubmitVerdictArgs } from '...services/verdictService'`.
+grep -rEn "from .*services/" frontend/src/ --include='*.ts' --include='*.tsx' 2>/dev/null | grep -E "(^[^:]+:[0-9]+:import type|, type )"
 
 # Engine purity — forbidden (React, fetch, DOM)
 grep -rn "from 'react'\|fetch(\|document\.\|window\." frontend/src/engine/
