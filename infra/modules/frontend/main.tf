@@ -63,9 +63,9 @@ resource "aws_cloudfront_distribution" "frontend" {
   # Route /api/* to API Gateway (no caching, forward all methods + query strings).
   # The Authorization header is forwarded so credentials reach the Lambda.
   # Clerk session cookies (__session, __client_uat) are forwarded so the
-  # backend's RequireAuth middleware can verify the Clerk session — Phase 6
-  # admin auth (R-089). Only the Clerk-specific cookies are whitelisted to
-  # avoid forwarding unrelated cookies that would disrupt CloudFront's cache
+  # backend's RequireAuth middleware can verify the Clerk session. Only the
+  # Clerk-specific cookies are whitelisted to avoid forwarding unrelated
+  # cookies that would disrupt CloudFront's cache
   # key for any future cacheable /api/* response. min_ttl/default_ttl/max_ttl
   # are 0, so cache hit ratios on /api/* aren't affected anyway; whitelisting
   # is defense-in-depth.

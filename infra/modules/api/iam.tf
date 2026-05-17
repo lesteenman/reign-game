@@ -1,8 +1,7 @@
 # Lambda IAM policies that depend on resources defined elsewhere in this
 # module. The base role + log/SQS/DynamoDB statements live in main.tf
-# alongside the Lambda function. New policies for Phase 6 admin auth
-# (R-089) are added here so the SSM and KMS additions are isolated and
-# easy to review.
+# alongside the Lambda function. Clerk-auth SSM + KMS policies live here
+# so the auth-specific additions are isolated and easy to review.
 
 # Read access to the two Clerk-related SSM parameters created by ssm.tf.
 # Resource-scoped to those exact ARNs — no wildcard. The publishable key
