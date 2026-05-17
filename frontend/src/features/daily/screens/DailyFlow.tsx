@@ -3,12 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { PageShell } from '../../../components/common/PageShell';
 import { PrimaryButton, SecondaryButton } from '../../../components/common/Button';
 import { ApiError } from '../../../services/api';
-import {
-  getDaily,
-  submitDailyResult,
-  type DailyPuzzlePayload,
-  type DailySubmitResponse,
-} from '../../../services/dailyService';
+import { useDailyService } from '../hooks/useDailyService';
+import type { DailyPuzzlePayload, DailySubmitResponse } from '../../../shared/types/daily';
 import { DailyGameBoard } from './DailyGameBoard';
 import { PostCompletionScreen } from './PostCompletionScreen';
 import { useGameStorage } from '../../../hooks/useGameStorage';
@@ -106,6 +102,7 @@ function makeEmptyCells(size: number): CellState[][] {
 }
 
 export function DailyFlow() {
+  const { getDaily, submitDailyResult } = useDailyService();
   const navigate = useNavigate();
   const { saveState, loadState } = useGameStorage();
   const [state, setState] = useState<FlowState>({ kind: 'loading' });

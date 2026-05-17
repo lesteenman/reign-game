@@ -4,10 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import { DailyFlow } from './DailyFlow';
 import { ApiError } from '../../../services/api';
-import {
-  type DailyPuzzlePayload,
-  type DailySubmitResponse,
-} from '../../../services/dailyService';
+import type { DailyPuzzlePayload, DailySubmitResponse } from '../../../shared/types/daily';
 
 // Mock the daily service so the component's data-fetch + submit
 // effects are observable. The default `mockResolvedValue` is replaced

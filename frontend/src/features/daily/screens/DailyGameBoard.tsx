@@ -5,7 +5,7 @@ import { useGameStorage } from '../../../hooks/useGameStorage';
 import { EMPTY_HISTORY } from '../../../storage/types';
 import type { GameHistory, GameState } from '../../../storage/types';
 import type { CellState, PuzzleData } from '../../../engine/types';
-import type { DailyPuzzlePayload } from '../../../services/dailyService';
+import type { DailyPuzzlePayload } from '../../../shared/types/daily';
 import { dateFromAssignedAt } from '../../../shared/dates';
 
 /**

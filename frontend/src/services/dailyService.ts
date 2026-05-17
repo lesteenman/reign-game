@@ -12,23 +12,11 @@
 
 import { apiFetch, apiPost, ApiError } from './api';
 import { todayUtcDate, dateFromAssignedAt } from '../shared/dates';
+import type { DailyPuzzlePayload, DailySubmitResponse } from '../shared/types/daily';
+
+export type { DailyPuzzlePayload, DailySubmitResponse };
 
 export const DAILY_DEVICE_ID_STORAGE_KEY = 'reign.deviceId';
-
-export interface DailyPuzzlePayload {
-  puzzleId: string;
-  grid: number;
-  regions: number[][];
-  assignedAt: string;
-  outcome: 'started' | 'solved';
-  serverElapsedMs?: number;
-  submittedAt?: string;
-}
-
-export interface DailySubmitResponse {
-  serverElapsedMs: number;
-  leaderboardRank?: number;
-}
 
 interface DailySubmitArgs {
   assignedAt: string;

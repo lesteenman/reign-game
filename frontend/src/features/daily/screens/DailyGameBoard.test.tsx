@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider } from '../../../theme/ThemeContext';
 import { DailyGameBoard } from './DailyGameBoard';
-import type { DailyPuzzlePayload } from '../../../services/dailyService';
+import type { DailyPuzzlePayload } from '../../../shared/types/daily';
 import type { GameBoardProps } from '../../../shared/game/components/GameBoard';
 import type { GameState } from '../../../storage/types';
 import type { CellState } from '../../../engine/types';
