@@ -13,7 +13,7 @@ The puzzle grid is the project's signature UI surface. It's intentionally NOT a 
 
 ## Files
 
-- **`Grid.tsx`** — Top-level grid. Measures the parent container, computes a cell size in `[getMinCellSize(gridSize), 72]`, defers rendering until measured (avoids first-paint flicker — lesson 2). Lays cells out in `inline-grid`; renders `Cell` per (row, col) plus a `RegionBorderOverlay` on top. Handles touch-move via `document.elementFromPoint` to translate touch coordinates into (row, col). Imports `cellKey` from `hooks/useGame` — **known architecture violation.**
+- **`Grid.tsx`** — Top-level grid. Measures the parent container, computes a cell size in `[getMinCellSize(gridSize), 72]`, defers rendering until measured (avoids first-paint flicker — lesson 2). Lays cells out in `inline-grid`; renders `Cell` per (row, col) plus a `RegionBorderOverlay` on top. Handles touch-move via `document.elementFromPoint` to translate touch coordinates into (row, col). Imports `cellKey` from `engine/cellKey`.
 - **`Cell.tsx`** — Single cell. Picks a background color (region fill / conflict bg / drag-highlighted mix), renders the theme's marker or exclusion mark, and handles mouse + touch with a `touchedRef` to suppress synthesized-mouse-after-touch events (lesson 1).
 - **`Marker.tsx`** — Rounded-square SVG marker for the Tactile theme. Takes `size` + `regionIndex`.
 - **`ExclusionMark.tsx`** — Small dot SVG for excluded cells. Takes `size`.
@@ -32,6 +32,3 @@ No local state worth surfacing beyond:
 - **Touch double-fire suppression.** Lesson 1 (top of `frontend/CLAUDE.md`): for touch/pointer interaction code, write Playwright e2e tests before unit tests. jsdom does not simulate synthesized mouse events.
 - **`__TEST_ATTRS__` gating.** Test-only `data-testid` attributes are gated on the build-time constant `__TEST_ATTRS__` (defined in `vite.config.ts:18`) so production builds don't ship test IDs.
 
-## Known architecture violation
-
-`Grid.tsx:3` imports `cellKey` from `'../../hooks/useGame'`. A hook should not re-export a pure helper consumed by a leaf component. Track 3 fix: move `cellKey` to `engine/` (or `shared/lib/cellKey.ts`) and have both the hook and Grid import from there.
