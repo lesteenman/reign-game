@@ -31,5 +31,11 @@ export default defineConfig(({ mode }) => ({
     globals: false,
     setupFiles: ["./src/test-setup.ts"],
     exclude: ["playwright/**", "node_modules/**"],
+    // The default `forks` pool intermittently fails to spawn a
+    // child_process under local load ("Failed to start forks worker"),
+    // which propagates as 5-second test timeouts in unrelated files.
+    // Worker threads have lower startup overhead and don't hit the
+    // OS fork limit, so the suite stabilises.
+    pool: "threads",
   },
 }));
