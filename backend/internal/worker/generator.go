@@ -15,8 +15,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 
 	"github.com/eriksteenman/reign-game/backend/internal/generator"
+	"github.com/eriksteenman/reign-game/backend/internal/message"
 	"github.com/eriksteenman/reign-game/backend/internal/mode"
-	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	puzzlestore "github.com/eriksteenman/reign-game/backend/internal/service/puzzlestore"
 )
 
@@ -87,7 +87,7 @@ func (w *GeneratorWorker) HandleSQSEvent(ctx context.Context, event events.SQSEv
 
 // processMessage handles a single SQS message.
 func (w *GeneratorWorker) processMessage(ctx context.Context, record *events.SQSMessage) error {
-	var req queue.GenerationRequest
+	var req message.GenerationRequest
 	if err := json.Unmarshal([]byte(record.Body), &req); err != nil {
 		return fmt.Errorf("deserializing generation request: %w", err)
 	}

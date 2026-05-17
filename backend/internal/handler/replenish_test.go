@@ -12,7 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
-	"github.com/eriksteenman/reign-game/backend/internal/queue"
+	"github.com/eriksteenman/reign-game/backend/internal/message"
 	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
 
@@ -49,11 +49,11 @@ func keyFor(size int, mode string) string {
 
 // mockMessagePublisher implements handler.MessagePublisher for testing.
 type mockMessagePublisher struct {
-	published []queue.GenerationRequest
+	published []message.GenerationRequest
 	err       error
 }
 
-func (m *mockMessagePublisher) PublishGenerationRequest(_ context.Context, req *queue.GenerationRequest) error {
+func (m *mockMessagePublisher) PublishGenerationRequest(_ context.Context, req *message.GenerationRequest) error {
 	if m.err != nil {
 		return m.err
 	}

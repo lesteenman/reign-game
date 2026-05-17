@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/eriksteenman/reign-game/backend/internal/queue"
+	"github.com/eriksteenman/reign-game/backend/internal/message"
 	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 	"github.com/eriksteenman/reign-game/backend/internal/service/replenish"
 )
@@ -61,11 +61,11 @@ func (f *fakePoolCounter) CountReady(_ context.Context, size int, mode string) (
 }
 
 type fakePublisher struct {
-	published []queue.GenerationRequest
+	published []message.GenerationRequest
 	err       error
 }
 
-func (f *fakePublisher) PublishGenerationRequest(_ context.Context, req *queue.GenerationRequest) error {
+func (f *fakePublisher) PublishGenerationRequest(_ context.Context, req *message.GenerationRequest) error {
 	if f.err != nil {
 		return f.err
 	}

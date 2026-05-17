@@ -25,7 +25,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/eriksteenman/reign-game/backend/internal/queue"
+	"github.com/eriksteenman/reign-game/backend/internal/message"
 	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
 
@@ -65,7 +65,7 @@ type PoolCounter interface {
 
 // MessagePublisher publishes generation requests to the SQS queue.
 type MessagePublisher interface {
-	PublishGenerationRequest(ctx context.Context, req *queue.GenerationRequest) error
+	PublishGenerationRequest(ctx context.Context, req *message.GenerationRequest) error
 }
 
 // AutoReplenishClaimer coordinates concurrent reactive top-ups via a
@@ -169,7 +169,7 @@ func Sweep(ctx context.Context, deps SweepDeps, filter Filter) (Result, error) {
 
 		needed := cfg.Threshold - count
 		for j := 0; j < needed; j++ {
-			req := &queue.GenerationRequest{
+			req := &message.GenerationRequest{
 				Size:        cfg.Size,
 				Mode:        cfg.Mode,
 				MaxAttempts: cfg.MaxAttempts,
@@ -217,7 +217,7 @@ func TryReactiveTopUp(ctx context.Context, deps ReactiveDeps, size int, mode str
 	}
 
 	for j := 0; j < cfg.Threshold; j++ {
-		req := &queue.GenerationRequest{
+		req := &message.GenerationRequest{
 			Size:        size,
 			Mode:        mode,
 			MaxAttempts: cfg.MaxAttempts,

@@ -35,6 +35,11 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/worker"
 )
 
+// Compile-time guarantee that *queue.Publisher satisfies the duck-typed
+// replenish.MessagePublisher interface. Catches signature drift at
+// unit-test compile rather than at integration time (backend lesson #5).
+var _ replenish.MessagePublisher = (*queue.Publisher)(nil)
+
 // newRouter builds and returns the application router with all routes mounted
 // under the /api prefix. The prefix separates API traffic from SPA routes
 // (e.g., the frontend's /admin page vs. the /api/admin/* backend endpoints).

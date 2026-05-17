@@ -7,7 +7,7 @@ import (
 
 	"github.com/aws/aws-lambda-go/events"
 
-	"github.com/eriksteenman/reign-game/backend/internal/queue"
+	"github.com/eriksteenman/reign-game/backend/internal/message"
 	puzzlestore "github.com/eriksteenman/reign-game/backend/internal/service/puzzlestore"
 )
 
@@ -23,7 +23,7 @@ func (m *mockPuzzleStore) StorePuzzle(ctx context.Context, in *puzzlestore.Puzzl
 func TestHandleSQSEvent(t *testing.T) {
 	tests := []struct {
 		name     string
-		req      queue.GenerationRequest
+		req      message.GenerationRequest
 		putErr   error
 		wantErr  bool
 		wantSize int
@@ -31,7 +31,7 @@ func TestHandleSQSEvent(t *testing.T) {
 	}{
 		{
 			name: "generates and stores 7x7 standard puzzle",
-			req: queue.GenerationRequest{
+			req: message.GenerationRequest{
 				Size: 7,
 				Mode: "standard",
 			},
@@ -41,7 +41,7 @@ func TestHandleSQSEvent(t *testing.T) {
 		},
 		{
 			name:    "invalid JSON returns error",
-			req:     queue.GenerationRequest{}, // we override body below
+			req:     message.GenerationRequest{}, // we override body below
 			wantErr: true,
 		},
 	}
