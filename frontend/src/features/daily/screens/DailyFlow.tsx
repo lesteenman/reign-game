@@ -133,10 +133,14 @@ export function DailyFlow() {
   // every state transition, which churns `DailyGameBoard`'s memoized
   // `onSolveDetectedRef` and triggers redundant re-renders of the
   // grid. Lesson: identity stability matters for downstream memos.
+  //
+  // The ref is assigned at render time (not in useEffect) so the value
+  // is current the moment React commits. A useEffect-based sync lags one
+  // commit behind, which races event handlers reading the ref between
+  // commit and effect — manifested as an intermittent test flake where
+  // the post-click state transition didn't fire.
   const stateRef = useRef<FlowState>(state);
-  useEffect(() => {
-    stateRef.current = state;
-  }, [state]);
+  stateRef.current = state;
 
   /** Re-runs the fetch effect (DP-30 retry affordance). */
   const retryFetch = useCallback(() => {
@@ -262,8 +266,8 @@ export function DailyFlow() {
     async (solution: number[][], elapsedMs: number) => {
       // Read the current state via the ref so this callback's identity
       // is stable across renders (no `state` in the dep list). The ref
-      // always carries the latest committed state value courtesy of the
-      // useEffect above.
+      // is assigned synchronously at render time above, so it always
+      // reflects the latest committed state when this handler fires.
       const current = stateRef.current;
       if (current.kind !== 'playing') return;
       const activePayload = current.payload;
