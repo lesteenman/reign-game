@@ -11,6 +11,7 @@
 // injected via the options.headers surface.
 
 import { apiFetch, apiPost, ApiError } from './api';
+import { todayUtcDate, dateFromAssignedAt } from '../shared/dates';
 
 export const DAILY_DEVICE_ID_STORAGE_KEY = 'reign.deviceId';
 
@@ -38,17 +39,6 @@ interface DailySubmitArgs {
 
 // --- Private helpers ---------------------------------------------------
 
-/** Returns YYYY-MM-DD for the current UTC date. */
-function todayUTC(now: Date = new Date()): string {
-  return now.toISOString().slice(0, 10);
-}
-
-/** Extracts YYYY-MM-DD from an RFC3339 timestamp's UTC date component. */
-function dateFromAssignedAt(assignedAt: string): string {
-  // RFC3339 / ISO8601 — Date parses Z and offset suffixes consistently.
-  return new Date(assignedAt).toISOString().slice(0, 10);
-}
-
 /** Reads deviceId from localStorage; mints a UUID if missing. */
 function getOrMintDeviceId(): string {
   const existing = localStorage.getItem(DAILY_DEVICE_ID_STORAGE_KEY);
@@ -74,7 +64,7 @@ function mintNewDeviceId(): string {
  * rotated once and the call retried — the second 401 surfaces.
  */
 export async function getDaily(date?: string): Promise<DailyPuzzlePayload> {
-  const target = date ?? todayUTC();
+  const target = date ?? todayUtcDate();
   let deviceId = getOrMintDeviceId();
   try {
     return await apiFetch<DailyPuzzlePayload>(`/api/daily/${target}`, {

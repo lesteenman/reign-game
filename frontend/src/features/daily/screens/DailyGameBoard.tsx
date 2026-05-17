@@ -6,6 +6,7 @@ import { EMPTY_HISTORY } from '../../../storage/types';
 import type { GameHistory, GameState } from '../../../storage/types';
 import type { CellState, PuzzleData } from '../../../engine/types';
 import type { DailyPuzzlePayload } from '../../../services/dailyService';
+import { dateFromAssignedAt } from '../../../shared/dates';
 
 /**
  * Daily-flow grid host.
@@ -35,13 +36,6 @@ export interface DailyGameBoardProps {
    * `submitDailyResult`.
    */
   onSolved: (solution: number[][], elapsedMs: number) => void;
-}
-
-/** Extracts YYYY-MM-DD (UTC) from an RFC3339 timestamp. Mirrors the
- *  helper in DailyFlow so the per-flow storage key agrees on both
- *  sides. */
-function dateFromAssignedAt(assignedAt: string): string {
-  return new Date(assignedAt).toISOString().slice(0, 10);
 }
 
 /** Build empty cells matrix sized to the daily grid. Used as the

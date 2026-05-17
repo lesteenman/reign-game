@@ -14,6 +14,7 @@ import { PostCompletionScreen } from './PostCompletionScreen';
 import { useGameStorage } from '../../../hooks/useGameStorage';
 import type { GameState } from '../../../storage/types';
 import type { CellState } from '../../../engine/types';
+import { todayUtcDate, dateFromAssignedAt } from '../../../shared/dates';
 
 /**
  * Daily Puzzle flow chrome.
@@ -68,11 +69,6 @@ function submitErrorCopy(state: { httpStatus: number | null }): string {
   return 'Could not submit your result';
 }
 
-/** Extracts YYYY-MM-DD from an RFC3339 timestamp's UTC date component. */
-function dateFromAssignedAt(assignedAt: string): string {
-  return new Date(assignedAt).toISOString().slice(0, 10);
-}
-
 /**
  * Format the daily's assignedAt as a locale-aware "Mon DD" string for
  * the page subtitle (e.g. "May 11"). Use the UTC date components from
@@ -107,19 +103,6 @@ function makeEmptyCells(size: number): CellState[][] {
   return Array.from({ length: size }, () =>
     Array.from({ length: size }, () => 'empty' as const),
   );
-}
-
-/** Today's date as YYYY-MM-DD in UTC. The player's daily flowId
- *  is derived from server-provided `assignedAt`, but at mount time
- *  (before the GET) we don't have the server's view yet. Using
- *  today's UTC date here is the standard short-circuit path: a
- *  player who solved today's daily and revisits the same UTC day
- *  hits the persisted row directly without re-fetching. Cross-
- *  midnight edge cases (player solved 23:55 UTC, revisits at
- *  00:01 UTC) fall through to `getDaily()` and pick up the new
- *  day's puzzle naturally. */
-function todayUtcDate(): string {
-  return new Date().toISOString().slice(0, 10);
 }
 
 export function DailyFlow() {
