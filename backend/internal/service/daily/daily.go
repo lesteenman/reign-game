@@ -32,6 +32,7 @@ import (
 //	ErrPlayNotStarted       -> 400 ("play not started")
 //	ErrAlreadySolved        -> 409
 //	ErrInvalidSolution      -> 400
+//	ErrInvalidPlayTime      -> 400 ("invalid playTimeMs")
 //	ErrNegativeClockSkew    -> 500
 //
 // Wrapping is fine (handler uses errors.Is). Other errors (DDB I/O,
@@ -45,6 +46,7 @@ var (
 	ErrAlreadySolved     = errors.New("already solved")
 	ErrInvalidSolution   = errors.New("invalid solution")
 	ErrNegativeClockSkew = errors.New("negative clock skew")
+	ErrInvalidPlayTime   = errors.New("invalid play time")
 )
 
 // Store is the persistence surface used by Service. Subset of
@@ -420,6 +422,7 @@ func (s *Service) GetDaily(ctx context.Context, in GetInput) (*DailyView, error)
 //	ErrInvalidDate        — date string does not match YYYY-MM-DD
 //	ErrOutOfWindow        — date is not today or yesterday (UTC)
 //	ErrInvalidSolution    — solution shape invalid or cells don't match puzzle
+//	ErrInvalidPlayTime    — playTimeMs is negative
 //	ErrPlayNotStarted     — no play row for this player/date
 //	ErrAlreadySolved      — play already in solved state (inc. race-loser)
 //	ErrNegativeClockSkew  — server clock predates the play row's assignedAt
@@ -447,6 +450,14 @@ func (s *Service) SubmitDaily(ctx context.Context, in SubmitInput) (*SubmitResul
 	if !solutionShapeValid(in.Solution) {
 		log.Printf("daily service: submit 400 invalid_solution_shape date=%s player=%s", in.Date, truncatePlayer(in.PlayerID))
 		return nil, ErrInvalidSolution
+	}
+
+	// 2b. Validate playTimeMs — negative values are rejected. Nil (absent)
+	// is defaulted to 0 by the handler, which passes this check.
+	if in.PlayTimeMs < 0 {
+		log.Printf("daily service: submit 400 invalid_play_time_ms date=%s player=%s playTimeMs=%d",
+			in.Date, truncatePlayer(in.PlayerID), in.PlayTimeMs)
+		return nil, ErrInvalidPlayTime
 	}
 
 	// 3. Fetch schedule + play in parallel.

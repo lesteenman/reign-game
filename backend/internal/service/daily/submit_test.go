@@ -602,6 +602,27 @@ func TestSubmitDaily_NegativeClockSkew_ReturnsErrNegativeClockSkew(t *testing.T)
 	}
 }
 
+func TestSubmitDaily_NegativePlayTimeMs_ReturnsErrInvalidPlayTime(t *testing.T) {
+	// Arrange
+	store := buildSubmitStore(&submitDailyFakeStore{})
+	svc := daily.New(store, "test-table", fixedClock(testNow), nil)
+	in := daily.SubmitInput{
+		PlayerID:    "player-1",
+		IsAnonymous: false,
+		Date:        testDate,
+		PlayTimeMs:  -1,
+		Solution:    validSolution,
+	}
+
+	// Act
+	_, err := svc.SubmitDaily(context.Background(), in)
+
+	// Assert
+	if !errors.Is(err, daily.ErrInvalidPlayTime) {
+		t.Errorf("error = %v, want daily.ErrInvalidPlayTime", err)
+	}
+}
+
 func TestSubmitDaily_InvalidDateFormat_ReturnsErrInvalidDate(t *testing.T) {
 	// Arrange
 	store := &submitDailyFakeStore{}

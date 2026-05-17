@@ -403,6 +403,7 @@ func TestDailySubmitHandler_SentinelErrors(t *testing.T) {
 		{"ErrPlayNotStarted -> 400", dailysvc.ErrPlayNotStarted, http.StatusBadRequest, "play not started"},
 		{"ErrAlreadySolved -> 409", dailysvc.ErrAlreadySolved, http.StatusConflict, "already solved"},
 		{"ErrInvalidSolution -> 400", dailysvc.ErrInvalidSolution, http.StatusBadRequest, "invalid solution"},
+		{"ErrInvalidPlayTime -> 400", dailysvc.ErrInvalidPlayTime, http.StatusBadRequest, "invalid playTimeMs"},
 		{"ErrNegativeClockSkew -> 500", dailysvc.ErrNegativeClockSkew, http.StatusInternalServerError, "internal error"},
 		{"unknown error -> 500", errors.New("unexpected"), http.StatusInternalServerError, "internal error"},
 	}

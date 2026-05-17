@@ -194,6 +194,8 @@ func writeDailySubmitError(w http.ResponseWriter, err error) {
 		writeDailyError(w, http.StatusConflict, "already solved")
 	case errors.Is(err, dailysvc.ErrInvalidSolution):
 		writeDailyError(w, http.StatusBadRequest, "invalid solution")
+	case errors.Is(err, dailysvc.ErrInvalidPlayTime):
+		writeDailyError(w, http.StatusBadRequest, "invalid playTimeMs")
 	case errors.Is(err, dailysvc.ErrNegativeClockSkew):
 		writeDailyError(w, http.StatusInternalServerError, "internal error")
 	default:
