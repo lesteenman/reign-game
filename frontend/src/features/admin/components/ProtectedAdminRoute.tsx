@@ -1,9 +1,9 @@
 import { useUser } from "@clerk/react";
 import type { CSSProperties, ReactNode } from 'react';
-import { AdminPage } from '../../pages/AdminPage';
-import { AdminLandingPage } from '../../pages/AdminLandingPage';
-import { PageShell } from '../common/PageShell';
-import { getClerkUserRole } from './role';
+import { AdminPage } from '../pages/AdminPage';
+import { AdminLandingPage } from '../pages/AdminLandingPage';
+import { PageShell } from '../../../components/common/PageShell';
+import { getClerkUserRole } from '../../../components/auth/role';
 
 const loadingStyle: CSSProperties = {
   textAlign: 'center',

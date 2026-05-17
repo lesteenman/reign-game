@@ -4,7 +4,7 @@ import { ThemeProvider } from './theme/ThemeContext';
 import { LandingPage } from './pages/LandingPage';
 import { GamePage } from './pages/GamePage';
 import { CurationPage } from './pages/CurationPage';
-import { ProtectedAdminRoute } from './components/auth/ProtectedAdminRoute';
+import { ProtectedAdminRoute } from './features/admin/components/ProtectedAdminRoute';
 import type { PuzzleData } from './engine/types';
 
 // TanStack Query client (Track 2 foundation; first useQuery/useMutation

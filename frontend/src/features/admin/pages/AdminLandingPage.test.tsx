@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from '../test-utils';
+import { render, screen, cleanup } from '../../../test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { AdminLandingPage } from './AdminLandingPage';

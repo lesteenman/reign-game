@@ -1,19 +1,19 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PageShell } from '../components/common/PageShell';
-import type { Mode } from '../engine/types';
+import { PageShell } from '../../../components/common/PageShell';
+import type { Mode } from '../../../engine/types';
 import type {
   ComboStatus,
   ConfigBody,
   ConfigCreateRequest,
-} from '../shared/types/admin';
+} from '../../../shared/types/admin';
 import {
   MODES,
   fetchPoolStatus,
   updateConfig,
   createConfig as createConfigApi,
   triggerReplenish,
-} from '../services/adminService';
+} from '../../../services/adminService';
 
 const labelStyle: React.CSSProperties = {
   display: 'flex',
