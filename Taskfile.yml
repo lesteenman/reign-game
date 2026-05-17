@@ -195,13 +195,19 @@ tasks:
   # Logs stream to ./logs/{backend,generator,frontend}.log (gitignored).
   #
   # Process tracking strategy differs per service:
-  #   - backend (:5181) + frontend (:5180): port-based via `lsof -ti:PORT`.
-  #     This is ground truth — whatever is listening on the port owns it. It
-  #     catches orphans from prior runs, handles processes started outside
-  #     `task dev:up`, and doesn't go stale.
-  #   - generator (no port): PID file at ./logs/generator.pid, because there's
-  #     nothing to probe. Trade-off: only tracks processes we started; stale
-  #     PID files are detected via `kill -0` and cleaned up.
+  #   - frontend (:5180): port-based via `lsof -ti:PORT`. This is ground
+  #     truth — whatever is listening on the port owns it. Catches orphans
+  #     from prior runs, handles processes started outside `task dev:up`,
+  #     and doesn't go stale.
+  #   - backend (:5181) + e2e backend (:5182): port-based via `lsof`
+  #     PLUS PID file (logs/{dev,e2e}-backend.pid). The PID file pins the
+  #     `go run` wrapper so the orphan preflight can disambiguate dev's
+  #     api binary from e2e's when both stacks are up (see GH #161). The
+  #     port stays the authoritative lifecycle signal for `dev:down:*`.
+  #   - generator + e2e generator (no port): PID file only
+  #     (logs/{generator,e2e-generator}.pid), because there's nothing to
+  #     probe. Trade-off: only tracks processes we started; stale PID
+  #     files are detected via `kill -0` and cleaned up.
   # ---------------------------------------------------------------------------
 
   dev:up:localstack:
@@ -251,33 +257,62 @@ tasks:
         # and bail.
         #
         # Expected process set when the stack is healthy:
-        #   dev backend      (compiled binary listening on :5181)
-        #   e2e backend      (compiled binary listening on :5182 when e2e:up ran)
-        #   generator wrapper (`go run`, PID in logs/generator.pid)
-        #   generator child  (compiled binary, child of wrapper)
+        #   dev backend       wrapper PID in logs/dev-backend.pid (and child api binary)
+        #   e2e backend       wrapper PID in logs/e2e-backend.pid (and child api binary)
+        #   dev generator     wrapper PID in logs/generator.pid     (and child api binary)
+        #   e2e generator     wrapper PID in logs/e2e-generator.pid (and child api binary)
         # Anything else running the api binary is an orphan.
         #
         # The pgrep pattern matches both the Go toolchain's go-build
         # cache and JetBrains GoLand's ___go_build_* builds so an IDE-
         # launched dev instance is detected too.
-        backend_pid=$(lsof -ti:5181 -sTCP:LISTEN 2>/dev/null || true)
-        e2e_backend_pid=$(lsof -ti:5182 -sTCP:LISTEN 2>/dev/null || true)
-        gen_wrapper_pid=""
-        gen_child_pid=""
-        if [ -f logs/generator.pid ]; then
-          gen_wrapper_pid=$(cat logs/generator.pid 2>/dev/null || true)
-          if [ -n "$gen_wrapper_pid" ]; then
-            # -f with a narrower pattern so non-api children of `go run`
-            # (linker, go tool helpers) are ignored.
-            gen_child_pid=$(pgrep -P "$gen_wrapper_pid" -f '/api$' 2>/dev/null | head -1 || true)
-          fi
-        fi
+        #
+        # Exclusion set is built from:
+        #   1. Port listeners on :5181 / :5182 (belt-and-suspenders — covers
+        #      the case where a PID file was deleted out from under us).
+        #   2. Every *-backend.pid / *generator.pid file's wrapper PID
+        #      plus the wrapper's `/api$` children. This is the
+        #      authoritative signal: a process whose PID is in one of
+        #      our files (and still alive) is a legitimate service, not
+        #      an orphan — even if it lost its port binding or hasn't
+        #      bound one yet (see GH #161).
+        exclude_pids=""
+        add_exclude() {
+          # Append space-separated PIDs to the exclusion list. The
+          # `return 0` is required under `set -e`: when a caller passes
+          # an empty arg (e.g. lsof returned nothing), the `[ -n ]` test
+          # in the loop becomes the function's last command and returns
+          # nonzero, which would otherwise abort the script.
+          for p in "$@"; do
+            [ -n "$p" ] && exclude_pids="$exclude_pids $p"
+          done
+          return 0
+        }
+        # NB: command substitutions below are intentionally unquoted so
+        # word-splitting at the call site delivers each PID as a separate
+        # argument to add_exclude (instead of one newline-joined blob).
+        # PIDs are integers, so no shell-metachar safety concern.
+        for port in 5181 5182; do
+          add_exclude $(lsof -ti:"$port" -sTCP:LISTEN 2>/dev/null || true)
+        done
+        for pidfile in logs/dev-backend.pid logs/e2e-backend.pid logs/generator.pid logs/e2e-generator.pid; do
+          [ -f "$pidfile" ] || continue
+          wrapper=$(cat "$pidfile" 2>/dev/null || true)
+          [ -n "$wrapper" ] || continue
+          kill -0 "$wrapper" 2>/dev/null || continue  # stale PID file → ignore
+          add_exclude "$wrapper"
+          add_exclude $(pgrep -P "$wrapper" -f '/api$' 2>/dev/null || true)
+        done
         orphans=""
         for pid in $(pgrep -f '(go-build|___go_build).*/api$' 2>/dev/null || true); do
-          if [ "$pid" = "$backend_pid" ] || [ "$pid" = "$e2e_backend_pid" ] || [ "$pid" = "$gen_child_pid" ]; then
-            continue
-          fi
-          orphans="$orphans $pid"
+          excluded=0
+          for ex in $exclude_pids; do
+            if [ "$pid" = "$ex" ]; then
+              excluded=1
+              break
+            fi
+          done
+          [ $excluded -eq 0 ] && orphans="$orphans $pid"
         done
         if [ -n "$orphans" ]; then
           echo "ERROR: orphan cmd/api process(es) detected — dev:down:* left them behind." >&2
@@ -322,6 +357,12 @@ tasks:
         fi
         : > ../logs/backend.log
         nohup go run ./cmd/api >> ../logs/backend.log 2>&1 </dev/null &
+        # Record the `go run` wrapper PID so _dev:preflight:orphans can
+        # exclude both the wrapper and its compiled-binary child when the
+        # e2e stack starts alongside dev. Without this, the e2e preflight
+        # misidentifies the dev backend's go-build cache binary as an
+        # orphan from a prior session (see GH #161).
+        echo $! > ../logs/dev-backend.pid
         echo "backend starting, logs: logs/backend.log"
         for i in $(seq 1 60); do
           if curl -sf http://localhost:5181/api/health >/dev/null 2>&1; then
@@ -331,6 +372,12 @@ tasks:
           sleep 1
         done
         echo "backend did not become ready in 60s — check logs/backend.log" >&2
+        # Kill the wrapper before discarding its PID — otherwise the
+        # process may still bind :5181 after we exit, and the next
+        # preflight has neither port nor PID file to recognize it (GH #161).
+        wrapper=$(cat ../logs/dev-backend.pid 2>/dev/null || true)
+        [ -n "$wrapper" ] && kill "$wrapper" 2>/dev/null || true
+        rm -f ../logs/dev-backend.pid
         exit 1
         BASH
 
@@ -473,6 +520,7 @@ tasks:
     cmds:
       - task: _dev:down:port
         vars: { NAME: backend, PORT: 5181 }
+      - rm -f logs/dev-backend.pid
 
   dev:down:frontend:
     desc: Stop the frontend (kills whatever is on :5180). Verifies the port is free before returning success.
@@ -648,6 +696,9 @@ tasks:
         fi
         : > ../logs/e2e-backend.log
         nohup go run ./cmd/api >> ../logs/e2e-backend.log 2>&1 </dev/null &
+        # Record the `go run` wrapper PID so the preflight excludes the
+        # e2e backend's process tree when dev:up runs alongside (GH #161).
+        echo $! > ../logs/e2e-backend.pid
         echo "e2e backend starting, logs: logs/e2e-backend.log"
         for i in $(seq 1 60); do
           if curl -sf http://localhost:5182/api/health >/dev/null 2>&1; then
@@ -657,6 +708,9 @@ tasks:
           sleep 1
         done
         echo "e2e backend did not become ready in 60s — check logs/e2e-backend.log" >&2
+        wrapper=$(cat ../logs/e2e-backend.pid 2>/dev/null || true)
+        [ -n "$wrapper" ] && kill "$wrapper" 2>/dev/null || true
+        rm -f ../logs/e2e-backend.pid
         exit 1
         BASH
 
@@ -665,6 +719,7 @@ tasks:
     cmds:
       - task: _dev:down:port
         vars: { NAME: "e2e backend", PORT: 5182 }
+      - rm -f logs/e2e-backend.pid
 
   e2e:up:generator:
     desc: Start the e2e SQS generator worker (logs -> logs/e2e-generator.log, PID -> logs/e2e-generator.pid)
