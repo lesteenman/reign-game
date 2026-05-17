@@ -150,24 +150,9 @@ grep -rn 'className=' frontend/src/ --include='*.tsx' --include='*.ts'
 
 Any non-empty result is a finding. Report as: `architecture: frontend drift in <file>:<line> — <rule>; <fix>`.
 
-### Known legacy violations (Track 3 refactor scope)
+### Known legacy violations
 
-These exist on `main` as of pre-Track-3. Track 3 refactors each one. After Track 3, this section should be empty — anything remaining is a real violation.
-
-**Pre-tracked 5:**
-- `frontend/src/components/auth/ProtectedAdminRoute.tsx` imports from `pages/`
-- `frontend/src/components/game/VerdictSurface.tsx` calls `submitVerdict()` + `updatePuzzleStatus()` directly (leaf I/O)
-- `frontend/src/services/dailyService.ts` bypasses `api.ts` for header injection
-- `frontend/src/pages/DailyGameBoard.tsx` imports from `pages/GamePage.tsx`
-- `frontend/src/hooks/useGame.ts` re-exports `cellKey` (consumed by `grid/Grid.tsx`)
-
-**Discovered during Phase 0 indexing:**
-- `frontend/src/pages/DailyFlow.tsx` imports `./DailyGameBoard` and `./PostCompletionScreen` (page-to-page)
-- `frontend/src/pages/GamePage.tsx` imports `./DailyFlow` (page-to-page)
-- `frontend/src/components/landing/PuzzleSelector.tsx` imports `Mode`/`ModeEntry` types from `services/`
-- `frontend/src/services/adminService.ts` re-exports `MODES`/`isMode`/`Mode` from `engine/types` (indirection)
-
-**Refactor target shape**: `DailyFlow`, `DailyGameBoard`, `PostCompletionScreen` are sub-flow components, not routes. They move under `features/daily/screens/`. The two `pages/`-only imports (`ProtectedAdminRoute` → `pages/`, `DailyGameBoard` ← from `GamePage`) dissolve because both source and target end up inside the same feature folder.
+None — all Track 3 violations resolved on branch `chore/track-3-code-review-refactor` (commit history under the `Track 3` prefix). New violations discovered after merge should be filed as architecture-drift issues in GitHub.
 
 ---
 
