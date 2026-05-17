@@ -12,3 +12,5 @@ There is no "game feature" in the Bulletproof React sense — no `features/game/
 - `components/VerdictSurface.tsx` — admin verdict surface (completion + skip variants). Moved from `components/game/`.
 - `hooks/useSubmitVerdict.ts` — TanStack `useMutation` wrapper for the verdict service.
 - `hooks/useUpdatePuzzleStatus.ts` — TanStack `useMutation` wrapper for the puzzle status service.
+
+Tests are co-located: `components/GameBoard.test.tsx`, `components/GameBoardWallClock.test.tsx`, `components/VerdictSurface.test.tsx`.

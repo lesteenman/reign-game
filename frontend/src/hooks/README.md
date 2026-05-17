@@ -16,7 +16,7 @@ Encapsulate gameplay state machines and IndexedDB I/O. The hooks here are the cl
 
 ## Files
 
-- **`useGame.ts`** — Gameplay reducer. Owns the `HistoryState` machine (`cells`, `past`, `future`) via `useReducer` with `commit` / `undo` / `redo` actions. Snapshot stack with `HISTORY_LIMIT = 200`. Drag-intent state is in refs (`startCellRef`, `hasDraggedRef`, `dragIntentRef`, `draggedCellsRef`). Conflicts are `useMemo`'d via `getAllConflicts` (engine). Exports `cellKey(row, col)` consumed by `grid/Grid.tsx` — **known architecture violation.**
+- **`useGame.ts`** — Gameplay reducer. Owns the `HistoryState` machine (`cells`, `past`, `future`) via `useReducer` with `commit` / `undo` / `redo` actions. Snapshot stack with `HISTORY_LIMIT = 200`. Drag-intent state is in refs (`startCellRef`, `hasDraggedRef`, `dragIntentRef`, `draggedCellsRef`). Conflicts are `useMemo`'d via `getAllConflicts` (engine).
 - **`useTimer.ts`** — Pause/resume timer. State: `elapsedAtLastPause`, `lastResumedAt`, `tick`, `stopped`. Display elapsed is computed from `Date.now() − lastResumedAt + elapsedAtLastPause` each render. `restore(state)` rehydrates from persistence; `stop()` is one-way (terminal). `setInterval(1s)` only ticks the display; the actual elapsed time is wall-clock-accurate.
 - **`useGameStorage.ts`** — IndexedDB CRUD. Four methods wrapped in `useCallback` and returned through a `useMemo`'d object so callers can put it in dependency arrays. `saveState`, `loadState`, `clearState` all key on `idFor(flowType, flowId)`. `addCompletion` appends to a separate object store.
 
@@ -33,6 +33,3 @@ Encapsulate gameplay state machines and IndexedDB I/O. The hooks here are the cl
 - **`useGameStorage` returns a `useMemo`'d object.** Don't destructure inline at every call site — the memoized identity is what makes the hook safe to put in effect dep lists.
 - **Persisted shapes live in `storage/`.** Lesson 4: `GameHistory`, `CompletionRecord`, `GameState` are all defined in `storage/types.ts` and consumed from here. Don't redeclare.
 
-## Known architecture violation
-
-`useGame.ts:9` exports `cellKey`. Track 3 fix: move to `engine/` (or `shared/lib/cellKey.ts`) and have both this hook and `grid/Grid.tsx` import from there.

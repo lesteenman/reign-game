@@ -8,7 +8,7 @@ The "what is a Reign puzzle and when is one solved" domain knowledge — separat
 
 ## Data flow
 
-- **In:** Imported by `hooks/useGame.ts`, every `pages/*` file that handles puzzles, `services/puzzleService.ts`, `services/verdictService.ts`, `services/adminService.ts`, `storage/types.ts`, `storage/utils.ts`, and every grid component. The engine is the single source of truth for `Mode`, `CellState`, `PuzzleData`, `Conflict`.
+- **In:** Imported by `hooks/useGame.ts`, `services/puzzleService.ts`, `services/verdictService.ts`, `services/adminService.ts`, `storage/types.ts`, `storage/utils.ts`, and every grid component. `cellKey` is imported by `components/grid/Grid.tsx` and `hooks/useGame.ts`. The engine is the single source of truth for `Mode`, `CellState`, `PuzzleData`, `Conflict`, and `cellKey`.
 - **Out:** Nothing. Pure functions and types.
 
 ## Files
@@ -16,6 +16,7 @@ The "what is a Reign puzzle and when is one solved" domain knowledge — separat
 - **`types.ts`** — Type primitives: `CellState` ('empty' | 'excluded' | 'marked'), `Position`, `Conflict`, `PuzzleMetadata`, `MODES` (tuple), `Mode` (union), `isMode` (type guard), `PuzzleData`.
 - **`constraints.ts`** — Four constraint checkers (`checkRowConstraint`, `checkColumnConstraint`, `checkRegionConstraint`, `checkAdjacencyConstraint`) plus `getAllConflicts` that runs all four and deduplicates by canonical pair key.
 - **`validator.ts`** — Solution validator (36 LOC).
+- **`cellKey.ts`** — `cellKey(row, col)` — the single source of the `"${row}:${col}"` composite key used by the grid and game reducer. Moved here from `hooks/useGame.ts` in Track 3.
 
 ## State management
 
