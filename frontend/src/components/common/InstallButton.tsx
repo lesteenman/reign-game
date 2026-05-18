@@ -6,7 +6,7 @@ import { useInstallPrompt } from '../../shared/hooks/useInstallPrompt';
 // Style: small text button in the PageShell header cluster. Visually
 // parallel to the dark-mode toggle (transparent background,
 // color-muted text, 44px hit target). Tamagui migration tracked in
-// #176; icon-library adoption is a separate follow-up.
+// #176.
 
 const buttonStyle: CSSProperties = {
   background: 'none',
