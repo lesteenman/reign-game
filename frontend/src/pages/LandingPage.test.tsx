@@ -121,6 +121,66 @@ describe('LandingPage — tile visibility across Clerk states', () => {
   });
 });
 
+describe('LandingPage — offline + install integration', () => {
+  let originalDescriptor: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    originalDescriptor = Object.getOwnPropertyDescriptor(window.navigator, 'onLine');
+    useUserMock.mockReturnValue({
+      isLoaded: true,
+      isSignedIn: true,
+      user: { publicMetadata: { role: 'admin' } },
+    });
+  });
+
+  afterEach(() => {
+    if (originalDescriptor) {
+      Object.defineProperty(window.navigator, 'onLine', originalDescriptor);
+    } else {
+      // onLine was on the prototype; remove the own-property override we set.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      delete (window.navigator as any).onLine;
+    }
+  });
+
+  it('disables Daily + Curation tiles when offline', () => {
+    // Arrange
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+
+    // Act
+    renderLandingPage();
+
+    // Assert
+    expect(screen.getByTestId('tile-daily')).toBeDisabled();
+    expect(screen.getByTestId('tile-curation')).toBeDisabled();
+    // Packs is always disabled regardless of online state.
+    expect(screen.getByTestId('tile-packs')).toBeDisabled();
+  });
+
+  it('Daily + Curation tiles are enabled when online', () => {
+    // Arrange
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+
+    // Act
+    renderLandingPage();
+
+    // Assert
+    expect(screen.getByTestId('tile-daily')).not.toBeDisabled();
+    expect(screen.getByTestId('tile-curation')).not.toBeDisabled();
+  });
+
+  it('does not render the install tile by default (no beforeinstallprompt fired)', () => {
+    // Arrange
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+
+    // Act
+    renderLandingPage();
+
+    // Assert
+    expect(screen.queryByTestId('tile-install')).not.toBeInTheDocument();
+  });
+});
+
 describe('LandingPage — tile click behaviour', () => {
   it('clicking the Daily tile navigates to /play?flow=daily', () => {
     // Arrange
