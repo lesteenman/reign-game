@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, Sun, Moon } from 'lucide-react';
 import { Show } from "@clerk/react";
 import { Icon } from '../../shared/components/Icon';
 import { useDarkMode } from '../../theme/useDarkMode';
@@ -140,7 +140,6 @@ export function PageShell({ children, onBack, backLabel = 'Back to home', subtit
               background: 'none',
               border: 'none',
               cursor: 'pointer',
-              fontSize: '1.25rem',
               padding: '8px',
               color: 'var(--color-muted)',
               lineHeight: 1,
@@ -151,7 +150,7 @@ export function PageShell({ children, onBack, backLabel = 'Back to home', subtit
               justifyContent: 'center',
             }}
           >
-            {isDark ? '☀' : '☾'}
+            <Icon as={isDark ? Sun : Moon} />
           </button>
         </div>
       </div>
