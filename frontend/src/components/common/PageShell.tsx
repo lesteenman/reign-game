@@ -4,6 +4,7 @@ import { useDarkMode } from '../../theme/useDarkMode';
 import { SignInButton } from '../auth/SignInButton';
 import { UserMenu } from '../auth/UserMenu';
 import { useClerkAvailable } from '../auth/ClerkAvailability';
+import { OfflineBanner } from './OfflineBanner';
 
 interface PageShellProps {
   children: ReactNode;
@@ -151,6 +152,7 @@ export function PageShell({ children, onBack, backLabel = 'Back to home', subtit
           </button>
         </div>
       </div>
+      <OfflineBanner />
       {subtitle && (
         <p
           data-testid="page-subtitle"

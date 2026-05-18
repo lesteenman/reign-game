@@ -3,6 +3,8 @@ import { useUser } from '@clerk/react';
 import type { CSSProperties, ReactNode } from 'react';
 import { PageShell } from '../components/common/PageShell';
 import { getClerkUserRole } from '../components/auth/role';
+import { useOnlineStatus } from '../shared/hooks/useOnlineStatus';
+import { InstallAppTile } from '../components/landing/InstallAppTile';
 
 /**
  * Landing page.
@@ -69,9 +71,10 @@ interface LandingTileProps {
   subtitle: ReactNode;
   enabled: boolean;
   onClick?: () => void;
+  disabledTitle?: string;
 }
 
-function LandingTile({ testId, title, subtitle, enabled, onClick }: LandingTileProps) {
+function LandingTile({ testId, title, subtitle, enabled, onClick, disabledTitle }: LandingTileProps) {
   return (
     <button
       type="button"
@@ -79,6 +82,7 @@ function LandingTile({ testId, title, subtitle, enabled, onClick }: LandingTileP
       onClick={enabled ? onClick : undefined}
       disabled={!enabled}
       aria-disabled={!enabled}
+      title={!enabled ? disabledTitle : undefined}
       style={enabled ? tileBaseStyle : tileDisabledStyle}
     >
       <h2 style={tileTitleStyle}>{title}</h2>
@@ -91,16 +95,19 @@ export function LandingPage() {
   const navigate = useNavigate();
   const { user, isLoaded } = useUser();
   const isAdmin = isLoaded && getClerkUserRole(user?.publicMetadata) === 'admin';
+  const online = useOnlineStatus();
 
   return (
     <PageShell>
       <div style={containerStyle} data-testid="landing-tiles">
+        <InstallAppTile />
         <LandingTile
           testId="tile-daily"
           title="Today's puzzle"
           subtitle="One 9×9 puzzle a day. UTC midnight resets."
-          enabled
+          enabled={online}
           onClick={() => navigate('/play?flow=daily')}
+          disabledTitle="Connect to the internet to start a new puzzle"
         />
         <LandingTile
           testId="tile-packs"
@@ -113,8 +120,9 @@ export function LandingPage() {
             testId="tile-curation"
             title="Curation"
             subtitle="Rate puzzles for the future corpus"
-            enabled
+            enabled={online}
             onClick={() => navigate('/curation')}
+            disabledTitle="Connect to the internet to start a new puzzle"
           />
         )}
       </div>

@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, cleanup } from '../../test-utils';
 import { MemoryRouter } from 'react-router-dom';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { PageShell } from './PageShell';
 import { ClerkAvailabilityProvider } from '../auth/ClerkAvailability';
 
@@ -144,5 +144,49 @@ describe('PageShell', () => {
     expect(computed.justifyContent).not.toBe('center');
     // Header is the first DOM child so it pins to the top.
     expect(shell.firstElementChild).toBe(header);
+  });
+});
+
+describe('PageShell — offline banner integration', () => {
+  let originalDescriptor: PropertyDescriptor | undefined;
+
+  beforeEach(() => {
+    originalDescriptor = Object.getOwnPropertyDescriptor(window.navigator, 'onLine');
+  });
+
+  afterEach(() => {
+    if (originalDescriptor) {
+      Object.defineProperty(window.navigator, 'onLine', originalDescriptor);
+    } else {
+      // onLine was on the prototype; remove the own-property override we set.
+      delete (window.navigator as unknown as { onLine?: boolean }).onLine;
+    }
+  });
+
+  it('does not render the offline banner when online', () => {
+    // Arrange
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
+
+    // Act
+    renderShell(<PageShell><p>content</p></PageShell>);
+
+    // Assert
+    expect(screen.queryByTestId('offline-banner')).not.toBeInTheDocument();
+  });
+
+  it('renders the offline banner when offline, positioned before children', () => {
+    // Arrange
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+
+    // Act
+    renderShell(<PageShell><p data-testid="body">content</p></PageShell>);
+
+    // Assert
+    const banner = screen.getByTestId('offline-banner');
+    const body = screen.getByTestId('body');
+    expect(banner).toBeInTheDocument();
+    // Banner must appear earlier in the document than the body so
+    // screen readers announce it first.
+    expect(banner.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

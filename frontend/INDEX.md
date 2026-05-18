@@ -77,6 +77,14 @@ Reusable hooks. See `src/hooks/README.md`.
 - `useGameStorage.ts` — IndexedDB CRUD wrapper (saveState / loadState / clearState / addCompletion).
 - Tests: `useGame.test.ts`, `useTimer.test.ts`, `useGameStorage.test.ts`.
 
+### `src/shared/hooks/` *(2026-05-18: PWA-related additions from #116)*
+
+Cross-feature reusable hooks.
+
+- `useOnlineStatus.ts` — `useSyncExternalStore` against `window.online`/`window.offline` events; returns `navigator.onLine` snapshot.
+- `useInstallPrompt.ts` — captures `beforeinstallprompt`; exposes `{ canInstall, isStandalone, promptInstall }`.
+- Tests: `useOnlineStatus.test.ts`, `useInstallPrompt.test.ts`.
+
 ### `src/pages/`
 
 Route-level components. See `src/pages/README.md`.
@@ -139,6 +147,8 @@ Shared UI primitives. See `src/components/common/README.md`.
 - `PageShell.tsx` — top-of-page chrome (header, back button, subtitle, dark-mode toggle, auth slot).
 - `buttonStyles.ts` — `compactSecondaryButtonStyle` (smaller variant for headers / cards).
 - `press.ts` — `pressIn` / `pressOut` mouse-event handlers for the "tactile ink shadow" press.
+- `OfflineBanner.tsx` — *(2026-05-18: #116)* global offline indicator slotted into `PageShell`; renders when `useOnlineStatus()` returns `false`.
+- Tests: `OfflineBanner.test.tsx`.
 
 ### `src/components/game/`
 
@@ -161,6 +171,8 @@ Custom hand-built grid UI. See `src/components/grid/README.md`.
 Landing-page-specific UI. See `src/components/landing/README.md`.
 
 - `PuzzleSelector.tsx` — size/mode preset selector + Play button. Used by `CurationPage`.
+- `InstallAppTile.tsx` — *(2026-05-18: #116)* install CTA tile; only rendered when `beforeinstallprompt` has fired and the app is not already running in standalone mode.
+- Tests: `InstallAppTile.test.tsx`.
 
 ## Playwright tests
 

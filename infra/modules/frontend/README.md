@@ -29,7 +29,7 @@ Provisions the public frontend delivery surface: a private S3 bucket for the SPA
 | `aws_s3_bucket.frontend` | Private bucket for the SPA assets. `force_destroy = true` so env renames can succeed. |
 | `aws_s3_bucket_public_access_block.frontend` | All four public-access settings = `true`. |
 | `aws_cloudfront_origin_access_control.frontend` | OAC: `s3` origin type, `always` signing, `sigv4` protocol — the modern replacement for OAI. |
-| `aws_cloudfront_distribution.frontend` | Two origins (S3 + API Gateway), one ordered behavior (`/api/*` → API), default behavior → S3, two SPA-fallback custom error responses (403→/index.html, 404→/index.html), conditional aliases + viewer cert (default `*.cloudfront.net` when no ARN supplied; SNI-only `TLSv1.2_2021` when supplied). |
+| `aws_cloudfront_distribution.frontend` | Two origins (S3 + API Gateway), three ordered behaviors (`/api/*` → API; `/sw.js` + `/workbox-*.js` → S3 with `CachingDisabled`), default behavior → S3, two SPA-fallback custom error responses (403→/index.html, 404→/index.html), conditional aliases + viewer cert (default `*.cloudfront.net` when no ARN supplied; SNI-only `TLSv1.2_2021` when supplied). |
 | `aws_s3_bucket_policy.frontend` | Grants `cloudfront.amazonaws.com` (with `AWS:SourceArn` condition matching this distribution) `s3:GetObject`. |
 
 ## Gotchas
@@ -40,4 +40,5 @@ Provisions the public frontend delivery surface: a private S3 bucket for the SPA
 - **SPA fallback maps 403 + 404 → 200 / `/index.html`.** This is what makes client-side routes like `/admin/curate` work. Don't remove without coordinating with the frontend router.
 - **No `response_headers_policy_id` attached** — issue #114. Missing HSTS / X-Content-Type-Options / CSP at the edge.
 - **No tags on any resource in this module.** Inconsistent with the rest of the codebase (api/database/generation/daily-cron all tag). Tracked as a follow-up consistency fix.
+- **Two ordered cache behaviors target `/sw.js` and `/workbox-*.js`** with the AWS managed `CachingDisabled` policy (`4135ea2d-6df8-44a3-9df3-4b5a84be39ad`) so service-worker updates propagate without waiting for edge TTL. Added in #116.
 - **The CloudFront distribution's `comment` is `"<project> <env> frontend"`** — fine for ops UX. Don't put PII or runtime data there.
