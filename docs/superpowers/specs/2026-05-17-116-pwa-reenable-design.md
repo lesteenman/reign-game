@@ -37,18 +37,20 @@ This spec defines a clean re-introduction at the new tech baseline, plus expande
 - Banner uses `role="status"` (which carries implicit `aria-live="polite"`) so it's announced to screen readers without interrupting.
 - Banner uses the existing `var(--color-destructive*)` token palette for visual consistency.
 - Banner disappears when the browser reports back online.
+- Detection combines `navigator.onLine` events with an active probe against `/api/health` on mount. The probe is necessary because the service worker serves the cached shell during a reload while offline — the browser never attempts a real network request, so navigator.onLine stays `true` and the offline event doesn't fire (post-merge user finding 2026-05-18).
 
 ### FR-3 — LandingPage tiles that require network are disabled while offline
 - Daily and Curation tiles render as `aria-disabled="true"` with reduced opacity and `cursor: not-allowed` when offline.
 - Tiles render with a tooltip ("Connect to the internet to start a new puzzle") via `title` attribute.
 - When back online, tiles re-enable without page reload.
 
-### FR-4 — Install-app tile on LandingPage when installable
-- A tile titled "Install Reign" with subtitle "Add to home screen — play offline" appears on LandingPage when:
+### FR-4 — Install-app button in PageShell header when installable
+- A small "Install" button appears in the PageShell header's right-side cluster (between auth slot and dark-mode toggle) when:
   - The browser fired `beforeinstallprompt` (deferred install available), AND
   - The app is not already running in standalone mode (`matchMedia('(display-mode: standalone)').matches === false`).
-- Clicking the tile calls `prompt()` on the deferred event. After the user accepts or dismisses, the tile self-hides.
-- If the browser never fires `beforeinstallprompt` (iOS Safari, desktop browsers without PWA install support), the tile is never rendered.
+- Visually parallel to the dark-mode toggle (compact, transparent background, color-muted text).
+- Clicking calls `prompt()` on the deferred event. After the user accepts or dismisses, the button self-hides.
+- If the browser never fires `beforeinstallprompt` (iOS Safari, desktop browsers without PWA install support), the button is never rendered.
 
 ### FR-5 — CloudFront serves `/sw.js` with `no-cache`
 - An `ordered_cache_behavior` block in `infra/modules/frontend/main.tf` uses the AWS-managed `CachingDisabled` policy (`4135ea2d-6df8-44a3-9df3-4b5a84be39ad`) for `/sw.js`, `/workbox-*.js`, and `/registerSW.js`.
@@ -150,6 +152,8 @@ These go into the PR description's "Key Decisions" section verbatim.
 7. **No new Playwright e2e for SW / install prompt.** SW lifecycle is fragile in headless; install prompt is device-dependent. Vitest covers component / hook logic with mocked browser APIs; manual smoke-test on Android Chrome + iOS Safari per #116 covers the device-level behavior.
 
 8. **Workbox runtime caching kept for Google Fonts only.** The existing `index.css` `@import url(fonts.googleapis.com/...)` is the only third-party network resource. Same shape as T-113.
+
+12. **Active connectivity probe on mount.** `navigator.onLine` is event-driven and unreliable when the SW serves the cached shell — no real network request triggers the offline event. A single `fetch('/api/health', { method: 'HEAD', cache: 'no-store' })` on mount gives ground truth; re-probes when navigator dispatches `online`. Hook lives in `shared/hooks/useConnectivity.ts`; `useOnlineStatus` remains as the lower-level navigator-snapshot primitive.
 
 ## Risks
 

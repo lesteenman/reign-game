@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { useOnlineStatus } from '../../shared/hooks/useOnlineStatus';
+import { useConnectivity } from '../../shared/hooks/useConnectivity';
 
 // Style: inline CSSProperties using theme tokens (no Tamagui).
 // Tamagui migration tracked in #176.
@@ -22,7 +22,7 @@ const bannerStyle: CSSProperties = {
  * Mounted by PageShell so every route gets the same signal.
  */
 export function OfflineBanner() {
-  const online = useOnlineStatus();
+  const online = useConnectivity();
   if (online) return null;
   return (
     <div
