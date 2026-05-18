@@ -61,6 +61,7 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 	r := chi.NewRouter()
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", handler.HealthCheck)
+		r.Head("/health", handler.HealthCheck)
 		r.Get("/puzzles/generate", handler.GenerateHandler)
 
 		if repo != nil {
