@@ -13,7 +13,7 @@
     "test:playwright": "playwright test"
   },
   "dependencies": {
-    "@clerk/react": "^6.6.3",
+    "@clerk/react": "^6.6.4",
     "@tamagui/config": "2.0.0-rc.42",
     "@tanstack/react-query": "^5.100.10",
     "lucide-react": "^1.16.0",
@@ -23,7 +23,7 @@
     "tamagui": "2.0.0-rc.42"
   },
   "devDependencies": {
-    "@clerk/testing": "^2.0.28",
+    "@clerk/testing": "^2.0.29",
     "@playwright/test": "^1.60.0",
     "@tailwindcss/vite": "^4.3.0",
     "@testing-library/dom": "^10.4.1",
