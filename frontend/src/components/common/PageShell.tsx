@@ -5,6 +5,7 @@ import { SignInButton } from '../auth/SignInButton';
 import { UserMenu } from '../auth/UserMenu';
 import { useClerkAvailable } from '../auth/ClerkAvailability';
 import { OfflineBanner } from './OfflineBanner';
+import { InstallButton } from './InstallButton';
 
 interface PageShellProps {
   children: ReactNode;
@@ -128,6 +129,7 @@ export function PageShell({ children, onBack, backLabel = 'Back to home', subtit
             menu, role-gated per AS-10. */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <HeaderAuthSlot />
+          <InstallButton />
           <button
             type="button"
             onClick={toggle}

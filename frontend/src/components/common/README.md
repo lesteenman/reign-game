@@ -17,7 +17,8 @@ The shared chrome and primitive widgets every page reuses: the standard layout w
 - **`Button.tsx`** — Three button components: `PrimaryButton` (accent background), `SecondaryButton` (surface background), `GhostButton` (transparent, muted text). All share `baseStyle` and `disabledOverrides`. Hover handlers wire `press.ts` for the tactile-shadow animation.
 - **`buttonStyles.ts`** — Exports `compactSecondaryButtonStyle` — a smaller secondary-button style for headers and cards (8×16 padding vs the full-sized 12×32). Kept as a CSS-properties object (not a component) so Clerk SDK wrappers (`<SignInButton>`, `<SignOutButton>`) can apply it as-is.
 - **`press.ts`** — `pressIn` / `pressOut` mouse-event handlers that animate the "tactile ink shadow" (shrinks shadow from 3px to 2px while translating 1px down). Element-agnostic: applied to both `<button>` and `<a>`.
-- **`OfflineBanner.tsx`** — Global offline indicator slotted into `PageShell`. Renders a `role="status"` banner when `useOnlineStatus()` returns `false`; returns `null` when online. Added in #116.
+- **`OfflineBanner.tsx`** — Global offline indicator slotted into `PageShell`. Renders a `role="status"` banner when `useConnectivity()` returns `false`; returns `null` when online. Added in #116.
+- **`InstallButton.tsx`** — Compact install CTA rendered in the PageShell header right-cluster. Calls `useInstallPrompt`; self-hides on iOS Safari / non-Chromium browsers / when already installed. Added in #116 follow-up.
 
 ## State management
 

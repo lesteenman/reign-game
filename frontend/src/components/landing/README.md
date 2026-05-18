@@ -14,7 +14,6 @@ A size/mode preset selector that renders one button per enabled `(size, mode)` c
 ## Files
 
 - **`PuzzleSelector.tsx`** — Renders one button per `(size, mode)` combo plus a Play button. Selection is local state. Empty-state branch handles `modes.length === 0` ("No puzzles available right now"). Clamps `selectedIndex` to `modes.length - 1` so a shorter list after re-mount still picks a valid entry.
-- **`InstallAppTile.tsx`** — Install CTA tile for `LandingPage`. Only rendered when `beforeinstallprompt` has fired (i.e. `canInstall === true`) and the app is not already running in standalone mode. Never shown on iOS Safari (which doesn't fire `beforeinstallprompt`). Added in #116.
 
 ## State management
 
@@ -26,4 +25,4 @@ Local: `useState<number>(0)` (selected index).
 
 ## Track 3 mapping
 
-`PuzzleSelector.tsx` moves to `features/curation/components/PuzzleSelector.tsx`. `InstallAppTile.tsx` stays in `components/landing/` for now and moves to `features/landing/components/` when #176's landing slice lands. The folder is deletable once both moves are complete.
+`PuzzleSelector.tsx` moves to `features/curation/components/PuzzleSelector.tsx`. The folder is deletable once that move is complete.

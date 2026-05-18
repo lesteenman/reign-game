@@ -81,9 +81,10 @@ Reusable hooks. See `src/hooks/README.md`.
 
 Cross-feature reusable hooks.
 
-- `useOnlineStatus.ts` — `useSyncExternalStore` against `window.online`/`window.offline` events; returns `navigator.onLine` snapshot.
+- `useOnlineStatus.ts` — `useSyncExternalStore` against `window.online`/`window.offline` events; returns `navigator.onLine` snapshot. Lower-level primitive; prefer `useConnectivity` for UI decisions.
 - `useInstallPrompt.ts` — captures `beforeinstallprompt`; exposes `{ canInstall, isStandalone, promptInstall }`.
-- Tests: `useOnlineStatus.test.ts`, `useInstallPrompt.test.ts`.
+- `useConnectivity.ts` — *(2026-05-18: #116 follow-up)* authoritative connectivity hook; combines `useOnlineStatus` with an active HEAD probe of `/api/health` on mount. Re-probes on browser `online` events. Used by `OfflineBanner` and `LandingPage`.
+- Tests: `useOnlineStatus.test.ts`, `useInstallPrompt.test.ts`, `useConnectivity.test.ts`.
 
 ### `src/pages/`
 
@@ -147,8 +148,9 @@ Shared UI primitives. See `src/components/common/README.md`.
 - `PageShell.tsx` — top-of-page chrome (header, back button, subtitle, dark-mode toggle, auth slot).
 - `buttonStyles.ts` — `compactSecondaryButtonStyle` (smaller variant for headers / cards).
 - `press.ts` — `pressIn` / `pressOut` mouse-event handlers for the "tactile ink shadow" press.
-- `OfflineBanner.tsx` — *(2026-05-18: #116)* global offline indicator slotted into `PageShell`; renders when `useOnlineStatus()` returns `false`.
-- Tests: `OfflineBanner.test.tsx`.
+- `OfflineBanner.tsx` — *(2026-05-18: #116)* global offline indicator slotted into `PageShell`; renders when `useConnectivity()` returns `false` (probe-based detection, not just navigator.onLine).
+- `InstallButton.tsx` — *(2026-05-18: #116 follow-up)* compact install CTA in the PageShell header right-cluster. Calls `useInstallPrompt`; self-hides on iOS Safari / non-Chromium browsers / when already installed.
+- Tests: `OfflineBanner.test.tsx`, `InstallButton.test.tsx`.
 
 ### `src/components/game/`
 
@@ -171,8 +173,7 @@ Custom hand-built grid UI. See `src/components/grid/README.md`.
 Landing-page-specific UI. See `src/components/landing/README.md`.
 
 - `PuzzleSelector.tsx` — size/mode preset selector + Play button. Used by `CurationPage`.
-- `InstallAppTile.tsx` — *(2026-05-18: #116)* install CTA tile; only rendered when `beforeinstallprompt` has fired and the app is not already running in standalone mode.
-- Tests: `InstallAppTile.test.tsx`.
+- Tests: `PuzzleSelector.test.tsx`.
 
 ## Playwright tests
 

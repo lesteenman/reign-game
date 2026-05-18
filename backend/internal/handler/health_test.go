@@ -24,6 +24,13 @@ func TestHealthCheck(t *testing.T) {
 			wantBody:       map[string]string{"status": "ok"},
 			wantHeader:     "application/json",
 		},
+		{
+			name:           "HEAD returns 200 with no body",
+			method:         http.MethodHead,
+			wantStatusCode: http.StatusOK,
+			wantBody:       nil,
+			wantHeader:     "application/json",
+		},
 	}
 
 	for _, tt := range tests {
@@ -44,7 +51,15 @@ func TestHealthCheck(t *testing.T) {
 				t.Errorf("Content-Type: got %q, want %q", gotHeader, tt.wantHeader)
 			}
 
-			// Verify response body.
+			// Verify response body. HEAD returns no body, so we assert
+			// emptiness instead of trying to decode JSON.
+			if tt.wantBody == nil {
+				if rec.Body.Len() != 0 {
+					t.Errorf("HEAD body: got %d bytes, want 0", rec.Body.Len())
+				}
+				return
+			}
+
 			var gotBody map[string]string
 			if err := json.NewDecoder(rec.Body).Decode(&gotBody); err != nil {
 				t.Fatalf("failed to decode response body: %v", err)
