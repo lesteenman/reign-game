@@ -94,8 +94,7 @@ resource "aws_cloudfront_distribution" "frontend" {
   # /sw.js once per page load; if CloudFront serves a stale SW, users
   # stay on outdated client code until the TTL expires (default policy
   # is 24h). Managed CachingDisabled forces revalidation on every
-  # request. Same logic applies to the Workbox runtime bundles and
-  # registerSW entrypoint. See GH #116.
+  # request. Same logic applies to the Workbox runtime bundles. See GH #116.
   ordered_cache_behavior {
     path_pattern           = "/sw.js"
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
@@ -107,15 +106,6 @@ resource "aws_cloudfront_distribution" "frontend" {
 
   ordered_cache_behavior {
     path_pattern           = "/workbox-*.js"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "s3-frontend"
-    viewer_protocol_policy = "redirect-to-https"
-    cache_policy_id        = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # AWS managed CachingDisabled
-  }
-
-  ordered_cache_behavior {
-    path_pattern           = "/registerSW.js"
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
     target_origin_id       = "s3-frontend"

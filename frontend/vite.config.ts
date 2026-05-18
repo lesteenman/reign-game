@@ -34,6 +34,7 @@ export default defineConfig(({ mode }) => ({
             options: {
               cacheName: 'google-fonts-stylesheets',
               expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [200] },
             },
           },
           {

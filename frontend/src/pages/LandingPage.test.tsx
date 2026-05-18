@@ -168,6 +168,26 @@ describe('LandingPage — offline + install integration', () => {
     expect(screen.getByTestId('tile-curation')).not.toBeDisabled();
   });
 
+  it('shows a connectivity tooltip on offline-disabled Daily + Curation tiles', () => {
+    // Arrange
+    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
+
+    // Act
+    renderLandingPage();
+
+    // Assert
+    expect(screen.getByTestId('tile-daily')).toHaveAttribute(
+      'title',
+      'Connect to the internet to start a new puzzle',
+    );
+    expect(screen.getByTestId('tile-curation')).toHaveAttribute(
+      'title',
+      'Connect to the internet to start a new puzzle',
+    );
+    // Packs does NOT get the connectivity tooltip — it's "Coming soon", not a connectivity issue.
+    expect(screen.getByTestId('tile-packs')).not.toHaveAttribute('title');
+  });
+
   it('does not render the install tile by default (no beforeinstallprompt fired)', () => {
     // Arrange
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });

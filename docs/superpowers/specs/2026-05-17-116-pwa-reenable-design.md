@@ -34,7 +34,7 @@ This spec defines a clean re-introduction at the new tech baseline, plus expande
 
 ### FR-2 — Offline banner appears globally when navigator.onLine === false
 - A banner renders at the top of every route when the browser reports offline.
-- Banner uses `role="alert"` and `aria-live="polite"` so it's announced to screen readers.
+- Banner uses `role="status"` (which carries implicit `aria-live="polite"`) so it's announced to screen readers without interrupting.
 - Banner uses the existing `var(--color-destructive*)` token palette for visual consistency.
 - Banner disappears when the browser reports back online.
 

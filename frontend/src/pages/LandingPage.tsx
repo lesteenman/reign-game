@@ -71,9 +71,10 @@ interface LandingTileProps {
   subtitle: ReactNode;
   enabled: boolean;
   onClick?: () => void;
+  disabledTitle?: string;
 }
 
-function LandingTile({ testId, title, subtitle, enabled, onClick }: LandingTileProps) {
+function LandingTile({ testId, title, subtitle, enabled, onClick, disabledTitle }: LandingTileProps) {
   return (
     <button
       type="button"
@@ -81,6 +82,7 @@ function LandingTile({ testId, title, subtitle, enabled, onClick }: LandingTileP
       onClick={enabled ? onClick : undefined}
       disabled={!enabled}
       aria-disabled={!enabled}
+      title={!enabled ? disabledTitle : undefined}
       style={enabled ? tileBaseStyle : tileDisabledStyle}
     >
       <h2 style={tileTitleStyle}>{title}</h2>
@@ -105,6 +107,7 @@ export function LandingPage() {
           subtitle="One 9×9 puzzle a day. UTC midnight resets."
           enabled={online}
           onClick={() => navigate('/play?flow=daily')}
+          disabledTitle="Connect to the internet to start a new puzzle"
         />
         <LandingTile
           testId="tile-packs"
@@ -119,6 +122,7 @@ export function LandingPage() {
             subtitle="Rate puzzles for the future corpus"
             enabled={online}
             onClick={() => navigate('/curation')}
+            disabledTitle="Connect to the internet to start a new puzzle"
           />
         )}
       </div>
