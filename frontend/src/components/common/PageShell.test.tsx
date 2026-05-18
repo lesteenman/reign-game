@@ -147,14 +147,29 @@ describe('PageShell', () => {
   });
 });
 
+describe('PageShell — install button integration', () => {
+  it('does not render the install button by default (no beforeinstallprompt fired in jsdom)', () => {
+    // Arrange & Act
+    renderShell(<PageShell><p>content</p></PageShell>);
+
+    // Assert
+    expect(screen.queryByTestId('install-button')).not.toBeInTheDocument();
+  });
+});
+
 describe('PageShell — offline banner integration', () => {
   let originalDescriptor: PropertyDescriptor | undefined;
+  let originalFetch: typeof globalThis.fetch;
 
   beforeEach(() => {
     originalDescriptor = Object.getOwnPropertyDescriptor(window.navigator, 'onLine');
+    originalFetch = globalThis.fetch;
+    // Default the probe to "succeeds" — tests drive assertions via navigator signal.
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true } as Response);
   });
 
   afterEach(() => {
+    globalThis.fetch = originalFetch;
     if (originalDescriptor) {
       Object.defineProperty(window.navigator, 'onLine', originalDescriptor);
     } else {

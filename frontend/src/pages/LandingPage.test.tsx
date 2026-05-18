@@ -3,6 +3,8 @@ import { fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
+let originalFetch: typeof globalThis.fetch;
+
 const mockNavigate = vi.fn();
 vi.mock('react-router-dom', async () => {
   const actual = await vi.importActual('react-router-dom');
@@ -121,11 +123,13 @@ describe('LandingPage — tile visibility across Clerk states', () => {
   });
 });
 
-describe('LandingPage — offline + install integration', () => {
+describe('LandingPage — offline integration', () => {
   let originalDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
     originalDescriptor = Object.getOwnPropertyDescriptor(window.navigator, 'onLine');
+    originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true } as Response);
     useUserMock.mockReturnValue({
       isLoaded: true,
       isSignedIn: true,
@@ -134,6 +138,7 @@ describe('LandingPage — offline + install integration', () => {
   });
 
   afterEach(() => {
+    globalThis.fetch = originalFetch;
     if (originalDescriptor) {
       Object.defineProperty(window.navigator, 'onLine', originalDescriptor);
     } else {
@@ -188,16 +193,6 @@ describe('LandingPage — offline + install integration', () => {
     expect(screen.getByTestId('tile-packs')).not.toHaveAttribute('title');
   });
 
-  it('does not render the install tile by default (no beforeinstallprompt fired)', () => {
-    // Arrange
-    Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: true });
-
-    // Act
-    renderLandingPage();
-
-    // Assert
-    expect(screen.queryByTestId('tile-install')).not.toBeInTheDocument();
-  });
 });
 
 describe('LandingPage — tile click behaviour', () => {

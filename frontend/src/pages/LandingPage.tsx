@@ -3,8 +3,7 @@ import { useUser } from '@clerk/react';
 import type { CSSProperties, ReactNode } from 'react';
 import { PageShell } from '../components/common/PageShell';
 import { getClerkUserRole } from '../components/auth/role';
-import { useOnlineStatus } from '../shared/hooks/useOnlineStatus';
-import { InstallAppTile } from '../components/landing/InstallAppTile';
+import { useConnectivity } from '../shared/hooks/useConnectivity';
 
 /**
  * Landing page.
@@ -95,12 +94,11 @@ export function LandingPage() {
   const navigate = useNavigate();
   const { user, isLoaded } = useUser();
   const isAdmin = isLoaded && getClerkUserRole(user?.publicMetadata) === 'admin';
-  const online = useOnlineStatus();
+  const online = useConnectivity();
 
   return (
     <PageShell>
       <div style={containerStyle} data-testid="landing-tiles">
-        <InstallAppTile />
         <LandingTile
           testId="tile-daily"
           title="Today's puzzle"

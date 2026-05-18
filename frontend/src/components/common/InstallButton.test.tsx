@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { fireEvent } from '@testing-library/react';
 import { render, screen, cleanup } from '../../test-utils';
-import { InstallAppTile } from './InstallAppTile';
+import { InstallButton } from './InstallButton';
 import * as useInstallPromptModule from '../../shared/hooks/useInstallPrompt';
 import type { InstallPromptState } from '../../shared/hooks/useInstallPrompt';
 
@@ -21,16 +21,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('InstallAppTile', () => {
+describe('InstallButton', () => {
   it('renders nothing when canInstall=false', () => {
     // Arrange
     mockUseInstallPrompt({ canInstall: false, isStandalone: false });
 
     // Act
-    render(<InstallAppTile />);
+    render(<InstallButton />);
 
     // Assert
-    expect(screen.queryByTestId('tile-install')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('install-button')).not.toBeInTheDocument();
   });
 
   it('renders nothing when isStandalone=true (already installed)', () => {
@@ -38,23 +38,24 @@ describe('InstallAppTile', () => {
     mockUseInstallPrompt({ canInstall: true, isStandalone: true });
 
     // Act
-    render(<InstallAppTile />);
+    render(<InstallButton />);
 
     // Assert
-    expect(screen.queryByTestId('tile-install')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('install-button')).not.toBeInTheDocument();
   });
 
-  it('renders the tile when canInstall=true and not standalone', () => {
+  it('renders the button when canInstall=true and not standalone', () => {
     // Arrange
     mockUseInstallPrompt({ canInstall: true, isStandalone: false });
 
     // Act
-    render(<InstallAppTile />);
+    render(<InstallButton />);
 
     // Assert
-    const tile = screen.getByTestId('tile-install');
-    expect(tile).toBeInTheDocument();
-    expect(tile).toHaveTextContent(/install/i);
+    const button = screen.getByTestId('install-button');
+    expect(button).toBeInTheDocument();
+    expect(button).toHaveTextContent(/install/i);
+    expect(button).toHaveAttribute('aria-label', 'Install Reign as an app');
   });
 
   it('calls promptInstall when clicked', () => {
@@ -62,8 +63,8 @@ describe('InstallAppTile', () => {
     const state = mockUseInstallPrompt({ canInstall: true, isStandalone: false });
 
     // Act
-    render(<InstallAppTile />);
-    fireEvent.click(screen.getByTestId('tile-install'));
+    render(<InstallButton />);
+    fireEvent.click(screen.getByTestId('install-button'));
 
     // Assert
     expect(state.promptInstall).toHaveBeenCalledOnce();
