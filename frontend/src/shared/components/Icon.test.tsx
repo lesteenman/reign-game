@@ -48,4 +48,13 @@ describe('Icon', () => {
     expect(svg).toHaveAttribute('height', '32');
     expect(svg).toHaveAttribute('stroke-width', '2');
   });
+
+  it('allows caller to override aria-hidden to false', () => {
+    // Arrange & Act
+    render(<Icon as={ArrowLeft} aria-hidden={false} data-testid="icon-aria-override" />);
+
+    // Assert
+    const svg = screen.getByTestId('icon-aria-override');
+    expect(svg).toHaveAttribute('aria-hidden', 'false');
+  });
 });
