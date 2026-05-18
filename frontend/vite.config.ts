@@ -1,19 +1,54 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { VitePWA } from "vite-plugin-pwa";
 
 // Vite runs its config under Node. Node's `process` global isn't
 // declared here because we don't depend on @types/node (this file is
 // the only consumer). Narrow declaration is enough.
 declare const process: { env: Record<string, string | undefined> };
 
-// PWA plugin (vite-plugin-pwa) removed — waiting for Vite 8 support:
-// https://github.com/vite-pwa/vite-plugin-pwa/issues/923
-// Manifest and icons are in place; service worker will be re-added
-// when the plugin ships Vite 8 compatibility.
+// PWA configuration (re-enabled for #116 — Vite 8 support shipped in
+// vite-plugin-pwa@1.3.0 on 2026-05-05). `manifest: false` keeps
+// public/manifest.json as the source of truth. `registerType:
+// 'autoUpdate'` activates new SWs on next navigation without a UI
+// prompt. navigateFallbackDenylist excludes /api/* so the SPA shell
+// fallback doesn't swallow backend errors. Runtime caching for
+// Google Fonts mirrors the original T-113 setup.
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      manifest: false,
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-stylesheets',
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 30 },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com/,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-webfonts',
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
+      },
+    }),
+  ],
   define: {
     __TEST_ATTRS__: mode !== "production",
   },
