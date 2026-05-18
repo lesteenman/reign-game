@@ -1,4 +1,6 @@
 import type { CSSProperties } from 'react';
+import { Download } from 'lucide-react';
+import { Icon } from '../../shared/components/Icon';
 import { useInstallPrompt } from '../../shared/hooks/useInstallPrompt';
 
 // Style: small text button in the PageShell header cluster. Visually
@@ -39,7 +41,8 @@ export function InstallButton() {
       title="Install Reign"
       style={buttonStyle}
     >
-      Install
+      <Icon as={Download} size={16} />
+      <span style={{ marginLeft: 6 }}>Install</span>
     </button>
   );
 }
