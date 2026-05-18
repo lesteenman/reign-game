@@ -37,22 +37,27 @@ test.describe("connectivity probe + offline banner", () => {
       }),
     );
 
-    // Act — load the landing page. The probe fires on mount and races
-    // against the network; give it a generous beat to settle before
-    // asserting the absence of the banner.
+    // Act — load the landing page, then wait specifically for the
+    // probe response. Starting the wait BEFORE goto ensures we don't
+    // miss the response if it lands before the await — Playwright
+    // buffers responses on the in-flight waiter.
+    const probeResponse = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/health") &&
+        response.request().method() === "HEAD",
+      { timeout: 5_000 },
+    );
     await page.goto("/");
     await expect(
       page.getByRole("heading", { name: /reign/i }),
     ).toBeVisible();
+    const response = await probeResponse;
 
-    // Allow the probe to resolve. We don't have a deterministic
-    // "probe done" signal; observing the network or the absence of
-    // a flipped state is the available signal.
-    await page.waitForLoadState("networkidle");
-
-    // Assert — banner is NOT visible. If the backend returned 405
-    // (or any non-2xx) to the HEAD probe, useConnectivity would set
-    // probeOffline=true and the banner would render.
+    // Assert — probe got 200 (this is the wire-format check that
+    // would catch a regression like #179's HEAD/405) AND the banner
+    // is not visible (so useConnectivity correctly translated the
+    // 200 into "online").
+    expect(response.status()).toBe(200);
     await expect(page.getByTestId("offline-banner")).not.toBeVisible();
   });
 
