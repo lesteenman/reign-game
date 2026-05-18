@@ -18,7 +18,7 @@ const bannerStyle: CSSProperties = {
 
 /**
  * Global offline indicator. Renders nothing while online; renders a
- * polite-priority aria-live banner when navigator.onLine === false.
+ * non-interruptive status banner when navigator.onLine === false.
  * Mounted by PageShell so every route gets the same signal.
  */
 export function OfflineBanner() {
@@ -27,11 +27,10 @@ export function OfflineBanner() {
   return (
     <div
       data-testid="offline-banner"
-      role="alert"
-      aria-live="polite"
+      role="status"
       style={bannerStyle}
     >
-      {"You're offline — connect to start a new puzzle or sync results."}
+      You&apos;re offline — connect to start a new puzzle or sync results.
     </div>
   );
 }

@@ -28,7 +28,7 @@ describe('OfflineBanner', () => {
     expect(screen.queryByTestId('offline-banner')).not.toBeInTheDocument();
   });
 
-  it('renders a role=alert banner when offline', () => {
+  it('renders a role=status banner when offline', () => {
     // Arrange
     Object.defineProperty(window.navigator, 'onLine', { configurable: true, value: false });
 
@@ -38,8 +38,8 @@ describe('OfflineBanner', () => {
     // Assert
     const banner = screen.getByTestId('offline-banner');
     expect(banner).toBeInTheDocument();
-    expect(banner).toHaveAttribute('role', 'alert');
-    expect(banner).toHaveAttribute('aria-live', 'polite');
+    expect(banner).toHaveAttribute('role', 'status');
+    expect(banner).not.toHaveAttribute('aria-live');
   });
 
   it('toggles visibility when window dispatches online/offline events', () => {
