@@ -4,6 +4,7 @@ import { ClerkProvider } from "@clerk/react";
 import App from "./App";
 import { ClerkAvailabilityProvider } from "./components/auth/ClerkAvailability";
 import "./index.css";
+import { registerSW } from "virtual:pwa-register";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {
@@ -26,6 +27,15 @@ if (!publishableKey) {
       "Copy frontend/.env.local.example to frontend/.env.local and set " +
       "VITE_CLERK_PUBLISHABLE_KEY. See docs/runbooks/admin-auth-setup.md.",
   );
+}
+
+// Register the service worker in production builds only. The Vite dev
+// server doesn't ship /sw.js by default, so registering against the
+// dev origin would log a console warning and 404 on every reload.
+// autoUpdate (configured in vite.config.ts) means new SW activates
+// silently on next navigation; no UI prompt required.
+if (import.meta.env.PROD) {
+  registerSW({ immediate: true });
 }
 
 createRoot(rootElement).render(
