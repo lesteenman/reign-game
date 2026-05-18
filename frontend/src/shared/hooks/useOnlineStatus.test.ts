@@ -15,8 +15,7 @@ describe('useOnlineStatus', () => {
       Object.defineProperty(window.navigator, 'onLine', originalDescriptor);
     } else {
       // onLine was on the prototype; remove the own-property override we set.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      delete (window.navigator as any).onLine;
+      delete (window.navigator as unknown as { onLine?: boolean }).onLine;
     }
   });
 
