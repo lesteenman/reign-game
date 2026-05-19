@@ -374,6 +374,10 @@ Run the full `security-review-final` agent when the diff includes any of:
 
 Skip when the diff only touches: service logic, models, frontend components, tests, docs, archived OpenSpec artifacts.
 
+## Security: Dependabot PRs (discipline)
+
+GitHub Actions are pinned to commit SHAs (#113), not tags. The pin only buys safety if a human glances at each Dependabot bump before merging — confirm the new SHA matches the new `# vX.Y.Z` comment by spot-checking the action's release notes / commit log linked in the Dependabot PR body. **Do not auto-merge** `area:devops`+`type:infra` Dependabot PRs that touch `.github/workflows/**`; that collapses the trust model back to "whatever the bot says is `v6.0.3`" and undoes the SHA-pin discipline.
+
 ## Available Skills
 
 Project-local skills in `.claude/skills/` (invoked by reading their `SKILL.md` and following the instructions):
