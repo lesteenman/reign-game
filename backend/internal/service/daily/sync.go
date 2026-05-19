@@ -44,8 +44,8 @@ type Repo interface {
 //     candidate empty AND yesterday missing -> ErrPoolExhausted
 //     candidate empty AND yesterday present -> recycle yesterday
 //     candidate present AND yesterday missing -> confirm candidate
-//     candidate present AND yesterday.solved == 0 -> recycle yesterday
-//     candidate present AND yesterday.solved > 0 -> confirm candidate
+//     candidate present AND yesterday.started == 0 AND yesterday.solved == 0 -> recycle yesterday
+//     candidate present AND (yesterday.started > 0 OR yesterday.solved > 0) -> confirm candidate
 //  4. FinalizeDaily with chosen puzzleID, sourcePartition, mode.
 //  5. ErrScheduleAlreadyFinalized -> race-loser, GetSchedule(today),
 //     return that row.
@@ -140,7 +140,7 @@ func chooseFinalizeTarget(
 		return candidate.PuzzleID, candidate.SourcePartition, repository.FinalizeModeConfirm, nil
 	}
 
-	if yesterday.Counters.Solved == 0 {
+	if yesterday.Counters.Solved == 0 && yesterday.Counters.Started == 0 {
 		return yesterday.PuzzleID, yesterday.SourcePartition, repository.FinalizeModeRecycle, nil
 	}
 	return candidate.PuzzleID, candidate.SourcePartition, repository.FinalizeModeConfirm, nil
