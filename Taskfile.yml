@@ -398,38 +398,13 @@ tasks:
       AWS_SECRET_ACCESS_KEY: test
     cmds:
       - mkdir -p ../logs
-      # Run the whole block in system bash — Task's built-in shell (mvdan/sh)
-      # returns goroutine handles (g1, g2…) for $! and has unreliable `kill -0`
-      # against external PIDs. We need real bash for background-PID tracking.
       - |
         bash <<'BASH'
-        set -e
-        LOGDIR=../logs
-        mkdir -p "$LOGDIR"
-        if [ -f "$LOGDIR/generator.pid" ] && kill -0 "$(cat "$LOGDIR/generator.pid")" 2>/dev/null; then
-          echo "generator already running (PID $(cat "$LOGDIR/generator.pid"))"
-          exit 0
-        fi
-        rm -f "$LOGDIR/generator.pid"
-        : > "$LOGDIR/generator.log"
-        nohup go run ./cmd/api >> "$LOGDIR/generator.log" 2>&1 </dev/null &
-        GENPID=$!
-        echo "$GENPID" > "$LOGDIR/generator.pid"
-        echo "generator starting (PID $GENPID), logs: logs/generator.log"
-        for i in $(seq 1 30); do
-          if ! kill -0 "$GENPID" 2>/dev/null; then
-            echo "generator exited during startup — check logs/generator.log"
-            rm -f "$LOGDIR/generator.pid"
-            exit 1
-          fi
-          if grep -q "starting local SQS poller" "$LOGDIR/generator.log" 2>/dev/null; then
-            echo "generator ready (PID $GENPID)"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "generator did not report ready in 30s — check logs/generator.log"
-        exit 1
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        start_pid_service generator 'go run ./cmd/api' ../logs/generator.log \
+          ../logs/generator.pid \
+          --ready-grep 'starting local SQS poller' \
+          --timeout 30
         BASH
 
   dev:up:frontend:
