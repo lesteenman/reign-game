@@ -93,9 +93,9 @@ Every change — feature, fix, or refactor — follows this pipeline. The full p
 
 ```
 1. Issue triage           → pick or open a GitHub issue; capture acceptance criteria in issue comments
-2. Brainstorm             → Superpowers `brainstorming` skill (Socratic refinement) + `architecture` skill (design-time layered/feature-folder check) + `glossary` skill (vocab alignment)
-3. Plan                   → Superpowers `writing-plans` skill (decompose into 2–5 min tasks). For multi-approach exploration: `parallel-plan` skill first to compare 5 approaches, then `writing-plans` to decompose the chosen one.
-4. Worktree or branch     → Superpowers `using-git-worktrees` (preferred) or feature branch on the main repo (solo dev)
+2. Worktree or branch     → Superpowers `using-git-worktrees` (preferred) or feature branch on the main repo (solo dev). **Do this BEFORE brainstorming** so the spec/plan commits land on the feature branch from the start, not on local main where the next worktree won't pick them up.
+3. Brainstorm             → Superpowers `brainstorming` skill (Socratic refinement) + `architecture` skill (design-time layered/feature-folder check) + `glossary` skill (vocab alignment)
+4. Plan                   → Superpowers `writing-plans` skill (decompose into 2–5 min tasks). For multi-approach exploration: `parallel-plan` skill first to compare 5 approaches, then `writing-plans` to decompose the chosen one.
 5. TDD execution          → Superpowers `subagent-driven-development` or `executing-plans`, gated by `test-driven-development`. Subagents auto-load the relevant subdirectory CLAUDE.md (`backend/CLAUDE.md`, `frontend/CLAUDE.md`, `infra/CLAUDE.md`) based on the file paths they touch.
 6. Integration verification → **For any change that crosses a service boundary (frontend↔backend, backend↔DB, backend↔SQS, frontend↔SW, frontend↔CloudFront edge), exercise the real wire before opening a PR.** Choose the lightest form that fits: (a) `playwright-cli` against `task dev:up` for one-off verifications where adding a permanent test would be ceremony — e.g. "does this single new endpoint accept the method I expect" or "does my CSS change render right"; (b) a durable Playwright e2e spec under `frontend/playwright/e2e/` (run via `task e2e:up && task test:e2e`) when the contract is worth catching regressions on long-term — e.g. the connectivity probe in `offline-banner.spec.ts`, where a frontend↔backend method mismatch shipped to merge in #179 because unit tests on both sides agreed on a contract that never existed. Default to (a); promote to (b) when the same boundary will keep getting touched. Unit tests on both sides do NOT prove the contract — see lesson 12. Skip only when the diff is purely within one layer (a pure-engine refactor, a frontend visual tweak with no new API calls, etc.).
 7. Inter-task review      → Superpowers `requesting-code-review` + the `architecture` skill's review-time drift greps. Findings get a SWEEP grep command — fix agents fix ALL matches, not just the reported file.
@@ -266,8 +266,11 @@ Frontend already binds `--host 0.0.0.0` (for mobile testing over LAN); the Vite 
 After cloning the repo:
 
 ```bash
-# 1. Git hooks (pre-commit + pre-push gates)
-git config core.hooksPath .githooks
+# 1. Git hooks (pre-commit + pre-push gates). Installs delegate shims in
+#    .git/hooks/ that forward to .githooks/. .git/hooks/ is per-clone and
+#    shared across worktrees, so this needs to run ONCE per fresh clone —
+#    every worktree picks up the hooks automatically.
+scripts/install-hooks.sh
 
 # 2. Frontend dependencies (Tamagui, TanStack, Tailwind, React, etc.)
 cd frontend && npm ci && cd ..
@@ -283,7 +286,7 @@ playwright-cli install --skills   # writes/updates .claude/skills/playwright-cli
 #        /plugin install superpowers@claude-plugins-official
 ```
 
-Without step 1, the pre-commit and pre-push gates silently don't run, and CI catches what your local shell should have.
+Without step 1, the pre-commit and pre-push gates silently don't run, and CI catches what your local shell should have. The previous setup (`git config core.hooksPath .githooks`) is replaced by the install script because `core.hooksPath` didn't reliably propagate across machines and worktrees, while delegate shims in `.git/hooks/` do (see `https://www.gitworktree.org/guides/hooks`).
 
 Without step 4, the Superpowers skills (`brainstorming`, `writing-plans`, `subagent-driven-development`, etc.) are referenced by `.claude/settings.json` but the skill files won't be available locally — the workflow falls back to ad-hoc behavior.
 
@@ -344,6 +347,7 @@ Slice IDs (`R-<phase>-<slice>`) are historical — new work uses GitHub issue nu
 10. **Lockstep service config: capture EVERY consumer in the spec.** When two services share an identifier (queue URL, table name, env var), the spec's acceptance criteria must enumerate all sites. Define shared constants once in `Taskfile.yml::vars:` and reference from each env block — single source of truth.
 11. **CD + Dependabot monitored by a scheduled Claude routine — don't inline-watch.** The `Reign CD + Dependabot monitor` routine fires twice daily (09:00 + 21:00 Europe/Amsterdam = `0 7,19 * * *` UTC) and opens a `priority:p0`+`area:devops`+`type:bug`+`status:blocks-prod` GitHub issue on any CD failure or critical/high Dependabot alert. **Don't run `gh run watch` after a merge** — let the routine surface failures. The inline-watch practice (motivated by the silent PR #102/103/104 failures on 2026-05-08) is replaced by this routine as of Track 1. The underlying lesson still applies as design context: _CI green is not CD green — TF state can fail on pre-existing drift, IAM policies can fail to attach, frontend sync can fail post-build._
 12. **Unit tests on both sides of a boundary don't prove the contract.** Frontend mocks `fetch` to return `{ ok: true }` and backend tests call handlers directly with `httptest` — both pass while the wire format diverges. #179's HEAD/405 bug shipped to a merged-but-not-yet-deployed branch precisely this way: the frontend probe sent HEAD, chi's route was registered GET-only, the user saw "405 Method Not Allowed" in their browser the first time they ran the dev stack. The fix is procedural, not technical: cross-boundary changes get a Playwright e2e spec under `frontend/playwright/e2e/` that exercises the real wire (Vite → backend through the actual proxy, or `playwright-cli` against `task dev:up` for interactive checks). This is now step 6 of the Change Workflow.
+13. **Trace from the call site before claiming an implementation is buggy.** When investigating a user-reported "X is broken", reading the suspected file in isolation can mislead — find where it's actually called from and follow the path to the rendered behaviour first. The #185 false alarm (timer "uses client wall-clock") came from reading `useTimer.ts` and not checking whether `DailyGameBoard.tsx` actually uses it (it doesn't — daily anchors on the server's `assignedAt` via a separate path in `GameBoard.tsx`). The user's "I thought we already do this" was the right read, dismissed too quickly. Cost: ~30 min + one filed-and-immediately-closed GitHub issue. The discipline: when a user says "I thought X already works", treat it as a hint to grep callers before re-reading internals.
 
 ## Security: Baseline Gates (every cycle)
 
