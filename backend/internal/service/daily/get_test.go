@@ -78,6 +78,7 @@ func (f *getDailyFakeStore) FinalizeDailyTransaction(ctx context.Context, date, 
 	}
 	return nil
 }
+
 // WriteTransaction records the items so tests can assert the PLAY put +
 // counters.started bump both fired. Returns the canned err when set.
 func (f *getDailyFakeStore) WriteTransaction(_ context.Context, items []types.TransactWriteItem) error {
