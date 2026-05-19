@@ -349,36 +349,11 @@ tasks:
       - mkdir -p ../logs
       - |
         bash <<'BASH'
-        set -e
-        backend_pid=$(lsof -ti:5181 -sTCP:LISTEN 2>/dev/null || true)
-        if [ -n "$backend_pid" ]; then
-          echo "backend already running on :5181 (PID $backend_pid)"
-          exit 0
-        fi
-        : > ../logs/backend.log
-        nohup go run ./cmd/api >> ../logs/backend.log 2>&1 </dev/null &
-        # Record the `go run` wrapper PID so _dev:preflight:orphans can
-        # exclude both the wrapper and its compiled-binary child when the
-        # e2e stack starts alongside dev. Without this, the e2e preflight
-        # misidentifies the dev backend's go-build cache binary as an
-        # orphan from a prior session (see GH #161).
-        echo $! > ../logs/dev-backend.pid
-        echo "backend starting, logs: logs/backend.log"
-        for i in $(seq 1 60); do
-          if curl -sf http://localhost:5181/api/health >/dev/null 2>&1; then
-            echo "backend ready on :5181 (PID $(lsof -ti:5181 -sTCP:LISTEN))"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "backend did not become ready in 60s — check logs/backend.log" >&2
-        # Kill the wrapper before discarding its PID — otherwise the
-        # process may still bind :5181 after we exit, and the next
-        # preflight has neither port nor PID file to recognize it (GH #161).
-        wrapper=$(cat ../logs/dev-backend.pid 2>/dev/null || true)
-        [ -n "$wrapper" ] && kill "$wrapper" 2>/dev/null || true
-        rm -f ../logs/dev-backend.pid
-        exit 1
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        start_port_service backend 5181 'go run ./cmd/api' ../logs/backend.log \
+          --health-url http://localhost:5181/api/health \
+          --pid-file ../logs/dev-backend.pid \
+          --timeout 60
         BASH
 
   dev:up:generator:
@@ -398,38 +373,13 @@ tasks:
       AWS_SECRET_ACCESS_KEY: test
     cmds:
       - mkdir -p ../logs
-      # Run the whole block in system bash — Task's built-in shell (mvdan/sh)
-      # returns goroutine handles (g1, g2…) for $! and has unreliable `kill -0`
-      # against external PIDs. We need real bash for background-PID tracking.
       - |
         bash <<'BASH'
-        set -e
-        LOGDIR=../logs
-        mkdir -p "$LOGDIR"
-        if [ -f "$LOGDIR/generator.pid" ] && kill -0 "$(cat "$LOGDIR/generator.pid")" 2>/dev/null; then
-          echo "generator already running (PID $(cat "$LOGDIR/generator.pid"))"
-          exit 0
-        fi
-        rm -f "$LOGDIR/generator.pid"
-        : > "$LOGDIR/generator.log"
-        nohup go run ./cmd/api >> "$LOGDIR/generator.log" 2>&1 </dev/null &
-        GENPID=$!
-        echo "$GENPID" > "$LOGDIR/generator.pid"
-        echo "generator starting (PID $GENPID), logs: logs/generator.log"
-        for i in $(seq 1 30); do
-          if ! kill -0 "$GENPID" 2>/dev/null; then
-            echo "generator exited during startup — check logs/generator.log"
-            rm -f "$LOGDIR/generator.pid"
-            exit 1
-          fi
-          if grep -q "starting local SQS poller" "$LOGDIR/generator.log" 2>/dev/null; then
-            echo "generator ready (PID $GENPID)"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "generator did not report ready in 30s — check logs/generator.log"
-        exit 1
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        start_pid_service generator 'go run ./cmd/api' ../logs/generator.log \
+          ../logs/generator.pid \
+          --ready-grep 'starting local SQS poller' \
+          --timeout 30
         BASH
 
   dev:up:frontend:
@@ -438,22 +388,11 @@ tasks:
     cmds:
       - mkdir -p ../logs
       - |
-        if lsof -ti:5180 -sTCP:LISTEN >/dev/null 2>&1; then
-          echo "frontend already running on :5180 (PID $(lsof -ti:5180 -sTCP:LISTEN))"
-          exit 0
-        fi
-        : > ../logs/frontend.log
-        nohup npm run dev -- --host 0.0.0.0 >> ../logs/frontend.log 2>&1 </dev/null &
-        echo "frontend starting, logs: logs/frontend.log"
-        for i in $(seq 1 60); do
-          if lsof -ti:5180 -sTCP:LISTEN >/dev/null 2>&1; then
-            echo "frontend ready on :5180"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "frontend did not start in 60s — check logs/frontend.log"
-        exit 1
+        bash <<'BASH'
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        start_port_service frontend 5180 'npm run dev -- --host 0.0.0.0' ../logs/frontend.log \
+          --timeout 60
+        BASH
 
   dev:up:
     desc: Start LocalStack + backend + generator + frontend (standard dev stack)
@@ -472,94 +411,31 @@ tasks:
         echo "  status:    task dev:status"
         echo "  stop:      task dev:down"
 
-  _dev:down:port:
-    desc: Internal — kill whatever listens on PORT. SIGTERM → 5s wait → SIGKILL → verify.
-    internal: true
-    vars:
-      # Caller passes NAME (for logs) and PORT (the TCP port).
-      NAME: '{{.NAME | default ""}}'
-      PORT: '{{.PORT | default ""}}'
-    cmds:
-      - |
-        bash <<'BASH'
-        set -e
-        name='{{.NAME}}'
-        port='{{.PORT}}'
-        if [ -z "$name" ] || [ -z "$port" ]; then
-          echo "internal error: _dev:down:port requires NAME and PORT vars" >&2
-          exit 1
-        fi
-        pids=$(lsof -ti:"$port" 2>/dev/null || true)
-        if [ -z "$pids" ]; then
-          echo "$name not running"
-          exit 0
-        fi
-        kill $pids 2>/dev/null || true
-        for i in 1 2 3 4 5; do
-          if ! lsof -ti:"$port" >/dev/null 2>&1; then break; fi
-          sleep 1
-        done
-        remaining=$(lsof -ti:"$port" 2>/dev/null || true)
-        if [ -n "$remaining" ]; then
-          kill -9 $remaining 2>/dev/null || true
-          sleep 1
-        fi
-        # Refuse to claim "stopped" if the port is still in use.
-        # Earlier versions printed success while leaving orphans alive;
-        # the dev:up preflight then either rejected them or silently
-        # added another one alongside (see KI-021).
-        if lsof -ti:"$port" >/dev/null 2>&1; then
-          echo "ERROR: $name still on :$port after SIGKILL (PID $(lsof -ti:"$port"))" >&2
-          exit 1
-        fi
-        echo "$name stopped (was $pids)"
-        BASH
-
   dev:down:backend:
     desc: Stop the backend (kills whatever is on :5181). Verifies the port is free before returning success.
     cmds:
-      - task: _dev:down:port
-        vars: { NAME: backend, PORT: 5181 }
-      - rm -f logs/dev-backend.pid
+      - |
+        bash <<'BASH'
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        stop_port_service backend 5181 --pid-file logs/dev-backend.pid
+        BASH
 
   dev:down:frontend:
     desc: Stop the frontend (kills whatever is on :5180). Verifies the port is free before returning success.
     cmds:
-      - task: _dev:down:port
-        vars: { NAME: frontend, PORT: 5180 }
+      - |
+        bash <<'BASH'
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        stop_port_service frontend 5180
+        BASH
 
   dev:down:generator:
     desc: Stop the generator worker. Verifies the PID is gone before returning success.
     cmds:
       - |
         bash <<'BASH'
-        set -e
-        if [ ! -f logs/generator.pid ]; then
-          echo "generator not running"
-          exit 0
-        fi
-        pid=$(cat logs/generator.pid)
-        if ! kill -0 "$pid" 2>/dev/null; then
-          echo "generator not running (stale PID file removed)"
-          rm -f logs/generator.pid
-          exit 0
-        fi
-        pkill -P "$pid" 2>/dev/null || true
-        kill "$pid" 2>/dev/null || true
-        for i in 1 2 3 4 5; do
-          if ! kill -0 "$pid" 2>/dev/null; then break; fi
-          sleep 1
-        done
-        pkill -9 -P "$pid" 2>/dev/null || true
-        kill -9 "$pid" 2>/dev/null || true
-        sleep 1
-        # Refuse to claim "stopped" if the process is still alive.
-        if kill -0 "$pid" 2>/dev/null; then
-          echo "ERROR: generator PID $pid still alive after SIGKILL" >&2
-          exit 1
-        fi
-        rm -f logs/generator.pid
-        echo "generator stopped (was PID $pid)"
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        stop_pid_service generator logs/generator.pid
         BASH
 
   dev:down:localstack:
@@ -688,38 +564,21 @@ tasks:
       - mkdir -p ../logs
       - |
         bash <<'BASH'
-        set -e
-        e2e_backend_pid=$(lsof -ti:5182 -sTCP:LISTEN 2>/dev/null || true)
-        if [ -n "$e2e_backend_pid" ]; then
-          echo "e2e backend already running on :5182 (PID $e2e_backend_pid)"
-          exit 0
-        fi
-        : > ../logs/e2e-backend.log
-        nohup go run ./cmd/api >> ../logs/e2e-backend.log 2>&1 </dev/null &
-        # Record the `go run` wrapper PID so the preflight excludes the
-        # e2e backend's process tree when dev:up runs alongside (GH #161).
-        echo $! > ../logs/e2e-backend.pid
-        echo "e2e backend starting, logs: logs/e2e-backend.log"
-        for i in $(seq 1 60); do
-          if curl -sf http://localhost:5182/api/health >/dev/null 2>&1; then
-            echo "e2e backend ready on :5182 (PID $(lsof -ti:5182 -sTCP:LISTEN))"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "e2e backend did not become ready in 60s — check logs/e2e-backend.log" >&2
-        wrapper=$(cat ../logs/e2e-backend.pid 2>/dev/null || true)
-        [ -n "$wrapper" ] && kill "$wrapper" 2>/dev/null || true
-        rm -f ../logs/e2e-backend.pid
-        exit 1
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        start_port_service "e2e backend" 5182 'go run ./cmd/api' ../logs/e2e-backend.log \
+          --health-url http://localhost:5182/api/health \
+          --pid-file ../logs/e2e-backend.pid \
+          --timeout 60
         BASH
 
   e2e:down:backend:
     desc: Stop the e2e backend. Verifies the port is free before returning success.
     cmds:
-      - task: _dev:down:port
-        vars: { NAME: "e2e backend", PORT: 5182 }
-      - rm -f logs/e2e-backend.pid
+      - |
+        bash <<'BASH'
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        stop_port_service "e2e backend" 5182 --pid-file logs/e2e-backend.pid
+        BASH
 
   e2e:up:generator:
     desc: Start the e2e SQS generator worker (logs -> logs/e2e-generator.log, PID -> logs/e2e-generator.pid)
@@ -738,38 +597,13 @@ tasks:
       AWS_SECRET_ACCESS_KEY: test
     cmds:
       - mkdir -p ../logs
-      # Mirrors dev:up:generator. Task's built-in shell (mvdan/sh) returns
-      # goroutine handles for $! and has unreliable kill -0 against external
-      # PIDs, so the lifecycle block runs in real bash via heredoc.
       - |
         bash <<'BASH'
-        set -e
-        LOGDIR=../logs
-        mkdir -p "$LOGDIR"
-        if [ -f "$LOGDIR/e2e-generator.pid" ] && kill -0 "$(cat "$LOGDIR/e2e-generator.pid")" 2>/dev/null; then
-          echo "e2e generator already running (PID $(cat "$LOGDIR/e2e-generator.pid"))"
-          exit 0
-        fi
-        rm -f "$LOGDIR/e2e-generator.pid"
-        : > "$LOGDIR/e2e-generator.log"
-        nohup go run ./cmd/api >> "$LOGDIR/e2e-generator.log" 2>&1 </dev/null &
-        GENPID=$!
-        echo "$GENPID" > "$LOGDIR/e2e-generator.pid"
-        echo "e2e generator starting (PID $GENPID), logs: logs/e2e-generator.log"
-        for i in $(seq 1 30); do
-          if ! kill -0 "$GENPID" 2>/dev/null; then
-            echo "e2e generator exited during startup — check logs/e2e-generator.log"
-            rm -f "$LOGDIR/e2e-generator.pid"
-            exit 1
-          fi
-          if grep -q "starting local SQS poller" "$LOGDIR/e2e-generator.log" 2>/dev/null; then
-            echo "e2e generator ready (PID $GENPID)"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "e2e generator did not report ready in 30s — check logs/e2e-generator.log"
-        exit 1
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        start_pid_service "e2e generator" 'go run ./cmd/api' ../logs/e2e-generator.log \
+          ../logs/e2e-generator.pid \
+          --ready-grep 'starting local SQS poller' \
+          --timeout 30
         BASH
 
   e2e:down:generator:
@@ -777,33 +611,8 @@ tasks:
     cmds:
       - |
         bash <<'BASH'
-        set -e
-        if [ ! -f logs/e2e-generator.pid ]; then
-          echo "e2e generator not running"
-          exit 0
-        fi
-        pid=$(cat logs/e2e-generator.pid)
-        if ! kill -0 "$pid" 2>/dev/null; then
-          echo "e2e generator not running (stale PID file removed)"
-          rm -f logs/e2e-generator.pid
-          exit 0
-        fi
-        pkill -P "$pid" 2>/dev/null || true
-        kill "$pid" 2>/dev/null || true
-        for i in 1 2 3 4 5; do
-          if ! kill -0 "$pid" 2>/dev/null; then break; fi
-          sleep 1
-        done
-        pkill -9 -P "$pid" 2>/dev/null || true
-        kill -9 "$pid" 2>/dev/null || true
-        sleep 1
-        # Refuse to claim "stopped" if the process is still alive.
-        if kill -0 "$pid" 2>/dev/null; then
-          echo "ERROR: e2e generator PID $pid still alive after SIGKILL" >&2
-          exit 1
-        fi
-        rm -f logs/e2e-generator.pid
-        echo "e2e generator stopped (was PID $pid)"
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        stop_pid_service "e2e generator" logs/e2e-generator.pid
         BASH
 
   e2e:up:frontend:
@@ -815,30 +624,19 @@ tasks:
       - mkdir -p ../logs
       - |
         bash <<'BASH'
-        set -e
-        if lsof -ti:5183 -sTCP:LISTEN >/dev/null 2>&1; then
-          echo "e2e frontend already running on :5183 (PID $(lsof -ti:5183 -sTCP:LISTEN))"
-          exit 0
-        fi
-        : > ../logs/e2e-frontend.log
-        nohup npm run dev -- --port 5183 --host 0.0.0.0 >> ../logs/e2e-frontend.log 2>&1 </dev/null &
-        echo "e2e frontend starting, logs: logs/e2e-frontend.log"
-        for i in $(seq 1 60); do
-          if lsof -ti:5183 -sTCP:LISTEN >/dev/null 2>&1; then
-            echo "e2e frontend ready on :5183"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "e2e frontend did not start in 60s — check logs/e2e-frontend.log" >&2
-        exit 1
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        start_port_service "e2e frontend" 5183 'npm run dev -- --port 5183 --host 0.0.0.0' ../logs/e2e-frontend.log \
+          --timeout 60
         BASH
 
   e2e:down:frontend:
     desc: Stop the e2e frontend. Verifies the port is free before returning success.
     cmds:
-      - task: _dev:down:port
-        vars: { NAME: "e2e frontend", PORT: 5183 }
+      - |
+        bash <<'BASH'
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        stop_port_service "e2e frontend" 5183
+        BASH
 
   e2e:seed:
     desc: Load committed fixture puzzles into puzzle-pool-e2e. Idempotent — wipes non-CONFIG rows and re-inserts.
