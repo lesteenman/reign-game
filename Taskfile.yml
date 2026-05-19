@@ -411,61 +411,23 @@ tasks:
         echo "  status:    task dev:status"
         echo "  stop:      task dev:down"
 
-  _dev:down:port:
-    desc: Internal — kill whatever listens on PORT. SIGTERM → 5s wait → SIGKILL → verify.
-    internal: true
-    vars:
-      # Caller passes NAME (for logs) and PORT (the TCP port).
-      NAME: '{{.NAME | default ""}}'
-      PORT: '{{.PORT | default ""}}'
-    cmds:
-      - |
-        bash <<'BASH'
-        set -e
-        name='{{.NAME}}'
-        port='{{.PORT}}'
-        if [ -z "$name" ] || [ -z "$port" ]; then
-          echo "internal error: _dev:down:port requires NAME and PORT vars" >&2
-          exit 1
-        fi
-        pids=$(lsof -ti:"$port" 2>/dev/null || true)
-        if [ -z "$pids" ]; then
-          echo "$name not running"
-          exit 0
-        fi
-        kill $pids 2>/dev/null || true
-        for i in 1 2 3 4 5; do
-          if ! lsof -ti:"$port" >/dev/null 2>&1; then break; fi
-          sleep 1
-        done
-        remaining=$(lsof -ti:"$port" 2>/dev/null || true)
-        if [ -n "$remaining" ]; then
-          kill -9 $remaining 2>/dev/null || true
-          sleep 1
-        fi
-        # Refuse to claim "stopped" if the port is still in use.
-        # Earlier versions printed success while leaving orphans alive;
-        # the dev:up preflight then either rejected them or silently
-        # added another one alongside (see KI-021).
-        if lsof -ti:"$port" >/dev/null 2>&1; then
-          echo "ERROR: $name still on :$port after SIGKILL (PID $(lsof -ti:"$port"))" >&2
-          exit 1
-        fi
-        echo "$name stopped (was $pids)"
-        BASH
-
   dev:down:backend:
     desc: Stop the backend (kills whatever is on :5181). Verifies the port is free before returning success.
     cmds:
-      - task: _dev:down:port
-        vars: { NAME: backend, PORT: 5181 }
-      - rm -f logs/dev-backend.pid
+      - |
+        bash <<'BASH'
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        stop_port_service backend 5181 --pid-file logs/dev-backend.pid
+        BASH
 
   dev:down:frontend:
     desc: Stop the frontend (kills whatever is on :5180). Verifies the port is free before returning success.
     cmds:
-      - task: _dev:down:port
-        vars: { NAME: frontend, PORT: 5180 }
+      - |
+        bash <<'BASH'
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        stop_port_service frontend 5180
+        BASH
 
   dev:down:generator:
     desc: Stop the generator worker. Verifies the PID is gone before returning success.
@@ -612,9 +574,11 @@ tasks:
   e2e:down:backend:
     desc: Stop the e2e backend. Verifies the port is free before returning success.
     cmds:
-      - task: _dev:down:port
-        vars: { NAME: "e2e backend", PORT: 5182 }
-      - rm -f logs/e2e-backend.pid
+      - |
+        bash <<'BASH'
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        stop_port_service "e2e backend" 5182 --pid-file logs/e2e-backend.pid
+        BASH
 
   e2e:up:generator:
     desc: Start the e2e SQS generator worker (logs -> logs/e2e-generator.log, PID -> logs/e2e-generator.pid)
@@ -647,33 +611,8 @@ tasks:
     cmds:
       - |
         bash <<'BASH'
-        set -e
-        if [ ! -f logs/e2e-generator.pid ]; then
-          echo "e2e generator not running"
-          exit 0
-        fi
-        pid=$(cat logs/e2e-generator.pid)
-        if ! kill -0 "$pid" 2>/dev/null; then
-          echo "e2e generator not running (stale PID file removed)"
-          rm -f logs/e2e-generator.pid
-          exit 0
-        fi
-        pkill -P "$pid" 2>/dev/null || true
-        kill "$pid" 2>/dev/null || true
-        for i in 1 2 3 4 5; do
-          if ! kill -0 "$pid" 2>/dev/null; then break; fi
-          sleep 1
-        done
-        pkill -9 -P "$pid" 2>/dev/null || true
-        kill -9 "$pid" 2>/dev/null || true
-        sleep 1
-        # Refuse to claim "stopped" if the process is still alive.
-        if kill -0 "$pid" 2>/dev/null; then
-          echo "ERROR: e2e generator PID $pid still alive after SIGKILL" >&2
-          exit 1
-        fi
-        rm -f logs/e2e-generator.pid
-        echo "e2e generator stopped (was PID $pid)"
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        stop_pid_service "e2e generator" logs/e2e-generator.pid
         BASH
 
   e2e:up:frontend:
@@ -693,8 +632,11 @@ tasks:
   e2e:down:frontend:
     desc: Stop the e2e frontend. Verifies the port is free before returning success.
     cmds:
-      - task: _dev:down:port
-        vars: { NAME: "e2e frontend", PORT: 5183 }
+      - |
+        bash <<'BASH'
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        stop_port_service "e2e frontend" 5183
+        BASH
 
   e2e:seed:
     desc: Load committed fixture puzzles into puzzle-pool-e2e. Idempotent — wipes non-CONFIG rows and re-inserts.
