@@ -349,36 +349,11 @@ tasks:
       - mkdir -p ../logs
       - |
         bash <<'BASH'
-        set -e
-        backend_pid=$(lsof -ti:5181 -sTCP:LISTEN 2>/dev/null || true)
-        if [ -n "$backend_pid" ]; then
-          echo "backend already running on :5181 (PID $backend_pid)"
-          exit 0
-        fi
-        : > ../logs/backend.log
-        nohup go run ./cmd/api >> ../logs/backend.log 2>&1 </dev/null &
-        # Record the `go run` wrapper PID so _dev:preflight:orphans can
-        # exclude both the wrapper and its compiled-binary child when the
-        # e2e stack starts alongside dev. Without this, the e2e preflight
-        # misidentifies the dev backend's go-build cache binary as an
-        # orphan from a prior session (see GH #161).
-        echo $! > ../logs/dev-backend.pid
-        echo "backend starting, logs: logs/backend.log"
-        for i in $(seq 1 60); do
-          if curl -sf http://localhost:5181/api/health >/dev/null 2>&1; then
-            echo "backend ready on :5181 (PID $(lsof -ti:5181 -sTCP:LISTEN))"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "backend did not become ready in 60s — check logs/backend.log" >&2
-        # Kill the wrapper before discarding its PID — otherwise the
-        # process may still bind :5181 after we exit, and the next
-        # preflight has neither port nor PID file to recognize it (GH #161).
-        wrapper=$(cat ../logs/dev-backend.pid 2>/dev/null || true)
-        [ -n "$wrapper" ] && kill "$wrapper" 2>/dev/null || true
-        rm -f ../logs/dev-backend.pid
-        exit 1
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        start_port_service backend 5181 'go run ./cmd/api' ../logs/backend.log \
+          --health-url http://localhost:5181/api/health \
+          --pid-file ../logs/dev-backend.pid \
+          --timeout 60
         BASH
 
   dev:up:generator:
