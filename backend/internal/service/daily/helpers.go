@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
 
@@ -47,17 +49,18 @@ func fetchScheduleAndPlay(
 }
 
 // materializePlayRow returns the PLAY row for (playerID, date),
-// creating it on first GET. On the race-loser branch it re-reads the
-// row so the caller surfaces the winner's assignedAt — the
-// "assignedAt is set once, never overwritten" invariant lives here.
-// existingPlay is the result of an upstream GetPlay (typically from
-// fetchScheduleAndPlay's parallel fan-out); when non-nil the function
-// short-circuits and returns it directly, avoiding a second DDB read.
-// playMs is the wall-clock cost of any PLAY-related DDB calls this
-// function issues itself (zero on the cache-hit path).
+// creating it on first GET via a two-leg TransactWriteItems that
+// atomically puts the PLAY row and bumps the schedule's
+// counters.started — the signal chooseFinalizeTarget reads at T=0 to
+// decide recycle-vs-confirm. On the race-loser branch it re-reads the
+// row so the caller surfaces the winner's assignedAt. existingPlay is
+// the result of an upstream GetPlay; when non-nil the function
+// short-circuits and returns it directly. playMs is the wall-clock
+// cost of any PLAY-related DDB calls this function issues itself.
 func materializePlayRow(
 	ctx context.Context,
 	store Store,
+	tableName string,
 	existingPlay *repository.PlayRecord,
 	playerID, date, puzzleID string,
 	clock func() time.Time,
@@ -68,30 +71,64 @@ func materializePlayRow(
 
 	playStart := time.Now()
 	now := clock().UTC()
-	putErr := store.PutPlayStartedIfAbsent(ctx, playerID, date, puzzleID, now)
-	if putErr == nil {
+	assignedAt := now.Format(time.RFC3339)
+
+	items := []types.TransactWriteItem{
+		{
+			Put: &types.Put{
+				TableName: aws.String(tableName),
+				Item: map[string]types.AttributeValue{
+					"PK":         &types.AttributeValueMemberS{Value: repository.BuildPlayPK(playerID)},
+					"SK":         &types.AttributeValueMemberS{Value: repository.BuildPlaySK(date)},
+					"outcome":    &types.AttributeValueMemberS{Value: repository.PlayOutcomeStarted},
+					"assignedAt": &types.AttributeValueMemberS{Value: assignedAt},
+					"puzzleId":   &types.AttributeValueMemberS{Value: puzzleID},
+				},
+				ConditionExpression: aws.String("attribute_not_exists(PK)"),
+			},
+		},
+		{
+			Update: &types.Update{
+				TableName: aws.String(tableName),
+				Key: map[string]types.AttributeValue{
+					"PK": &types.AttributeValueMemberS{Value: repository.BuildDailySchedulePK(date)},
+					"SK": &types.AttributeValueMemberS{Value: repository.DailySingletonSK},
+				},
+				UpdateExpression: aws.String("ADD #counters.#started :one"),
+				ExpressionAttributeNames: map[string]string{
+					"#counters": "counters",
+					"#started":  repository.ScheduleCounterStarted,
+				},
+				ExpressionAttributeValues: map[string]types.AttributeValue{
+					":one": &types.AttributeValueMemberN{Value: "1"},
+				},
+			},
+		},
+	}
+
+	txErr := store.WriteTransaction(ctx, items)
+	if txErr == nil {
 		return &repository.PlayRecord{
 			PlayerID:   playerID,
 			Date:       date,
 			Outcome:    repository.PlayOutcomeStarted,
-			AssignedAt: now.Format(time.RFC3339),
+			AssignedAt: assignedAt,
 			PuzzleID:   puzzleID,
 		}, time.Since(playStart).Milliseconds(), nil
 	}
-	if !errors.Is(putErr, repository.ErrPlayAlreadyExists) {
-		return nil, time.Since(playStart).Milliseconds(), putErr
+
+	if !repository.IsConditionalCheckFailureOnLeg(txErr, 0) {
+		return nil, time.Since(playStart).Milliseconds(), txErr
 	}
 
-	// Race-loser: another request created the row between our GetPlay
-	// and our PutPlayStartedIfAbsent. Re-read so the caller surfaces
-	// the winner's assignedAt.
+	// Race-loser: leg 0 condition failed because another first-GET
+	// landed first. Re-read so the caller surfaces the winner's
+	// assignedAt.
 	winner, err := store.GetPlay(ctx, playerID, date)
 	if err != nil {
 		return nil, time.Since(playStart).Milliseconds(), err
 	}
 	if winner == nil {
-		// Should not happen — the conditional put failed because the
-		// row exists, so the follow-up read should hit it.
 		return nil, time.Since(playStart).Milliseconds(), errors.New("play row vanished after race-loser conditional fail")
 	}
 	return winner, time.Since(playStart).Milliseconds(), nil
