@@ -54,10 +54,6 @@ var (
 	// races a cron — caller falls back to GetSchedule and reads the
 	// winner's row.
 	ErrScheduleAlreadyFinalized = errors.New("daily schedule already finalized")
-	// ErrPlayAlreadyExists is returned by PutPlayStartedIfAbsent when a
-	// PLAY row exists for (playerId, date). Caller follows up with GetPlay
-	// to read the existing assignedAt — never overwrite.
-	ErrPlayAlreadyExists = errors.New("daily play row already exists")
 	// ErrPlayNotInStartedState is returned by Service.SubmitPlay in
 	// internal/service/daily when the PLAY row is missing or its outcome
 	// is not "started" (e.g. a duplicate submission of an already-solved
@@ -354,8 +350,7 @@ func (r *PuzzleRepository) ListApprovedPool(ctx context.Context, size int, mode 
 }
 
 // GetPlay reads the per-player play row for (playerId, date). Returns
-// (nil, nil) when absent — caller branches to PutPlayStartedIfAbsent on
-// first GET.
+// (nil, nil) when absent.
 func (r *PuzzleRepository) GetPlay(ctx context.Context, playerID, date string) (*PlayRecord, error) {
 	output, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(r.tableName),
@@ -378,36 +373,6 @@ func (r *PuzzleRepository) GetPlay(ctx context.Context, playerID, date string) (
 	record.PlayerID = playerID
 	record.Date = date
 	return &record, nil
-}
-
-// PutPlayStartedIfAbsent creates a fresh PLAY row with outcome=started
-// and the server-stamped assignedAt. Conditional on absence — assignedAt
-// is set once and never overwritten,
-// so a duplicate first-GET race must NOT update the existing row.
-// Caller responds to ErrPlayAlreadyExists by calling GetPlay and using
-// the winner's assignedAt.
-func (r *PuzzleRepository) PutPlayStartedIfAbsent(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error {
-	item := map[string]types.AttributeValue{
-		"PK":         &types.AttributeValueMemberS{Value: BuildPlayPK(playerID)},
-		"SK":         &types.AttributeValueMemberS{Value: BuildPlaySK(date)},
-		"outcome":    &types.AttributeValueMemberS{Value: PlayOutcomeStarted},
-		"assignedAt": &types.AttributeValueMemberS{Value: assignedAt.UTC().Format(time.RFC3339)},
-		"puzzleId":   &types.AttributeValueMemberS{Value: puzzleID},
-	}
-
-	_, err := r.client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName:           aws.String(r.tableName),
-		Item:                item,
-		ConditionExpression: aws.String("attribute_not_exists(PK)"),
-	})
-	if err != nil {
-		var ccfe *types.ConditionalCheckFailedException
-		if errors.As(err, &ccfe) {
-			return ErrPlayAlreadyExists
-		}
-		return fmt.Errorf("putting daily play %s/%s: %w", playerID, date, err)
-	}
-	return nil
 }
 
 // FinalizeMode discriminates the two T=0 finalize paths (design §4):

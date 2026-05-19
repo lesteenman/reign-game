@@ -3,6 +3,7 @@ package daily_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,14 +14,24 @@ import (
 
 // getDailyFakeStore is a configurable Store for GetDaily tests. Each
 // function field controls one Store method; nil fields fall back to
-// a default (no-op / nil return).
+// a default (no-op / nil return). writeTransactionCalls records every
+// call to WriteTransaction; writeTransactionErr is the canned error
+// WriteTransaction returns when set. playByKeyAfterTX is consulted by
+// GetPlay once at least one WriteTransaction call has been made — used
+// to simulate the race-loser re-read path.
 type getDailyFakeStore struct {
-	getScheduleFunc            func(ctx context.Context, date string) (*repository.ScheduleRecord, error)
-	getPuzzleFunc              func(ctx context.Context, size int, mode, puzzleID string) (*repository.PuzzleRecord, error)
-	getPlayFunc                func(ctx context.Context, playerID, date string) (*repository.PlayRecord, error)
-	putPlayStartedIfAbsentFunc func(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error
-	getCandidateFunc           func(ctx context.Context) (*repository.CandidateRecord, error)
-	finalizeDailyFunc          func(ctx context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error
+	getScheduleFunc   func(ctx context.Context, date string) (*repository.ScheduleRecord, error)
+	getPuzzleFunc     func(ctx context.Context, size int, mode, puzzleID string) (*repository.PuzzleRecord, error)
+	getPlayFunc       func(ctx context.Context, playerID, date string) (*repository.PlayRecord, error)
+	getCandidateFunc  func(ctx context.Context) (*repository.CandidateRecord, error)
+	finalizeDailyFunc func(ctx context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error
+
+	writeTransactionCalls [][]types.TransactWriteItem
+	writeTransactionErr   error
+	// playByKeyAfterTX is keyed "{playerID}|{date}" and consulted by
+	// GetPlay once at least one WriteTransaction call has been issued —
+	// simulates the winner's row appearing after a race-loser TX failure.
+	playByKeyAfterTX map[string]*repository.PlayRecord
 }
 
 func (f *getDailyFakeStore) GetSchedule(ctx context.Context, date string) (*repository.ScheduleRecord, error) {
@@ -36,16 +47,17 @@ func (f *getDailyFakeStore) GetPuzzle(ctx context.Context, size int, mode, puzzl
 	return nil, nil
 }
 func (f *getDailyFakeStore) GetPlay(ctx context.Context, playerID, date string) (*repository.PlayRecord, error) {
+	// After at least one WriteTransaction call, check playByKeyAfterTX
+	// first — simulates the race-loser re-read finding the winner's row.
+	if len(f.writeTransactionCalls) > 0 && f.playByKeyAfterTX != nil {
+		if rec, ok := f.playByKeyAfterTX[playerID+"|"+date]; ok {
+			return rec, nil
+		}
+	}
 	if f.getPlayFunc != nil {
 		return f.getPlayFunc(ctx, playerID, date)
 	}
 	return nil, nil
-}
-func (f *getDailyFakeStore) PutPlayStartedIfAbsent(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error {
-	if f.putPlayStartedIfAbsentFunc != nil {
-		return f.putPlayStartedIfAbsentFunc(ctx, playerID, date, puzzleID, assignedAt)
-	}
-	return nil
 }
 func (f *getDailyFakeStore) GetCandidate(ctx context.Context) (*repository.CandidateRecord, error) {
 	if f.getCandidateFunc != nil {
@@ -59,7 +71,14 @@ func (f *getDailyFakeStore) FinalizeDailyTransaction(ctx context.Context, date, 
 	}
 	return nil
 }
-func (f *getDailyFakeStore) WriteTransaction(_ context.Context, _ []types.TransactWriteItem) error {
+
+// WriteTransaction records the items so tests can assert the PLAY put +
+// counters.started bump both fired. Returns the canned err when set.
+func (f *getDailyFakeStore) WriteTransaction(_ context.Context, items []types.TransactWriteItem) error {
+	f.writeTransactionCalls = append(f.writeTransactionCalls, items)
+	if f.writeTransactionErr != nil {
+		return f.writeTransactionErr
+	}
 	return nil
 }
 func (f *getDailyFakeStore) ListApprovedPool(_ context.Context, _ int, _ string, _ bool, _ time.Time) ([]repository.PuzzleRecord, error) {
@@ -203,7 +222,7 @@ func TestGetDaily_HappyPath_SolvedPlay(t *testing.T) {
 }
 
 func TestGetDaily_HappyPath_NoExistingPlay_CreatesFresh(t *testing.T) {
-	// Arrange — GetPlay returns nil; PutPlayStartedIfAbsent succeeds.
+	// Arrange — GetPlay returns nil; WriteTransaction succeeds (new TX path).
 	store := &getDailyFakeStore{
 		getScheduleFunc: func(_ context.Context, _ string) (*repository.ScheduleRecord, error) {
 			return testSchedule(), nil
@@ -213,9 +232,6 @@ func TestGetDaily_HappyPath_NoExistingPlay_CreatesFresh(t *testing.T) {
 		},
 		getPlayFunc: func(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
 			return nil, nil
-		},
-		putPlayStartedIfAbsentFunc: func(_ context.Context, _, _, _ string, _ time.Time) error {
-			return nil
 		},
 	}
 	svc := daily.New(store, "test-table", fixedClock(testNow), nil)
@@ -237,9 +253,9 @@ func TestGetDaily_HappyPath_NoExistingPlay_CreatesFresh(t *testing.T) {
 }
 
 func TestGetDaily_RaceLoserPlayCreate_ReturnsWinnerPlay(t *testing.T) {
-	// Arrange — GetPlay returns nil initially; PutPlayStartedIfAbsent races
-	// → ErrPlayAlreadyExists; second GetPlay returns the winner's row.
-	getPlayCalls := 0
+	// Arrange — GetPlay returns nil initially; WriteTransaction returns a
+	// leg-0 ConditionalCheckFailed (another first-GET race won between our
+	// GetPlay and our WriteTransaction); re-read returns the winner's row.
 	winnerPlay := testStartedPlay("player-1")
 	winnerPlay.AssignedAt = "2026-05-16T09:59:00Z" // winner's timestamp
 
@@ -251,16 +267,12 @@ func TestGetDaily_RaceLoserPlayCreate_ReturnsWinnerPlay(t *testing.T) {
 			return testPuzzle(), nil
 		},
 		getPlayFunc: func(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
-			getPlayCalls++
-			if getPlayCalls == 1 {
-				// First call (from fetchScheduleAndPlay) returns nil.
-				return nil, nil
-			}
-			// Second call (race-loser re-read) returns winner.
-			return winnerPlay, nil
+			// First call (from fetchScheduleAndPlay) returns nil — no play yet.
+			return nil, nil
 		},
-		putPlayStartedIfAbsentFunc: func(_ context.Context, _, _, _ string, _ time.Time) error {
-			return repository.ErrPlayAlreadyExists
+		writeTransactionErr: makeCancelErr("ConditionalCheckFailed", "None"),
+		playByKeyAfterTX: map[string]*repository.PlayRecord{
+			"player-1|" + testDate: winnerPlay,
 		},
 	}
 	svc := daily.New(store, "test-table", fixedClock(testNow), nil)
@@ -482,9 +494,9 @@ func TestGetDaily_GetScheduleFails_ReturnsWrappedError(t *testing.T) {
 	}
 }
 
-func TestGetDaily_PutPlayStartedIfAbsentFails_ReturnsWrappedError(t *testing.T) {
-	// Arrange — GetPlay returns nil; PutPlayStartedIfAbsent fails with a
-	// non-ErrPlayAlreadyExists error (e.g. a DDB I/O error).
+func TestGetDaily_WriteTransactionFails_ReturnsWrappedError(t *testing.T) {
+	// Arrange — GetPlay returns nil; WriteTransaction fails with a
+	// non-conditional error (e.g. a DDB I/O error).
 	ddbErr := errors.New("write failed")
 	store := &getDailyFakeStore{
 		getScheduleFunc: func(_ context.Context, _ string) (*repository.ScheduleRecord, error) {
@@ -496,9 +508,7 @@ func TestGetDaily_PutPlayStartedIfAbsentFails_ReturnsWrappedError(t *testing.T) 
 		getPlayFunc: func(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
 			return nil, nil
 		},
-		putPlayStartedIfAbsentFunc: func(_ context.Context, _, _, _ string, _ time.Time) error {
-			return ddbErr
-		},
+		writeTransactionErr: ddbErr,
 	}
 	svc := daily.New(store, "test-table", fixedClock(testNow), nil)
 	in := daily.GetInput{PlayerID: "player-1", IsAnonymous: false, Date: testDate}
@@ -512,5 +522,131 @@ func TestGetDaily_PutPlayStartedIfAbsentFails_ReturnsWrappedError(t *testing.T) 
 	}
 	if !errors.Is(err, ddbErr) {
 		t.Errorf("error should wrap underlying cause; got %v", err)
+	}
+}
+
+func TestGetDaily_FirstGet_AtomicallyPutsPlayAndBumpsStarted(t *testing.T) {
+	// Arrange — schedule exists, no PLAY row yet. First GET should issue
+	// ONE TransactWriteItems with two legs:
+	//   leg 0: Put PLAY with attribute_not_exists(PK)
+	//   leg 1: Update DAILY#{date} ADD counters.started 1
+	store := &getDailyFakeStore{
+		getScheduleFunc: func(_ context.Context, _ string) (*repository.ScheduleRecord, error) {
+			return testSchedule(), nil
+		},
+		getPuzzleFunc: func(_ context.Context, _ int, _, _ string) (*repository.PuzzleRecord, error) {
+			return testPuzzle(), nil
+		},
+		getPlayFunc: func(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
+			return nil, nil
+		},
+	}
+	svc := daily.New(store, "test-table", fixedClock(testNow), nil)
+	in := daily.GetInput{PlayerID: "alice", IsAnonymous: true, Date: testDate}
+
+	// Act
+	_, err := svc.GetDaily(context.Background(), in)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected nil err, got %v", err)
+	}
+	if len(store.writeTransactionCalls) != 1 {
+		t.Fatalf("expected 1 WriteTransaction call, got %d", len(store.writeTransactionCalls))
+	}
+	items := store.writeTransactionCalls[0]
+	if len(items) != 2 {
+		t.Fatalf("expected 2 TX legs (PLAY put + counter bump), got %d", len(items))
+	}
+	if items[0].Put == nil {
+		t.Errorf("leg 0 should be Put (PLAY row), got %+v", items[0])
+	} else {
+		pk := items[0].Put.Item["PK"].(*types.AttributeValueMemberS).Value
+		if pk != "PLAY#alice" {
+			t.Errorf("leg 0 PK = %q, want PLAY#alice", pk)
+		}
+		if items[0].Put.ConditionExpression == nil || *items[0].Put.ConditionExpression != "attribute_not_exists(PK)" {
+			t.Errorf("leg 0 should have attribute_not_exists(PK) condition")
+		}
+	}
+	if items[1].Update == nil {
+		t.Errorf("leg 1 should be Update (counter bump), got %+v", items[1])
+	} else {
+		pk := items[1].Update.Key["PK"].(*types.AttributeValueMemberS).Value
+		if pk != "DAILY#"+testDate {
+			t.Errorf("leg 1 PK = %q, want DAILY#%s", pk, testDate)
+		}
+		if items[1].Update.UpdateExpression == nil || !strings.Contains(*items[1].Update.UpdateExpression, "started") {
+			t.Errorf("leg 1 UpdateExpression should reference started counter, got %v", items[1].Update.UpdateExpression)
+		}
+	}
+}
+
+func TestGetDaily_ExistingPlay_DoesNotIssueTransaction(t *testing.T) {
+	// Arrange — PLAY row already exists for (player-1, testDate). Second
+	// GET should short-circuit: no WriteTransaction call, no counter
+	// double-increment.
+	store := &getDailyFakeStore{
+		getScheduleFunc: func(_ context.Context, _ string) (*repository.ScheduleRecord, error) {
+			return testSchedule(), nil
+		},
+		getPuzzleFunc: func(_ context.Context, _ int, _, _ string) (*repository.PuzzleRecord, error) {
+			return testPuzzle(), nil
+		},
+		getPlayFunc: func(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
+			return testStartedPlay("player-1"), nil
+		},
+	}
+	svc := daily.New(store, "test-table", fixedClock(testNow), nil)
+	in := daily.GetInput{PlayerID: "player-1", IsAnonymous: false, Date: testDate}
+
+	// Act
+	_, err := svc.GetDaily(context.Background(), in)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected nil err, got %v", err)
+	}
+	if len(store.writeTransactionCalls) != 0 {
+		t.Errorf("expected 0 WriteTransaction calls for second GET, got %d", len(store.writeTransactionCalls))
+	}
+}
+
+func TestGetDaily_RaceLoserOnFirstGet_ReReadsWinnerPlay(t *testing.T) {
+	// Arrange — schedule exists, no PLAY row initially; WriteTransaction
+	// returns a leg-0 ConditionalCheckFailed (another first-GET race won
+	// between our GetPlay and our WriteTransaction). After the failure we
+	// re-read GetPlay and return the winner's row.
+	winner := testStartedPlay("player-1")
+	winner.AssignedAt = "2026-05-16T11:00:00Z" // winner landed earlier
+
+	store := &getDailyFakeStore{
+		getScheduleFunc: func(_ context.Context, _ string) (*repository.ScheduleRecord, error) {
+			return testSchedule(), nil
+		},
+		getPuzzleFunc: func(_ context.Context, _ int, _, _ string) (*repository.PuzzleRecord, error) {
+			return testPuzzle(), nil
+		},
+		getPlayFunc: func(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
+			// Initial read — no play yet.
+			return nil, nil
+		},
+		writeTransactionErr: makeCancelErr("ConditionalCheckFailed", "None"),
+		playByKeyAfterTX: map[string]*repository.PlayRecord{
+			"player-1|" + testDate: winner,
+		},
+	}
+	svc := daily.New(store, "test-table", fixedClock(testNow), nil)
+	in := daily.GetInput{PlayerID: "player-1", IsAnonymous: true, Date: testDate}
+
+	// Act
+	got, err := svc.GetDaily(context.Background(), in)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected nil err, got %v", err)
+	}
+	if got.AssignedAt != winner.AssignedAt {
+		t.Errorf("expected winner's assignedAt %q, got %q", winner.AssignedAt, got.AssignedAt)
 	}
 }

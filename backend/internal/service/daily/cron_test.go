@@ -66,9 +66,6 @@ func (f *fakeCronRepo) GetPuzzle(_ context.Context, _ int, _, _ string) (*reposi
 func (f *fakeCronRepo) GetPlay(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
 	return nil, nil
 }
-func (f *fakeCronRepo) PutPlayStartedIfAbsent(_ context.Context, _, _, _ string, _ time.Time) error {
-	return nil
-}
 func (f *fakeCronRepo) FinalizeDailyTransaction(_ context.Context, _, _, _ string, _ repository.FinalizeMode) error {
 	return nil
 }

@@ -123,9 +123,6 @@ func (f *fakeRepo) GetPuzzle(_ context.Context, _ int, _, _ string) (*repository
 func (f *fakeRepo) GetPlay(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
 	return nil, nil
 }
-func (f *fakeRepo) PutPlayStartedIfAbsent(_ context.Context, _, _, _ string, _ time.Time) error {
-	return nil
-}
 func (f *fakeRepo) FinalizeDailyTransaction(_ context.Context, _, _, _ string, _ repository.FinalizeMode) error {
 	return nil
 }
@@ -204,7 +201,9 @@ func TestSyncFinalizeForToday_ConfirmCandidate_YesterdayHasSolves(t *testing.T) 
 }
 
 func TestSyncFinalizeForToday_RecycleYesterday_NoSolves(t *testing.T) {
-	// Arrange
+	// Arrange — nobody started AND nobody solved yesterday;
+	// candidate present. With the gated recycle, this is the only
+	// way recycle fires when a candidate exists.
 	today := "2026-05-02"
 	yesterday := "2026-05-01"
 	repo := &fakeRepo{
@@ -213,7 +212,7 @@ func TestSyncFinalizeForToday_RecycleYesterday_NoSolves(t *testing.T) {
 				Date:            yesterday,
 				PuzzleID:        "puzzle-yesterday",
 				SourcePartition: "9#standard",
-				Counters:        repository.ScheduleCounters{Started: 5, Solved: 0},
+				Counters:        repository.ScheduleCounters{Started: 0, Solved: 0},
 			},
 		},
 		candidate: &repository.CandidateRecord{
@@ -246,6 +245,64 @@ func TestSyncFinalizeForToday_RecycleYesterday_NoSolves(t *testing.T) {
 	}
 	if repo.finalizeCall.sourcePartition != "9#standard" {
 		t.Errorf("expected sourcePartition=9#standard (yesterday's), got %q", repo.finalizeCall.sourcePartition)
+	}
+}
+
+func TestChooseFinalizeTarget_StartedButNotSolved_Confirms(t *testing.T) {
+	// Arrange — yesterday has started>0, solved==0; candidate present.
+	// New gate: do NOT recycle (someone engaged with yesterday's puzzle).
+	candidate := &repository.CandidateRecord{
+		PuzzleID:        "puzzle-candidate",
+		SourcePartition: "9#standard",
+	}
+	yesterday := &repository.ScheduleRecord{
+		Date:            "2026-05-17",
+		PuzzleID:        "puzzle-yesterday",
+		SourcePartition: "9#standard",
+		Counters:        repository.ScheduleCounters{Started: 1, Solved: 0},
+	}
+
+	// Act
+	puzzleID, sourcePartition, mode, err := chooseFinalizeTarget(candidate, yesterday)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if mode != repository.FinalizeModeConfirm {
+		t.Errorf("expected FinalizeModeConfirm (started>0 blocks recycle), got %q", mode)
+	}
+	if puzzleID != "puzzle-candidate" {
+		t.Errorf("expected candidate puzzleID, got %q", puzzleID)
+	}
+	if sourcePartition != "9#standard" {
+		t.Errorf("expected candidate sourcePartition, got %q", sourcePartition)
+	}
+}
+
+func TestChooseFinalizeTarget_NoStartsNoSolves_Recycles(t *testing.T) {
+	// Arrange — yesterday untouched (nobody started, nobody solved);
+	// candidate present. Recycle is the right call.
+	candidate := &repository.CandidateRecord{
+		PuzzleID:        "puzzle-candidate",
+		SourcePartition: "9#standard",
+	}
+	yesterday := &repository.ScheduleRecord{
+		Date:            "2026-05-17",
+		PuzzleID:        "puzzle-yesterday",
+		SourcePartition: "9#standard",
+		Counters:        repository.ScheduleCounters{Started: 0, Solved: 0},
+	}
+
+	// Act
+	_, _, mode, err := chooseFinalizeTarget(candidate, yesterday)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if mode != repository.FinalizeModeRecycle {
+		t.Errorf("expected FinalizeModeRecycle, got %q", mode)
 	}
 }
 

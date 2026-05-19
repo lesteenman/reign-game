@@ -12,11 +12,15 @@ import { VerdictSurface } from './VerdictSurface';
 import type { PuzzleData, CellState } from '../../../engine/types';
 import type { FlowType, GameState, GameHistory, CompletionRecord } from '../../../storage/types';
 
-/** Format seconds as MM:SS. */
-function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
+/** Format seconds as MM:SS (under 1h) or H:MM:SS (1h+). Hour digit is
+ * un-padded; presence of the leading `H:` itself signals hour-scale. */
+export function formatTime(seconds: number): string {
   const s = seconds % 60;
-  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  const m = Math.floor(seconds / 60) % 60;
+  const h = Math.floor(seconds / 3600);
+  const ss = String(s).padStart(2, '0');
+  const mm = String(m).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 /** Format generation duration for display. */

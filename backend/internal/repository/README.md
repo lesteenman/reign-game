@@ -28,7 +28,7 @@ The whole project uses a single DynamoDB table (`puzzle-pool` in prod; `puzzle-p
 - `DynamoDBAPI` — narrow interface (the SDK calls we actually need).
 - `PuzzleRecord`, `ConfigRecord`, `VerdictRecord`, `VerdictSummary` — the puzzle/config/verdict row shapes (in `puzzle.go`).
 - `ScheduleRecord`, `ScheduleCounters`, `CandidateRecord`, `PlayRecord`, `SubmitInput`, `FinalizeMode` — daily-puzzle row shapes (in `daily.go`).
-- Sentinel errors — `ErrPuzzleNotFound`, `ErrCandidateAlreadyExists`, `ErrScheduleAlreadyFinalized`, `ErrPlayAlreadyExists`, `ErrPlayNotInStartedState`. Plus `ConfigAlreadyExistsError` (typed; carries Size+Mode).
+- Sentinel errors — `ErrPuzzleNotFound`, `ErrCandidateAlreadyExists`, `ErrScheduleAlreadyFinalized`, `ErrPlayNotInStartedState`. Plus `ConfigAlreadyExistsError` (typed; carries Size+Mode).
 - Constants — `DailyRecycleWindowDays = 14`, `ScheduleCounterStarted/Solved`, `PlayOutcomeStarted/Solved`, `FinalizeModeConfirm/Recycle`.
 
 ## Methods grouped by family
@@ -37,7 +37,7 @@ The whole project uses a single DynamoDB table (`puzzle-pool` in prod; `puzzle-p
 - **Configs** — `GetAllConfigs`, `GetConfig`, `PutConfig`, `CreateConfig`, `TryClaimAutoReplenish` (uses the CONFIG row's `last_auto_replenish_ts` attribute as a debounce mutex).
 - **Verdicts** — `PutVerdict`, `ListVerdictsForPuzzle`, `RecomputeVerdictSummary`.
 - **Daily schedule / candidate** — `GetSchedule`, `GetCandidate`, `PutCandidateIfAbsent`, `DeleteCandidate`, `FinalizeSchedule`, `IncrementScheduleCounter`, `FinalizeDailyTransaction`, `ListApprovedPool`, `MarkPuzzleAsDailyOn`.
-- **Daily play / leaderboard** — `GetPlay`, `PutPlayStartedIfAbsent`, `SubmitPlayTransactionally` (3-leg `TransactWriteItems`), `LeaderboardRank`.
+- **Daily play / leaderboard** — `GetPlay`, `SubmitPlayTransactionally` (3-leg `TransactWriteItems`), `LeaderboardRank`. PLAY-row creation is performed by a 2-leg `TransactWriteItems` composed in `service/daily/` (PUT + `counters.started` bump).
 
 ## Rules specific to this directory
 

@@ -56,7 +56,6 @@ type Store interface {
 	GetSchedule(ctx context.Context, date string) (*repository.ScheduleRecord, error)
 	GetPuzzle(ctx context.Context, size int, mode, puzzleID string) (*repository.PuzzleRecord, error)
 	GetPlay(ctx context.Context, playerID, date string) (*repository.PlayRecord, error)
-	PutPlayStartedIfAbsent(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error
 	GetCandidate(ctx context.Context) (*repository.CandidateRecord, error)
 	WriteTransaction(ctx context.Context, items []types.TransactWriteItem) error
 	ListApprovedPool(ctx context.Context, size int, mode string, excludeRecentlyDailied bool, now time.Time) ([]repository.PuzzleRecord, error)
@@ -387,7 +386,7 @@ func (s *Service) GetDaily(ctx context.Context, in GetInput) (*DailyView, error)
 		return nil, fmt.Errorf("daily service: puzzle %s referenced by schedule for %s does not exist", schedule.PuzzleID, in.Date)
 	}
 
-	play, playMs, err := materializePlayRow(ctx, s.store, existingPlay, in.PlayerID, in.Date, schedule.PuzzleID, s.clock)
+	play, playMs, err := materializePlayRow(ctx, s.store, s.tableName, existingPlay, in.PlayerID, in.Date, schedule.PuzzleID, s.clock)
 	if err != nil {
 		log.Printf("daily service: 500 play_materialize_failed date=%s player=%s err=%v", in.Date, truncatePlayer(in.PlayerID), err)
 		return nil, fmt.Errorf("daily service: materializing play row for %s/%s: %w", in.PlayerID, in.Date, err)

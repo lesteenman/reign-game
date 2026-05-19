@@ -41,9 +41,6 @@ func (f *submitDailyFakeStore) GetPlay(ctx context.Context, playerID, date strin
 	}
 	return nil, nil
 }
-func (f *submitDailyFakeStore) PutPlayStartedIfAbsent(_ context.Context, _, _, _ string, _ time.Time) error {
-	return nil
-}
 func (f *submitDailyFakeStore) GetCandidate(_ context.Context) (*repository.CandidateRecord, error) {
 	return nil, nil
 }
