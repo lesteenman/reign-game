@@ -123,9 +123,6 @@ func (f *fakeRepo) GetPuzzle(_ context.Context, _ int, _, _ string) (*repository
 func (f *fakeRepo) GetPlay(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
 	return nil, nil
 }
-func (f *fakeRepo) PutPlayStartedIfAbsent(_ context.Context, _, _, _ string, _ time.Time) error {
-	return nil
-}
 func (f *fakeRepo) FinalizeDailyTransaction(_ context.Context, _, _, _ string, _ repository.FinalizeMode) error {
 	return nil
 }

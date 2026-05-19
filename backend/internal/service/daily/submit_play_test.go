@@ -28,9 +28,6 @@ func (f *submitFakeStore) GetPuzzle(_ context.Context, _ int, _, _ string) (*rep
 func (f *submitFakeStore) GetPlay(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
 	return nil, nil
 }
-func (f *submitFakeStore) PutPlayStartedIfAbsent(_ context.Context, _, _, _ string, _ time.Time) error {
-	return nil
-}
 func (f *submitFakeStore) GetCandidate(_ context.Context) (*repository.CandidateRecord, error) {
 	return nil, nil
 }

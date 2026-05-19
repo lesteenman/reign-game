@@ -56,7 +56,6 @@ type Store interface {
 	GetSchedule(ctx context.Context, date string) (*repository.ScheduleRecord, error)
 	GetPuzzle(ctx context.Context, size int, mode, puzzleID string) (*repository.PuzzleRecord, error)
 	GetPlay(ctx context.Context, playerID, date string) (*repository.PlayRecord, error)
-	PutPlayStartedIfAbsent(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error
 	GetCandidate(ctx context.Context) (*repository.CandidateRecord, error)
 	WriteTransaction(ctx context.Context, items []types.TransactWriteItem) error
 	ListApprovedPool(ctx context.Context, size int, mode string, excludeRecentlyDailied bool, now time.Time) ([]repository.PuzzleRecord, error)

@@ -82,10 +82,6 @@ func (s *stubStore) GetPlay(_ context.Context, _, _ string) (*repository.PlayRec
 	return nil, nil
 }
 
-func (s *stubStore) PutPlayStartedIfAbsent(_ context.Context, _, _, _ string, _ time.Time) error {
-	return nil
-}
-
 func (s *stubStore) GetCandidate(_ context.Context) (*repository.CandidateRecord, error) {
 	return nil, nil
 }

@@ -20,12 +20,11 @@ import (
 // GetPlay once at least one WriteTransaction call has been made — used
 // to simulate the race-loser re-read path.
 type getDailyFakeStore struct {
-	getScheduleFunc            func(ctx context.Context, date string) (*repository.ScheduleRecord, error)
-	getPuzzleFunc              func(ctx context.Context, size int, mode, puzzleID string) (*repository.PuzzleRecord, error)
-	getPlayFunc                func(ctx context.Context, playerID, date string) (*repository.PlayRecord, error)
-	putPlayStartedIfAbsentFunc func(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error
-	getCandidateFunc           func(ctx context.Context) (*repository.CandidateRecord, error)
-	finalizeDailyFunc          func(ctx context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error
+	getScheduleFunc   func(ctx context.Context, date string) (*repository.ScheduleRecord, error)
+	getPuzzleFunc     func(ctx context.Context, size int, mode, puzzleID string) (*repository.PuzzleRecord, error)
+	getPlayFunc       func(ctx context.Context, playerID, date string) (*repository.PlayRecord, error)
+	getCandidateFunc  func(ctx context.Context) (*repository.CandidateRecord, error)
+	finalizeDailyFunc func(ctx context.Context, date, puzzleID, sourcePartition string, mode repository.FinalizeMode) error
 
 	writeTransactionCalls [][]types.TransactWriteItem
 	writeTransactionErr   error
@@ -59,12 +58,6 @@ func (f *getDailyFakeStore) GetPlay(ctx context.Context, playerID, date string) 
 		return f.getPlayFunc(ctx, playerID, date)
 	}
 	return nil, nil
-}
-func (f *getDailyFakeStore) PutPlayStartedIfAbsent(ctx context.Context, playerID, date, puzzleID string, assignedAt time.Time) error {
-	if f.putPlayStartedIfAbsentFunc != nil {
-		return f.putPlayStartedIfAbsentFunc(ctx, playerID, date, puzzleID, assignedAt)
-	}
-	return nil
 }
 func (f *getDailyFakeStore) GetCandidate(ctx context.Context) (*repository.CandidateRecord, error) {
 	if f.getCandidateFunc != nil {
