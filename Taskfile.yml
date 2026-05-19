@@ -602,30 +602,11 @@ tasks:
       - mkdir -p ../logs
       - |
         bash <<'BASH'
-        set -e
-        e2e_backend_pid=$(lsof -ti:5182 -sTCP:LISTEN 2>/dev/null || true)
-        if [ -n "$e2e_backend_pid" ]; then
-          echo "e2e backend already running on :5182 (PID $e2e_backend_pid)"
-          exit 0
-        fi
-        : > ../logs/e2e-backend.log
-        nohup go run ./cmd/api >> ../logs/e2e-backend.log 2>&1 </dev/null &
-        # Record the `go run` wrapper PID so the preflight excludes the
-        # e2e backend's process tree when dev:up runs alongside (GH #161).
-        echo $! > ../logs/e2e-backend.pid
-        echo "e2e backend starting, logs: logs/e2e-backend.log"
-        for i in $(seq 1 60); do
-          if curl -sf http://localhost:5182/api/health >/dev/null 2>&1; then
-            echo "e2e backend ready on :5182 (PID $(lsof -ti:5182 -sTCP:LISTEN))"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "e2e backend did not become ready in 60s — check logs/e2e-backend.log" >&2
-        wrapper=$(cat ../logs/e2e-backend.pid 2>/dev/null || true)
-        [ -n "$wrapper" ] && kill "$wrapper" 2>/dev/null || true
-        rm -f ../logs/e2e-backend.pid
-        exit 1
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        start_port_service "e2e backend" 5182 'go run ./cmd/api' ../logs/e2e-backend.log \
+          --health-url http://localhost:5182/api/health \
+          --pid-file ../logs/e2e-backend.pid \
+          --timeout 60
         BASH
 
   e2e:down:backend:
@@ -652,38 +633,13 @@ tasks:
       AWS_SECRET_ACCESS_KEY: test
     cmds:
       - mkdir -p ../logs
-      # Mirrors dev:up:generator. Task's built-in shell (mvdan/sh) returns
-      # goroutine handles for $! and has unreliable kill -0 against external
-      # PIDs, so the lifecycle block runs in real bash via heredoc.
       - |
         bash <<'BASH'
-        set -e
-        LOGDIR=../logs
-        mkdir -p "$LOGDIR"
-        if [ -f "$LOGDIR/e2e-generator.pid" ] && kill -0 "$(cat "$LOGDIR/e2e-generator.pid")" 2>/dev/null; then
-          echo "e2e generator already running (PID $(cat "$LOGDIR/e2e-generator.pid"))"
-          exit 0
-        fi
-        rm -f "$LOGDIR/e2e-generator.pid"
-        : > "$LOGDIR/e2e-generator.log"
-        nohup go run ./cmd/api >> "$LOGDIR/e2e-generator.log" 2>&1 </dev/null &
-        GENPID=$!
-        echo "$GENPID" > "$LOGDIR/e2e-generator.pid"
-        echo "e2e generator starting (PID $GENPID), logs: logs/e2e-generator.log"
-        for i in $(seq 1 30); do
-          if ! kill -0 "$GENPID" 2>/dev/null; then
-            echo "e2e generator exited during startup — check logs/e2e-generator.log"
-            rm -f "$LOGDIR/e2e-generator.pid"
-            exit 1
-          fi
-          if grep -q "starting local SQS poller" "$LOGDIR/e2e-generator.log" 2>/dev/null; then
-            echo "e2e generator ready (PID $GENPID)"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "e2e generator did not report ready in 30s — check logs/e2e-generator.log"
-        exit 1
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        start_pid_service "e2e generator" 'go run ./cmd/api' ../logs/e2e-generator.log \
+          ../logs/e2e-generator.pid \
+          --ready-grep 'starting local SQS poller' \
+          --timeout 30
         BASH
 
   e2e:down:generator:
@@ -729,23 +685,9 @@ tasks:
       - mkdir -p ../logs
       - |
         bash <<'BASH'
-        set -e
-        if lsof -ti:5183 -sTCP:LISTEN >/dev/null 2>&1; then
-          echo "e2e frontend already running on :5183 (PID $(lsof -ti:5183 -sTCP:LISTEN))"
-          exit 0
-        fi
-        : > ../logs/e2e-frontend.log
-        nohup npm run dev -- --port 5183 --host 0.0.0.0 >> ../logs/e2e-frontend.log 2>&1 </dev/null &
-        echo "e2e frontend starting, logs: logs/e2e-frontend.log"
-        for i in $(seq 1 60); do
-          if lsof -ti:5183 -sTCP:LISTEN >/dev/null 2>&1; then
-            echo "e2e frontend ready on :5183"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "e2e frontend did not start in 60s — check logs/e2e-frontend.log" >&2
-        exit 1
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        start_port_service "e2e frontend" 5183 'npm run dev -- --port 5183 --host 0.0.0.0' ../logs/e2e-frontend.log \
+          --timeout 60
         BASH
 
   e2e:down:frontend:
