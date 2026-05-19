@@ -388,22 +388,11 @@ tasks:
     cmds:
       - mkdir -p ../logs
       - |
-        if lsof -ti:5180 -sTCP:LISTEN >/dev/null 2>&1; then
-          echo "frontend already running on :5180 (PID $(lsof -ti:5180 -sTCP:LISTEN))"
-          exit 0
-        fi
-        : > ../logs/frontend.log
-        nohup npm run dev -- --host 0.0.0.0 >> ../logs/frontend.log 2>&1 </dev/null &
-        echo "frontend starting, logs: logs/frontend.log"
-        for i in $(seq 1 60); do
-          if lsof -ti:5180 -sTCP:LISTEN >/dev/null 2>&1; then
-            echo "frontend ready on :5180"
-            exit 0
-          fi
-          sleep 1
-        done
-        echo "frontend did not start in 60s — check logs/frontend.log"
-        exit 1
+        bash <<'BASH'
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        start_port_service frontend 5180 'npm run dev -- --host 0.0.0.0' ../logs/frontend.log \
+          --timeout 60
+        BASH
 
   dev:up:
     desc: Start LocalStack + backend + generator + frontend (standard dev stack)
