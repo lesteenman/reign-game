@@ -56,7 +56,10 @@ cd reign-game
 # ONCE per fresh clone and every worktree picks it up automatically.
 scripts/install-hooks.sh
 
-# Install deps
+# Install deps. Frontend's node_modules is gitignored and per-worktree,
+# so `npm install` (or `npm ci`) needs to run again inside each new
+# `git worktree add`/`EnterWorktree` worktree — otherwise pre-push tsc
+# fails with "command not found".
 cd backend  && go mod download && cd ..
 cd frontend && npm install       && cd ..
 
