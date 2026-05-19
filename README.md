@@ -50,7 +50,7 @@ reign-game/
 git clone git@github.com:lesteenman/reign-game.git
 cd reign-game
 
-# Install the project's git hooks (required — pre-commit + pre-push gates).
+# Install the project's git hooks (required — pre-commit + pre-push + post-checkout).
 # This installs delegate shims in .git/hooks/ that forward to .githooks/.
 # .git/hooks/ is shared across worktrees of the same clone, so this runs
 # ONCE per fresh clone and every worktree picks it up automatically.

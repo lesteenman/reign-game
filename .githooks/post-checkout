@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Symlink .env.local files from the main worktree into a freshly created
+# linked worktree. Triggers ONLY on the first checkout
+# (prev_HEAD = 0000…). Covers `git worktree add` and `git clone`; the
+# latter is self-skipped because the new clone IS the main worktree
+# (source == dest).
+set -u
+
+PREV_HEAD=$1
+NEW_HEAD=$2
+BRANCH_FLAG=$3
+
+# First-checkout signal. Skip ordinary `git checkout BRANCH` so the hook
+# never auto-restores a file the user deliberately deleted.
+[ "$PREV_HEAD" = "0000000000000000000000000000000000000000" ] || exit 0
+[ "$BRANCH_FLAG" = "1" ] || exit 0
+
+GIT_DIR="$(cd "$(git rev-parse --git-dir)" && pwd -P)"
+COMMON_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
+NEW_WORKTREE="$(git rev-parse --show-toplevel)"
+
+# Self-skip in main worktree (linked worktrees have GIT_DIR != COMMON_DIR).
+[ "$GIT_DIR" != "$COMMON_DIR" ] || exit 0
+
+MAIN_WORKTREE="$(cd "$COMMON_DIR/.." && pwd -P)"
+
+FILES=(
+  "backend/.env.local"
+  "frontend/.env.local"
+)
+
+linked=()
+for rel in "${FILES[@]}"; do
+  src="$MAIN_WORKTREE/$rel"
+  dst="$NEW_WORKTREE/$rel"
+  [ -e "$src" ] || continue                          # main doesn't have it — nothing to share
+  { [ -e "$dst" ] || [ -L "$dst" ]; } && continue    # don't clobber an existing file/link
+  ln -s "$src" "$dst" 2>/dev/null && linked+=("$rel")
+done
+
+[ "${#linked[@]}" -gt 0 ] && echo "post-checkout: symlinked from main worktree: ${linked[*]}"
+exit 0

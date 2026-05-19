@@ -33,11 +33,20 @@ for hook_path in "$SRC_DIR"/*; do
   cat > "$dest" <<EOF
 #!/usr/bin/env bash
 # Auto-installed by scripts/install-hooks.sh — DO NOT EDIT.
-# Delegates to .githooks/$hook in the worktree's checkout. Because
+# Delegates to .githooks/$hook. Tries the current worktree first; falls back
+# to the main worktree. The fallback matters for post-checkout, which fires in
+# the NEW worktree during \`git worktree add\` before its checkout is complete,
+# so the new worktree's .githooks/ may not yet contain the hook.
 # .git/hooks/ is shared across worktrees of the same clone (see
-# https://www.gitworktree.org/guides/hooks), this delegation lets every
-# worktree run the project hooks without per-worktree setup.
-exec "\$(git rev-parse --show-toplevel)/.githooks/$hook" "\$@"
+# https://www.gitworktree.org/guides/hooks), so these delegate shims run from
+# EVERY worktree of the same clone automatically.
+HOOK="\$(git rev-parse --show-toplevel)/.githooks/$hook"
+if [ ! -x "\$HOOK" ]; then
+  MAIN_WORKTREE="\$(cd "\$(git rev-parse --git-common-dir)" && cd .. && pwd -P)"
+  HOOK="\$MAIN_WORKTREE/.githooks/$hook"
+fi
+[ -x "\$HOOK" ] || exit 0
+exec "\$HOOK" "\$@"
 EOF
   chmod +x "$dest"
   installed+=("$hook")

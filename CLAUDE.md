@@ -266,7 +266,7 @@ Frontend already binds `--host 0.0.0.0` (for mobile testing over LAN); the Vite 
 After cloning the repo:
 
 ```bash
-# 1. Git hooks (pre-commit + pre-push gates). Installs delegate shims in
+# 1. Git hooks (pre-commit + pre-push + post-checkout). Installs delegate shims in
 #    .git/hooks/ that forward to .githooks/. .git/hooks/ is per-clone and
 #    shared across worktrees, so this needs to run ONCE per fresh clone —
 #    every worktree picks up the hooks automatically.
