@@ -14,8 +14,6 @@
 # function return codes.
 set -u
 
-DEV_LIB_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-
 # Private: emit error to stderr.
 _dev_lib_die() {
   echo "$1" >&2
@@ -25,7 +23,7 @@ _dev_lib_die() {
 #   [--health-url URL] [--pid-file FILE] [--timeout SECONDS]
 #
 # Idempotent on PORT having a listener. Launches COMMAND in background,
-# appends output to LOG_FILE, waits up to TIMEOUT seconds (default 60)
+# overwrites LOG_FILE on each launch, waits up to TIMEOUT seconds (default 60)
 # for either:
 #   - HEALTH_URL to return 2xx (when provided), OR
 #   - lsof to see a listener on PORT (otherwise).
