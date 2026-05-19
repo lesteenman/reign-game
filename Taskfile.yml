@@ -508,33 +508,8 @@ tasks:
     cmds:
       - |
         bash <<'BASH'
-        set -e
-        if [ ! -f logs/generator.pid ]; then
-          echo "generator not running"
-          exit 0
-        fi
-        pid=$(cat logs/generator.pid)
-        if ! kill -0 "$pid" 2>/dev/null; then
-          echo "generator not running (stale PID file removed)"
-          rm -f logs/generator.pid
-          exit 0
-        fi
-        pkill -P "$pid" 2>/dev/null || true
-        kill "$pid" 2>/dev/null || true
-        for i in 1 2 3 4 5; do
-          if ! kill -0 "$pid" 2>/dev/null; then break; fi
-          sleep 1
-        done
-        pkill -9 -P "$pid" 2>/dev/null || true
-        kill -9 "$pid" 2>/dev/null || true
-        sleep 1
-        # Refuse to claim "stopped" if the process is still alive.
-        if kill -0 "$pid" 2>/dev/null; then
-          echo "ERROR: generator PID $pid still alive after SIGKILL" >&2
-          exit 1
-        fi
-        rm -f logs/generator.pid
-        echo "generator stopped (was PID $pid)"
+        source "$(git rev-parse --show-toplevel)/scripts/dev/lib.sh"
+        stop_pid_service generator logs/generator.pid
         BASH
 
   dev:down:localstack:
