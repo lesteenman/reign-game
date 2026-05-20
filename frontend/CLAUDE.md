@@ -40,8 +40,7 @@ in `eslint.config.js`.
 | `@engine/*` | `src/engine/*` | BR target home |
 | `@theme/*` | `src/theme/*` | BR target home |
 | `@storage/*` | `src/storage/*` | BR target home |
-| `@pages/*` | `src/pages/*` | Transitional — only `GamePage.tsx` remains; pending split into `features/curation/` + direct routing to `features/daily/` per #176 |
-| `@services/*` | `src/services/*` | Transitional — slated for `features/<feature>/services/` or `useQuery` adoption per #176 |
+| `@services/*` | `src/services/*` | Transitional — `api.ts` is genuinely cross-feature shared (used by every service); `adminService` / `dailyService` / `puzzleService` migrate per #176's Services→TanStack slice |
 
 When a legacy alias's contents fully migrate, drop the alias from
 `tsconfig.app.json` and `tsconfig.json`.
