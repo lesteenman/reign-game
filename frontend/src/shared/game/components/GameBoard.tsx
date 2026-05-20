@@ -7,7 +7,7 @@ import { useTimer } from '../../../hooks/useTimer';
 import { useUpdatePuzzleStatus } from '../hooks/useUpdatePuzzleStatus';
 import { PageShell } from '../../../components/common/PageShell';
 import { PrimaryButton, SecondaryButton, GhostButton } from '../../../components/common/Button';
-import { getClerkUserRole } from '../../../components/auth/role';
+import { getClerkUserRole } from '../../auth/role';
 import { VerdictSurface } from './VerdictSurface';
 import type { PuzzleData, CellState } from '../../../engine/types';
 import type { FlowType, GameState, GameHistory, CompletionRecord } from '../../../storage/types';
