@@ -40,9 +40,7 @@ in `eslint.config.js`.
 | `@engine/*` | `src/engine/*` | BR target home |
 | `@theme/*` | `src/theme/*` | BR target home |
 | `@storage/*` | `src/storage/*` | BR target home |
-| `@pages/*` | `src/pages/*` | Transitional — slated for `features/*/pages/` per #176 |
-| `@components/*` | `src/components/*` | Transitional — only `grid/` remains; moves to `features/game/components/` per #176 |
-| `@hooks/*` | `src/hooks/*` | Transitional — slated for `features/<feature>/hooks/` per #176 |
+| `@pages/*` | `src/pages/*` | Transitional — only `GamePage.tsx` remains; pending split into `features/curation/` + direct routing to `features/daily/` per #176 |
 | `@services/*` | `src/services/*` | Transitional — slated for `features/<feature>/services/` or `useQuery` adoption per #176 |
 
 When a legacy alias's contents fully migrate, drop the alias from

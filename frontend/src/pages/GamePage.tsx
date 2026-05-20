@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { useGameStorage } from '@hooks/useGameStorage';
+import { useGameStorage } from '@shared/game/hooks/useGameStorage';
 import { fetchNextPuzzle, NoPuzzlesAvailableError } from '@services/puzzleService';
 import { createFreshGameState } from '@storage/utils';
 import { PageShell } from '@shared/components/PageShell';
