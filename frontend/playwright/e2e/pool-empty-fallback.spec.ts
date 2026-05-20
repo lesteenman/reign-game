@@ -9,7 +9,7 @@ import { test, expect, type APIRequestContext } from "@playwright/test";
  *   drain 9#double via repeated GET /api/puzzles/next?size=9&mode=double
  *     -> backend now responds 404 {error:"no_puzzles_available"} for that combo
  *   navigate to /play?flow=curation&size=9&mode=double
- *     -> GamePage fetches the next puzzle, hits the 404
+ *     -> PlayPuzzlePage fetches the next puzzle, hits the 404
  *     -> useGameStorage's NoPuzzlesAvailableError path renders the
  *        `no-puzzles-state` testid with user-readable copy
  *
@@ -101,18 +101,18 @@ test.describe.serial("Pool-empty fallback", () => {
     const drainedCount = await drainCombo(request);
 
     // Act: navigate to the curation Game page for the drained combo. The
-    // `flow=curation` param is mandatory — without it GamePage redirects to
-    // `/`. See GamePage.tsx::parseFlowType.
+    // `flow=curation` param is mandatory — without it PlayPuzzlePage redirects to
+    // `/`. See PlayPuzzlePage.tsx::parseFlowType.
     await page.goto(`/play?flow=curation&size=${SIZE}&mode=${MODE}`);
 
-    // Assert: GamePage renders the documented `no-puzzles-state` empty-state
-    // testid. This is what GamePage.tsx renders when fetchNextPuzzle throws
+    // Assert: PlayPuzzlePage renders the documented `no-puzzles-state` empty-state
+    // testid. This is what PlayPuzzlePage.tsx renders when fetchNextPuzzle throws
     // NoPuzzlesAvailableError, which is what the puzzleService maps the
     // backend's 404 envelope onto.
     const emptyState = page.getByTestId("no-puzzles-state");
     await expect(
       emptyState,
-      `GamePage must render \`no-puzzles-state\` testid when /api/puzzles/next ` +
+      `PlayPuzzlePage must render \`no-puzzles-state\` testid when /api/puzzles/next ` +
         `returns 404 (drained ${drainedCount} rows). If this fails because the ` +
         `SPA went blank, file a follow-up bug per Q-A=(a) lock-in. If a ` +
         `replenished row raced in between drain and navigation, raise ` +

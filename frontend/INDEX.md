@@ -13,7 +13,7 @@ A single-page Progressive Web App (PWA) that renders the Reign puzzle game. Thre
 | Folder shape | Mostly BR feature-folder. Remaining legacy: `services/` (four cross-feature service files). Target: pure feature-folder with no legacy layered dirs. | Feature-folder: `app/`, `engine/`, `features/{daily,curation,admin,landing}/`, `shared/{auth,components,game,hooks,types}/`, `theme/`, `storage/` (note: `auth` and `game` live under `shared/` because they are genuinely cross-feature, not single-feature concerns — see #196 + #204's BR-incorrect-framing analysis) |
 | UI primitives | Hand-rolled `<div>`, `<button>` with inline `style={}`; one residual `className=` (`Cell.tsx` animation hook) | Tamagui 2 RC primitives + theme tokens |
 | Tailwind | Imported once in `index.css` (`@import "tailwindcss"`); no `className=*` consumers other than the animation hook | Retired (gone) |
-| Server state | Hand-rolled `useState<LoadState>` / `useState<FlowState>` discriminated unions in `GamePage` + `DailyFlow`; bespoke `useEffect` fetch + cancel | TanStack `useQuery` / `useMutation` |
+| Server state | Hand-rolled `useState<LoadState>` / `useState<FlowState>` discriminated unions in `PlayPuzzlePage` + `DailyFlow`; bespoke `useEffect` fetch + cancel | TanStack `useQuery` / `useMutation` |
 | `services/*` | Four service modules with three near-identical fetch helpers (`apiFetch` / `apiPost` / `apiPut`) plus a fourth fork (`dailyService.ts`) that bypasses `api.ts` for header injection | Hooks own the I/O; leaf components consume hooks |
 | `engine/` | Pure TS (verified: no React, no `fetch`, no DOM) | Same — already conforming |
 | `storage/` | Hand-rolled IndexedDB wrapper, single source of truth for persisted shapes | Same — already conforming |
@@ -139,7 +139,7 @@ Theme abstraction + dark mode hook. See `src/theme/README.md`.
 
 ### `src/shared/game/` *(2026-05-20: consolidated grid + hooks here in #176)*
 
-Cross-feature puzzle-rendering layer. Used by both the curation flow (via `pages/GamePage`) and the daily flow (via `features/daily/screens/DailyGameBoard`). Lives in `shared/` because no single feature owns it.
+Cross-feature puzzle-rendering layer. Used by both the curation flow (via `features/curation/pages/PlayPuzzlePage`) and the daily flow (via `features/daily/screens/DailyGameBoard`). Lives in `shared/` because no single feature owns it.
 
 **`components/`**
 - `GameBoard.tsx` — the puzzle play surface (550+ LOC). Renders grid + completion overlay + skip modal. Accepts an `AdminVerdictSurface?` slot (curation flow's `VerdictSurface`) via DI — see `src/features/curation/` and `shared/game/types/admin-verdict-surface.ts`.
@@ -153,7 +153,7 @@ Cross-feature puzzle-rendering layer. Used by both the curation flow (via `pages
 **`hooks/`** (moved from `src/hooks/` in #176, except `useUpdatePuzzleStatus` which was already here)
 - `useGame.ts` — gameplay reducer (history stack, drag intent, conflicts, isSolved).
 - `useTimer.ts` — pause/resume timer with `restore()` for persistence and `stop()` for solved-state.
-- `useGameStorage.ts` — IndexedDB CRUD wrapper (saveState / loadState / clearState / addCompletion). Used by `GamePage` (curation flow) AND `features/daily/screens/DailyFlow` + `DailyGameBoard`.
+- `useGameStorage.ts` — IndexedDB CRUD wrapper (saveState / loadState / clearState / addCompletion). Used by `PlayPuzzlePage` (curation flow) AND `features/daily/screens/DailyFlow` + `DailyGameBoard`.
 - `useUpdatePuzzleStatus.ts` — TanStack `useMutation` wrapper around `puzzleService.updatePuzzleStatus`.
 
 **`types/`**

@@ -36,7 +36,7 @@ test.describe("e2e: play to completion (7x7 Standard)", () => {
   test("place seven marks, exercise undo/redo mid-play, reach solved", async ({ page }) => {
     // Arrange — navigate directly to the game route. The post-R-7-02
     // LandingPage no longer surfaces size/mode preset buttons (those
-    // moved to admin-gated /curation), but GamePage reads flow/size/
+    // moved to admin-gated /curation), but PlayPuzzlePage reads flow/size/
     // mode from the URL and fetches /api/puzzles/next on mount, which
     // hits the e2e backend's seeded fixture pool. The 15s timeout
     // absorbs first-DynamoDB-call cold-start latency (KI-022). This

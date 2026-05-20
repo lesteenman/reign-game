@@ -29,7 +29,7 @@ test.describe("Grid Interaction", () => {
     );
     // Navigate directly to the game route. The post-R-7-02 LandingPage
     // has no public play flow (Daily/Packs are placeholders, Curation
-    // is admin-gated), but GamePage itself reads flow/size/mode from
+    // is admin-gated), but PlayPuzzlePage itself reads flow/size/mode from
     // the URL and fetches /api/puzzles/next on mount — auth-independent.
     // These tests assert grid mechanics, not landing nav.
     await page.goto("/play?flow=curation&size=5&mode=standard");

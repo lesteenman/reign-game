@@ -86,8 +86,8 @@ export interface GameBoardProps {
    * (which would violate the unidirectional `shared → features → app`
    * rule enforced by `import/no-restricted-paths` in eslint.config.js).
    * features/curation/components/VerdictSurface.tsx is the canonical
-   * implementation; pages/GamePage.tsx wires it up for the curation
-   * flow.
+   * implementation; features/curation/pages/PlayPuzzlePage.tsx wires
+   * it up for the curation flow.
    */
   AdminVerdictSurface?: AdminVerdictSurfaceComponent;
 }

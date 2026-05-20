@@ -11,7 +11,7 @@ import type { Mode } from '@engine/types';
  * `import/no-restricted-paths` in eslint.config.js).
  *
  * features/curation/components/VerdictSurface.tsx implements this
- * contract; consumers (pages/GamePage.tsx for the curation flow) pass
+ * contract; consumers (features/curation/pages/PlayPuzzlePage.tsx for the curation flow) pass
  * it to GameBoard via the `AdminVerdictSurface` prop. Daily flow does
  * not pass it (no verdict step).
  */

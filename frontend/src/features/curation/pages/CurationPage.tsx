@@ -13,12 +13,14 @@ import type { ModeEntry } from '@shared/types/modes';
  * Mirrors the pre-Phase-7 LandingPage flow: shows one button per
  * enabled (size, mode) pool, plus a Settings link to /admin for pool
  * configuration (threshold, enabled flag, replenish controls). When a
- * pool is selected, navigates to /play with the size + mode the
- * GamePage uses to fetch the next puzzle.
+ * pool is selected, navigates to /play with the size + mode that
+ * `PlayPuzzlePage` (the `/play?flow=curation` page) uses to fetch the
+ * next puzzle.
  *
- * Verdict surface + explicit Skip button live on GamePage and gate
- * themselves on the admin role — no curation-specific query param is
- * needed; admins are the only callers of /curation by construction.
+ * Verdict surface + explicit Skip button live on `PlayPuzzlePage`'s
+ * GameBoard via the `AdminVerdictSurface` slot, and gate themselves on
+ * the admin role — no curation-specific query param is needed; admins
+ * are the only callers of /curation by construction.
  */
 export function CurationPage() {
   const navigate = useNavigate();

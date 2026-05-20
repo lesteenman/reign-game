@@ -59,19 +59,6 @@ vi.mock('@features/curation/services/verdictService', () => ({
   submitVerdict: (...args: unknown[]) => mockSubmitVerdict(...args),
 }));
 
-// GamePage delegates to <DailyFlow /> for `flow=daily`. Stub getDaily()
-// so the delegated component renders without hitting the network — the
-// delegation test only asserts the wrapper is mounted.
-vi.mock('@services/dailyService', async () => {
-  const actual = await vi.importActual<typeof import('@services/dailyService')>(
-    '@services/dailyService',
-  );
-  return {
-    ...actual,
-    getDaily: vi.fn().mockReturnValue(new Promise(() => {})),
-  };
-});
-
 // Clerk hook mock — controls the role-gated UI (verdict surface, Skip
 // button) under three states: signedOut, role=user, role=admin.
 type UseUserReturn = {
@@ -879,14 +866,13 @@ describe('PlayPuzzlePage — timer starts on mount (not on first tap)', () => {
   });
 });
 
-describe('PlayPuzzlePage — daily-flow gates the Skip button (admin only on curation)', () => {
+describe('PlayPuzzlePage — admin sees Skip button (curation flow)', () => {
   // Skip puzzle is the admin verdict surface and belongs to the
-  // curation flow. The daily flow must NOT render Skip even for
-  // admins. This test exercises the curation case (admin sees Skip)
-  // and the daily case (admin does not). Daily branch goes via
-  // <DailyFlow /> which mocks getDaily to never resolve, so a Skip
-  // probe there would only be possible from inside the real
-  // GameBoard — see GameBoard.test.tsx for the direct-render test.
+  // curation flow. The daily-flow negative case (admin does NOT see
+  // Skip on daily) is verified at the GameBoard level — see
+  // GameBoard.test.tsx's "daily flow hides Skip button (admin)" test
+  // — because the daily flow no longer routes through this page after
+  // #176's GamePage split.
 
   it('curation flow: admin sees Skip button', async () => {
     // Arrange

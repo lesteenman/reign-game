@@ -27,7 +27,7 @@ The shared chrome and primitive widgets every page reuses: the standard layout w
 
 ## Rules specific to this directory
 
-- **`PageShell` is the only layout wrapper.** Pages compose `<PageShell>...</PageShell>` at the root of every rendered tree (with one exception: `GameBoard` skips the wrapper when running in delegated mode under `DailyFlow`, because `DailyFlow` already mounts its own `PageShell` with the daily subtitle — see `GamePage.tsx:556-558`).
+- **`PageShell` is the only layout wrapper.** Pages compose `<PageShell>...</PageShell>` at the root of every rendered tree (with one exception: `GameBoard` skips the wrapper when running in delegated mode under `DailyFlow`, because `DailyFlow` already mounts its own `PageShell` with the daily subtitle — see `GameBoard.tsx`'s `isDelegated` branch).
 - **`compactSecondaryButtonStyle` and `Button.tsx`'s `SecondaryButton`** are intentionally separate primitives — one is 8×16, the other 12×32. Use the compact style in headers / cards; use the component in body buttons.
 - **`Button.tsx`'s buttons wire `press.ts` to `onMouseEnter` / `onMouseLeave`** for hover-feel; header buttons (e.g. `SignInButton`, `AdminLandingPage`'s Home link) wire to `onMouseDown` / `onMouseUp` / `onMouseLeave` for click-feel. The `press` helper handles both — picking the right trigger is the caller's responsibility.
 
