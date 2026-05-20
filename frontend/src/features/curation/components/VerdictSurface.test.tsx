@@ -159,8 +159,11 @@ render(<VerdictSurface variant="completion" outcome="solved" {...baseProps} />);
       <VerdictSurface variant="completion" outcome="solved" {...baseProps} />,
     );
 
-    // Assert
-    expect(container.firstChild).toBeNull();
+    // Assert — `<TamaguiProvider>` adds an empty `<span>` font scope to the
+    // render container, so we can't assert `firstChild === null`. Check
+    // that no user-facing content rendered: no text, no buttons, no links.
+    expect(container.textContent).toBe('');
+    expect(container.querySelector('button, a, [role="button"]')).toBeNull();
   });
 });
 
@@ -346,8 +349,11 @@ render(
       />,
     );
 
-    // Assert
-    expect(container.firstChild).toBeNull();
+    // Assert — `<TamaguiProvider>` adds an empty `<span>` font scope to the
+    // render container, so we can't assert `firstChild === null`. Check
+    // that no user-facing content rendered: no text, no buttons, no links.
+    expect(container.textContent).toBe('');
+    expect(container.querySelector('button, a, [role="button"]')).toBeNull();
   });
 });
 

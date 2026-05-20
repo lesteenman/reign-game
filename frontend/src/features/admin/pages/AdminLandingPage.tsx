@@ -1,9 +1,7 @@
 import type { CSSProperties } from 'react';
-import { Link } from 'react-router-dom';
 import { PageShell } from '@shared/components/PageShell';
 import { SignInButton } from '@shared/auth/SignInButton';
-import { compactSecondaryButtonStyle } from '@shared/components/buttonStyles';
-import { pressIn, pressOut } from '@shared/components/press';
+import { CompactSecondaryLink } from '@shared/components/Button';
 
 type LandingState = 'anonymous' | 'forbidden';
 
@@ -75,15 +73,7 @@ export function AdminLandingPage({ state }: AdminLandingPageProps) {
       <div style={cardStyle} data-testid="admin-landing-forbidden">
         <h2 style={headingStyle}>No Admin Access</h2>
         <p style={bodyStyle}>This account doesn&apos;t have admin access.</p>
-        <Link
-          to="/"
-          style={{ ...compactSecondaryButtonStyle, textDecoration: 'none' }}
-          onMouseDown={(e) => pressIn(e, 'var(--color-ink)')}
-          onMouseUp={(e) => pressOut(e, 'var(--color-ink)')}
-          onMouseLeave={(e) => pressOut(e, 'var(--color-ink)')}
-        >
-          Home
-        </Link>
+        <CompactSecondaryLink to="/">Home</CompactSecondaryLink>
       </div>
     </PageShell>
   );

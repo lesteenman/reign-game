@@ -1,86 +1,100 @@
-import { render, screen, cleanup } from '@shared/test-utils';
+import { render, screen, cleanup, fireEvent } from '@shared/test-utils';
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { PrimaryButton, SecondaryButton, GhostButton } from './Button';
+import {
+  PrimaryButton,
+  SecondaryButton,
+  GhostButton,
+  CompactSecondaryButton,
+} from './Button';
 
 afterEach(() => {
   cleanup();
 });
 
-describe('Button — disabled visual state', () => {
+describe('Button — disabled behaviour', () => {
   it.each([
     ['PrimaryButton', PrimaryButton],
     ['SecondaryButton', SecondaryButton],
     ['GhostButton', GhostButton],
-  ] as const)('%s applies reduced opacity and not-allowed cursor when disabled', (_name, Component) => {
-    // Arrange
-    render(
-      <Component disabled data-testid="btn">
-        Disabled
-      </Component>,
-    );
+    ['CompactSecondaryButton', CompactSecondaryButton],
+  ] as const)(
+    '%s sets the disabled DOM attribute and suppresses onClick',
+    (_name, Component) => {
+      // Arrange
+      const onClick = vi.fn();
+      render(
+        <Component disabled onClick={onClick} data-testid="btn">
+          Disabled
+        </Component>,
+      );
 
-    // Act
-    const button = screen.getByTestId('btn');
+      // Act
+      const button = screen.getByTestId('btn');
+      fireEvent.click(button);
 
-    // Assert — disabled state must be visually distinguishable per
-    // BRAND_GUIDELINES (reduced opacity + not-allowed cursor).
-    expect(button).toBeDisabled();
-    expect(button.style.opacity).toBe('0.4');
-    expect(button.style.cursor).toBe('not-allowed');
-  });
+      // Assert — disabled attribute prevents the click handler from firing.
+      // Tamagui's `disabled` prop forwards to the native `<button>` element,
+      // and the browser short-circuits click dispatch for disabled buttons.
+      expect(button).toBeDisabled();
+      expect(onClick).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['PrimaryButton', PrimaryButton],
     ['SecondaryButton', SecondaryButton],
     ['GhostButton', GhostButton],
-  ] as const)('%s renders default opacity and pointer cursor when enabled', (_name, Component) => {
+    ['CompactSecondaryButton', CompactSecondaryButton],
+  ] as const)(
+    '%s fires onClick when enabled',
+    (_name, Component) => {
+      // Arrange
+      const onClick = vi.fn();
+      render(
+        <Component onClick={onClick} data-testid="btn">
+          Enabled
+        </Component>,
+      );
+
+      // Act
+      fireEvent.click(screen.getByTestId('btn'));
+
+      // Assert
+      expect(onClick).toHaveBeenCalledTimes(1);
+    },
+  );
+});
+
+describe('Button — prop propagation', () => {
+  it('defaults to type="button" via the underlying render element', () => {
     // Arrange
-    render(
-      <Component data-testid="btn">
-        Enabled
-      </Component>,
-    );
+    render(<PrimaryButton data-testid="btn">Click</PrimaryButton>);
 
-    // Act
-    const button = screen.getByTestId('btn');
-
-    // Assert
-    expect(button).not.toBeDisabled();
-    expect(button.style.opacity).not.toBe('0.4');
-    expect(button.style.cursor).toBe('pointer');
+    // Act + Assert — the styled component's `render: <button type="button" />`
+    // bakes type="button" into every Button instance so it stays out of any
+    // surrounding form's submit chain. Type="submit" is not exposed on the
+    // wrapper today (no current consumer needs it; Tamagui's `type` style
+    // prop would shadow the HTML attribute — see Button.tsx note).
+    expect(screen.getByTestId('btn')).toHaveAttribute('type', 'button');
   });
 
-  it('PrimaryButton hover handler is a no-op when disabled (no press-in transform)', () => {
+  it('passes aria-label through to the rendered button', () => {
     // Arrange
     render(
-      <PrimaryButton disabled onClick={vi.fn()} data-testid="btn">
-        Disabled
+      <PrimaryButton aria-label="dismiss" data-testid="btn">
+        ×
       </PrimaryButton>,
     );
-    const button = screen.getByTestId('btn');
 
-    // Act — fire a mouse-enter to trigger pressIn; if disabled-guard is
-    // missing, this would apply translateY(1px). We rely on the inline
-    // style attribute to detect the leak.
-    button.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-
-    // Assert — disabled buttons must not animate on hover.
-    expect(button.style.transform).not.toContain('translateY');
+    // Act + Assert
+    expect(screen.getByTestId('btn')).toHaveAttribute('aria-label', 'dismiss');
   });
 
-  it('SecondaryButton hover handler is a no-op when disabled', () => {
+  it('renders children inside the button', () => {
     // Arrange
-    render(
-      <SecondaryButton disabled onClick={vi.fn()} data-testid="btn">
-        Disabled
-      </SecondaryButton>,
-    );
-    const button = screen.getByTestId('btn');
+    render(<SecondaryButton data-testid="btn">Hello world</SecondaryButton>);
 
-    // Act
-    button.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
-
-    // Assert
-    expect(button.style.transform).not.toContain('translateY');
+    // Act + Assert
+    expect(screen.getByTestId('btn')).toHaveTextContent('Hello world');
   });
 });

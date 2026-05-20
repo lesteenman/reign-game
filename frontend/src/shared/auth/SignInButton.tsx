@@ -1,6 +1,5 @@
 import { SignInButton as ClerkSignInButton } from "@clerk/react";
-import { compactSecondaryButtonStyle } from '@shared/components/buttonStyles';
-import { pressIn, pressOut } from '@shared/components/press';
+import { CompactSecondaryButton } from '@shared/components/Button';
 
 interface SignInButtonProps {
   /** Button label. Defaults to "Sign in". */
@@ -11,23 +10,21 @@ interface SignInButtonProps {
  * Thin wrapper around Clerk's `<SignInButton mode="modal">`. Clerk's
  * component forwards click events to its children, so we render our
  * branded button as the child to keep visuals consistent with the rest
- * of the app (BRAND_GUIDELINES §5.4 Secondary button). Shared style
- * and press handlers live in `shared/components/` so the admin landing
- * page's sign-out button can match byte-for-byte.
+ * of the app (BRAND_GUIDELINES §5.4 Secondary button).
+ *
+ * Uses the shared `CompactSecondaryButton` (Tamagui-styled, #208) so
+ * the press effect, padding, and tap-target size stay byte-for-byte
+ * matched with the admin landing page's home link and any other
+ * compact-secondary CTA. The pre-#208 implementation imperatively
+ * wired mouseDown/mouseUp/mouseLeave handlers via `press.ts`; that
+ * file is gone (Tamagui's `pressStyle` does the same work declaratively).
  */
 export function SignInButton({ label = 'Sign in' }: SignInButtonProps) {
   return (
     <ClerkSignInButton mode="modal">
-      <button
-        type="button"
-        data-testid="sign-in-button"
-        style={compactSecondaryButtonStyle}
-        onMouseDown={(e) => pressIn(e, 'var(--color-ink)')}
-        onMouseUp={(e) => pressOut(e, 'var(--color-ink)')}
-        onMouseLeave={(e) => pressOut(e, 'var(--color-ink)')}
-      >
+      <CompactSecondaryButton data-testid="sign-in-button">
         {label}
-      </button>
+      </CompactSecondaryButton>
     </ClerkSignInButton>
   );
 }

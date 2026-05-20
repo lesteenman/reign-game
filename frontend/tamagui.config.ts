@@ -1,6 +1,21 @@
 import { defaultConfig } from "@tamagui/config/v4";
 import { createTamagui } from "tamagui";
 
+/* Animations. We rely on `defaultConfig.animations` (CSS driver from
+ * @tamagui/config/v4 — already an `@tamagui/animations-css` instance)
+ * rather than registering our own. The default set ships
+ * `quickerLessBouncy: 100ms ease-out` which matches BRAND_GUIDELINES
+ * §5.4's button-press timing (current `transition: transform 100ms
+ * ease-out`). Adding our own driver here would override defaultConfig's
+ * full animation menu (slow/medium/lazy/bouncy/etc.) which we may want
+ * for sheets + modals later. Reign components should reference keys by
+ * intent, not duration; canonical mapping:
+ *
+ *   button hover/press         → "quickerLessBouncy" (100ms ease-out)
+ *   (future) sheet open/close  → "medium"           (300ms ease-out)
+ *   (future) toast slide       → "quick"            (150ms ease-out)
+ */
+
 /* =====================================================================
  * SYNC DISCIPLINE: the token values below mirror `frontend/src/index.css`.
  *
