@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GameBoard } from '@shared/game/components/GameBoard';
-import { useGameStorage } from '@hooks/useGameStorage';
+import { useGameStorage } from '@shared/game/hooks/useGameStorage';
 import { EMPTY_HISTORY } from '@storage/types';
 import type { GameHistory, GameState } from '@storage/types';
 import type { CellState, PuzzleData } from '@engine/types';

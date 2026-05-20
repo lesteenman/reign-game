@@ -48,8 +48,6 @@
       /* Transitional legacy-dir aliases. Drop each as its contents
        * migrate to a BR layer per #176. */
       "@pages/*": ["./src/pages/*"],
-      "@components/*": ["./src/components/*"],
-      "@hooks/*": ["./src/hooks/*"],
       "@services/*": ["./src/services/*"]
     }
   },

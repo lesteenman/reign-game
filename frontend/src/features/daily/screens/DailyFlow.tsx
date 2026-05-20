@@ -7,7 +7,7 @@ import { useDailyService } from '@features/daily/hooks/useDailyService';
 import type { DailyPuzzlePayload, DailySubmitResponse } from '@shared/types/daily';
 import { DailyGameBoard } from './DailyGameBoard';
 import { PostCompletionScreen } from './PostCompletionScreen';
-import { useGameStorage } from '@hooks/useGameStorage';
+import { useGameStorage } from '@shared/game/hooks/useGameStorage';
 import type { GameState } from '@storage/types';
 import type { CellState } from '@engine/types';
 import { todayUtcDate, dateFromAssignedAt } from '@shared/dates';

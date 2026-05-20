@@ -30,7 +30,7 @@ const mockSaveState = vi.fn(async () => {});
 const mockLoadState = vi.fn<(...args: [unknown, unknown]) => Promise<GameState | null>>(async () => null);
 const mockClearState = vi.fn(async () => {});
 const mockAddCompletion = vi.fn(async () => {});
-vi.mock('@hooks/useGameStorage', () => ({
+vi.mock('@shared/game/hooks/useGameStorage', () => ({
   useGameStorage: () => ({
     saveState: mockSaveState,
     loadState: mockLoadState,

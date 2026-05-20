@@ -10,7 +10,7 @@ A single-page Progressive Web App (PWA) that renders the Reign puzzle game. Thre
 
 | | Current (today) | Target (per `frontend/CLAUDE.md` + `architecture` skill) |
 |---|---|---|
-| Folder shape | Layered: `components/`, `pages/`, `hooks/`, `services/`, `engine/`, `storage/`, `theme/` | Feature-folder: `app/`, `engine/`, `features/{auth,game,daily,curation,admin,landing}/`, `shared/{components,hooks,lib,types}/`, `theme/`, `storage/` |
+| Folder shape | Mostly BR feature-folder. Remaining legacy: `pages/` (one file), `services/` (four files). Target: pure feature-folder with no legacy layered dirs. | Feature-folder: `app/`, `engine/`, `features/{daily,curation,admin,landing}/`, `shared/{auth,components,game,hooks,types}/`, `theme/`, `storage/` (note: `auth` and `game` live under `shared/` because they are genuinely cross-feature, not single-feature concerns — see #196 + this PR's BR-incorrect-framing analysis) |
 | UI primitives | Hand-rolled `<div>`, `<button>` with inline `style={}`; one residual `className=` (`Cell.tsx` animation hook) | Tamagui 2 RC primitives + theme tokens |
 | Tailwind | Imported once in `index.css` (`@import "tailwindcss"`); no `className=*` consumers other than the animation hook | Retired (gone) |
 | Server state | Hand-rolled `useState<LoadState>` / `useState<FlowState>` discriminated unions in `GamePage` + `DailyFlow`; bespoke `useEffect` fetch + cancel | TanStack `useQuery` / `useMutation` |
@@ -61,10 +61,6 @@ Bulletproof React app-composition layer. Today holds providers only; router extr
 
 - `providers.tsx` — `<Providers>`: composes `QueryClientProvider` (TanStack), `ThemeProvider`, `ClerkProvider` (conditional on `VITE_CLERK_PUBLISHABLE_KEY`), and `ClerkAvailabilityProvider`. Mounted by `main.tsx`.
 
-### `src/components/`
-
-Legacy cross-feature React components. New code does NOT land here. Remaining subfolder (`grid/`) has its own #176 slice planned. See `src/components/README.md` for status. (`auth/` → `shared/auth/` in #176 PR #196; `common/` → `shared/components/` in #176 PR #197; `landing/PuzzleSelector` → `features/curation/components/` in #176 this PR; `game/` → `shared/game/components/` in Track 3.)
-
 ### `src/engine/`
 
 Pure-TS puzzle domain. No React, no fetch, no DOM. See `src/engine/README.md`.
@@ -73,15 +69,6 @@ Pure-TS puzzle domain. No React, no fetch, no DOM. See `src/engine/README.md`.
 - `constraints.ts` — row / column / region / adjacency conflict detectors + `getAllConflicts` deduplicator.
 - `validator.ts` — solution validator.
 - Tests: `constraints.test.ts`, `validator.test.ts`.
-
-### `src/hooks/`
-
-Reusable hooks. See `src/hooks/README.md`.
-
-- `useGame.ts` — gameplay reducer (history stack, drag intent, conflicts, isSolved). Exports `cellKey` (consumed by `grid/Grid.tsx`).
-- `useTimer.ts` — pause/resume timer with `restore()` for persistence and `stop()` for solved-state.
-- `useGameStorage.ts` — IndexedDB CRUD wrapper (saveState / loadState / clearState / addCompletion).
-- Tests: `useGame.test.ts`, `useTimer.test.ts`, `useGameStorage.test.ts`.
 
 ### `src/shared/hooks/` *(2026-05-18: PWA-related additions from #116)*
 
@@ -162,15 +149,27 @@ Theme abstraction + dark mode hook. See `src/theme/README.md`.
 - `useDarkMode.ts` — `prefers-color-scheme` initial + localStorage override; toggles `.dark` class on `<html>`.
 - Tests: `tactile.test.ts`, `useDarkMode.test.ts`, `ThemeContext.test.tsx`.
 
-### `src/components/grid/`
+### `src/shared/game/` *(2026-05-20: consolidated grid + hooks here in #176)*
 
-Custom hand-built grid UI. See `src/components/grid/README.md`.
+Cross-feature puzzle-rendering layer. Used by both the curation flow (via `pages/GamePage`) and the daily flow (via `features/daily/screens/DailyGameBoard`). Lives in `shared/` because no single feature owns it.
 
-- `Grid.tsx` — measures the container, lays out cells, renders the region-border overlay. **Imports `cellKey` from `hooks/useGame`.**
-- `Cell.tsx` — single cell; renders marker / exclusion mark; handles touch + mouse pointer-down with synthesized-mouse-event suppression.
-- `Marker.tsx` — rounded-square marker SVG for the Tactile theme.
-- `ExclusionMark.tsx` — small dot SVG for excluded cells.
-- `RegionBorderOverlay.tsx` — SVG overlay drawing region boundary lines + corner junctions.
+**`components/`**
+- `GameBoard.tsx` — the puzzle play surface (550+ LOC). Renders grid + completion overlay + skip modal. Accepts an `AdminVerdictSurface?` slot (curation flow's `VerdictSurface`) via DI — see `src/features/curation/` and `shared/game/types/admin-verdict-surface.ts`.
+- `grid/` — custom hand-built grid UI (moved from `src/components/grid/` in #176):
+  - `Grid.tsx` — measures the container, lays out cells, renders the region-border overlay. Uses `cellKey` from `@engine/cellKey`.
+  - `Cell.tsx` — single cell; renders marker / exclusion mark; handles touch + mouse pointer-down with synthesized-mouse-event suppression.
+  - `Marker.tsx` — rounded-square marker SVG for the Tactile theme.
+  - `ExclusionMark.tsx` — small dot SVG for excluded cells.
+  - `RegionBorderOverlay.tsx` — SVG overlay drawing region boundary lines + corner junctions.
+
+**`hooks/`** (moved from `src/hooks/` in #176, except `useUpdatePuzzleStatus` which was already here)
+- `useGame.ts` — gameplay reducer (history stack, drag intent, conflicts, isSolved).
+- `useTimer.ts` — pause/resume timer with `restore()` for persistence and `stop()` for solved-state.
+- `useGameStorage.ts` — IndexedDB CRUD wrapper (saveState / loadState / clearState / addCompletion). Used by `GamePage` (curation flow) AND `features/daily/screens/DailyFlow` + `DailyGameBoard`.
+- `useUpdatePuzzleStatus.ts` — TanStack `useMutation` wrapper around `puzzleService.updatePuzzleStatus`.
+
+**`types/`**
+- `admin-verdict-surface.ts` — slot contract `AdminVerdictSurfaceComponent` consumed by `GameBoard`. Implementation lives in `features/curation/components/VerdictSurface.tsx`. Prevents the shared → features dependency that would otherwise be a BR violation.
 
 ### `src/features/curation/` *(2026-05-20: introduced in #176)*
 

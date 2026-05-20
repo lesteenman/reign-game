@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef, useLayoutEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/react';
-import { Grid } from '@components/grid/Grid';
-import { useGame } from '@hooks/useGame';
-import { useTimer } from '@hooks/useTimer';
+import { Grid } from '@shared/game/components/grid/Grid';
+import { useGame } from '@shared/game/hooks/useGame';
+import { useTimer } from '@shared/game/hooks/useTimer';
 import { useUpdatePuzzleStatus } from '@shared/game/hooks/useUpdatePuzzleStatus';
 import { PageShell } from '@shared/components/PageShell';
 import { PrimaryButton, SecondaryButton, GhostButton } from '@shared/components/Button';

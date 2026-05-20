@@ -1,6 +1,6 @@
-# `src/components/grid/`
+# `src/shared/game/components/grid/`
 
-Custom hand-built grid UI. Five production files plus three unit tests.
+Custom hand-built grid UI. Five production files plus four unit tests. Moved from `src/components/grid/` in #176 (game library consolidated into `shared/game/`).
 
 ## Responsibility
 
@@ -8,7 +8,7 @@ The puzzle grid is the project's signature UI surface. It's intentionally NOT a 
 
 ## Data flow
 
-- **In:** Rendered by `GameBoard` (inside `pages/GamePage.tsx`) — receives `puzzle`, `cells`, `conflicts`, `isSolved`, `draggedCells`, and three event handlers (`onPointerDown`, `onPointerUp`, `onDragEnter`) all wired to `useGame`'s reducer.
+- **In:** Rendered by `GameBoard` (`shared/game/components/GameBoard.tsx`) — used by both the curation flow (`pages/GamePage.tsx`) and the daily flow (`features/daily/screens/DailyGameBoard.tsx`). Receives `puzzle`, `cells`, `conflicts`, `isSolved`, `draggedCells`, and three event handlers (`onPointerDown`, `onPointerUp`, `onDragEnter`) all wired to `useGame`'s reducer.
 - **Out:** `Cell.tsx` reads `useTheme()` to pick the right `MarkerComponent` / `ExclusionMarkComponent` and the animation class names. Otherwise no external calls.
 
 ## Files
