@@ -2,7 +2,7 @@
 
 Legacy backend client modules. New service code does NOT land here — the BR-correct home is `features/<feature>/services/` (or wired directly via TanStack `useQuery` / `useMutation`). What remains here is awaiting its own #176 slice.
 
-Five production files plus four unit tests.
+Four production files plus three unit tests.
 
 ## Responsibility
 
@@ -18,8 +18,9 @@ Wrap `/api/*` calls in typed functions. The shared `api.ts` exposes a thin fetch
 - **`api.ts`** — Shared fetch base. Exports `apiFetch<T>(path, params?)`, `apiPut<T>(path, body, params?)`, `apiPost<T>(path, body, params?)`, and an `ApiError` class carrying `status`. The three helpers are near-identical (URL construction + headers + ok-check + body parse) — duplication called out in `frontend/FINDINGS.md`.
 - **`puzzleService.ts`** — `fetchNextPuzzle(size, mode)` (GET /api/puzzles/next?size=N&mode=M) and `updatePuzzleStatus(puzzleId, size, mode, status)` (PUT /api/puzzles/{id}/status). Defines `NoPuzzlesAvailableError` thrown when the pool returns 404.
 - **`adminService.ts`** — Pool / config CRUD: `fetchPoolStatus`, `updateConfig`, `createConfig`, `triggerReplenish`. Also re-exports `MODES` / `isMode` / `Mode` from `engine/types` (architectural smell — drive-by indirection).
-- **`landingService.ts`** — `fetchEnabledModes()` (GET /api/config/modes). Public endpoint, no auth.
 - **`dailyService.ts`** — `getDaily(date?)` and `submitDailyResult(args)`. Carries `X-Device-Id` (DP-10) and on 401 silently rotates the deviceId and retries once. Routes through `api.ts` (header injection added to `api.ts` in Track 3). Uses `ApiError` from `api.ts`; `DailyApiError` removed.
+
+(`landingService.ts` moved to `features/curation/services/enabled-modes-service.ts` in #176; was always vestigially named — only CurationPage consumed it.)
 
 ## State management
 

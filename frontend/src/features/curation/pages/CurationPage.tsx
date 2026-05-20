@@ -4,7 +4,7 @@ import { PageShell } from '@shared/components/PageShell';
 import { GhostButton } from '@shared/components/Button';
 import { PuzzleSelector } from '@features/curation/components/PuzzleSelector';
 import type { PuzzleSelection } from '@features/curation/components/PuzzleSelector';
-import { fetchEnabledModes } from '@services/landingService';
+import { fetchEnabledModes } from '@features/curation/services/enabled-modes-service';
 import type { ModeEntry } from '@shared/types/modes';
 
 /**
