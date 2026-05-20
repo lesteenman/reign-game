@@ -5,8 +5,8 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PageShell } from '../../../components/common/PageShell';
-import { SecondaryButton } from '../../../components/common/Button';
+import { PageShell } from '../../../shared/components/PageShell';
+import { SecondaryButton } from '../../../shared/components/Button';
 
 export interface PostCompletionScreenProps {
   serverElapsedMs: number;

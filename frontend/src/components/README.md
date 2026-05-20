@@ -1,11 +1,15 @@
 # `src/components/`
 
-Cross-feature React components organized by subdomain. Each subfolder has its own README; this file is a router.
+Legacy cross-feature React components organized by subdomain. New code does NOT land here — the BR-correct layer is `src/shared/` (cross-feature reusables) or `src/features/<feature>/` (feature-internal). What remains here is awaiting its own #176 slice.
 
 | Subfolder | Responsibility | README |
 |---|---|---|
-| `common/` | Cross-feature UI primitives: PageShell, Button variants, button styles, press handlers. | `common/README.md` |
-| `grid/` | Custom hand-built grid UI: Grid, Cell, Marker, ExclusionMark, RegionBorderOverlay. | `grid/README.md` |
-| `landing/` | Landing-page-specific UI: PuzzleSelector. | `landing/README.md` |
+| `grid/` | Custom hand-built grid UI: Grid, Cell, Marker, ExclusionMark, RegionBorderOverlay. Moves to `features/game/components/` in a later #176 slice. | `grid/README.md` |
+| `landing/` | Misnamed: contains `PuzzleSelector` which is curation-only. Moves to `features/curation/components/` in a later #176 slice. | `landing/README.md` |
 
-Note: `components/game/` (VerdictSurface) moved to `shared/game/components/` in Track 3. `components/auth/ProtectedAdminRoute` moved to `features/admin/components/` in Track 3. The rest of `components/auth/` (`ClerkAvailability`, `SignInButton`, `UserMenu`, `role.ts`) moved to `shared/auth/` (#176 — cross-feature usage required a shared-layer home; see issue body for the BR analysis).
+Already migrated out of this folder:
+
+- `components/game/` (VerdictSurface) → `shared/game/components/` (Track 3).
+- `components/auth/ProtectedAdminRoute` → `features/admin/components/` (Track 3).
+- `components/auth/` (`ClerkAvailability`, `SignInButton`, `UserMenu`, `role.ts`) → `shared/auth/` (#176, PR #196 — cross-feature usage required a shared-layer home; see issue body for the BR analysis).
+- `components/common/*` (`PageShell`, `Button`, `buttonStyles`, `press`, `OfflineBanner`, `InstallButton`) → `shared/components/` (#176, this PR).
