@@ -28,11 +28,6 @@ vi.mock('@services/puzzleService', () => ({
   updatePuzzleStatus: (...args: unknown[]) => mockUpdateStatus(...args),
 }));
 
-// We don't care about VerdictSurface internals here — stub it.
-vi.mock('./VerdictSurface', () => ({
-  VerdictSurface: () => null,
-}));
-
 const emptyGrid5 = (): CellState[][] =>
   Array.from({ length: 5 }, () => Array<CellState>(5).fill('empty'));
 
@@ -53,6 +48,14 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
 });
+
+// Trivial AdminVerdictSurface stub — these tests verify the Skip-button
+// + verdict-slot gating logic, not VerdictSurface internals. Passing a
+// stub lets the curation-flow tests render the Skip button (which is
+// gated on the slot being provided).
+function AdminVerdictSurfaceStub() {
+  return null;
+}
 
 function Harness({
   flowType,
@@ -79,6 +82,7 @@ function Harness({
       onBack={() => {}}
       onPlayAgain={() => {}}
       onSolveDetected={onSolveDetected}
+      AdminVerdictSurface={AdminVerdictSurfaceStub}
     />
   );
 }

@@ -27,7 +27,7 @@ vi.mock('@services/puzzleService', () => ({
 
 // Verdict service stub — only invoked when the admin verdict surface is
 // rendered; not exercised here.
-vi.mock('@services/verdictService', () => ({
+vi.mock('@features/curation/services/verdictService', () => ({
   submitVerdict: vi.fn().mockResolvedValue(undefined),
 }));
 

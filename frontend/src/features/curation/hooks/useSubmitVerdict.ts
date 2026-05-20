@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { submitVerdict } from '@services/verdictService';
+import { submitVerdict } from '@features/curation/services/verdictService';
 import type { SubmitVerdictArgs } from '@shared/types/verdict';
 
 /** Wraps the verdict service in a TanStack useMutation so leaf components

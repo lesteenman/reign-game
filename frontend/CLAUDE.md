@@ -41,7 +41,7 @@ in `eslint.config.js`.
 | `@theme/*` | `src/theme/*` | BR target home |
 | `@storage/*` | `src/storage/*` | BR target home |
 | `@pages/*` | `src/pages/*` | Transitional — slated for `features/*/pages/` per #176 |
-| `@components/*` | `src/components/*` | Transitional — `grid/` → `features/game/`, `landing/` → `features/curation/` per #176 |
+| `@components/*` | `src/components/*` | Transitional — only `grid/` remains; moves to `features/game/components/` per #176 |
 | `@hooks/*` | `src/hooks/*` | Transitional — slated for `features/<feature>/hooks/` per #176 |
 | `@services/*` | `src/services/*` | Transitional — slated for `features/<feature>/services/` or `useQuery` adoption per #176 |
 

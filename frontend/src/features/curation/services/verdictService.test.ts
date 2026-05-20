@@ -123,7 +123,7 @@ describe('submitVerdict', () => {
       json: () => Promise.resolve({ message: 'puzzle not found' }),
     });
     const { submitVerdict } = await import('./verdictService');
-    const { ApiError } = await import('./api');
+    const { ApiError } = await import('@services/api');
 
     // Act + Assert
     try {
@@ -150,7 +150,7 @@ describe('submitVerdict', () => {
       json: () => Promise.resolve({ message: 'internal error' }),
     });
     const { submitVerdict } = await import('./verdictService');
-    const { ApiError } = await import('./api');
+    const { ApiError } = await import('@services/api');
 
     // Act + Assert
     try {
@@ -177,7 +177,7 @@ describe('submitVerdict', () => {
       json: () => Promise.resolve({ message: 'invalid_params: value' }),
     });
     const { submitVerdict } = await import('./verdictService');
-    const { ApiError } = await import('./api');
+    const { ApiError } = await import('@services/api');
 
     // Act + Assert
     try {

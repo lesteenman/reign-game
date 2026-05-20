@@ -8,9 +8,9 @@ import { useUpdatePuzzleStatus } from '@shared/game/hooks/useUpdatePuzzleStatus'
 import { PageShell } from '@shared/components/PageShell';
 import { PrimaryButton, SecondaryButton, GhostButton } from '@shared/components/Button';
 import { getClerkUserRole } from '@shared/auth/role';
-import { VerdictSurface } from './VerdictSurface';
 import type { PuzzleData, CellState } from '@engine/types';
 import type { FlowType, GameState, GameHistory, CompletionRecord } from '@storage/types';
+import type { AdminVerdictSurfaceComponent } from '@shared/game/types/admin-verdict-surface';
 
 /** Format seconds as MM:SS (under 1h) or H:MM:SS (1h+). Hour digit is
  * un-padded; presence of the leading `H:` itself signals hour-scale. */
@@ -73,6 +73,23 @@ export interface GameBoardProps {
    * curation/practice-shaped.
    */
   onSolveDetected?: (solution: number[][], elapsedMs: number) => void;
+  /**
+   * Optional admin-only verdict surface component (curation flow). When
+   * provided, GameBoard renders it at the completion overlay (after
+   * solve, admin only) and inside the skip modal. When omitted (e.g.
+   * daily flow), no admin verdict UI is shown — the Skip button is
+   * also suppressed in that case because the modal would have no
+   * surface to mount.
+   *
+   * Type contract lives in `@shared/game/types/admin-verdict-surface`
+   * so GameBoard (shared) does not import from `features/curation/`
+   * (which would violate the unidirectional `shared → features → app`
+   * rule enforced by `import/no-restricted-paths` in eslint.config.js).
+   * features/curation/components/VerdictSurface.tsx is the canonical
+   * implementation; pages/GamePage.tsx wires it up for the curation
+   * flow.
+   */
+  AdminVerdictSurface?: AdminVerdictSurfaceComponent;
 }
 
 /** Build the current GameState from refs, preserving the original startedAt. */
@@ -116,6 +133,7 @@ export function GameBoard({
   onBack,
   onPlayAgain,
   onSolveDetected,
+  AdminVerdictSurface,
 }: GameBoardProps) {
   const assignedAtMs = assignedAt ? new Date(assignedAt).getTime() : null;
   const isWallClockAnchored = assignedAtMs !== null && !Number.isNaN(assignedAtMs);
@@ -445,8 +463,8 @@ export function GameBoard({
                 <PrimaryButton onClick={handlePlayAgain}>Play Again</PrimaryButton>
                 <SecondaryButton onClick={handleGoHome}>Home</SecondaryButton>
               </div>
-              {isAdmin && (
-                <VerdictSurface
+              {isAdmin && AdminVerdictSurface && (
+                <AdminVerdictSurface
                   variant="completion"
                   outcome="solved"
                   puzzleId={puzzle.puzzleId}
@@ -515,8 +533,10 @@ export function GameBoard({
         {/* Skip is the admin verdict surface for curation/practice. The
             daily flow doesn't expose a verdict step — admins playing
             the daily play it like everyone else. Gate the Skip button
-            on flowType so the admin role alone doesn't surface it. */}
-        {isAdmin && !isSolved && flowType !== 'daily' && (
+            on flowType so the admin role alone doesn't surface it.
+            Also require AdminVerdictSurface — if the slot isn't wired
+            up, clicking Skip would open a modal with nothing to mount. */}
+        {isAdmin && !isSolved && flowType !== 'daily' && AdminVerdictSurface && (
           <GhostButton
             onClick={() => setShowSkipModal(true)}
             data-testid="skip-button"
@@ -558,19 +578,21 @@ export function GameBoard({
               minWidth: '280px',
             }}
           >
-            <VerdictSurface
-              variant="skip"
-              outcome="skipped"
-              puzzleId={puzzle.puzzleId}
-              size={puzzle.gridSize}
-              mode={puzzle.mode}
-              playTimeMs={timer.elapsed * 1000}
-              onDismiss={() => setShowSkipModal(false)}
-              onAfterVerdict={() => {
-                setShowSkipModal(false);
-                navigate('/curation');
-              }}
-            />
+            {AdminVerdictSurface && (
+              <AdminVerdictSurface
+                variant="skip"
+                outcome="skipped"
+                puzzleId={puzzle.puzzleId}
+                size={puzzle.gridSize}
+                mode={puzzle.mode}
+                playTimeMs={timer.elapsed * 1000}
+                onDismiss={() => setShowSkipModal(false)}
+                onAfterVerdict={() => {
+                  setShowSkipModal(false);
+                  navigate('/curation');
+                }}
+              />
+            )}
           </div>
         </div>
       )}

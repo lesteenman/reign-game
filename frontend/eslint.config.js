@@ -175,6 +175,11 @@ export default tseslint.config(
               from: './src/features',
               except: ['./daily'],
             },
+            {
+              target: './src/features/curation',
+              from: './src/features',
+              except: ['./curation'],
+            },
 
             // Unidirectional: shared → features → app.
             // Features cannot import from app (app composes features).

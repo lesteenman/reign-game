@@ -9,7 +9,7 @@ const updatePuzzleStatusMock = vi.fn();
 // useMutation, so mocking at the service layer requires waiting for
 // TanStack's async mutation pipeline. Mocking the hooks gives direct
 // control over mutateAsync's resolved/rejected value.
-vi.mock('@shared/game/hooks/useSubmitVerdict', () => ({
+vi.mock('@features/curation/hooks/useSubmitVerdict', () => ({
   useSubmitVerdict: () => ({ mutateAsync: (...args: unknown[]) => submitVerdictMock(...args) }),
 }));
 

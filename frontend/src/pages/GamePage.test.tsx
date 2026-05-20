@@ -52,7 +52,7 @@ vi.mock('@services/puzzleService', () => ({
   },
 }));
 
-vi.mock('@services/verdictService', () => ({
+vi.mock('@features/curation/services/verdictService', () => ({
   submitVerdict: (...args: unknown[]) => mockSubmitVerdict(...args),
 }));
 

@@ -63,7 +63,7 @@ Bulletproof React app-composition layer. Today holds providers only; router extr
 
 ### `src/components/`
 
-Legacy cross-feature React components. New code does NOT land here. Remaining subfolders (`grid/`, `landing/`) each have their own #176 slice planned. See `src/components/README.md` for status. (`auth/` → `shared/auth/` in #176 PR #196; `common/` → `shared/components/` in #176 this PR; `game/` → `shared/game/components/` in Track 3.)
+Legacy cross-feature React components. New code does NOT land here. Remaining subfolder (`grid/`) has its own #176 slice planned. See `src/components/README.md` for status. (`auth/` → `shared/auth/` in #176 PR #196; `common/` → `shared/components/` in #176 PR #197; `landing/PuzzleSelector` → `features/curation/components/` in #176 this PR; `game/` → `shared/game/components/` in Track 3.)
 
 ### `src/engine/`
 
@@ -121,13 +121,13 @@ Route-level components. See `src/pages/README.md`.
 
 - `LandingPage.tsx` — public landing with Daily / Packs / Curation tiles (Curation gated on admin role).
 - `GamePage.tsx` — gameplay host (786 LOC). Manages `LoadState` machine + the inner `GameBoard` (also exported here).
-- `DailyFlow.tsx` — daily-puzzle state machine (loading → playing → submitting → solved). Internally uses `DailyGameBoard`.
-- `DailyGameBoard.tsx` — daily flow's grid host; adapts the daily payload to the `GameBoard` contract.
-- `PostCompletionScreen.tsx` — terminal "Done for today" screen with countdown.
-- `CurationPage.tsx` — admin-gated puzzle-selector for curation play.
-- `AdminPage.tsx` — admin pool-management UI (649 LOC).
-- `AdminLandingPage.tsx` — unauthenticated / forbidden landing for `/admin`.
-- Tests: one `.test.tsx` per page plus `GameBoard.test.tsx` and `GameBoardWallClock.test.tsx`, both targeting the `GameBoard` function exported from `GamePage.tsx`.
+- `DailyFlow.tsx` — daily-puzzle state machine; lives in `features/daily/screens/`.
+- `DailyGameBoard.tsx` — daily flow's grid host; lives in `features/daily/screens/`.
+- `PostCompletionScreen.tsx` — terminal "Done for today" screen; lives in `features/daily/screens/`.
+- `AdminPage.tsx` — admin pool-management UI; lives in `features/admin/pages/`.
+- `AdminLandingPage.tsx` — unauthenticated / forbidden landing for `/admin`; lives in `features/admin/pages/`.
+- `CurationPage.tsx` — admin-gated puzzle-selector for curation play; lives in `features/curation/pages/` (moved in #176).
+- Tests: one `.test.tsx` per page plus `GameBoard.test.tsx` and `GameBoardWallClock.test.tsx`, both targeting `GameBoard` (which lives in `shared/game/components/`).
 
 ### `src/services/`
 
@@ -135,10 +135,11 @@ Backend client modules. See `src/services/README.md`.
 
 - `api.ts` — shared fetch base (`apiFetch` / `apiPut` / `apiPost`) + `ApiError`.
 - `puzzleService.ts` — `fetchNextPuzzle`, `updatePuzzleStatus`, `NoPuzzlesAvailableError`.
-- `verdictService.ts` — `submitVerdict` (admin verdict POST with `clientVersion`).
 - `adminService.ts` — pool / config CRUD (`fetchPoolStatus`, `updateConfig`, `createConfig`, `triggerReplenish`) plus type re-exports.
 - `landingService.ts` — `fetchEnabledModes` (public `/api/config/modes`).
 - `dailyService.ts` — daily flow (`getDaily`, `submitDailyResult`); intentionally bypasses `api.ts` to inject `X-Device-Id`.
+
+(`verdictService.ts` moved to `features/curation/services/` in #176.)
 
 ### `src/storage/`
 
@@ -169,12 +170,16 @@ Custom hand-built grid UI. See `src/components/grid/README.md`.
 - `ExclusionMark.tsx` — small dot SVG for excluded cells.
 - `RegionBorderOverlay.tsx` — SVG overlay drawing region boundary lines + corner junctions.
 
-### `src/components/landing/`
+### `src/features/curation/` *(2026-05-20: introduced in #176)*
 
-Landing-page-specific UI. See `src/components/landing/README.md`.
+Curation feature: admin-only puzzle review surface. The `/curation` route lands here; admin verdict submission inside any curation-flow `GameBoard` also threads through this feature.
 
-- `PuzzleSelector.tsx` — size/mode preset selector + Play button. Used by `CurationPage`.
-- Tests: `PuzzleSelector.test.tsx`.
+- `pages/CurationPage.tsx` — admin-gated landing for the curation flow; presents `PuzzleSelector` for size/mode pick.
+- `components/PuzzleSelector.tsx` — size/mode preset selector + Play button. (Was misnamed `components/landing/PuzzleSelector` in legacy layout; moved here in #176.)
+- `components/VerdictSurface.tsx` — admin verdict UI (completion + skip variants). Mounted by `GameBoard` via the `AdminVerdictSurface` prop (slot contract in `shared/game/types/admin-verdict-surface.ts`). Was previously in `shared/game/components/`; moved here in #176 because the verdict surface is curation-specific.
+- `services/verdictService.ts` — `submitVerdict` (admin PUT to `/api/admin/puzzles/{id}/verdict`). Was previously in `src/services/`.
+- `hooks/useSubmitVerdict.ts` — TanStack `useMutation` wrapper around `verdictService.submitVerdict`. Was previously in `shared/game/hooks/`.
+- Tests: one per source file.
 
 ## Playwright tests
 
