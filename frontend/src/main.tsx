@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { registerSW } from 'virtual:pwa-register';
-import App from './App';
+import { Router } from '@app/router';
 import { Providers } from '@app/providers';
 import './index.css';
 
@@ -22,7 +22,7 @@ if (import.meta.env.PROD) {
 createRoot(rootElement).render(
   <StrictMode>
     <Providers>
-      <App />
+      <Router />
     </Providers>
   </StrictMode>,
 );

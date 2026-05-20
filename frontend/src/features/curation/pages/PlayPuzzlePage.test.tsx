@@ -3,7 +3,7 @@ import { render, screen, fireEvent, cleanup, waitFor } from '@shared/test-utils'
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider } from '@theme/ThemeContext';
-import { GamePage } from './GamePage';
+import { PlayPuzzlePage } from './PlayPuzzlePage';
 import { FALLBACK_PUZZLE } from '@shared/test-fixtures';
 import type { PuzzleData } from '@engine/types';
 
@@ -37,13 +37,12 @@ let mockFetchResult: () => Promise<PuzzleData> = () => Promise.resolve(MOCK_PUZZ
 const mockUpdateStatus = vi.fn().mockResolvedValue(undefined);
 const mockSubmitVerdict = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('@services/puzzleService', () => ({
+vi.mock('@features/curation/services/fetch-next-puzzle-service', () => ({
   fetchNextPuzzle: (size: number, mode: string) => {
     lastFetchArgs = { size, mode };
     fetchCallCount++;
     return mockFetchResult();
   },
-  updatePuzzleStatus: (...args: unknown[]) => mockUpdateStatus(...args),
   NoPuzzlesAvailableError: class NoPuzzlesAvailableError extends Error {
     constructor(message = 'No puzzles available') {
       super(message);
@@ -52,22 +51,13 @@ vi.mock('@services/puzzleService', () => ({
   },
 }));
 
+vi.mock('@services/puzzleService', () => ({
+  updatePuzzleStatus: (...args: unknown[]) => mockUpdateStatus(...args),
+}));
+
 vi.mock('@features/curation/services/verdictService', () => ({
   submitVerdict: (...args: unknown[]) => mockSubmitVerdict(...args),
 }));
-
-// GamePage delegates to <DailyFlow /> for `flow=daily`. Stub getDaily()
-// so the delegated component renders without hitting the network — the
-// delegation test only asserts the wrapper is mounted.
-vi.mock('@services/dailyService', async () => {
-  const actual = await vi.importActual<typeof import('@services/dailyService')>(
-    '@services/dailyService',
-  );
-  return {
-    ...actual,
-    getDaily: vi.fn().mockReturnValue(new Promise(() => {})),
-  };
-});
 
 // Clerk hook mock — controls the role-gated UI (verdict surface, Skip
 // button) under three states: signedOut, role=user, role=admin.
@@ -110,7 +100,7 @@ beforeEach(() => {
   mockUpdateStatus.mockResolvedValue(undefined);
   // Default to signed-out state. Each test that needs a different
   // Clerk state overrides via useUserMock.mockReturnValue(...) before
-  // calling renderGamePage.
+  // calling renderPage.
   useUserMock.mockReset();
   useUserMock.mockReturnValue({ isLoaded: true, isSignedIn: false, user: null });
   sessionStorage.clear();
@@ -128,11 +118,11 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-function renderGamePage(initialEntry = '/play?flow=curation&size=5&mode=standard') {
+function renderPage(initialEntry = '/play?flow=curation&size=5&mode=standard') {
   return render(
     <ThemeProvider>
       <MemoryRouter initialEntries={[initialEntry]}>
-        <GamePage />
+        <PlayPuzzlePage />
       </MemoryRouter>
     </ThemeProvider>,
   );
@@ -143,10 +133,10 @@ async function waitForHeader() {
   await screen.findByTestId('page-header');
 }
 
-describe('GamePage header', () => {
+describe('PlayPuzzlePage header', () => {
   it('renders back button', async () => {
     // Arrange
-    renderGamePage();
+    renderPage();
 
     // Act
     await waitForHeader();
@@ -159,7 +149,7 @@ describe('GamePage header', () => {
 
   it('back button navigates to / on click', async () => {
     // Arrange
-    renderGamePage();
+    renderPage();
     await waitForHeader();
 
     // Act
@@ -171,7 +161,7 @@ describe('GamePage header', () => {
 
   it('renders dark mode toggle in header', async () => {
     // Arrange
-    renderGamePage();
+    renderPage();
 
     // Act
     await waitForHeader();
@@ -184,7 +174,7 @@ describe('GamePage header', () => {
 
   it('dark mode toggle changes mode on click', async () => {
     // Arrange
-    renderGamePage();
+    renderPage();
     await waitForHeader();
     const toggle = screen.getByTestId('dark-mode-toggle');
     const initialLabel = toggle.getAttribute('aria-label');
@@ -199,10 +189,10 @@ describe('GamePage header', () => {
   });
 });
 
-describe('GamePage back navigation preserves state', () => {
+describe('PlayPuzzlePage back navigation preserves state', () => {
   it('does not clear IndexedDB when navigating back', async () => {
     // Arrange
-    renderGamePage();
+    renderPage();
     await waitForHeader();
 
     // Act — navigate back
@@ -215,10 +205,10 @@ describe('GamePage back navigation preserves state', () => {
   });
 });
 
-describe('GamePage fetchNextPuzzle integration', () => {
+describe('PlayPuzzlePage fetchNextPuzzle integration', () => {
   it('calls fetchNextPuzzle with size and mode from URL params', async () => {
     // Arrange & Act
-    renderGamePage('/play?flow=curation&size=7&mode=double');
+    renderPage('/play?flow=curation&size=7&mode=double');
     await waitForHeader();
 
     // Assert
@@ -227,7 +217,7 @@ describe('GamePage fetchNextPuzzle integration', () => {
 
   it('uses default size=5 and mode=standard when params absent', async () => {
     // Arrange & Act
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -236,7 +226,7 @@ describe('GamePage fetchNextPuzzle integration', () => {
 
   it('does not read pipeline, solver, regions, or regionVariance from URL', async () => {
     // Arrange & Act
-    renderGamePage('/play?flow=curation&size=9&mode=standard&pipeline=iterative&solver=propagation');
+    renderPage('/play?flow=curation&size=9&mode=standard&pipeline=iterative&solver=propagation');
     await waitForHeader();
 
     // Assert — only size and mode matter now
@@ -244,11 +234,11 @@ describe('GamePage fetchNextPuzzle integration', () => {
   });
 });
 
-describe('GamePage error states', () => {
+describe('PlayPuzzlePage error states', () => {
   it('shows generic error on fetch failure', async () => {
     // Arrange
     mockFetchResult = () => Promise.reject(new Error('network error'));
-    renderGamePage('/play?flow=curation&size=7&mode=standard');
+    renderPage('/play?flow=curation&size=7&mode=standard');
 
     // Act
     const errorState = await screen.findByTestId('error-state');
@@ -260,7 +250,7 @@ describe('GamePage error states', () => {
   it('Try Again on error retries fetch without navigating', async () => {
     // Arrange
     mockFetchResult = () => Promise.reject(new Error('generation failed'));
-    renderGamePage('/play?flow=curation&size=9&mode=double');
+    renderPage('/play?flow=curation&size=9&mode=double');
 
     // Act
     await screen.findByTestId('error-state');
@@ -276,12 +266,12 @@ describe('GamePage error states', () => {
   });
 });
 
-describe('GamePage no-puzzles state (FE-04)', () => {
+describe('PlayPuzzlePage no-puzzles state (FE-04)', () => {
   it('shows no-puzzles message when fetchNextPuzzle throws NoPuzzlesAvailableError', async () => {
     // Arrange — import the mock error class
-    const { NoPuzzlesAvailableError } = await import('@services/puzzleService');
+    const { NoPuzzlesAvailableError } = await import('@features/curation/services/fetch-next-puzzle-service');
     mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
-    renderGamePage('/play?flow=curation&size=7&mode=standard');
+    renderPage('/play?flow=curation&size=7&mode=standard');
 
     // Act
     const noPuzzlesState = await screen.findByTestId('no-puzzles-state');
@@ -293,9 +283,9 @@ describe('GamePage no-puzzles state (FE-04)', () => {
 
   it('shows retry button in no-puzzles state', async () => {
     // Arrange
-    const { NoPuzzlesAvailableError } = await import('@services/puzzleService');
+    const { NoPuzzlesAvailableError } = await import('@features/curation/services/fetch-next-puzzle-service');
     mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
-    renderGamePage('/play?flow=curation&size=7&mode=standard');
+    renderPage('/play?flow=curation&size=7&mode=standard');
 
     // Act
     await screen.findByTestId('no-puzzles-state');
@@ -306,9 +296,9 @@ describe('GamePage no-puzzles state (FE-04)', () => {
 
   it('retry button re-fetches without navigating', async () => {
     // Arrange
-    const { NoPuzzlesAvailableError } = await import('@services/puzzleService');
+    const { NoPuzzlesAvailableError } = await import('@features/curation/services/fetch-next-puzzle-service');
     mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
-    renderGamePage('/play?flow=curation&size=9&mode=double');
+    renderPage('/play?flow=curation&size=9&mode=double');
 
     // Act
     await screen.findByTestId('no-puzzles-state');
@@ -324,10 +314,10 @@ describe('GamePage no-puzzles state (FE-04)', () => {
   });
 });
 
-describe('GamePage metadata display (FE-05)', () => {
+describe('PlayPuzzlePage metadata display (FE-05)', () => {
   it('shows metadata when puzzle has metadata', async () => {
     // Arrange & Act
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -343,7 +333,7 @@ describe('GamePage metadata display (FE-05)', () => {
       ...MOCK_PUZZLE_WITH_METADATA,
       metadata: { ...MOCK_PUZZLE_WITH_METADATA.metadata!, generationDurationMs: 450 },
     });
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -354,7 +344,7 @@ describe('GamePage metadata display (FE-05)', () => {
   it('does not show metadata when puzzle has no metadata', async () => {
     // Arrange
     mockFetchResult = () => Promise.resolve(FALLBACK_PUZZLE);
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -373,7 +363,7 @@ describe('GamePage metadata display (FE-05)', () => {
       status: 'in-progress',
       startedAt: Date.now(),
     });
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -381,7 +371,7 @@ describe('GamePage metadata display (FE-05)', () => {
   });
 });
 
-describe('GamePage undo/redo (R-060)', () => {
+describe('PlayPuzzlePage undo/redo (R-060)', () => {
   const emptyGrid5 = () => Array.from({ length: 5 }, () => Array(5).fill('empty'));
 
   function mockStateWithUndoable() {
@@ -403,7 +393,7 @@ describe('GamePage undo/redo (R-060)', () => {
 
   it('renders undo and redo buttons, initially disabled for fresh puzzle', async () => {
     // Arrange & Act
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -417,7 +407,7 @@ describe('GamePage undo/redo (R-060)', () => {
     mockStateWithUndoable();
 
     // Act
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert
@@ -429,7 +419,7 @@ describe('GamePage undo/redo (R-060)', () => {
   it('clicking undo reverts state and flips button enabled states', async () => {
     // Arrange
     mockStateWithUndoable();
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
     const undoBtn = await screen.findByTestId('undo-button');
     expect(undoBtn).not.toBeDisabled();
@@ -445,7 +435,7 @@ describe('GamePage undo/redo (R-060)', () => {
   it('Ctrl+Z triggers undo when history is available', async () => {
     // Arrange
     mockStateWithUndoable();
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
     await screen.findByTestId('undo-button');
 
@@ -460,7 +450,7 @@ describe('GamePage undo/redo (R-060)', () => {
   it('Ctrl+Shift+Z triggers redo after an undo', async () => {
     // Arrange
     mockStateWithUndoable();
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
     await screen.findByTestId('undo-button');
     fireEvent.keyDown(window, { key: 'z', ctrlKey: true });
@@ -477,7 +467,7 @@ describe('GamePage undo/redo (R-060)', () => {
   it('Meta+Z also triggers undo (Mac chord)', async () => {
     // Arrange
     mockStateWithUndoable();
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
     await screen.findByTestId('undo-button');
 
@@ -491,7 +481,7 @@ describe('GamePage undo/redo (R-060)', () => {
   it('plain Z (no modifier) does not trigger undo', async () => {
     // Arrange
     mockStateWithUndoable();
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
     const undoBtn = await screen.findByTestId('undo-button');
 
@@ -505,7 +495,7 @@ describe('GamePage undo/redo (R-060)', () => {
   it('saveState payload includes history after an undo', async () => {
     // Arrange
     mockStateWithUndoable();
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
     const undoBtn = await screen.findByTestId('undo-button');
     mockSaveState.mockClear();
@@ -525,13 +515,13 @@ describe('GamePage undo/redo (R-060)', () => {
   });
 });
 
-describe('GamePage — Skip button visibility (FB-11)', () => {
+describe('PlayPuzzlePage — Skip button visibility (FB-11)', () => {
   it('hides the Skip button when signed out', async () => {
     // Arrange
     useUserMock.mockReturnValue({ isLoaded: true, isSignedIn: false, user: null });
 
     // Act
-    renderGamePage();
+    renderPage();
     await waitForHeader();
 
     // Assert
@@ -547,7 +537,7 @@ describe('GamePage — Skip button visibility (FB-11)', () => {
     });
 
     // Act
-    renderGamePage();
+    renderPage();
     await waitForHeader();
 
     // Assert
@@ -563,7 +553,7 @@ describe('GamePage — Skip button visibility (FB-11)', () => {
     });
 
     // Act
-    renderGamePage();
+    renderPage();
     await waitForHeader();
 
     // Assert
@@ -577,7 +567,7 @@ describe('GamePage — Skip button visibility (FB-11)', () => {
     useUserMock.mockReturnValue({ isLoaded: false, isSignedIn: false, user: null });
 
     // Act
-    renderGamePage();
+    renderPage();
     await waitForHeader();
 
     // Assert
@@ -585,7 +575,7 @@ describe('GamePage — Skip button visibility (FB-11)', () => {
   });
 });
 
-describe('GamePage — Skip modal flow (FB-02 §2)', () => {
+describe('PlayPuzzlePage — Skip modal flow (FB-02 §2)', () => {
   beforeEach(() => {
     useUserMock.mockReturnValue({
       isLoaded: true,
@@ -596,7 +586,7 @@ describe('GamePage — Skip modal flow (FB-02 §2)', () => {
 
   it('opens the modal with three buttons when admin clicks Skip', async () => {
     // Arrange
-    renderGamePage();
+    renderPage();
     await waitForHeader();
     const skip = await screen.findByTestId('skip-button');
 
@@ -615,7 +605,7 @@ describe('GamePage — Skip modal flow (FB-02 §2)', () => {
 
   it('Cancel closes the modal without calling any service', async () => {
     // Arrange
-    renderGamePage();
+    renderPage();
     await waitForHeader();
     const skip = await screen.findByTestId('skip-button');
     fireEvent.click(skip);
@@ -635,7 +625,7 @@ describe('GamePage — Skip modal flow (FB-02 §2)', () => {
 
   it('"I hate this" calls both updatePuzzleStatus and submitVerdict, then navigates to /curation', async () => {
     // Arrange
-    renderGamePage();
+    renderPage();
     await waitForHeader();
     const skip = await screen.findByTestId('skip-button');
     fireEvent.click(skip);
@@ -662,7 +652,7 @@ describe('GamePage — Skip modal flow (FB-02 §2)', () => {
 
   it('"Just skip" calls only updatePuzzleStatus, then navigates to /curation', async () => {
     // Arrange
-    renderGamePage();
+    renderPage();
     await waitForHeader();
     const skip = await screen.findByTestId('skip-button');
     fireEvent.click(skip);
@@ -680,13 +670,13 @@ describe('GamePage — Skip modal flow (FB-02 §2)', () => {
   });
 });
 
-describe('GamePage — Flow Slot URL contract', () => {
+describe('PlayPuzzlePage — Flow Slot URL contract', () => {
   const emptyGrid5 = (): ('empty' | 'excluded' | 'marked')[][] =>
     Array.from({ length: 5 }, () => Array(5).fill('empty'));
 
   it('redirects home when flow query param is unrecognized (ST-11)', async () => {
     // Arrange
-    renderGamePage('/play?flow=junk&size=5&mode=standard');
+    renderPage('/play?flow=junk&size=5&mode=standard');
 
     // Act — wait for the redirect effect to fire
     await waitFor(() => {
@@ -700,7 +690,7 @@ describe('GamePage — Flow Slot URL contract', () => {
 
   it('redirects home when flow query param is missing', async () => {
     // Arrange — no flow param at all
-    renderGamePage('/play?size=5&mode=standard');
+    renderPage('/play?size=5&mode=standard');
 
     // Act
     await waitFor(() => {
@@ -717,7 +707,7 @@ describe('GamePage — Flow Slot URL contract', () => {
     mockLoadState.mockResolvedValue(null);
 
     // Act
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert — fetched the right (size, mode); saveState wrote a slot
@@ -746,7 +736,7 @@ describe('GamePage — Flow Slot URL contract', () => {
     });
 
     // Act
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert — no fetch happened; the resume path took over.
@@ -769,7 +759,7 @@ describe('GamePage — Flow Slot URL contract', () => {
     });
 
     // Act
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert — fetch ran exactly once (the defensive fallback).
@@ -803,7 +793,7 @@ describe('GamePage — Flow Slot URL contract', () => {
     });
 
     // Act
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert — clearState was called with the matching slot.
@@ -816,7 +806,7 @@ describe('GamePage — Flow Slot URL contract', () => {
     // Arrange — first mount slot A (5x5 standard), let it settle, then
     // unmount and mount slot B (7x7 double).
     mockLoadState.mockResolvedValue(null);
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Sanity: slot A's saveState ran with the right tag.
@@ -831,7 +821,7 @@ describe('GamePage — Flow Slot URL contract', () => {
     // Act — unmount A, mount B with a different (size, mode).
     cleanup();
     mockLoadState.mockResolvedValue(null);
-    renderGamePage('/play?flow=curation&size=7&mode=double');
+    renderPage('/play?flow=curation&size=7&mode=double');
     await waitForHeader();
 
     // Assert — no clearState call ever targeted slot A. Slot B may
@@ -845,27 +835,19 @@ describe('GamePage — Flow Slot URL contract', () => {
   });
 });
 
-describe('GamePage daily delegation', () => {
-  it('delegates to DailyFlow when flow=daily search param is set', async () => {
-    // Arrange + Act
-    renderGamePage('/play?flow=daily');
+// `flow=daily` delegation moved to the router (`src/app/router.tsx`)
+// in #176; this page no longer reads the daily flow. The delegation
+// behaviour is covered structurally by `src/app/router.tsx`'s shape:
+// `?flow=daily` returns `<DailyFlow />` directly without touching this
+// page. No equivalent test lives here anymore.
 
-    // Assert — DailyFlow's wrapper is mounted; the existing pool/
-    // curation fetcher must not have been invoked.
-    await waitFor(() => {
-      expect(screen.getByTestId('daily-flow')).toBeInTheDocument();
-    });
-    expect(fetchCallCount).toBe(0);
-  });
-});
-
-describe('GamePage — timer starts on mount (not on first tap)', () => {
+describe('PlayPuzzlePage — timer starts on mount (not on first tap)', () => {
   it('timer is running by the time the grid first renders, before any user input', async () => {
     // Arrange — fresh puzzle, no restored state. The timer must begin
     // ticking on mount so a user opening the daily/curation page sees
     // it count from 0 without needing to tap a cell first.
     mockLoadState.mockResolvedValue(null);
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert — the timer-display is mounted (with elapsed=0 initially)
@@ -884,14 +866,13 @@ describe('GamePage — timer starts on mount (not on first tap)', () => {
   });
 });
 
-describe('GamePage — daily-flow gates the Skip button (admin only on curation)', () => {
+describe('PlayPuzzlePage — admin sees Skip button (curation flow)', () => {
   // Skip puzzle is the admin verdict surface and belongs to the
-  // curation flow. The daily flow must NOT render Skip even for
-  // admins. This test exercises the curation case (admin sees Skip)
-  // and the daily case (admin does not). Daily branch goes via
-  // <DailyFlow /> which mocks getDaily to never resolve, so a Skip
-  // probe there would only be possible from inside the real
-  // GameBoard — see GameBoard.test.tsx for the direct-render test.
+  // curation flow. The daily-flow negative case (admin does NOT see
+  // Skip on daily) is verified at the GameBoard level — see
+  // GameBoard.test.tsx's "daily flow hides Skip button (admin)" test
+  // — because the daily flow no longer routes through this page after
+  // #176's GamePage split.
 
   it('curation flow: admin sees Skip button', async () => {
     // Arrange
@@ -902,7 +883,7 @@ describe('GamePage — daily-flow gates the Skip button (admin only on curation)
     });
 
     // Act
-    renderGamePage('/play?flow=curation&size=5&mode=standard');
+    renderPage('/play?flow=curation&size=5&mode=standard');
     await waitForHeader();
 
     // Assert

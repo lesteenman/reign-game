@@ -83,7 +83,7 @@ task e2e:down:generator  # stop e2e generator worker
 
 ## Fixtures
 
-Committed under `e2e/fixtures/puzzles/*.json` as DynamoDB-Item JSON. Two fixtures with the same region map + different SKs are committed for the 7×7 Standard combo — a workaround for React StrictMode's dev-mode double-mount of `GamePage`, where the first mount's cancelled fetch still triggers a server-side `status=served` update, leaving the second mount needing a fresh fixture to avoid 404.
+Committed under `e2e/fixtures/puzzles/*.json` as DynamoDB-Item JSON. Two fixtures with the same region map + different SKs are committed for the 7×7 Standard combo — a workaround for React StrictMode's dev-mode double-mount of `PlayPuzzlePage`, where the first mount's cancelled fetch still triggers a server-side `status=served` update, leaving the second mount needing a fresh fixture to avoid 404.
 
 Regenerate after intentional generator changes:
 

@@ -18,7 +18,6 @@
       "@engine/*": ["./src/engine/*"],
       "@theme/*": ["./src/theme/*"],
       "@storage/*": ["./src/storage/*"],
-      "@pages/*": ["./src/pages/*"],
       "@services/*": ["./src/services/*"]
     }
   }

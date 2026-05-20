@@ -1,7 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useGameStorage } from '@shared/game/hooks/useGameStorage';
-import { fetchNextPuzzle, NoPuzzlesAvailableError } from '@services/puzzleService';
+import {
+  fetchNextPuzzle,
+  NoPuzzlesAvailableError,
+} from '@features/curation/services/fetch-next-puzzle-service';
 import { createFreshGameState } from '@storage/utils';
 import { PageShell } from '@shared/components/PageShell';
 import { SecondaryButton } from '@shared/components/Button';
@@ -10,7 +13,6 @@ import type { Mode, PuzzleData, CellState } from '@engine/types';
 import { isMode } from '@engine/types';
 import type { FlowType, GameHistory } from '@storage/types';
 import { EMPTY_HISTORY, buildCurationFlowId, parseFlowType } from '@storage/types';
-import { DailyFlow } from '@features/daily/screens/DailyFlow';
 import { VerdictSurface } from '@features/curation/components/VerdictSurface';
 
 type LoadState =
@@ -21,21 +23,22 @@ type LoadState =
   | { status: 'error'; message: string };
 
 /**
- * Main gameplay page. The URL specifies the Flow Slot
- * (`?flow=curation&size=N&mode=M`); storage decides resume vs. fetch.
- * An unrecognized or missing `flow` redirects home (ST-11).
+ * Curation/practice play route. Reads `?flow=curation&size=N&mode=M`
+ * from the URL, loads a saved game from IndexedDB or fetches a fresh
+ * puzzle from the pool, then mounts `<GameBoard>` with the admin
+ * `<VerdictSurface>` slot wired up. An unrecognized or missing `flow`
+ * redirects home (ST-11).
+ *
+ * The `?flow=daily` branch lives at the router level (`src/app/router.tsx`)
+ * so this page never imports `features/daily/`. Was `pages/GamePage.tsx`
+ * before #176.
  */
-export function GamePage() {
+export function PlayPuzzlePage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { loadState, saveState, clearState, addCompletion } = useGameStorage();
   const [loadStatus, setLoadStatus] = useState<LoadState>({ status: 'loading' });
   const [fetchKey, setFetchKey] = useState(0);
-
-  // When the URL says `?flow=daily`, delegate the entire flow to
-  // DailyFlow. The existing pool/practice/curation path below remains
-  // untouched for non-daily flows.
-  const isDailyFlow = searchParams.get('flow') === 'daily';
 
   /** Force a re-fetch of the current Flow Slot (used by Retry / Play Again). */
   const retryFetch = useCallback(() => {
@@ -50,11 +53,6 @@ export function GamePage() {
 
   useEffect(() => {
     let cancelled = false;
-    // The daily flow is handled entirely by <DailyFlow /> below; skip
-    // the pool/curation fetcher so it doesn't race or flip loadStatus.
-    if (isDailyFlow) {
-      return () => { cancelled = true; };
-    }
     const flowType = parseFlowType(searchParams.get('flow'));
     if (flowType === null) {
       setLoadStatus({ status: 'no-state' });
@@ -121,15 +119,7 @@ export function GamePage() {
     });
 
     return () => { cancelled = true; };
-  }, [searchParams, loadState, saveState, fetchKey, isDailyFlow]);
-
-  if (isDailyFlow) {
-    return (
-      <div data-testid="daily-flow">
-        <DailyFlow />
-      </div>
-    );
-  }
+  }, [searchParams, loadState, saveState, fetchKey]);
 
   if (loadStatus.status === 'loading') {
     return (

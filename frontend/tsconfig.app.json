@@ -45,9 +45,9 @@
       "@engine/*": ["./src/engine/*"],
       "@theme/*": ["./src/theme/*"],
       "@storage/*": ["./src/storage/*"],
-      /* Transitional legacy-dir aliases. Drop each as its contents
-       * migrate to a BR layer per #176. */
-      "@pages/*": ["./src/pages/*"],
+      /* Transitional legacy-dir alias. Drop when src/services/ fully
+       * migrates per #176 (api/adminService/dailyService/puzzleService
+       * remain). */
       "@services/*": ["./src/services/*"]
     }
   },

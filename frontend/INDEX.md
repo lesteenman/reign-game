@@ -10,10 +10,10 @@ A single-page Progressive Web App (PWA) that renders the Reign puzzle game. Thre
 
 | | Current (today) | Target (per `frontend/CLAUDE.md` + `architecture` skill) |
 |---|---|---|
-| Folder shape | Mostly BR feature-folder. Remaining legacy: `pages/` (one file), `services/` (four files). Target: pure feature-folder with no legacy layered dirs. | Feature-folder: `app/`, `engine/`, `features/{daily,curation,admin,landing}/`, `shared/{auth,components,game,hooks,types}/`, `theme/`, `storage/` (note: `auth` and `game` live under `shared/` because they are genuinely cross-feature, not single-feature concerns — see #196 + this PR's BR-incorrect-framing analysis) |
+| Folder shape | Mostly BR feature-folder. Remaining legacy: `services/` (four cross-feature service files). Target: pure feature-folder with no legacy layered dirs. | Feature-folder: `app/`, `engine/`, `features/{daily,curation,admin,landing}/`, `shared/{auth,components,game,hooks,types}/`, `theme/`, `storage/` (note: `auth` and `game` live under `shared/` because they are genuinely cross-feature, not single-feature concerns — see #196 + #204's BR-incorrect-framing analysis) |
 | UI primitives | Hand-rolled `<div>`, `<button>` with inline `style={}`; one residual `className=` (`Cell.tsx` animation hook) | Tamagui 2 RC primitives + theme tokens |
 | Tailwind | Imported once in `index.css` (`@import "tailwindcss"`); no `className=*` consumers other than the animation hook | Retired (gone) |
-| Server state | Hand-rolled `useState<LoadState>` / `useState<FlowState>` discriminated unions in `GamePage` + `DailyFlow`; bespoke `useEffect` fetch + cancel | TanStack `useQuery` / `useMutation` |
+| Server state | Hand-rolled `useState<LoadState>` / `useState<FlowState>` discriminated unions in `PlayPuzzlePage` + `DailyFlow`; bespoke `useEffect` fetch + cancel | TanStack `useQuery` / `useMutation` |
 | `services/*` | Four service modules with three near-identical fetch helpers (`apiFetch` / `apiPost` / `apiPut`) plus a fourth fork (`dailyService.ts`) that bypasses `api.ts` for header injection | Hooks own the I/O; leaf components consume hooks |
 | `engine/` | Pure TS (verified: no React, no `fetch`, no DOM) | Same — already conforming |
 | `storage/` | Hand-rolled IndexedDB wrapper, single source of truth for persisted shapes | Same — already conforming |
@@ -57,9 +57,10 @@ frontend/
 
 ### `src/app/` *(2026-05-20: introduced in #176)*
 
-Bulletproof React app-composition layer. Today holds providers only; router extraction is a later #176 slice.
+Bulletproof React app-composition layer.
 
 - `providers.tsx` — `<Providers>`: composes `QueryClientProvider` (TanStack), `ThemeProvider`, `ClerkProvider` (conditional on `VITE_CLERK_PUBLISHABLE_KEY`), and `ClerkAvailabilityProvider`. Mounted by `main.tsx`.
+- `router.tsx` — `<Router>`: BrowserRouter + Routes definitions for `/`, `/play`, `/curation`, `/admin`. `/play` uses an inline `<PlayRoute>` dispatcher that branches on `?flow=` to either `features/daily/screens/DailyFlow` or `features/curation/pages/PlayPuzzlePage` — the dispatch lives at the router level so features/curation/ doesn't import features/daily/.
 
 ### `src/engine/`
 
@@ -102,33 +103,20 @@ Bulletproof React shared-component layer. Every page and feature consumes from h
 - `InstallButton.tsx` — *(2026-05-18: #116 follow-up)* compact install CTA in the PageShell header right-cluster.
 - Tests: `Icon.test.tsx`, `PageShell.test.tsx`, `Button.test.tsx`, `OfflineBanner.test.tsx`, `InstallButton.test.tsx`.
 
-### `src/pages/`
-
-Route-level components. See `src/pages/README.md`.
-
-- `LandingPage.tsx` — public landing with Daily / Packs / Curation tiles (Curation gated on admin role); lives in `features/landing/pages/` (moved in #176).
-- `GamePage.tsx` — gameplay host (786 LOC). Manages `LoadState` machine + the inner `GameBoard` (also exported here).
-- `DailyFlow.tsx` — daily-puzzle state machine; lives in `features/daily/screens/`.
-- `DailyGameBoard.tsx` — daily flow's grid host; lives in `features/daily/screens/`.
-- `PostCompletionScreen.tsx` — terminal "Done for today" screen; lives in `features/daily/screens/`.
-- `AdminPage.tsx` — admin pool-management UI; lives in `features/admin/pages/`.
-- `AdminLandingPage.tsx` — unauthenticated / forbidden landing for `/admin`; lives in `features/admin/pages/`.
-- `CurationPage.tsx` — admin-gated puzzle-selector for curation play; lives in `features/curation/pages/` (moved in #176).
-- Tests: one `.test.tsx` per page plus `GameBoard.test.tsx` and `GameBoardWallClock.test.tsx`, both targeting `GameBoard` (which lives in `shared/game/components/`).
-
 ### `src/services/`
 
-Backend client modules. See `src/services/README.md`.
+Legacy backend client modules. New code uses `features/<feature>/services/` or wraps services in shared hooks (`shared/game/hooks/useUpdatePuzzleStatus`).
 
-- `api.ts` — shared fetch base (`apiFetch` / `apiPut` / `apiPost`) + `ApiError`.
-- `puzzleService.ts` — `fetchNextPuzzle`, `updatePuzzleStatus`, `NoPuzzlesAvailableError`.
-- `adminService.ts` — pool / config CRUD (`fetchPoolStatus`, `updateConfig`, `createConfig`, `triggerReplenish`) plus type re-exports.
-- `dailyService.ts` — daily flow (`getDaily`, `submitDailyResult`); intentionally bypasses `api.ts` to inject `X-Device-Id`.
+- `api.ts` — shared fetch base (`apiFetch` / `apiPut` / `apiPost`) + `ApiError`. Tests in `api.test.ts`.
+- `puzzleService.ts` — just `updatePuzzleStatus` after #176's split (cross-feature; used by both curation + daily via `shared/game/hooks/useUpdatePuzzleStatus`).
+- `adminService.ts` — pool / config CRUD (`fetchPoolStatus`, `updateConfig`, `createConfig`, `triggerReplenish`).
+- `dailyService.ts` — daily flow (`getDaily`, `submitDailyResult`); bypasses `api.ts` to inject `X-Device-Id`.
 
 Already migrated out of this folder:
 
 - `verdictService.ts` → `features/curation/services/` (#176, PR #202).
-- `landingService.ts` → `features/curation/services/enabled-modes-service.ts` (#176, this PR — renamed; the "landing" label was vestigial. Only CurationPage consumed it).
+- `landingService.ts` → `features/curation/services/enabled-modes-service.ts` (#176, PR #203 — renamed; only CurationPage ever consumed it).
+- `puzzleService.ts::fetchNextPuzzle` → `features/curation/services/fetch-next-puzzle-service.ts` (#176, this PR — single-feature consumer once GamePage moved to features/curation/).
 
 ### `src/storage/`
 
@@ -151,7 +139,7 @@ Theme abstraction + dark mode hook. See `src/theme/README.md`.
 
 ### `src/shared/game/` *(2026-05-20: consolidated grid + hooks here in #176)*
 
-Cross-feature puzzle-rendering layer. Used by both the curation flow (via `pages/GamePage`) and the daily flow (via `features/daily/screens/DailyGameBoard`). Lives in `shared/` because no single feature owns it.
+Cross-feature puzzle-rendering layer. Used by both the curation flow (via `features/curation/pages/PlayPuzzlePage`) and the daily flow (via `features/daily/screens/DailyGameBoard`). Lives in `shared/` because no single feature owns it.
 
 **`components/`**
 - `GameBoard.tsx` — the puzzle play surface (550+ LOC). Renders grid + completion overlay + skip modal. Accepts an `AdminVerdictSurface?` slot (curation flow's `VerdictSurface`) via DI — see `src/features/curation/` and `shared/game/types/admin-verdict-surface.ts`.
@@ -165,7 +153,7 @@ Cross-feature puzzle-rendering layer. Used by both the curation flow (via `pages
 **`hooks/`** (moved from `src/hooks/` in #176, except `useUpdatePuzzleStatus` which was already here)
 - `useGame.ts` — gameplay reducer (history stack, drag intent, conflicts, isSolved).
 - `useTimer.ts` — pause/resume timer with `restore()` for persistence and `stop()` for solved-state.
-- `useGameStorage.ts` — IndexedDB CRUD wrapper (saveState / loadState / clearState / addCompletion). Used by `GamePage` (curation flow) AND `features/daily/screens/DailyFlow` + `DailyGameBoard`.
+- `useGameStorage.ts` — IndexedDB CRUD wrapper (saveState / loadState / clearState / addCompletion). Used by `PlayPuzzlePage` (curation flow) AND `features/daily/screens/DailyFlow` + `DailyGameBoard`.
 - `useUpdatePuzzleStatus.ts` — TanStack `useMutation` wrapper around `puzzleService.updatePuzzleStatus`.
 
 **`types/`**
@@ -176,10 +164,12 @@ Cross-feature puzzle-rendering layer. Used by both the curation flow (via `pages
 Curation feature: admin-only puzzle review surface. The `/curation` route lands here; admin verdict submission inside any curation-flow `GameBoard` also threads through this feature.
 
 - `pages/CurationPage.tsx` — admin-gated landing for the curation flow; presents `PuzzleSelector` for size/mode pick.
+- `pages/PlayPuzzlePage.tsx` — curation/practice play route. Was `src/pages/GamePage.tsx` before #176; moved here when the GamePage was split (the `?flow=daily` branch collapsed into `src/app/router.tsx`).
 - `components/PuzzleSelector.tsx` — size/mode preset selector + Play button. (Was misnamed `components/landing/PuzzleSelector` in legacy layout; moved here in #176.)
 - `components/VerdictSurface.tsx` — admin verdict UI (completion + skip variants). Mounted by `GameBoard` via the `AdminVerdictSurface` prop (slot contract in `shared/game/types/admin-verdict-surface.ts`). Was previously in `shared/game/components/`; moved here in #176 because the verdict surface is curation-specific.
 - `services/verdictService.ts` — `submitVerdict` (admin PUT to `/api/admin/puzzles/{id}/verdict`). Was previously in `src/services/`.
 - `services/enabled-modes-service.ts` — `fetchEnabledModes` (GET `/api/config/modes`). Used by `CurationPage` to populate the size/mode picker. Was previously `src/services/landingService.ts`; renamed + relocated in #176 because the "landing" label was vestigial — only CurationPage ever consumed it.
+- `services/fetch-next-puzzle-service.ts` — `fetchNextPuzzle` (GET `/api/puzzles/next`) + `NoPuzzlesAvailableError`. Was previously `src/services/puzzleService.ts::fetchNextPuzzle`; moved here in #176 when the GamePage split made the curation flow the sole consumer.
 - `hooks/useSubmitVerdict.ts` — TanStack `useMutation` wrapper around `verdictService.submitVerdict`. Was previously in `shared/game/hooks/`.
 - Tests: one per source file.
 

@@ -21,8 +21,6 @@ vi.mock('@clerk/react', () => ({
 // Detected wired), so this stub is defensive only.
 vi.mock('@services/puzzleService', () => ({
   updatePuzzleStatus: vi.fn().mockResolvedValue(undefined),
-  fetchNextPuzzle: vi.fn(),
-  NoPuzzlesAvailableError: class extends Error {},
 }));
 
 // Verdict service stub — only invoked when the admin verdict surface is

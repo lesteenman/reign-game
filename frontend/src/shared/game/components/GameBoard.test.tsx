@@ -34,8 +34,8 @@ const emptyGrid5 = (): CellState[][] =>
 beforeEach(() => {
   useUserMock.mockReset();
   // Default admin so the Skip-gating test starts from the admin-shows
-  // baseline. The curation case in GamePage.test.tsx covers the
-  // non-admin path.
+  // baseline. The curation case in PlayPuzzlePage.test.tsx covers
+  // the non-admin path.
   useUserMock.mockReturnValue({
     isLoaded: true,
     isSignedIn: true,

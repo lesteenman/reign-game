@@ -13,8 +13,10 @@ screens/
 
 ## Entry point
 
-`screens/DailyFlow` is the sub-flow component composed by `pages/GamePage` when the URL carries `?flow=daily`. It owns the fetch, submit, and state-machine logic for one daily session.
+`screens/DailyFlow` is mounted directly by the router (`src/app/router.tsx`) when the URL carries `?flow=daily`. It owns the fetch, submit, and state-machine logic for one daily session.
 
 ## Wiring
 
-Mounted by `pages/GamePage` when the URL has `?flow=daily`. GamePage is the router-mounted component; DailyFlow and its siblings are sub-flow screens that live here rather than in `pages/`.
+`src/app/router.tsx`'s inline `<PlayRoute>` dispatcher reads `?flow=` from the URL and renders `<DailyFlow />` for `flow=daily` (curation goes to `features/curation/pages/PlayPuzzlePage`). The dispatch lives at the router level so neither feature imports the other — see PR #N (GamePage split) for the BR rationale.
+
+These files are `screens/`, not `pages/`, because `DailyFlow` is mounted as the `/play` element's content but not as its own router-pattern target — the router only knows about `/play`.
