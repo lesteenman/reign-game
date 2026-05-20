@@ -1,6 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useDarkMode } from "./useDarkMode";
+import { DarkModeProvider, useDarkMode } from "./useDarkMode";
+
+// useDarkMode now reads from a context (#176 Tamagui kickoff slice)
+// so the state is shared between PageShell's toggle and Tamagui's
+// theme switcher. Tests must wrap renderHook in the provider.
+const wrapper = DarkModeProvider;
 
 describe("useDarkMode", () => {
   const localStorageStore: Record<string, string> = {};
@@ -61,7 +66,7 @@ describe("useDarkMode", () => {
   }
 
   it("defaults to light mode when system prefers light", () => {
-    const { result } = renderHook(() => useDarkMode());
+    const { result } = renderHook(() => useDarkMode(), { wrapper });
     expect(result.current.isDark).toBe(false);
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
@@ -78,13 +83,13 @@ describe("useDarkMode", () => {
       }),
     });
 
-    const { result } = renderHook(() => useDarkMode());
+    const { result } = renderHook(() => useDarkMode(), { wrapper });
     expect(result.current.isDark).toBe(true);
     expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
 
   it("toggles dark mode and updates the document class", () => {
-    const { result } = renderHook(() => useDarkMode());
+    const { result } = renderHook(() => useDarkMode(), { wrapper });
     expect(result.current.isDark).toBe(false);
 
     act(() => {
@@ -96,7 +101,7 @@ describe("useDarkMode", () => {
   });
 
   it("persists preference to localStorage", () => {
-    const { result } = renderHook(() => useDarkMode());
+    const { result } = renderHook(() => useDarkMode(), { wrapper });
 
     act(() => {
       result.current.toggle();
@@ -108,7 +113,7 @@ describe("useDarkMode", () => {
   it("restores preference from localStorage", () => {
     localStorageStore["reign-dark-mode"] = "true";
 
-    const { result } = renderHook(() => useDarkMode());
+    const { result } = renderHook(() => useDarkMode(), { wrapper });
     expect(result.current.isDark).toBe(true);
     expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
@@ -118,7 +123,7 @@ describe("useDarkMode", () => {
     const meta = setupMeta("#some-stale-value");
 
     // Act
-    renderHook(() => useDarkMode());
+    renderHook(() => useDarkMode(), { wrapper });
 
     // Assert
     expect(meta.content).toBe("#F8F6F3");
@@ -130,7 +135,7 @@ describe("useDarkMode", () => {
     const meta = setupMeta("#some-stale-value");
 
     // Act
-    renderHook(() => useDarkMode());
+    renderHook(() => useDarkMode(), { wrapper });
 
     // Assert
     expect(meta.content).toBe("#161310");
@@ -139,7 +144,7 @@ describe("useDarkMode", () => {
   it("updates <meta name=\"theme-color\"> when the user toggles dark mode", () => {
     // Arrange
     const meta = setupMeta();
-    const { result } = renderHook(() => useDarkMode());
+    const { result } = renderHook(() => useDarkMode(), { wrapper });
     expect(meta.content).toBe("#F8F6F3");
 
     // Act
@@ -155,7 +160,7 @@ describe("useDarkMode", () => {
     // Arrange — no setupMeta(); the document has no theme-color tag.
 
     // Act + Assert — render the hook and toggle without crashing.
-    const { result } = renderHook(() => useDarkMode());
+    const { result } = renderHook(() => useDarkMode(), { wrapper });
     expect(() => {
       act(() => {
         result.current.toggle();

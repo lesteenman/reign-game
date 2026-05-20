@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
+import { tamaguiPlugin } from "@tamagui/vite-plugin";
 import { VitePWA } from "vite-plugin-pwa";
 
 // Vite runs its config under Node. Node's `process` global isn't
@@ -22,6 +23,32 @@ export default defineConfig(({ mode }) => ({
     // from tsconfig.app.json so vite + vitest match tsc + IDE.
     tsconfigPaths(),
     react(),
+    // Tamagui compiler — hoists styles at build time instead of computing
+    // them at runtime. Pin held at @tamagui/vite-plugin@2.0.0-rc.34
+    // because rc.35-42 ship a malformed peer dep (`vite: "*8.0.3"`,
+    // upstream tamagui/tamagui#4008). See reign-game #207 for tracking.
+    tamaguiPlugin({
+      config: "./tamagui.config.ts",
+      components: ["tamagui"],
+    }),
+    // The Tamagui plugin's config() hook returns `envPrefix: ["TAMAGUI_"]`,
+    // which Vite's mergeConfig treats as REPLACING (not extending) the
+    // default "VITE_" prefix. Result: `import.meta.env.VITE_*` becomes
+    // undefined in the browser, which crashes ClerkProvider mounting in
+    // src/app/providers.tsx and propagates as "useUser must be inside
+    // <ClerkProvider />" wherever useUser() is called. Discovered while
+    // debugging PR #209's CI integration-test failures — see reign-game
+    // #207 + upstream tamagui/tamagui#4008 follow-up. The override below
+    // appends VITE_ back to the prefix list so both the SPA's env vars
+    // AND Tamagui's TAMAGUI_-prefixed compiler opts still reach the
+    // browser.
+    {
+      name: "reign-restore-vite-env-prefix",
+      enforce: "post",
+      config() {
+        return { envPrefix: ["VITE_", "TAMAGUI_"] };
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       manifest: false,
