@@ -1,7 +1,7 @@
-import { render, screen, fireEvent, waitFor, cleanup } from '../../../test-utils';
+import { render, screen, fireEvent, waitFor, cleanup } from '@shared/test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ThemeProvider } from '../../../theme/ThemeContext';
+import { ThemeProvider } from '@theme/ThemeContext';
 import { AdminPage } from './AdminPage';
 
 // Mock admin service
@@ -10,7 +10,7 @@ const mockUpdateConfig = vi.fn();
 const mockCreateConfig = vi.fn();
 const mockTriggerReplenish = vi.fn();
 
-vi.mock('../../../services/adminService', () => ({
+vi.mock('@services/adminService', () => ({
   fetchPoolStatus: (...args: unknown[]) => mockFetchPoolStatus(...args),
   updateConfig: (...args: unknown[]) => mockUpdateConfig(...args),
   createConfig: (...args: unknown[]) => mockCreateConfig(...args),

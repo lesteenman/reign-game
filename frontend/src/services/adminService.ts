@@ -1,12 +1,12 @@
 import { apiFetch, apiPut, apiPost } from './api';
-import type { Mode } from '../engine/types';
+import type { Mode } from '@engine/types';
 import type {
   ConfigView,
   ConfigUpdateRequest,
   ConfigCreateRequest,
   PoolStatus,
   ReplenishResult,
-} from '../shared/types/admin';
+} from '@shared/types/admin';
 
 /** Fetch the current pool status for all combos. */
 export async function fetchPoolStatus(): Promise<PoolStatus> {

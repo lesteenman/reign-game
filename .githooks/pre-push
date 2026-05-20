@@ -38,8 +38,11 @@ if ! terraform fmt -recursive -check -diff; then
 fi
 
 # Frontend
-echo "--- Frontend: build (includes tsc) ---"
+echo "--- Frontend: lint ---"
 cd "$ROOT/frontend"
+npm run lint
+
+echo "--- Frontend: build (includes tsc) ---"
 npm run build
 
 echo "--- Frontend: unit tests ---"

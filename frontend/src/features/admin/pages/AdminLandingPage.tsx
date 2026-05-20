@@ -1,9 +1,9 @@
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
-import { PageShell } from '../../../shared/components/PageShell';
-import { SignInButton } from '../../../shared/auth/SignInButton';
-import { compactSecondaryButtonStyle } from '../../../shared/components/buttonStyles';
-import { pressIn, pressOut } from '../../../shared/components/press';
+import { PageShell } from '@shared/components/PageShell';
+import { SignInButton } from '@shared/auth/SignInButton';
+import { compactSecondaryButtonStyle } from '@shared/components/buttonStyles';
+import { pressIn, pressOut } from '@shared/components/press';
 
 type LandingState = 'anonymous' | 'forbidden';
 

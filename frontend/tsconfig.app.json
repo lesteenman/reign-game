@@ -19,7 +19,39 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+
+    /* Path aliases (#198). Two groups:
+     *
+     * 1. BR-layer targets — the homes new code lands in.
+     * 2. Legacy dirs — transitional aliases (pages/, components/,
+     *    hooks/, services/) that exist so the ESLint enforcement rule
+     *    can ban cross-folder relative imports without per-file
+     *    exemptions during the #176 transition. As each legacy dir
+     *    migrates, drop its alias.
+     *
+     * Enforcement: `no-restricted-imports` in `eslint.config.js` bans
+     * any cross-folder relative path (`../X`, `./X/Y`). `./X`
+     * within-folder siblings still allowed.
+     *
+     * Paths are relative to this tsconfig's directory (frontend/).
+     * `baseUrl` is deprecated in TS 7.0 — paths handle the resolution
+     * directly. */
+    "paths": {
+      /* BR layers (target homes). */
+      "@app/*": ["./src/app/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@features/*": ["./src/features/*"],
+      "@engine/*": ["./src/engine/*"],
+      "@theme/*": ["./src/theme/*"],
+      "@storage/*": ["./src/storage/*"],
+      /* Transitional legacy-dir aliases. Drop each as its contents
+       * migrate to a BR layer per #176. */
+      "@pages/*": ["./src/pages/*"],
+      "@components/*": ["./src/components/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@services/*": ["./src/services/*"]
+    }
   },
   "include": ["src"]
 }

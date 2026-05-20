@@ -1,5 +1,5 @@
 import { apiPut, ApiError } from './api';
-import type { SubmitVerdictArgs } from '../shared/types/verdict';
+import type { SubmitVerdictArgs } from '@shared/types/verdict';
 
 export type { SubmitVerdictArgs };
 

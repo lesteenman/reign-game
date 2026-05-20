@@ -1,9 +1,9 @@
-import { render, screen, cleanup } from './test-utils';
+import { render, screen, cleanup } from '@shared/test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import { expect, test, vi, beforeEach, afterEach } from 'vitest';
-import { ThemeProvider } from './theme/ThemeContext';
-import { LandingPage } from './pages/LandingPage';
-import { FALLBACK_PUZZLE } from './App';
+import { ThemeProvider } from '@theme/ThemeContext';
+import { LandingPage } from '@pages/LandingPage';
+import { FALLBACK_PUZZLE } from '@shared/test-fixtures';
 
 // Mock the Clerk hook the new tile-based LandingPage reads — same
 // pattern used in LandingPage.test.tsx / GamePage.test.tsx.

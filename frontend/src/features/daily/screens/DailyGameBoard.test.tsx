@@ -1,12 +1,12 @@
-import { render, screen, cleanup, waitFor } from '../../../test-utils';
+import { render, screen, cleanup, waitFor } from '@shared/test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ThemeProvider } from '../../../theme/ThemeContext';
+import { ThemeProvider } from '@theme/ThemeContext';
 import { DailyGameBoard } from './DailyGameBoard';
-import type { DailyPuzzlePayload } from '../../../shared/types/daily';
-import type { GameBoardProps } from '../../../shared/game/components/GameBoard';
-import type { GameState } from '../../../storage/types';
-import type { CellState } from '../../../engine/types';
+import type { DailyPuzzlePayload } from '@shared/types/daily';
+import type { GameBoardProps } from '@shared/game/components/GameBoard';
+import type { GameState } from '@storage/types';
+import type { CellState } from '@engine/types';
 
 // Storage stub — DailyGameBoard reads `loadState('daily', flowId)` on
 // mount. Keeping the mock here means the test asserts the call shape
@@ -15,7 +15,7 @@ const mockSaveState = vi.fn(async () => {});
 const mockLoadState = vi.fn<(...args: [unknown, unknown]) => Promise<GameState | null>>(async () => null);
 const mockClearState = vi.fn(async () => {});
 const mockAddCompletion = vi.fn(async () => {});
-vi.mock('../../../hooks/useGameStorage', () => ({
+vi.mock('@hooks/useGameStorage', () => ({
   useGameStorage: () => ({
     saveState: mockSaveState,
     loadState: mockLoadState,
@@ -34,8 +34,8 @@ const STUB_SOLUTION = [
   [0, 1, 0],
 ];
 const STUB_ELAPSED_MS = 8_000;
-vi.mock('../../../shared/game/components/GameBoard', async () => {
-  const actual = await vi.importActual<typeof import('../../../shared/game/components/GameBoard')>('../../../shared/game/components/GameBoard');
+vi.mock('@shared/game/components/GameBoard', async () => {
+  const actual = await vi.importActual<typeof import('@shared/game/components/GameBoard')>('@shared/game/components/GameBoard');
   return {
     ...actual,
     GameBoard: (props: GameBoardProps) => {

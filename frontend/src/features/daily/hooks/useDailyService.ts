@@ -1,4 +1,4 @@
-import { getDaily, submitDailyResult } from '../../../services/dailyService';
+import { getDaily, submitDailyResult } from '@services/dailyService';
 
 /**
  * Passthrough hook that provides the daily service functions.

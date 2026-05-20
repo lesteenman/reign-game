@@ -2,10 +2,10 @@ import type { ReactNode } from 'react';
 import { ArrowLeft, Sun, Moon } from 'lucide-react';
 import { Show } from "@clerk/react";
 import { Icon } from './Icon';
-import { useDarkMode } from '../../theme/useDarkMode';
-import { SignInButton } from '../auth/SignInButton';
-import { UserMenu } from '../auth/UserMenu';
-import { useClerkAvailable } from '../auth/ClerkAvailability';
+import { useDarkMode } from '@theme/useDarkMode';
+import { SignInButton } from '@shared/auth/SignInButton';
+import { UserMenu } from '@shared/auth/UserMenu';
+import { useClerkAvailable } from '@shared/auth/ClerkAvailability';
 import { OfflineBanner } from './OfflineBanner';
 import { InstallButton } from './InstallButton';
 

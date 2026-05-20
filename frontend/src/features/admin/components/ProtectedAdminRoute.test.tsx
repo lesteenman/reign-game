@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from '../../../test-utils';
+import { render, screen, cleanup } from '@shared/test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
@@ -29,7 +29,7 @@ vi.mock('@clerk/react', () => ({
 
 // Stub AdminPage — it pulls in admin services / network code that we
 // don't need for routing assertions.
-vi.mock('../pages/AdminPage', () => ({
+vi.mock('@features/admin/pages/AdminPage', () => ({
   AdminPage: () => <div data-testid="admin-page">ADMIN UI</div>,
 }));
 

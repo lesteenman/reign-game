@@ -1,10 +1,10 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { renderHook } from '../test-utils';
+import { renderHook } from '@shared/test-utils';
 import { useGameStorage } from './useGameStorage';
-import { resetDBCache } from '../storage/db';
-import type { GameState, CompletionRecord } from '../storage/types';
-import type { PuzzleData } from '../engine/types';
+import { resetDBCache } from '@storage/db';
+import type { GameState, CompletionRecord } from '@storage/types';
+import type { PuzzleData } from '@engine/types';
 
 const TEST_PUZZLE: PuzzleData = {
   puzzleId: 'test-001',
@@ -40,7 +40,7 @@ function makeGameState(): GameState {
 // Reset the fake-indexeddb between tests so each test starts with a clean DB.
 beforeEach(async () => {
   // Close any existing connection before deleting.
-  const { openDB: getDB } = await import('../storage/db');
+  const { openDB: getDB } = await import('@storage/db');
   try {
     const db = await getDB();
     db.close();
@@ -103,7 +103,7 @@ describe('useGameStorage', () => {
     await result.current.addCompletion(record);
 
     // Read directly from the store to verify
-    const { openDB } = await import('../storage/db');
+    const { openDB } = await import('@storage/db');
     const db = await openDB();
     const tx = db.transaction('completions', 'readonly');
     const store = tx.objectStore('completions');

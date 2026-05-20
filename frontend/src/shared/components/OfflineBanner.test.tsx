@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, waitFor } from '@testing-library/react';
-import { render, screen, cleanup } from '../../test-utils';
+import { render, screen, cleanup } from '@shared/test-utils';
 import { OfflineBanner } from './OfflineBanner';
 
 describe('OfflineBanner', () => {

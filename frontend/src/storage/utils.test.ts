@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createFreshGameState } from './utils';
-import type { PuzzleData } from '../engine/types';
+import type { PuzzleData } from '@engine/types';
 
 const BASE_PUZZLE: PuzzleData = {
   puzzleId: 'test-001',

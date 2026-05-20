@@ -1,19 +1,19 @@
-import { render, screen, cleanup, waitFor, fireEvent, act } from '../../../test-utils';
+import { render, screen, cleanup, waitFor, fireEvent, act } from '@shared/test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ThemeProvider } from '../../../theme/ThemeContext';
+import { ThemeProvider } from '@theme/ThemeContext';
 import { DailyFlow } from './DailyFlow';
-import { ApiError } from '../../../shared/api-errors';
-import type { DailyPuzzlePayload, DailySubmitResponse } from '../../../shared/types/daily';
+import { ApiError } from '@shared/api-errors';
+import type { DailyPuzzlePayload, DailySubmitResponse } from '@shared/types/daily';
 
 // Mock the daily service so the component's data-fetch + submit
 // effects are observable. The default `mockResolvedValue` is replaced
 // per test to drive each branch of the daily-flow state machine.
 const mockGetDaily = vi.fn();
 const mockSubmitDailyResult = vi.fn();
-vi.mock('../../../services/dailyService', async () => {
-  const actual = await vi.importActual<typeof import('../../../services/dailyService')>(
-    '../../../services/dailyService',
+vi.mock('@services/dailyService', async () => {
+  const actual = await vi.importActual<typeof import('@services/dailyService')>(
+    '@services/dailyService',
   );
   return {
     ...actual,
@@ -25,12 +25,12 @@ vi.mock('../../../services/dailyService', async () => {
 // Mock storage so the per-flow IndexedDB write is observable without
 // needing fake-indexeddb here. Lesson 16 drove the choice to keep the
 // shape inside storage/ — the mock asserts call shape, not row layout.
-import type { GameState } from '../../../storage/types';
+import type { GameState } from '@storage/types';
 const mockSaveState = vi.fn(async () => {});
 const mockLoadState = vi.fn<(...args: [unknown, unknown]) => Promise<GameState | null>>(async () => null);
 const mockClearState = vi.fn(async () => {});
 const mockAddCompletion = vi.fn(async () => {});
-vi.mock('../../../hooks/useGameStorage', () => ({
+vi.mock('@hooks/useGameStorage', () => ({
   useGameStorage: () => ({
     saveState: mockSaveState,
     loadState: mockLoadState,

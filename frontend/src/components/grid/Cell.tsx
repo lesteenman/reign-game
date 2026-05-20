@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import type { CellState } from '../../engine/types';
-import { useTheme } from '../../theme/ThemeContext';
+import type { CellState } from '@engine/types';
+import { useTheme } from '@theme/ThemeContext';
 
 /** Props for the Cell component. */
 export interface CellProps {

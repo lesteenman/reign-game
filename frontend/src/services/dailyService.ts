@@ -11,8 +11,8 @@
 // injected via the options.headers surface.
 
 import { apiFetch, apiPost, ApiError } from './api';
-import { todayUtcDate, dateFromAssignedAt } from '../shared/dates';
-import type { DailyPuzzlePayload, DailySubmitResponse } from '../shared/types/daily';
+import { todayUtcDate, dateFromAssignedAt } from '@shared/dates';
+import type { DailyPuzzlePayload, DailySubmitResponse } from '@shared/types/daily';
 
 export type { DailyPuzzlePayload, DailySubmitResponse };
 

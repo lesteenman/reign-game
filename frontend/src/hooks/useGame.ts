@@ -1,9 +1,9 @@
 import { useState, useCallback, useRef, useMemo, useReducer } from 'react';
-import type { CellState, Conflict, PuzzleData } from '../engine/types';
-import { getAllConflicts } from '../engine/constraints';
-import { cellKey } from '../engine/cellKey';
-import type { GameHistory } from '../storage/types';
-import { EMPTY_HISTORY } from '../storage/types';
+import type { CellState, Conflict, PuzzleData } from '@engine/types';
+import { getAllConflicts } from '@engine/constraints';
+import { cellKey } from '@engine/cellKey';
+import type { GameHistory } from '@storage/types';
+import { EMPTY_HISTORY } from '@storage/types';
 
 type DragIntent = 'exclude' | 'clear' | null;
 

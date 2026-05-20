@@ -1,4 +1,4 @@
-import type { Mode } from '../../engine/types';
+import type { Mode } from '@engine/types';
 
 /**
  * SubmitVerdictArgs is the payload for the verdict submission API call.

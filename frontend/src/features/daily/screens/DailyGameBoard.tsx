@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { GameBoard } from '../../../shared/game/components/GameBoard';
-import { useGameStorage } from '../../../hooks/useGameStorage';
-import { EMPTY_HISTORY } from '../../../storage/types';
-import type { GameHistory, GameState } from '../../../storage/types';
-import type { CellState, PuzzleData } from '../../../engine/types';
-import type { DailyPuzzlePayload } from '../../../shared/types/daily';
-import { dateFromAssignedAt } from '../../../shared/dates';
+import { GameBoard } from '@shared/game/components/GameBoard';
+import { useGameStorage } from '@hooks/useGameStorage';
+import { EMPTY_HISTORY } from '@storage/types';
+import type { GameHistory, GameState } from '@storage/types';
+import type { CellState, PuzzleData } from '@engine/types';
+import type { DailyPuzzlePayload } from '@shared/types/daily';
+import { dateFromAssignedAt } from '@shared/dates';
 
 /**
  * Daily-flow grid host.

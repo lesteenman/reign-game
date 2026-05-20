@@ -1,6 +1,6 @@
 import { SignInButton as ClerkSignInButton } from "@clerk/react";
-import { compactSecondaryButtonStyle } from '../components/buttonStyles';
-import { pressIn, pressOut } from '../components/press';
+import { compactSecondaryButtonStyle } from '@shared/components/buttonStyles';
+import { pressIn, pressOut } from '@shared/components/press';
 
 interface SignInButtonProps {
   /** Button label. Defaults to "Sign in". */

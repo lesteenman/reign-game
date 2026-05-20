@@ -1,10 +1,10 @@
-import { render, screen, cleanup, act } from '../../../test-utils';
+import { render, screen, cleanup, act } from '@shared/test-utils';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ThemeProvider } from '../../../theme/ThemeContext';
+import { ThemeProvider } from '@theme/ThemeContext';
 import { GameBoard, type GameBoardProps } from './GameBoard';
-import type { PuzzleData, CellState } from '../../../engine/types';
-import { EMPTY_HISTORY } from '../../../storage/types';
+import type { PuzzleData, CellState } from '@engine/types';
+import { EMPTY_HISTORY } from '@storage/types';
 
 // Clerk hook stub — GameBoard reads `useUser()` for role-gated UI; the
 // wall-clock anchor logic is independent of role.
@@ -19,7 +19,7 @@ vi.mock('@clerk/react', () => ({
 // puzzleService stub — GameBoard's solve effect calls updatePuzzleStatus
 // in non-delegated mode. The tests below stay in delegated mode (onSolve-
 // Detected wired), so this stub is defensive only.
-vi.mock('../../../services/puzzleService', () => ({
+vi.mock('@services/puzzleService', () => ({
   updatePuzzleStatus: vi.fn().mockResolvedValue(undefined),
   fetchNextPuzzle: vi.fn(),
   NoPuzzlesAvailableError: class extends Error {},
@@ -27,7 +27,7 @@ vi.mock('../../../services/puzzleService', () => ({
 
 // Verdict service stub — only invoked when the admin verdict surface is
 // rendered; not exercised here.
-vi.mock('../../../services/verdictService', () => ({
+vi.mock('@services/verdictService', () => ({
   submitVerdict: vi.fn().mockResolvedValue(undefined),
 }));
 

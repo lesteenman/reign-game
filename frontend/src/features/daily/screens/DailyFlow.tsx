@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PageShell } from '../../../shared/components/PageShell';
-import { PrimaryButton, SecondaryButton } from '../../../shared/components/Button';
-import { ApiError } from '../../../shared/api-errors';
-import { useDailyService } from '../hooks/useDailyService';
-import type { DailyPuzzlePayload, DailySubmitResponse } from '../../../shared/types/daily';
+import { PageShell } from '@shared/components/PageShell';
+import { PrimaryButton, SecondaryButton } from '@shared/components/Button';
+import { ApiError } from '@shared/api-errors';
+import { useDailyService } from '@features/daily/hooks/useDailyService';
+import type { DailyPuzzlePayload, DailySubmitResponse } from '@shared/types/daily';
 import { DailyGameBoard } from './DailyGameBoard';
 import { PostCompletionScreen } from './PostCompletionScreen';
-import { useGameStorage } from '../../../hooks/useGameStorage';
-import type { GameState } from '../../../storage/types';
-import type { CellState } from '../../../engine/types';
-import { todayUtcDate, dateFromAssignedAt } from '../../../shared/dates';
+import { useGameStorage } from '@hooks/useGameStorage';
+import type { GameState } from '@storage/types';
+import type { CellState } from '@engine/types';
+import { todayUtcDate, dateFromAssignedAt } from '@shared/dates';
 
 /**
  * Daily Puzzle flow chrome.

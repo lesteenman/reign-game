@@ -1,4 +1,4 @@
-import type { CellState, PuzzleData } from '../engine/types';
+import type { CellState, PuzzleData } from '@engine/types';
 import type { FlowType, GameState } from './types';
 import { EMPTY_HISTORY } from './types';
 import { idFor } from './db';

@@ -1,8 +1,8 @@
-import { render, fireEvent, cleanup } from '../../test-utils';
+import { render, fireEvent, cleanup } from '@shared/test-utils';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Grid, getMinCellSize } from './Grid';
-import { ThemeProvider } from '../../theme/ThemeContext';
-import type { PuzzleData, CellState } from '../../engine/types';
+import { ThemeProvider } from '@theme/ThemeContext';
+import type { PuzzleData, CellState } from '@engine/types';
 import type { GridProps } from './Grid';
 
 afterEach(() => {

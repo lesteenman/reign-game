@@ -1,8 +1,8 @@
 import { type ReactNode } from 'react';
 import { ClerkProvider } from '@clerk/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ThemeProvider } from '../theme/ThemeContext';
-import { ClerkAvailabilityProvider } from '../shared/auth/ClerkAvailability';
+import { ThemeProvider } from '@theme/ThemeContext';
+import { ClerkAvailabilityProvider } from '@shared/auth/ClerkAvailability';
 
 // TanStack Query client (Track 2 foundation; first useQuery/useMutation
 // adoptions land in Track 3 alongside the LoadState migration). Single
@@ -28,7 +28,6 @@ const queryClient = new QueryClient({
 const publishableKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 if (!publishableKey) {
-  // eslint-disable-next-line no-console
   console.error(
     'auth: VITE_CLERK_PUBLISHABLE_KEY is not set. Sign-in will not work. ' +
       'Copy frontend/.env.local.example to frontend/.env.local and set ' +

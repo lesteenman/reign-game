@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { fireEvent } from '@testing-library/react';
-import { render, screen, cleanup } from '../../test-utils';
+import { render, screen, cleanup } from '@shared/test-utils';
 import { InstallButton } from './InstallButton';
-import * as useInstallPromptModule from '../hooks/useInstallPrompt';
-import type { InstallPromptState } from '../hooks/useInstallPrompt';
+import * as useInstallPromptModule from '@shared/hooks/useInstallPrompt';
+import type { InstallPromptState } from '@shared/hooks/useInstallPrompt';
 
 function mockUseInstallPrompt(overrides: Partial<InstallPromptState> = {}): InstallPromptState {
   const state: InstallPromptState = {

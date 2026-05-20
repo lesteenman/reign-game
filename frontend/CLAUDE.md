@@ -24,9 +24,33 @@ frontend/src/
   storage/      IndexedDB wrapper
 ```
 
+### Path aliases (#198)
+
+All cross-folder imports use `@layer/...` aliases. Only within-folder
+siblings (`./X`) stay relative. Configured in `tsconfig.app.json` +
+`tsconfig.json` (for Playwright esbuild) + `vite.config.ts` (via
+`vite-tsconfig-paths`). Enforced by ESLint rule `no-restricted-imports`
+in `eslint.config.js`.
+
+| Alias | Maps to | Status |
+|---|---|---|
+| `@app/*` | `src/app/*` | BR target home |
+| `@shared/*` | `src/shared/*` | BR target home |
+| `@features/*` | `src/features/*` | BR target home |
+| `@engine/*` | `src/engine/*` | BR target home |
+| `@theme/*` | `src/theme/*` | BR target home |
+| `@storage/*` | `src/storage/*` | BR target home |
+| `@pages/*` | `src/pages/*` | Transitional — slated for `features/*/pages/` per #176 |
+| `@components/*` | `src/components/*` | Transitional — `grid/` → `features/game/`, `landing/` → `features/curation/` per #176 |
+| `@hooks/*` | `src/hooks/*` | Transitional — slated for `features/<feature>/hooks/` per #176 |
+| `@services/*` | `src/services/*` | Transitional — slated for `features/<feature>/services/` or `useQuery` adoption per #176 |
+
+When a legacy alias's contents fully migrate, drop the alias from
+`tsconfig.app.json` and `tsconfig.json`.
+
 ### Import rules
 
-- **No cross-feature imports.** `features/X` never imports from `features/Y`. Cross-feature dependencies go through `shared/`, `engine/`, or `theme/`.
+- **No cross-feature imports.** `features/X` never imports from `features/Y`. Cross-feature dependencies go through `shared/`, `engine/`, or `theme/`. **Enforced by `import/no-restricted-paths` in `eslint.config.js`.**
 - **`pages/` are routes only.** `features/X/pages/` holds ONLY components mounted by the router. Sub-flow components (intermediate screens within a flow) live under `features/X/screens/`. Leaf components live under `features/X/components/`.
 - **No page-to-page imports.** A page never imports another page, even within the same feature. Shared sub-flow goes under `screens/`.
 - **No `services/*` imports below `pages/`.** Leaf components and screens consume hooks; hooks own I/O. `useSubmitVerdict()` in a leaf is fine; `import { submitVerdict } from '...services/...'` in a leaf is a violation.
@@ -77,7 +101,7 @@ Project-wide TDD rule in `/CLAUDE.md`. Frontend-specific:
 - **Vitest** for unit tests. Co-located with source: `Foo.tsx` + `Foo.test.tsx`.
 - **Playwright** for e2e in `frontend/playwright/e2e/`; integration specs in `frontend/playwright/integration/`. See `.claude/skills/playwright-cli/` for browser automation patterns.
 - Aim for above 90% coverage on hooks and services.
-- Use `frontend/src/test-utils.tsx` (wraps RTL `render` with providers).
+- Use `frontend/src/shared/test-utils.tsx` (wraps RTL `render` with providers); import as `@shared/test-utils`.
 - **Mock external dependencies** (network via MSW or `page.route()`; not Vitest unit-mocks of services).
 
 ## Lessons (Reign-specific)

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { renderHook, act } from '../test-utils';
+import { renderHook, act } from '@shared/test-utils';
 import { useTimer } from './useTimer';
 
 describe('useTimer', () => {

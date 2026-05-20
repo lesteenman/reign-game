@@ -1,4 +1,4 @@
-import { render, screen, cleanup, waitFor } from '../../../test-utils';
+import { render, screen, cleanup, waitFor } from '@shared/test-utils';
 import { fireEvent } from '@testing-library/react';
 import { describe, it, test, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -9,16 +9,16 @@ const updatePuzzleStatusMock = vi.fn();
 // useMutation, so mocking at the service layer requires waiting for
 // TanStack's async mutation pipeline. Mocking the hooks gives direct
 // control over mutateAsync's resolved/rejected value.
-vi.mock('../hooks/useSubmitVerdict', () => ({
+vi.mock('@shared/game/hooks/useSubmitVerdict', () => ({
   useSubmitVerdict: () => ({ mutateAsync: (...args: unknown[]) => submitVerdictMock(...args) }),
 }));
 
-vi.mock('../hooks/useUpdatePuzzleStatus', () => ({
+vi.mock('@shared/game/hooks/useUpdatePuzzleStatus', () => ({
   useUpdatePuzzleStatus: () => ({ mutateAsync: (...args: unknown[]) => updatePuzzleStatusMock(...args) }),
 }));
 
 import { VerdictSurface } from './VerdictSurface';
-import { ApiError } from '../../../services/api';
+import { ApiError } from '@services/api';
 
 const baseProps = {
   puzzleId: 'puz-test-123',

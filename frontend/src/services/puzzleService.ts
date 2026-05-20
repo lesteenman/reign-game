@@ -1,4 +1,4 @@
-import type { Mode, PuzzleData } from '../engine/types';
+import type { Mode, PuzzleData } from '@engine/types';
 import { apiFetch, ApiError, apiPut } from './api';
 
 /** Error thrown when the puzzle pool has no puzzles for the requested size/mode. */
