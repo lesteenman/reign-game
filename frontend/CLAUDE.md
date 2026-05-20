@@ -71,7 +71,7 @@ Drift detection grep examples (the architecture skill codifies these):
 
 - **Tamagui 2 RC** for generic chrome (Button, Sheet, Dialog, Select, Tooltip, Tabs, Popover, Input, Toast). Configured in `tamagui.config.ts` (root of `frontend/`) via `createTokens` + `createTheme` + `createTamagui`, consuming `theme/tactile.ts` as the token source.
 - **Custom game UI** (Grid, Cell, Marker, ExclusionMark, RegionBorderOverlay) is hand-built on Tamagui's low-level primitives (`<View>`, `<Stack>`, `<Text>`) — same tokens, ready for React Native later.
-- **Tailwind is retired.** Migration of existing `className=` sites happens in Track 3, not Track 2. New code uses Tamagui from the start.
+- **Tailwind is gone.** Removed from `package.json`, `vite.config.ts`, and `index.css` in #176. The remaining `className=` usage in `shared/game/components/grid/Cell.tsx` is for a plain-CSS keyframe-animation class hook (`animate-placement` / `animate-conflict`), defined in `index.css` — not Tailwind utility classes. New chrome code uses Tamagui primitives.
 - **Icons.** Lucide via `lucide-react`. All icon usage goes through `shared/components/Icon` to inherit brand defaults (1.5 stroke, 20px size). Sites import the specific icon directly (`import { ArrowLeft } from 'lucide-react'`) and pass it via the `as` prop: `<Icon as={ArrowLeft} />`. Per-site overrides for `size` / `strokeWidth` are fine when needed (e.g. compact buttons). No emoji or Unicode glyphs for chrome icons — `BRAND_GUIDELINES.md` lines 437 + 692.
 
 ## TypeScript Conventions

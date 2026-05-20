@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | CI/CD | GitHub Actions — CI on PR, CD on merge to main |
 | Dev Environment | LocalStack (local DynamoDB), Vite dev server (frontend) |
 
-**Frontend transition state.** Tamagui + TanStack Query are installed in Track 2 as foundations; Track 3 migrates existing code (Tailwind → Tamagui, manual `LoadState` → TanStack hooks). New code uses Tamagui + TanStack from the start. See `frontend/CLAUDE.md` and `.claude/skills/architecture/SKILL.md`.
+**Frontend transition state.** Tamagui + TanStack Query installed in Track 2; #176 migrates existing code into the Bulletproof React feature-folder layout + the `LoadState` → TanStack hooks transition. Tailwind retired in #176 (removed from package.json + index.css). New code uses Tamagui from the start; chrome styling is inline `style={}` + theme tokens until the Tamagui kickoff slice lands. See `frontend/CLAUDE.md` and `.claude/skills/architecture/SKILL.md`.
 
 ## Coding Principles
 
@@ -272,7 +272,7 @@ After cloning the repo:
 #    every worktree picks up the hooks automatically.
 scripts/install-hooks.sh
 
-# 2. Frontend dependencies (Tamagui, TanStack, Tailwind, React, etc.)
+# 2. Frontend dependencies (React, Vite, Tamagui, TanStack, Clerk, etc.)
 #    Re-run inside any new `git worktree add`/`EnterWorktree` worktree
 #    too — node_modules is gitignored and per-worktree. The pre-push
 #    hook's `tsc` step fails with "command not found" otherwise.

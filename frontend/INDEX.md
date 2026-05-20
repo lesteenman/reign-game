@@ -12,7 +12,7 @@ A single-page Progressive Web App (PWA) that renders the Reign puzzle game. Thre
 |---|---|---|
 | Folder shape | Mostly BR feature-folder. Remaining legacy: `services/` (four cross-feature service files). Target: pure feature-folder with no legacy layered dirs. | Feature-folder: `app/`, `engine/`, `features/{daily,curation,admin,landing}/`, `shared/{auth,components,game,hooks,types}/`, `theme/`, `storage/` (note: `auth` and `game` live under `shared/` because they are genuinely cross-feature, not single-feature concerns — see #196 + #204's BR-incorrect-framing analysis) |
 | UI primitives | Hand-rolled `<div>`, `<button>` with inline `style={}`; one residual `className=` (`Cell.tsx` animation hook) | Tamagui 2 RC primitives + theme tokens |
-| Tailwind | Imported once in `index.css` (`@import "tailwindcss"`); no `className=*` consumers other than the animation hook | Retired (gone) |
+| Tailwind | Gone (`tailwindcss` + `@tailwindcss/vite` removed in #176; `@import "tailwindcss"` removed from `index.css`; build precache -9 KB). The remaining `className=` in `Cell.tsx` is for a plain-CSS keyframe-animation hook, not Tailwind. | Gone |
 | Server state | Hand-rolled `useState<LoadState>` / `useState<FlowState>` discriminated unions in `PlayPuzzlePage` + `DailyFlow`; bespoke `useEffect` fetch + cancel | TanStack `useQuery` / `useMutation` |
 | `services/*` | Four service modules with three near-identical fetch helpers (`apiFetch` / `apiPost` / `apiPut`) plus a fourth fork (`dailyService.ts`) that bypasses `api.ts` for header injection | Hooks own the I/O; leaf components consume hooks |
 | `engine/` | Pure TS (verified: no React, no `fetch`, no DOM) | Same — already conforming |
@@ -37,7 +37,7 @@ frontend/
   tsconfig.json               root project references config
   tsconfig.app.json           app build (browser target)
   tsconfig.node.json          node-side config (vite.config, generate-icons)
-  vite.config.ts              Vite + Vitest + Tailwind plugin + /api proxy
+  vite.config.ts              Vite + Vitest + PWA + tsconfig-paths + /api proxy
   playwright.config.ts        integration + e2e projects
   tamagui.config.ts           Track 2 placeholder; full migration is Track 3
   CLAUDE.md                   frontend conventions (additive to root CLAUDE.md)
@@ -50,7 +50,7 @@ frontend/
 - `App.tsx` — Router composition (BrowserRouter + Routes); exports `FALLBACK_PUZZLE` used by tests. Global providers moved to `src/app/providers.tsx` in #176.
 - `main.tsx` — React DOM bootstrap; mounts `<Providers>` from `src/app/providers.tsx`. Service-worker registration lives here (production-only).
 - `App.test.tsx` — smoke test that renders the app and resolves the initial puzzle fetch.
-- `index.css` — CSS custom-property tokens (light + dark), animation keyframes, and a `@import "tailwindcss"` line.
+- `index.css` — CSS custom-property tokens (light + dark) + animation keyframes. (`@import "tailwindcss"` removed in #176.)
 - `test-setup.ts` — Vitest setup: jest-dom matchers + `matchMedia` mock for jsdom.
 - `test-utils.tsx` — wraps RTL `render` / `renderHook` in `<StrictMode>` to catch impure updaters at unit-test time.
 - `vite-env.d.ts` — Vite's ambient type reference.
