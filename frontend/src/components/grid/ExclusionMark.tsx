@@ -1,4 +1,4 @@
-import type { ExclusionMarkProps } from "../../theme/types";
+import type { ExclusionMarkProps } from "@theme/types";
 
 /** Small dot indicating an excluded cell. */
 export function ExclusionMark({ size }: ExclusionMarkProps) {

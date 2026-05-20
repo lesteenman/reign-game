@@ -1,4 +1,4 @@
-import { render, screen, cleanup, waitFor } from '../../../test-utils';
+import { render, screen, cleanup, waitFor } from '@shared/test-utils';
 import { fireEvent } from '@testing-library/react';
 import { describe, it, test, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -18,7 +18,7 @@ vi.mock('../hooks/useUpdatePuzzleStatus', () => ({
 }));
 
 import { VerdictSurface } from './VerdictSurface';
-import { ApiError } from '../../../services/api';
+import { ApiError } from '@services/api';
 
 const baseProps = {
   puzzleId: 'puz-test-123',

@@ -1,10 +1,10 @@
-import { render, screen, cleanup, act } from '../../../test-utils';
+import { render, screen, cleanup, act } from '@shared/test-utils';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ThemeProvider } from '../../../theme/ThemeContext';
+import { ThemeProvider } from '@theme/ThemeContext';
 import { GameBoard, type GameBoardProps } from './GameBoard';
-import type { PuzzleData, CellState } from '../../../engine/types';
-import { EMPTY_HISTORY } from '../../../storage/types';
+import type { PuzzleData, CellState } from '@engine/types';
+import { EMPTY_HISTORY } from '@storage/types';
 
 // Clerk hook stub — GameBoard reads `useUser()` for role-gated UI; the
 // wall-clock anchor logic is independent of role.

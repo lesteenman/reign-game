@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from '../test-utils';
+import { render, screen, cleanup } from '@shared/test-utils';
 import { fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';

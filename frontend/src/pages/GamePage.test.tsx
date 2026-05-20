@@ -1,11 +1,11 @@
 import 'fake-indexeddb/auto';
-import { render, screen, fireEvent, cleanup, waitFor } from '../test-utils';
+import { render, screen, fireEvent, cleanup, waitFor } from '@shared/test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ThemeProvider } from '../theme/ThemeContext';
+import { ThemeProvider } from '@theme/ThemeContext';
 import { GamePage } from './GamePage';
-import { FALLBACK_PUZZLE } from '../App';
-import type { PuzzleData } from '../engine/types';
+import { FALLBACK_PUZZLE } from '@shared/test-fixtures';
+import type { PuzzleData } from '@engine/types';
 
 const MOCK_PUZZLE_WITH_METADATA: PuzzleData = {
   ...FALLBACK_PUZZLE,
@@ -60,7 +60,7 @@ vi.mock('../services/verdictService', () => ({
 // so the delegated component renders without hitting the network — the
 // delegation test only asserts the wrapper is mounted.
 vi.mock('../services/dailyService', async () => {
-  const actual = await vi.importActual<typeof import('../services/dailyService')>(
+  const actual = await vi.importActual<typeof import('@services/dailyService')>(
     '../services/dailyService',
   );
   return {
@@ -279,7 +279,7 @@ describe('GamePage error states', () => {
 describe('GamePage no-puzzles state (FE-04)', () => {
   it('shows no-puzzles message when fetchNextPuzzle throws NoPuzzlesAvailableError', async () => {
     // Arrange — import the mock error class
-    const { NoPuzzlesAvailableError } = await import('../services/puzzleService');
+    const { NoPuzzlesAvailableError } = await import('@services/puzzleService');
     mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
     renderGamePage('/play?flow=curation&size=7&mode=standard');
 
@@ -293,7 +293,7 @@ describe('GamePage no-puzzles state (FE-04)', () => {
 
   it('shows retry button in no-puzzles state', async () => {
     // Arrange
-    const { NoPuzzlesAvailableError } = await import('../services/puzzleService');
+    const { NoPuzzlesAvailableError } = await import('@services/puzzleService');
     mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
     renderGamePage('/play?flow=curation&size=7&mode=standard');
 
@@ -306,7 +306,7 @@ describe('GamePage no-puzzles state (FE-04)', () => {
 
   it('retry button re-fetches without navigating', async () => {
     // Arrange
-    const { NoPuzzlesAvailableError } = await import('../services/puzzleService');
+    const { NoPuzzlesAvailableError } = await import('@services/puzzleService');
     mockFetchResult = () => Promise.reject(new NoPuzzlesAvailableError());
     renderGamePage('/play?flow=curation&size=9&mode=double');
 

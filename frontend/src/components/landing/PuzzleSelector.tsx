@@ -1,6 +1,6 @@
 import { useState, useCallback, type CSSProperties } from 'react';
-import type { Mode } from '../../engine/types';
-import type { ModeEntry } from '../../shared/types/modes';
+import type { Mode } from '@engine/types';
+import type { ModeEntry } from '@shared/types/modes';
 
 /** Selection from the puzzle selector: size and mode. */
 export interface PuzzleSelection {

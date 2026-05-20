@@ -1,4 +1,4 @@
-import type { Mode } from '../../engine/types';
+import type { Mode } from '@engine/types';
 
 /**
  * ModeEntry mirrors `handler.ModeEntry` — one {size, mode} pair of an

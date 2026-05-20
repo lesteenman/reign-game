@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from '../../test-utils';
+import { render, screen, cleanup } from '@shared/test-utils';
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { PrimaryButton, SecondaryButton, GhostButton } from './Button';
 

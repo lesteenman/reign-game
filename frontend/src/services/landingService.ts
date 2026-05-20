@@ -1,5 +1,5 @@
 import { apiFetch } from './api';
-import type { ModeEntry } from '../shared/types/modes';
+import type { ModeEntry } from '@shared/types/modes';
 
 /** JSON shape of GET /api/config/modes. `modes` is always non-nil. */
 interface ConfigModesResponse {

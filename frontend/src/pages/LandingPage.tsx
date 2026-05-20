@@ -1,9 +1,9 @@
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/react';
 import type { CSSProperties, ReactNode } from 'react';
-import { PageShell } from '../shared/components/PageShell';
-import { getClerkUserRole } from '../shared/auth/role';
-import { useConnectivity } from '../shared/hooks/useConnectivity';
+import { PageShell } from '@shared/components/PageShell';
+import { getClerkUserRole } from '@shared/auth/role';
+import { useConnectivity } from '@shared/hooks/useConnectivity';
 
 /**
  * Landing page.

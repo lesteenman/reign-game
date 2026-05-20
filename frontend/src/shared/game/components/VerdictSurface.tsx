@@ -1,8 +1,8 @@
 import { useCallback, useState, type CSSProperties } from 'react';
-import type { Mode } from '../../../engine/types';
-import { useSubmitVerdict } from '../hooks/useSubmitVerdict';
-import { useUpdatePuzzleStatus } from '../hooks/useUpdatePuzzleStatus';
-import { PrimaryButton, SecondaryButton, GhostButton } from '../../../shared/components/Button';
+import type { Mode } from '@engine/types';
+import { useSubmitVerdict } from '@shared/game/hooks/useSubmitVerdict';
+import { useUpdatePuzzleStatus } from '@shared/game/hooks/useUpdatePuzzleStatus';
+import { PrimaryButton, SecondaryButton, GhostButton } from '@shared/components/Button';
 
 /**
  * Verdict surface for admin curation. Renders different button sets

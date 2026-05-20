@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { ArrowLeft } from 'lucide-react';
-import { render, screen, cleanup } from '../../test-utils';
+import { render, screen, cleanup } from '@shared/test-utils';
 import { Icon } from './Icon';
 
 afterEach(() => {

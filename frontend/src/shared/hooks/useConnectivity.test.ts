@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, waitFor } from '@testing-library/react';
-import { renderHook } from '../../test-utils';
+import { renderHook } from '@shared/test-utils';
 import { useConnectivity } from './useConnectivity';
 
 describe('useConnectivity', () => {

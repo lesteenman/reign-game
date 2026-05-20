@@ -1,4 +1,4 @@
-import { render, screen, cleanup, waitFor } from '../test-utils';
+import { render, screen, cleanup, waitFor } from '@shared/test-utils';
 import { fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -24,7 +24,7 @@ const mockFetchEnabledModes = vi
   ]);
 
 vi.mock('../services/landingService', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../services/landingService')>();
+  const actual = await importOriginal<typeof import('@services/landingService')>();
   return {
     ...actual,
     fetchEnabledModes: () => mockFetchEnabledModes(),

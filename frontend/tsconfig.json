@@ -3,5 +3,25 @@
   "references": [
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" }
-  ]
+  ],
+  /* Path aliases duplicated from tsconfig.app.json so Playwright's
+   * esbuild bundler (which loads this root tsconfig.json directly and
+   * does NOT follow project references) can resolve them in spec
+   * files under playwright/. Keep this block in sync with the paths
+   * map in tsconfig.app.json. Paths are relative to this directory
+   * (frontend/); baseUrl is deprecated in TS 7.0. */
+  "compilerOptions": {
+    "paths": {
+      "@app/*": ["./src/app/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@features/*": ["./src/features/*"],
+      "@engine/*": ["./src/engine/*"],
+      "@theme/*": ["./src/theme/*"],
+      "@storage/*": ["./src/storage/*"],
+      "@pages/*": ["./src/pages/*"],
+      "@components/*": ["./src/components/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@services/*": ["./src/services/*"]
+    }
+  }
 }

@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from '../../test-utils';
+import { render, screen, cleanup } from '@shared/test-utils';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 
 // Clerk's `<UserButton>` in real life opens a popover menu; we mock it

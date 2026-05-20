@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import { useConnectivity } from '../hooks/useConnectivity';
+import { useConnectivity } from '@shared/hooks/useConnectivity';
 
 // Style: inline CSSProperties using theme tokens (no Tamagui).
 // Tamagui migration tracked in #176.

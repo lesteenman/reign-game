@@ -1,7 +1,7 @@
-import { render, fireEvent, cleanup } from '../../test-utils';
+import { render, fireEvent, cleanup } from '@shared/test-utils';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Cell } from './Cell';
-import { ThemeProvider } from '../../theme/ThemeContext';
+import { ThemeProvider } from '@theme/ThemeContext';
 import type { CellProps } from './Cell';
 
 afterEach(() => {

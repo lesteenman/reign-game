@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react';
-import { idFor, openDB } from '../storage/db';
-import type { CompletionRecord, FlowType, GameState } from '../storage/types';
+import { idFor, openDB } from '@storage/db';
+import type { CompletionRecord, FlowType, GameState } from '@storage/types';
 
 /** Hook providing IndexedDB persistence for game state and completions. */
 export function useGameStorage() {

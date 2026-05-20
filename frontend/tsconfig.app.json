@@ -19,7 +19,33 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedIndexedAccess": true
+    "noUncheckedIndexedAccess": true,
+
+    /* Path aliases — Bulletproof React layers only.
+     * Legacy dirs (pages/, components/, hooks/, services/) deliberately
+     * NOT aliased — emphasises their target-for-migration status (#176).
+     * ESLint rule `import/no-relative-parent-imports` enforces alias use
+     * for everything except within-folder siblings (`./X`).
+     * Paths are relative to this tsconfig's directory (frontend/).
+     * `baseUrl` is deprecated in TS 7.0 — paths handle the resolution
+     * directly. */
+    "paths": {
+      /* BR layers (target homes). */
+      "@app/*": ["./src/app/*"],
+      "@shared/*": ["./src/shared/*"],
+      "@features/*": ["./src/features/*"],
+      "@engine/*": ["./src/engine/*"],
+      "@theme/*": ["./src/theme/*"],
+      "@storage/*": ["./src/storage/*"],
+      /* Legacy dirs (target-for-migration; each has its own #176 slice).
+       * Aliased so the lint rule can enforce alias-only imports without
+       * per-file exemptions. As each legacy dir migrates, drop its
+       * alias here. */
+      "@pages/*": ["./src/pages/*"],
+      "@components/*": ["./src/components/*"],
+      "@hooks/*": ["./src/hooks/*"],
+      "@services/*": ["./src/services/*"]
+    }
   },
   "include": ["src"]
 }

@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { PuzzleData } from '../engine/types';
+import type { PuzzleData } from '@engine/types';
 
 const MOCK_PUZZLE: PuzzleData = {
   puzzleId: 'test-001',

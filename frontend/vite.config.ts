@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import tsconfigPaths from "vite-tsconfig-paths";
 import { VitePWA } from "vite-plugin-pwa";
 
 // Vite runs its config under Node. Node's `process` global isn't
@@ -18,6 +19,9 @@ declare const process: { env: Record<string, string | undefined> };
 
 export default defineConfig(({ mode }) => ({
   plugins: [
+    // Resolve @app/@shared/@features/@engine/@theme/@storage aliases
+    // from tsconfig.app.json so vite + vitest match tsc + IDE.
+    tsconfigPaths(),
     react(),
     tailwindcss(),
     VitePWA({
