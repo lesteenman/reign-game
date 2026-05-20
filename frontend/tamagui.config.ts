@@ -31,7 +31,8 @@ import { createTamagui } from "tamagui";
  * for compiler-readability + a single mental model (always check
  * index.css first, then propagate).
  *
- * Last full sync: 2026-05-20 (#176 Tamagui kickoff slice).
+ * Last full sync: 2026-05-20 (#208 Button migration — added `mutedBg`
+ * for Ghost-button hover per BRAND_GUIDELINES §5.4).
  * ===================================================================== */
 
 const lightColors = {
@@ -41,6 +42,11 @@ const lightColors = {
   surface: '#FFFFFF',
   body: '#6B6358',
   muted: '#9C9488',
+  // Soft surface tint used for muted-context hover states (e.g. GhostButton hover).
+  // Sits between `background` (#F8F6F3) and `border` (#D6CFC5) so the
+  // hover affordance reads as a subtle "page surface darkening" rather
+  // than a hard outlined block.
+  mutedBg: '#EDE7DA',
   border: '#D6CFC5',
   // Accent
   accent: '#4F46E5',
@@ -62,6 +68,7 @@ const darkColors = {
   surface: '#1F1C18',
   body: '#9C9488',
   muted: '#6B6358',
+  mutedBg: '#2A2620',
   border: '#3D3830',
   accent: '#818CF8',
   accentHover: '#A5B4FC',

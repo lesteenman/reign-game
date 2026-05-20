@@ -120,9 +120,15 @@ const ReignButton = styledAny(View, {
         borderColor: 'transparent',
         shadowColor: 'transparent',
         shadowOffset: { width: 0, height: 0 },
-        // BRAND_GUIDELINES Ghost-hover: color shift, no translate.
+        // BRAND_GUIDELINES Ghost-hover: `text-ink, bg-muted-bg` — color
+        // shift + a soft muted-background tint, no translate. The
+        // `$mutedBg` token was added alongside #208 (mirrored in
+        // `src/index.css` and `tamagui.config.ts`); it sits between
+        // `$background` and `$border` so the affordance reads as a
+        // subtle surface darkening rather than a hard outlined block.
         hoverStyle: {
           color: '$ink',
+          backgroundColor: '$mutedBg',
         },
       },
     },

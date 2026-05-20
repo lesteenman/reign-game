@@ -6,6 +6,7 @@
   --color-surface: #FFFFFF;
   --color-body: #6B6358;
   --color-muted: #9C9488;
+  --color-muted-bg: #EDE7DA;
   --color-border: #D6CFC5;
   --color-accent: #4F46E5;
   --color-accent-hover: #4338CA;
@@ -44,6 +45,7 @@
   --color-surface: #1F1C18;
   --color-body: #9C9488;
   --color-muted: #6B6358;
+  --color-muted-bg: #2A2620;
   --color-border: #3D3830;
   --color-accent: #818CF8;
   --color-accent-hover: #A5B4FC;
