@@ -31,6 +31,24 @@ export default defineConfig(({ mode }) => ({
       config: "./tamagui.config.ts",
       components: ["tamagui"],
     }),
+    // The Tamagui plugin's config() hook returns `envPrefix: ["TAMAGUI_"]`,
+    // which Vite's mergeConfig treats as REPLACING (not extending) the
+    // default "VITE_" prefix. Result: `import.meta.env.VITE_*` becomes
+    // undefined in the browser, which crashes ClerkProvider mounting in
+    // src/app/providers.tsx and propagates as "useUser must be inside
+    // <ClerkProvider />" wherever useUser() is called. Discovered while
+    // debugging PR #209's CI integration-test failures — see reign-game
+    // #207 + upstream tamagui/tamagui#4008 follow-up. The override below
+    // appends VITE_ back to the prefix list so both the SPA's env vars
+    // AND Tamagui's TAMAGUI_-prefixed compiler opts still reach the
+    // browser.
+    {
+      name: "reign-restore-vite-env-prefix",
+      enforce: "post",
+      config() {
+        return { envPrefix: ["VITE_", "TAMAGUI_"] };
+      },
+    },
     VitePWA({
       registerType: 'autoUpdate',
       manifest: false,
