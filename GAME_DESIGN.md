@@ -167,7 +167,7 @@ Pay for content access, not for removing annoyances. One-time purchase, not a su
 |---------|-----------|
 | Framework | React 19 + TypeScript |
 | Bundler | Vite |
-| Styling | Tailwind CSS |
+| Styling | Inline `style={}` + CSS custom-property tokens (light + dark) + plain-CSS keyframe animations; migrating to Tamagui per #176 (Tailwind retired) |
 | PWA | Workbox (service worker, offline caching, install prompt) |
 | State | Local state + React Context (no heavy state library needed) |
 | Testing | Vitest (unit) + Playwright (e2e) |
