@@ -1,6 +1,6 @@
 import { SignInButton as ClerkSignInButton } from "@clerk/react";
-import { compactSecondaryButtonStyle } from '../../components/common/buttonStyles';
-import { pressIn, pressOut } from '../../components/common/press';
+import { compactSecondaryButtonStyle } from '../components/buttonStyles';
+import { pressIn, pressOut } from '../components/press';
 
 interface SignInButtonProps {
   /** Button label. Defaults to "Sign in". */
@@ -12,7 +12,7 @@ interface SignInButtonProps {
  * component forwards click events to its children, so we render our
  * branded button as the child to keep visuals consistent with the rest
  * of the app (BRAND_GUIDELINES §5.4 Secondary button). Shared style
- * and press handlers live in `components/common/` so the admin landing
+ * and press handlers live in `shared/components/` so the admin landing
  * page's sign-out button can match byte-for-byte.
  */
 export function SignInButton({ label = 'Sign in' }: SignInButtonProps) {

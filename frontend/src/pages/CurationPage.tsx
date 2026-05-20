@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PageShell } from '../components/common/PageShell';
-import { GhostButton } from '../components/common/Button';
+import { PageShell } from '../shared/components/PageShell';
+import { GhostButton } from '../shared/components/Button';
 import { PuzzleSelector } from '../components/landing/PuzzleSelector';
 import type { PuzzleSelection } from '../components/landing/PuzzleSelector';
 import { fetchEnabledModes } from '../services/landingService';

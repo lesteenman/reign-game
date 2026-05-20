@@ -1,6 +1,6 @@
-# `src/components/common/`
+# `src/shared/components/`
 
-Cross-feature UI primitives. Four production files plus three unit tests.
+Cross-feature UI primitives. Bulletproof React's shared-component layer — every page and feature consumes from here. Moved from `src/components/common/` in #176 (which kept `Icon` for `lucide-react` defaults).
 
 ## Responsibility
 
@@ -13,6 +13,7 @@ The shared chrome and primitive widgets every page reuses: the standard layout w
 
 ## Files
 
+- **`Icon.tsx`** — Brand-default wrapper around `lucide-react` icons (1.5 stroke, 20px size). Sites import the specific icon and pass via `as` prop: `<Icon as={ArrowLeft} />`. Pre-existed this folder.
 - **`PageShell.tsx`** — Top-of-page chrome. Renders the header row (back button | "Reign" wordmark | auth slot + dark-mode toggle), an optional subtitle below the wordmark, and the children below. The auth slot is conditionally rendered via `<Show when="signed-in|signed-out">` only when Clerk is available.
 - **`Button.tsx`** — Three button components: `PrimaryButton` (accent background), `SecondaryButton` (surface background), `GhostButton` (transparent, muted text). All share `baseStyle` and `disabledOverrides`. Hover handlers wire `press.ts` for the tactile-shadow animation.
 - **`buttonStyles.ts`** — Exports `compactSecondaryButtonStyle` — a smaller secondary-button style for headers and cards (8×16 padding vs the full-sized 12×32). Kept as a CSS-properties object (not a component) so Clerk SDK wrappers (`<SignInButton>`, `<SignOutButton>`) can apply it as-is.
@@ -30,6 +31,3 @@ The shared chrome and primitive widgets every page reuses: the standard layout w
 - **`compactSecondaryButtonStyle` and `Button.tsx`'s `SecondaryButton`** are intentionally separate primitives — one is 8×16, the other 12×32. Use the compact style in headers / cards; use the component in body buttons.
 - **`Button.tsx`'s buttons wire `press.ts` to `onMouseEnter` / `onMouseLeave`** for hover-feel; header buttons (e.g. `SignInButton`, `AdminLandingPage`'s Home link) wire to `onMouseDown` / `onMouseUp` / `onMouseLeave` for click-feel. The `press` helper handles both — picking the right trigger is the caller's responsibility.
 
-## Track 3 mapping
-
-Everything in this folder moves to `src/shared/components/` (per `frontend/CLAUDE.md` architecture section).

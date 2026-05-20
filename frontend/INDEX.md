@@ -63,7 +63,7 @@ Bulletproof React app-composition layer. Today holds providers only; router extr
 
 ### `src/components/`
 
-Cross-feature React components. See `src/components/README.md` for the directory breakdown — each immediate subfolder (`common/`, `grid/`, `landing/`) has its own README. (`auth/` moved to `shared/auth/` in #176; `game/` moved to `shared/game/components/` in Track 3.)
+Legacy cross-feature React components. New code does NOT land here. Remaining subfolders (`grid/`, `landing/`) each have their own #176 slice planned. See `src/components/README.md` for status. (`auth/` → `shared/auth/` in #176 PR #196; `common/` → `shared/components/` in #176 this PR; `game/` → `shared/game/components/` in Track 3.)
 
 ### `src/engine/`
 
@@ -101,6 +101,19 @@ Clerk-integration surface. Cross-feature: every role-gated UI consumes `getClerk
 - `UserMenu.tsx` — wraps Clerk's `<UserButton>`; adds an "Admin" menu item for admins (AS-10).
 - `role.ts` — `getClerkUserRole(publicMetadata)`. Single source of truth for the admin gate; consumed by `ProtectedAdminRoute`, `GameBoard`, `LandingPage`, and `UserMenu`.
 - Tests: `SignInButton.test.tsx`, `UserMenu.test.tsx`.
+
+### `src/shared/components/` *(2026-05-20: extended from `Icon` to full chrome in #176)*
+
+Bulletproof React shared-component layer. Every page and feature consumes from here.
+
+- `Icon.tsx` — brand-default wrapper around `lucide-react` icons (1.5 stroke, 20px size). Sites pass the icon via `as` prop: `<Icon as={ArrowLeft} />`.
+- `PageShell.tsx` — top-of-page chrome (header, back button, subtitle, dark-mode toggle, auth slot, install button, offline banner).
+- `Button.tsx` — `PrimaryButton`, `SecondaryButton`, `GhostButton`.
+- `buttonStyles.ts` — `compactSecondaryButtonStyle` (smaller variant for headers / cards). Used directly by Clerk SDK wrappers in `shared/auth/SignInButton`.
+- `press.ts` — `pressIn` / `pressOut` mouse-event handlers for the "tactile ink shadow" press feel. Element-agnostic.
+- `OfflineBanner.tsx` — *(2026-05-18: #116)* global offline indicator slotted into `PageShell`; renders when `useConnectivity()` returns `false`.
+- `InstallButton.tsx` — *(2026-05-18: #116 follow-up)* compact install CTA in the PageShell header right-cluster.
+- Tests: `Icon.test.tsx`, `PageShell.test.tsx`, `Button.test.tsx`, `OfflineBanner.test.tsx`, `InstallButton.test.tsx`.
 
 ### `src/pages/`
 
@@ -145,24 +158,6 @@ Theme abstraction + dark mode hook. See `src/theme/README.md`.
 - `ThemeContext.tsx` — provider + `useTheme()` hook.
 - `useDarkMode.ts` — `prefers-color-scheme` initial + localStorage override; toggles `.dark` class on `<html>`.
 - Tests: `tactile.test.ts`, `useDarkMode.test.ts`, `ThemeContext.test.tsx`.
-
-### `src/components/common/`
-
-Shared UI primitives. See `src/components/common/README.md`.
-
-- `Button.tsx` — `PrimaryButton`, `SecondaryButton`, `GhostButton`.
-- `PageShell.tsx` — top-of-page chrome (header, back button, subtitle, dark-mode toggle, auth slot).
-- `buttonStyles.ts` — `compactSecondaryButtonStyle` (smaller variant for headers / cards).
-- `press.ts` — `pressIn` / `pressOut` mouse-event handlers for the "tactile ink shadow" press.
-- `OfflineBanner.tsx` — *(2026-05-18: #116)* global offline indicator slotted into `PageShell`; renders when `useConnectivity()` returns `false` (probe-based detection, not just navigator.onLine).
-- `InstallButton.tsx` — *(2026-05-18: #116 follow-up)* compact install CTA in the PageShell header right-cluster. Calls `useInstallPrompt`; self-hides on iOS Safari / non-Chromium browsers / when already installed.
-- Tests: `OfflineBanner.test.tsx`, `InstallButton.test.tsx`.
-
-### `src/components/game/`
-
-Game-specific (non-grid) UI. See `src/components/game/README.md`.
-
-- `VerdictSurface.tsx` — admin curation verdict surface (completion and skip variants). **Known violation:** imports `submitVerdict` + `updatePuzzleStatus` directly.
 
 ### `src/components/grid/`
 

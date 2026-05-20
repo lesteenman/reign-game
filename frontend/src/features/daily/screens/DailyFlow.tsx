@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PageShell } from '../../../components/common/PageShell';
-import { PrimaryButton, SecondaryButton } from '../../../components/common/Button';
+import { PageShell } from '../../../shared/components/PageShell';
+import { PrimaryButton, SecondaryButton } from '../../../shared/components/Button';
 import { ApiError } from '../../../shared/api-errors';
 import { useDailyService } from '../hooks/useDailyService';
 import type { DailyPuzzlePayload, DailySubmitResponse } from '../../../shared/types/daily';

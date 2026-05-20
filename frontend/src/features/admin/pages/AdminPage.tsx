@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PageShell } from '../../../components/common/PageShell';
+import { PageShell } from '../../../shared/components/PageShell';
 import { MODES } from '../../../engine/types';
 import type { Mode } from '../../../engine/types';
 import type {

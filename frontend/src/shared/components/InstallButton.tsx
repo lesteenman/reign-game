@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { Download } from 'lucide-react';
-import { Icon } from '../../shared/components/Icon';
-import { useInstallPrompt } from '../../shared/hooks/useInstallPrompt';
+import { Icon } from './Icon';
+import { useInstallPrompt } from '../hooks/useInstallPrompt';
 
 // Style: small text button in the PageShell header cluster. Visually
 // parallel to the dark-mode toggle (transparent background,

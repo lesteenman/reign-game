@@ -2,7 +2,7 @@ import { useUser } from "@clerk/react";
 import type { CSSProperties, ReactNode } from 'react';
 import { AdminPage } from '../pages/AdminPage';
 import { AdminLandingPage } from '../pages/AdminLandingPage';
-import { PageShell } from '../../../components/common/PageShell';
+import { PageShell } from '../../../shared/components/PageShell';
 import { getClerkUserRole } from '../../../shared/auth/role';
 
 const loadingStyle: CSSProperties = {
