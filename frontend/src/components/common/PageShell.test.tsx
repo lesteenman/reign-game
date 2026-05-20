@@ -2,7 +2,7 @@ import { render, screen, fireEvent, cleanup } from '../../test-utils';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { PageShell } from './PageShell';
-import { ClerkAvailabilityProvider } from '../auth/ClerkAvailability';
+import { ClerkAvailabilityProvider } from '../../shared/auth/ClerkAvailability';
 
 // Tests run outside a real ClerkProvider; the components that rely on
 // Clerk hooks / auth gates (Show / UserMenu / SignInButton) are gated

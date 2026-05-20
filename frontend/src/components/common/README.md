@@ -8,7 +8,7 @@ The shared chrome and primitive widgets every page reuses: the standard layout w
 
 ## Data flow
 
-- **In:** Imported by every page (`PageShell` is the layout wrapper) and by `components/auth/` (`SignInButton` uses `compactSecondaryButtonStyle` + `press` handlers).
+- **In:** Imported by every page (`PageShell` is the layout wrapper) and by `shared/auth/` (`SignInButton` uses `compactSecondaryButtonStyle` + `press` handlers).
 - **Out:** Nothing; pure presentational primitives. `PageShell` reads `useDarkMode()` and `useClerkAvailable()` to compose the header.
 
 ## Files

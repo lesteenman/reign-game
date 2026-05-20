@@ -47,17 +47,23 @@ frontend/
 
 ### `src/` root
 
-- `App.tsx` — Router + QueryClientProvider + ThemeProvider composition; exports `FALLBACK_PUZZLE` used by tests.
-- `main.tsx` — React DOM bootstrap; mounts `<ClerkProvider>` only when `VITE_CLERK_PUBLISHABLE_KEY` is set (anonymous-safe degradation).
+- `App.tsx` — Router composition (BrowserRouter + Routes); exports `FALLBACK_PUZZLE` used by tests. Global providers moved to `src/app/providers.tsx` in #176.
+- `main.tsx` — React DOM bootstrap; mounts `<Providers>` from `src/app/providers.tsx`. Service-worker registration lives here (production-only).
 - `App.test.tsx` — smoke test that renders the app and resolves the initial puzzle fetch.
 - `index.css` — CSS custom-property tokens (light + dark), animation keyframes, and a `@import "tailwindcss"` line.
 - `test-setup.ts` — Vitest setup: jest-dom matchers + `matchMedia` mock for jsdom.
 - `test-utils.tsx` — wraps RTL `render` / `renderHook` in `<StrictMode>` to catch impure updaters at unit-test time.
 - `vite-env.d.ts` — Vite's ambient type reference.
 
+### `src/app/` *(2026-05-20: introduced in #176)*
+
+Bulletproof React app-composition layer. Today holds providers only; router extraction is a later #176 slice.
+
+- `providers.tsx` — `<Providers>`: composes `QueryClientProvider` (TanStack), `ThemeProvider`, `ClerkProvider` (conditional on `VITE_CLERK_PUBLISHABLE_KEY`), and `ClerkAvailabilityProvider`. Mounted by `main.tsx`.
+
 ### `src/components/`
 
-Cross-feature React components. See `src/components/README.md` for the directory breakdown — each immediate subfolder (`auth/`, `common/`, `game/`, `grid/`, `landing/`) has its own README.
+Cross-feature React components. See `src/components/README.md` for the directory breakdown — each immediate subfolder (`common/`, `grid/`, `landing/`) has its own README. (`auth/` moved to `shared/auth/` in #176; `game/` moved to `shared/game/components/` in Track 3.)
 
 ### `src/engine/`
 
@@ -85,6 +91,16 @@ Cross-feature reusable hooks.
 - `useInstallPrompt.ts` — captures `beforeinstallprompt`; exposes `{ canInstall, isStandalone, promptInstall }`.
 - `useConnectivity.ts` — *(2026-05-18: #116 follow-up)* authoritative connectivity hook; combines `useOnlineStatus` with an active HEAD probe of `/api/health` on mount. Re-probes on browser `online` events. Used by `OfflineBanner` and `LandingPage`.
 - Tests: `useOnlineStatus.test.ts`, `useInstallPrompt.test.ts`, `useConnectivity.test.ts`.
+
+### `src/shared/auth/` *(2026-05-20: moved from `src/components/auth/` in #176)*
+
+Clerk-integration surface. Cross-feature: every role-gated UI consumes `getClerkUserRole`, and the chrome (`PageShell`) renders `SignInButton`/`UserMenu` conditionally on `useClerkAvailable()`.
+
+- `ClerkAvailability.tsx` — context flag (provider + `useClerkAvailable` hook) telling consumers whether `<ClerkProvider>` was mounted. Provider is composed in `src/app/providers.tsx`.
+- `SignInButton.tsx` — wraps Clerk's `<SignInButton mode="modal">` with branded styling. Used by `PageShell` and `AdminLandingPage`.
+- `UserMenu.tsx` — wraps Clerk's `<UserButton>`; adds an "Admin" menu item for admins (AS-10).
+- `role.ts` — `getClerkUserRole(publicMetadata)`. Single source of truth for the admin gate; consumed by `ProtectedAdminRoute`, `GameBoard`, `LandingPage`, and `UserMenu`.
+- Tests: `SignInButton.test.tsx`, `UserMenu.test.tsx`.
 
 ### `src/pages/`
 
@@ -129,16 +145,6 @@ Theme abstraction + dark mode hook. See `src/theme/README.md`.
 - `ThemeContext.tsx` — provider + `useTheme()` hook.
 - `useDarkMode.ts` — `prefers-color-scheme` initial + localStorage override; toggles `.dark` class on `<html>`.
 - Tests: `tactile.test.ts`, `useDarkMode.test.ts`, `ThemeContext.test.tsx`.
-
-### `src/components/auth/`
-
-Auth-related components. See `src/components/auth/README.md`.
-
-- `ClerkAvailability.tsx` — context flag indicating whether `<ClerkProvider>` was mounted (anonymous-safe degradation).
-- `ProtectedAdminRoute.tsx` — wraps `/admin` and `/curation`; renders three states per AS-09. **Known violation:** imports `AdminPage` + `AdminLandingPage` from `pages/`.
-- `SignInButton.tsx` — wraps Clerk's `<SignInButton mode="modal">` with branded styling.
-- `UserMenu.tsx` — wraps Clerk's `<UserButton>`; adds an "Admin" menu item for admins.
-- `role.ts` — `getClerkUserRole(publicMetadata)`.
 
 ### `src/components/common/`
 

@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { AdminPage } from '../pages/AdminPage';
 import { AdminLandingPage } from '../pages/AdminLandingPage';
 import { PageShell } from '../../../components/common/PageShell';
-import { getClerkUserRole } from '../../../components/auth/role';
+import { getClerkUserRole } from '../../../shared/auth/role';
 
 const loadingStyle: CSSProperties = {
   textAlign: 'center',
