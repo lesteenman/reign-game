@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import tsconfigPaths from "vite-tsconfig-paths";
+import { tamaguiPlugin } from "@tamagui/vite-plugin";
 import { VitePWA } from "vite-plugin-pwa";
 
 // Vite runs its config under Node. Node's `process` global isn't
@@ -22,6 +23,14 @@ export default defineConfig(({ mode }) => ({
     // from tsconfig.app.json so vite + vitest match tsc + IDE.
     tsconfigPaths(),
     react(),
+    // Tamagui compiler — hoists styles at build time instead of computing
+    // them at runtime. Pin held at @tamagui/vite-plugin@2.0.0-rc.34
+    // because rc.35-42 ship a malformed peer dep (`vite: "*8.0.3"`,
+    // upstream tamagui/tamagui#4008). See reign-game #207 for tracking.
+    tamaguiPlugin({
+      config: "./tamagui.config.ts",
+      components: ["tamagui"],
+    }),
     VitePWA({
       registerType: 'autoUpdate',
       manifest: false,
