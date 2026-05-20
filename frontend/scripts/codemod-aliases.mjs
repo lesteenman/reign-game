@@ -4,16 +4,20 @@
 //
 // Rules:
 //   - Walk all *.ts / *.tsx under src/.
-//   - For each `from '...'` / `from "..."` / `import('...')` whose
-//     target starts with `../`, resolve to an absolute path under src/.
-//   - If the target lives under one of the aliased layers (app, shared,
-//     features, engine, theme, storage), rewrite to `@<layer>/<rest>`.
-//   - Targets under legacy dirs (pages, components, hooks, services)
-//     stay relative — they aren't aliased so the rule can't enforce
-//     them, and emphasising their target-for-migration status is
-//     intentional.
-//   - Sibling imports (`./X`) stay as is — within-folder relatives are
-//     allowed by `import/no-relative-parent-imports`.
+//   - For each `from '...'` / `from "..."` / `import('...')` /
+//     `vi.mock('...')` / `vi.doMock('...')` / `vi.unmock('...')` /
+//     `vi.importActual('...')` / `vi.importMock('...')` whose target
+//     starts with `../`, resolve to an absolute path under src/.
+//   - If the target lives under one of the aliased layers — BR
+//     (app, shared, features, engine, theme, storage) OR transitional
+//     legacy (pages, components, hooks, services) — rewrite to
+//     `@<layer>/<rest>`. The legacy aliases exist so the
+//     `no-restricted-imports` ESLint rule can enforce alias-only
+//     imports without per-file exemptions during the #176 transition.
+//   - Sibling imports (`./X`) stay as-is — within-folder relatives are
+//     allowed by `no-restricted-imports`.
+//   - The script is idempotent: re-running it on the converted tree
+//     produces zero changes (the rule guards on `../` prefix).
 
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs';
 import { resolve, dirname, relative, sep } from 'node:path';
@@ -30,8 +34,7 @@ const ALIASED_LAYERS = new Set([
   'engine',
   'theme',
   'storage',
-  // Legacy dirs (target-for-migration; aliased only so the lint rule
-  // can enforce alias-only imports during the #176 transition).
+  // Transitional legacy-dir aliases. Drop as each migrates per #176.
   'pages',
   'components',
   'hooks',
@@ -73,7 +76,10 @@ let changedImports = 0;
 //   import("...")
 //   export ... from '...'
 //   export ... from "..."
-const IMPORT_RE = /(from\s+|import\s*\()(['"])([^'"]+)\2/g;
+//   vi.mock('...')   /   vi.mock("...")   /   vi.doMock(...)
+//   vi.unmock('...') / vi.importActual(...) / vi.importMock(...)
+const IMPORT_RE =
+  /(from\s+|import\s*\(|vi\.(?:mock|doMock|unmock|importActual|importMock)\s*\()(['"])([^'"]+)\2/g;
 
 for (const file of files) {
   const original = readFileSync(file, 'utf8');

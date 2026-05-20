@@ -11,9 +11,9 @@ import type { DailyPuzzlePayload, DailySubmitResponse } from '@shared/types/dail
 // per test to drive each branch of the daily-flow state machine.
 const mockGetDaily = vi.fn();
 const mockSubmitDailyResult = vi.fn();
-vi.mock('../../../services/dailyService', async () => {
+vi.mock('@services/dailyService', async () => {
   const actual = await vi.importActual<typeof import('@services/dailyService')>(
-    '../../../services/dailyService',
+    '@services/dailyService',
   );
   return {
     ...actual,
@@ -30,7 +30,7 @@ const mockSaveState = vi.fn(async () => {});
 const mockLoadState = vi.fn<(...args: [unknown, unknown]) => Promise<GameState | null>>(async () => null);
 const mockClearState = vi.fn(async () => {});
 const mockAddCompletion = vi.fn(async () => {});
-vi.mock('../../../hooks/useGameStorage', () => ({
+vi.mock('@hooks/useGameStorage', () => ({
   useGameStorage: () => ({
     saveState: mockSaveState,
     loadState: mockLoadState,

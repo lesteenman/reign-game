@@ -80,11 +80,23 @@ export default tseslint.config(
       react: { version: 'detect' },
       'import/resolver': {
         // typescript resolver follows tsconfig paths so the import
-        // plugin understands @app/@shared/etc. references.
+        // plugin understands @app/@shared/etc. references. Listing only
+        // tsconfig.app.json (which covers src/ — where almost all
+        // imports live) avoids the "Multiple projects found" warning
+        // from eslint-import-resolver-typescript. tsconfig.json's paths
+        // map is identical and only used by Playwright's esbuild, which
+        // isn't linted here.
         typescript: {
-          project: ['./tsconfig.app.json', './tsconfig.json'],
+          project: './tsconfig.app.json',
         },
       },
+    },
+    linterOptions: {
+      // Flag stale `// eslint-disable-next-line X` comments where X is
+      // never reported. Prevents disable-comment rot (e.g. the inert
+      // `// eslint-disable-next-line no-console` removed from
+      // src/app/providers.tsx in #198).
+      reportUnusedDisableDirectives: 'warn',
     },
     rules: {
       ...react.configs.recommended.rules,
@@ -113,10 +125,27 @@ export default tseslint.config(
       // this on by default.
       'react/prop-types': 'off',
 
-      // The two enforcement rules this PR introduces.
+      // The three enforcement rules this PR introduces.
       // Bans cross-folder relative imports. `./X` (within-folder
       // sibling) still allowed; `./X/Y` (subfolder hop) banned; any
       // `../` banned. Aliases (start with `@`) are allowed.
+      // The companion `no-restricted-syntax` rule below extends this
+      // ban to vitest's module-mock string-literal args (vi.mock,
+      // vi.importActual, etc.) which `no-restricted-imports` does NOT
+      // inspect.
+      'no-restricted-syntax': [
+        'error',
+        {
+          // Matches paths starting with `../` (parent-relative) OR
+          // `./<something>/` (cross-folder relative). Bare `./X`
+          // sibling-file mocks stay allowed, matching the
+          // no-restricted-imports policy.
+          selector:
+            "CallExpression[callee.object.name='vi'][callee.property.name=/^(mock|doMock|unmock|importActual|importMock)$/] > Literal[value=/^\\.\\.\\/|^\\.\\/[^/]+\\//]",
+          message:
+            "vi.mock / vi.importActual / etc. must use a path alias (@layer/X), not a relative path. The lint rule above doesn't catch these calls because they aren't import statements.",
+        },
+      ],
       'no-restricted-imports': [
         'error',
         {

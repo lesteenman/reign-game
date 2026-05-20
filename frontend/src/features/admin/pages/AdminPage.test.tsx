@@ -10,7 +10,7 @@ const mockUpdateConfig = vi.fn();
 const mockCreateConfig = vi.fn();
 const mockTriggerReplenish = vi.fn();
 
-vi.mock('../../../services/adminService', () => ({
+vi.mock('@services/adminService', () => ({
   fetchPoolStatus: (...args: unknown[]) => mockFetchPoolStatus(...args),
   updateConfig: (...args: unknown[]) => mockUpdateConfig(...args),
   createConfig: (...args: unknown[]) => mockCreateConfig(...args),

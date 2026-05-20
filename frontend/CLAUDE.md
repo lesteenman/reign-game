@@ -101,7 +101,7 @@ Project-wide TDD rule in `/CLAUDE.md`. Frontend-specific:
 - **Vitest** for unit tests. Co-located with source: `Foo.tsx` + `Foo.test.tsx`.
 - **Playwright** for e2e in `frontend/playwright/e2e/`; integration specs in `frontend/playwright/integration/`. See `.claude/skills/playwright-cli/` for browser automation patterns.
 - Aim for above 90% coverage on hooks and services.
-- Use `frontend/src/test-utils.tsx` (wraps RTL `render` with providers).
+- Use `frontend/src/shared/test-utils.tsx` (wraps RTL `render` with providers); import as `@shared/test-utils`.
 - **Mock external dependencies** (network via MSW or `page.route()`; not Vitest unit-mocks of services).
 
 ## Lessons (Reign-specific)

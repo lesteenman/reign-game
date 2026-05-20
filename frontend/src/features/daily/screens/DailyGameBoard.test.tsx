@@ -15,7 +15,7 @@ const mockSaveState = vi.fn(async () => {});
 const mockLoadState = vi.fn<(...args: [unknown, unknown]) => Promise<GameState | null>>(async () => null);
 const mockClearState = vi.fn(async () => {});
 const mockAddCompletion = vi.fn(async () => {});
-vi.mock('../../../hooks/useGameStorage', () => ({
+vi.mock('@hooks/useGameStorage', () => ({
   useGameStorage: () => ({
     saveState: mockSaveState,
     loadState: mockLoadState,
@@ -34,8 +34,8 @@ const STUB_SOLUTION = [
   [0, 1, 0],
 ];
 const STUB_ELAPSED_MS = 8_000;
-vi.mock('../../../shared/game/components/GameBoard', async () => {
-  const actual = await vi.importActual<typeof import('@shared/game/components/GameBoard')>('../../../shared/game/components/GameBoard');
+vi.mock('@shared/game/components/GameBoard', async () => {
+  const actual = await vi.importActual<typeof import('@shared/game/components/GameBoard')>('@shared/game/components/GameBoard');
   return {
     ...actual,
     GameBoard: (props: GameBoardProps) => {

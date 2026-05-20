@@ -37,7 +37,7 @@ let mockFetchResult: () => Promise<PuzzleData> = () => Promise.resolve(MOCK_PUZZ
 const mockUpdateStatus = vi.fn().mockResolvedValue(undefined);
 const mockSubmitVerdict = vi.fn().mockResolvedValue(undefined);
 
-vi.mock('../services/puzzleService', () => ({
+vi.mock('@services/puzzleService', () => ({
   fetchNextPuzzle: (size: number, mode: string) => {
     lastFetchArgs = { size, mode };
     fetchCallCount++;
@@ -52,16 +52,16 @@ vi.mock('../services/puzzleService', () => ({
   },
 }));
 
-vi.mock('../services/verdictService', () => ({
+vi.mock('@services/verdictService', () => ({
   submitVerdict: (...args: unknown[]) => mockSubmitVerdict(...args),
 }));
 
 // GamePage delegates to <DailyFlow /> for `flow=daily`. Stub getDaily()
 // so the delegated component renders without hitting the network — the
 // delegation test only asserts the wrapper is mounted.
-vi.mock('../services/dailyService', async () => {
+vi.mock('@services/dailyService', async () => {
   const actual = await vi.importActual<typeof import('@services/dailyService')>(
-    '../services/dailyService',
+    '@services/dailyService',
   );
   return {
     ...actual,
@@ -86,7 +86,7 @@ const mockLoadState = vi.fn().mockResolvedValue(null);
 const mockSaveState = vi.fn().mockResolvedValue(undefined);
 const mockClearState = vi.fn().mockResolvedValue(undefined);
 const mockAddCompletion = vi.fn().mockResolvedValue(undefined);
-vi.mock('../hooks/useGameStorage', () => ({
+vi.mock('@hooks/useGameStorage', () => ({
   useGameStorage: () => ({
     loadState: mockLoadState,
     saveState: mockSaveState,

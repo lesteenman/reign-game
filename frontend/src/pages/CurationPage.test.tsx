@@ -23,7 +23,7 @@ const mockFetchEnabledModes = vi
     { size: 9, mode: 'double', threshold: 3, enabled: true },
   ]);
 
-vi.mock('../services/landingService', async (importOriginal) => {
+vi.mock('@services/landingService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@services/landingService')>();
   return {
     ...actual,
