@@ -153,7 +153,7 @@ export default tseslint.config(
             {
               group: ['../*', './*/*'],
               message:
-                'Use a path alias (@app/@shared/@features/@engine/@theme/@storage; transitional: @pages/@components/@hooks/@services) instead of a cross-folder relative import. See tsconfig.app.json paths + frontend/CLAUDE.md.',
+                'Use a path alias (@app/@shared/@features/@engine/@theme/@storage; transitional: @pages/@services) instead of a cross-folder relative import. See tsconfig.app.json paths + frontend/CLAUDE.md.',
             },
           ],
         },

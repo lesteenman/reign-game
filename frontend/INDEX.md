@@ -10,7 +10,7 @@ A single-page Progressive Web App (PWA) that renders the Reign puzzle game. Thre
 
 | | Current (today) | Target (per `frontend/CLAUDE.md` + `architecture` skill) |
 |---|---|---|
-| Folder shape | Mostly BR feature-folder. Remaining legacy: `pages/` (one file), `services/` (four files). Target: pure feature-folder with no legacy layered dirs. | Feature-folder: `app/`, `engine/`, `features/{auth,game,daily,curation,admin,landing}/`, `shared/{components,hooks,lib,types}/`, `theme/`, `storage/` |
+| Folder shape | Mostly BR feature-folder. Remaining legacy: `pages/` (one file), `services/` (four files). Target: pure feature-folder with no legacy layered dirs. | Feature-folder: `app/`, `engine/`, `features/{daily,curation,admin,landing}/`, `shared/{auth,components,game,hooks,types}/`, `theme/`, `storage/` (note: `auth` and `game` live under `shared/` because they are genuinely cross-feature, not single-feature concerns — see #196 + this PR's BR-incorrect-framing analysis) |
 | UI primitives | Hand-rolled `<div>`, `<button>` with inline `style={}`; one residual `className=` (`Cell.tsx` animation hook) | Tamagui 2 RC primitives + theme tokens |
 | Tailwind | Imported once in `index.css` (`@import "tailwindcss"`); no `className=*` consumers other than the animation hook | Retired (gone) |
 | Server state | Hand-rolled `useState<LoadState>` / `useState<FlowState>` discriminated unions in `GamePage` + `DailyFlow`; bespoke `useEffect` fetch + cancel | TanStack `useQuery` / `useMutation` |
