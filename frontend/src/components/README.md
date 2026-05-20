@@ -5,11 +5,11 @@ Legacy cross-feature React components organized by subdomain. New code does NOT 
 | Subfolder | Responsibility | README |
 |---|---|---|
 | `grid/` | Custom hand-built grid UI: Grid, Cell, Marker, ExclusionMark, RegionBorderOverlay. Moves to `features/game/components/` in a later #176 slice. | `grid/README.md` |
-| `landing/` | Misnamed: contains `PuzzleSelector` which is curation-only. Moves to `features/curation/components/` in a later #176 slice. | `landing/README.md` |
 
 Already migrated out of this folder:
 
-- `components/game/` (VerdictSurface) → `shared/game/components/` (Track 3).
+- `components/game/` (VerdictSurface) → `shared/game/components/` (Track 3). Later moved to `features/curation/components/` in #176.
 - `components/auth/ProtectedAdminRoute` → `features/admin/components/` (Track 3).
-- `components/auth/` (`ClerkAvailability`, `SignInButton`, `UserMenu`, `role.ts`) → `shared/auth/` (#176, PR #196 — cross-feature usage required a shared-layer home; see issue body for the BR analysis).
-- `components/common/*` (`PageShell`, `Button`, `buttonStyles`, `press`, `OfflineBanner`, `InstallButton`) → `shared/components/` (#176, this PR).
+- `components/auth/` (`ClerkAvailability`, `SignInButton`, `UserMenu`, `role.ts`) → `shared/auth/` (#176, PR #196).
+- `components/common/*` (`PageShell`, `Button`, `buttonStyles`, `press`, `OfflineBanner`, `InstallButton`) → `shared/components/` (#176, PR #197).
+- `components/landing/PuzzleSelector` → `features/curation/components/` (#176, this PR — the folder was always misnamed; `PuzzleSelector` is curation-only).

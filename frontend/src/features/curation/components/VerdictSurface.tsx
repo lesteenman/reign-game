@@ -1,8 +1,21 @@
 import { useCallback, useState, type CSSProperties } from 'react';
-import type { Mode } from '@engine/types';
-import { useSubmitVerdict } from '@shared/game/hooks/useSubmitVerdict';
+import { useSubmitVerdict } from '@features/curation/hooks/useSubmitVerdict';
 import { useUpdatePuzzleStatus } from '@shared/game/hooks/useUpdatePuzzleStatus';
 import { PrimaryButton, SecondaryButton, GhostButton } from '@shared/components/Button';
+import type { AdminVerdictSurfaceProps } from '@shared/game/types/admin-verdict-surface';
+
+/**
+ * Re-export the slot contract types under their historical names so
+ * existing consumers and tests that imported them from this file keep
+ * compiling. The canonical declarations now live in
+ * `shared/game/types/admin-verdict-surface.ts` so GameBoard (shared)
+ * can reference them without violating the cross-layer rule.
+ */
+export type {
+  AdminVerdictSurfaceProps as VerdictSurfaceProps,
+  AdminVerdictCompletionProps as CompletionVerdictSurfaceProps,
+  AdminVerdictSkipProps as SkipVerdictSurfaceProps,
+} from '@shared/game/types/admin-verdict-surface';
 
 /**
  * Verdict surface for admin curation. Renders different button sets
@@ -51,37 +64,6 @@ function markSubmitted(puzzleId: string): void {
   }
 }
 
-interface VerdictSurfaceCommonProps {
-  puzzleId: string;
-  size: number;
-  mode: Mode;
-  /** Player's elapsed time on the attempt that produced this verdict, in milliseconds. */
-  playTimeMs: number;
-}
-
-interface CompletionVerdictSurfaceProps extends VerdictSurfaceCommonProps {
-  variant: 'completion';
-  outcome: 'solved';
-  onDismiss?: never;
-  onAfterVerdict?: () => void;
-}
-
-interface SkipVerdictSurfaceProps extends VerdictSurfaceCommonProps {
-  variant: 'skip';
-  outcome: 'skipped';
-  /** Called when the admin clicks Cancel. Parent should restore the playable view. */
-  onDismiss: () => void;
-  /**
-   * Called after a successful "I hate this" or "Just skip" — the parent navigates
-   * forward (typically to /curation or /).
-   */
-  onAfterVerdict: () => void;
-}
-
-export type VerdictSurfaceProps =
-  | CompletionVerdictSurfaceProps
-  | SkipVerdictSurfaceProps;
-
 type SubmissionStatus =
   | { kind: 'idle' }
   | { kind: 'submitting' }
@@ -123,7 +105,7 @@ const skipButtonRowStyle: CSSProperties = {
   gap: '8px',
 };
 
-export function VerdictSurface(props: VerdictSurfaceProps) {
+export function VerdictSurface(props: AdminVerdictSurfaceProps) {
   const { puzzleId, size, mode, playTimeMs, variant } = props;
   // Cache check is captured ONCE at mount via the lazy initial state.
   // After a successful submission we mark the puzzleId in

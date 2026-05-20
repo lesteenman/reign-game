@@ -11,6 +11,7 @@ import { isMode } from '@engine/types';
 import type { FlowType, GameHistory } from '@storage/types';
 import { EMPTY_HISTORY, buildCurationFlowId, parseFlowType } from '@storage/types';
 import { DailyFlow } from '@features/daily/screens/DailyFlow';
+import { VerdictSurface } from '@features/curation/components/VerdictSurface';
 
 type LoadState =
   | { status: 'loading' }
@@ -207,6 +208,7 @@ export function GamePage() {
       addCompletion={addCompletion}
       onBack={handleBack}
       onPlayAgain={retryFetch}
+      AdminVerdictSurface={VerdictSurface}
     />
   );
 }
