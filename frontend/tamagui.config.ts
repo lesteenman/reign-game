@@ -71,7 +71,11 @@ const darkColors = {
 const light = {
   ...defaultConfig.themes.light,
   ...lightColors,
-  background: lightColors.background,
+  // `background` is already in `lightColors`; the explicit assignments
+  // below are the ones doing real work — Tamagui's defaults have
+  // `color` + `borderColor` keys but Reign's tokens carry the same
+  // values under `ink` and `border`, so we re-bind for Tamagui's
+  // semantic-key consumers.
   color: lightColors.ink,
   borderColor: lightColors.border,
 };
@@ -79,7 +83,6 @@ const light = {
 const dark = {
   ...defaultConfig.themes.dark,
   ...darkColors,
-  background: darkColors.background,
   color: darkColors.ink,
   borderColor: darkColors.border,
 };

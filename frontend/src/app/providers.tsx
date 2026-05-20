@@ -3,7 +3,7 @@ import { ClerkProvider } from '@clerk/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TamaguiProvider } from 'tamagui';
 import { ThemeProvider } from '@theme/ThemeContext';
-import { useDarkMode } from '@theme/useDarkMode';
+import { DarkModeProvider, useDarkMode } from '@theme/useDarkMode';
 import { ClerkAvailabilityProvider } from '@shared/auth/ClerkAvailability';
 // Tamagui requires the config object at runtime (not just compile-time
 // types). It lives at the frontend/ root by Tamagui convention + the
@@ -48,10 +48,12 @@ interface ProvidersProps {
 }
 
 /**
- * Tracks dark-mode state via `useDarkMode` and feeds it to Tamagui's
- * `defaultTheme` so Tamagui-styled components pick up the active theme.
- * Lives inside ThemeProvider so the Reign `useTheme()` API can be
- * called from Tamagui-styled components without provider-order surprise.
+ * Reads the active dark-mode state from `DarkModeProvider` and feeds
+ * it to Tamagui's `defaultTheme` so Tamagui-styled components pick up
+ * the active theme. Must sit inside `<DarkModeProvider>` so it shares
+ * state with `PageShell`'s toggle UI — without the shared provider,
+ * each `useDarkMode()` call would own its own `useState` and the
+ * toggle would update PageShell but not Tamagui.
  */
 function TamaguiThemedProvider({ children }: { children: ReactNode }) {
   const { isDark } = useDarkMode();
@@ -65,26 +67,28 @@ function TamaguiThemedProvider({ children }: { children: ReactNode }) {
 /**
  * App-level provider composition (Bulletproof React `app/providers.tsx`).
  * Wraps the router and feature tree with TanStack Query, theme,
- * Tamagui, and Clerk auth so feature code stays free of bootstrapping
- * concerns.
+ * dark-mode state, Tamagui, and Clerk auth so feature code stays free
+ * of bootstrapping concerns.
  */
 export function Providers({ children }: ProvidersProps) {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <TamaguiThemedProvider>
-          {publishableKey ? (
-            <ClerkProvider publishableKey={publishableKey}>
-              <ClerkAvailabilityProvider available={true}>
+        <DarkModeProvider>
+          <TamaguiThemedProvider>
+            {publishableKey ? (
+              <ClerkProvider publishableKey={publishableKey}>
+                <ClerkAvailabilityProvider available={true}>
+                  {children}
+                </ClerkAvailabilityProvider>
+              </ClerkProvider>
+            ) : (
+              <ClerkAvailabilityProvider available={false}>
                 {children}
               </ClerkAvailabilityProvider>
-            </ClerkProvider>
-          ) : (
-            <ClerkAvailabilityProvider available={false}>
-              {children}
-            </ClerkAvailabilityProvider>
-          )}
-        </TamaguiThemedProvider>
+            )}
+          </TamaguiThemedProvider>
+        </DarkModeProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
