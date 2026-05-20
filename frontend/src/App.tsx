@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { LandingPage } from '@pages/LandingPage';
+import { LandingPage } from '@features/landing/pages/LandingPage';
 import { GamePage } from '@pages/GamePage';
 import { CurationPage } from '@features/curation/pages/CurationPage';
 import { ProtectedAdminRoute } from '@features/admin/components/ProtectedAdminRoute';

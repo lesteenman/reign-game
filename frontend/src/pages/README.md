@@ -1,6 +1,6 @@
 # `src/pages/`
 
-Route-level components. Three production files and three unit tests.
+Legacy route-level components. New page components do NOT land here — each route lives under `src/features/<feature>/pages/`. One production file (`GamePage.tsx`) and its unit test remain pending their #176 slice (`features/game/`).
 
 ## Responsibility
 
@@ -13,11 +13,14 @@ Top-of-tree React components that the router mounts under each URL path. Each ow
 
 ## Files
 
-- **`LandingPage.tsx`** — Public landing. Three tiles (Daily / Packs / Curation). Curation gated on `getClerkUserRole(user.publicMetadata) === 'admin'`. Daily is live; Packs is a disabled placeholder.
-- **`GamePage.tsx`** — Curation/practice play route (and daily-flow delegator). Owns the `LoadState` machine (loading / ready / no-state / no-puzzles / error). When `?flow=daily` is in the URL, renders `<DailyFlow />` from `features/daily/` and skips its own fetcher. Composes `<GameBoard>` from `shared/game/components/`.
-- **`CurationPage.tsx`** — Admin-gated puzzle selector. Renders `<PuzzleSelector>` with the enabled-modes list and navigates to `/play?flow=curation&size=N&mode=M` on select.
+- **`GamePage.tsx`** — Curation/practice play route (and daily-flow delegator). Owns the `LoadState` machine (loading / ready / no-state / no-puzzles / error). When `?flow=daily` is in the URL, renders `<DailyFlow />` from `features/daily/` and skips its own fetcher. Composes `<GameBoard>` from `shared/game/components/`. Wires the curation flow's `<VerdictSurface>` slot via `AdminVerdictSurface` (PR #202).
 
-Note: `AdminPage`, `AdminLandingPage` moved to `features/admin/pages/`. `DailyFlow`, `DailyGameBoard`, `PostCompletionScreen` moved to `features/daily/screens/`.
+Already migrated out of this folder:
+
+- `LandingPage.tsx` → `features/landing/pages/` (#176, this PR).
+- `CurationPage.tsx` → `features/curation/pages/` (#176, PR #202).
+- `AdminPage.tsx`, `AdminLandingPage.tsx` → `features/admin/pages/` (Track 3).
+- `DailyFlow.tsx`, `DailyGameBoard.tsx`, `PostCompletionScreen.tsx` → `features/daily/screens/` (Track 3).
 
 ## Rules specific to this directory
 

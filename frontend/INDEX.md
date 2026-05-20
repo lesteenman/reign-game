@@ -119,7 +119,7 @@ Bulletproof React shared-component layer. Every page and feature consumes from h
 
 Route-level components. See `src/pages/README.md`.
 
-- `LandingPage.tsx` — public landing with Daily / Packs / Curation tiles (Curation gated on admin role).
+- `LandingPage.tsx` — public landing with Daily / Packs / Curation tiles (Curation gated on admin role); lives in `features/landing/pages/` (moved in #176).
 - `GamePage.tsx` — gameplay host (786 LOC). Manages `LoadState` machine + the inner `GameBoard` (also exported here).
 - `DailyFlow.tsx` — daily-puzzle state machine; lives in `features/daily/screens/`.
 - `DailyGameBoard.tsx` — daily flow's grid host; lives in `features/daily/screens/`.
@@ -136,10 +136,12 @@ Backend client modules. See `src/services/README.md`.
 - `api.ts` — shared fetch base (`apiFetch` / `apiPut` / `apiPost`) + `ApiError`.
 - `puzzleService.ts` — `fetchNextPuzzle`, `updatePuzzleStatus`, `NoPuzzlesAvailableError`.
 - `adminService.ts` — pool / config CRUD (`fetchPoolStatus`, `updateConfig`, `createConfig`, `triggerReplenish`) plus type re-exports.
-- `landingService.ts` — `fetchEnabledModes` (public `/api/config/modes`).
 - `dailyService.ts` — daily flow (`getDaily`, `submitDailyResult`); intentionally bypasses `api.ts` to inject `X-Device-Id`.
 
-(`verdictService.ts` moved to `features/curation/services/` in #176.)
+Already migrated out of this folder:
+
+- `verdictService.ts` → `features/curation/services/` (#176, PR #202).
+- `landingService.ts` → `features/curation/services/enabled-modes-service.ts` (#176, this PR — renamed; the "landing" label was vestigial. Only CurationPage consumed it).
 
 ### `src/storage/`
 
@@ -178,8 +180,16 @@ Curation feature: admin-only puzzle review surface. The `/curation` route lands 
 - `components/PuzzleSelector.tsx` — size/mode preset selector + Play button. (Was misnamed `components/landing/PuzzleSelector` in legacy layout; moved here in #176.)
 - `components/VerdictSurface.tsx` — admin verdict UI (completion + skip variants). Mounted by `GameBoard` via the `AdminVerdictSurface` prop (slot contract in `shared/game/types/admin-verdict-surface.ts`). Was previously in `shared/game/components/`; moved here in #176 because the verdict surface is curation-specific.
 - `services/verdictService.ts` — `submitVerdict` (admin PUT to `/api/admin/puzzles/{id}/verdict`). Was previously in `src/services/`.
+- `services/enabled-modes-service.ts` — `fetchEnabledModes` (GET `/api/config/modes`). Used by `CurationPage` to populate the size/mode picker. Was previously `src/services/landingService.ts`; renamed + relocated in #176 because the "landing" label was vestigial — only CurationPage ever consumed it.
 - `hooks/useSubmitVerdict.ts` — TanStack `useMutation` wrapper around `verdictService.submitVerdict`. Was previously in `shared/game/hooks/`.
 - Tests: one per source file.
+
+### `src/features/landing/` *(2026-05-20: introduced in #176)*
+
+Landing feature: the public landing page at `/` with three top-level tiles (Daily / Packs placeholder / admin-only Curation).
+
+- `pages/LandingPage.tsx` — tile-based landing. Reads `useUser` (Clerk) + `useConnectivity` (shared/hooks) to decide which tiles are enabled / visible. No I/O of its own — entirely self-contained.
+- Tests: `pages/LandingPage.test.tsx`.
 
 ## Playwright tests
 
