@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { ArrowLeft, Sun, Moon } from 'lucide-react';
-import { Show } from '@clerk/react';
+import { Show } from "@clerk/react";
 import { styled, View, Text } from 'tamagui';
 import { Icon } from './Icon';
 import { IconButton } from './IconButton';
@@ -73,8 +73,11 @@ const Title = styledAny(Text, {
   letterSpacing: -0.3,
   color: '$ink',
   render: <h1 />,
-  // Override Tamagui Text's default margin so the wordmark sits
-  // visually centered in the header row.
+  // `<h1>` carries a non-zero block margin from the browser UA
+  // stylesheet (Chromium: 0.67em top + bottom). Zero it out so the
+  // wordmark sits visually centered in the header row alongside the
+  // 44×44 icon-button slots. Tamagui's Text doesn't inject margin
+  // itself; the override exists for the underlying HTML element.
   margin: 0,
 });
 

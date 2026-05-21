@@ -84,9 +84,9 @@ function renderEl(disabled: boolean | undefined) {
  *
  * `aria-label` is required — icon-only buttons must announce their
  * purpose to screen readers (WCAG 2.1 SC 4.1.2). TypeScript enforces
- * this via the required prop; lint catches blank-string anti-patterns
- * via `jsx-a11y/aria-label-prevent-empty` (not currently enabled —
- * the type-level requirement is the active guard).
+ * non-omission via the required prop; empty-string is a hole we
+ * accept for now (no `jsx-a11y/aria-label-prevent-empty` rule
+ * configured yet — tracked alongside the broader a11y audit in #143).
  */
 export function IconButton({
   children,
