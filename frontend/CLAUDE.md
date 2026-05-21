@@ -40,7 +40,7 @@ in `eslint.config.js`.
 | `@engine/*` | `src/engine/*` | BR target home |
 | `@theme/*` | `src/theme/*` | BR target home |
 | `@storage/*` | `src/storage/*` | BR target home |
-| `@services/*` | `src/services/*` | Transitional — `api.ts` is genuinely cross-feature shared (used by every service); `adminService` / `dailyService` / `puzzleService` migrate per #176's Services→TanStack slice |
+| `@services/*` | `src/services/*` | Transitional — `adminService` / `dailyService` / `puzzleService` migrate per #176's Services→TanStack slice. `api.ts` already moved to `shared/api/` in #120 (use `@shared/api`). |
 
 When a legacy alias's contents fully migrate, drop the alias from
 `tsconfig.app.json` and `tsconfig.json`.

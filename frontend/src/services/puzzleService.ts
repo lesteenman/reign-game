@@ -1,5 +1,5 @@
 import type { Mode } from '@engine/types';
-import { apiPut } from '@services/api';
+import { apiPut } from '@shared/api';
 
 /**
  * Update a puzzle's status after the player completes or skips it.

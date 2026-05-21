@@ -1,4 +1,4 @@
-import { apiFetch } from '@services/api';
+import { apiGet } from '@shared/api';
 import type { ModeEntry } from '@shared/types/modes';
 
 /** JSON shape of GET /api/config/modes. `modes` is always non-nil. */
@@ -12,6 +12,6 @@ interface ConfigModesResponse {
  * which throws.
  */
 export async function fetchEnabledModes(): Promise<ModeEntry[]> {
-  const resp = await apiFetch<ConfigModesResponse>('/api/config/modes');
+  const resp = await apiGet<ConfigModesResponse>('/api/config/modes');
   return resp.modes;
 }

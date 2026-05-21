@@ -7,10 +7,10 @@
 // deviceId and retries once — the original was likely rejected as
 // malformed; a fresh UUID is the cheap recovery.
 //
-// Requests go through api.ts (apiFetch / apiPost) with X-Device-Id
+// Requests go through @shared/api (apiGet / apiPost) with X-Device-Id
 // injected via the options.headers surface.
 
-import { apiFetch, apiPost, ApiError } from './api';
+import { apiGet, apiPost, ApiError } from '@shared/api';
 import { todayUtcDate, dateFromAssignedAt } from '@shared/dates';
 import type { DailyPuzzlePayload, DailySubmitResponse } from '@shared/types/daily';
 
@@ -55,13 +55,13 @@ export async function getDaily(date?: string): Promise<DailyPuzzlePayload> {
   const target = date ?? todayUtcDate();
   let deviceId = getOrMintDeviceId();
   try {
-    return await apiFetch<DailyPuzzlePayload>(`/api/daily/${target}`, {
+    return await apiGet<DailyPuzzlePayload>(`/api/daily/${target}`, {
       headers: { 'X-Device-Id': deviceId },
     });
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
       deviceId = mintNewDeviceId();
-      return await apiFetch<DailyPuzzlePayload>(`/api/daily/${target}`, {
+      return await apiGet<DailyPuzzlePayload>(`/api/daily/${target}`, {
         headers: { 'X-Device-Id': deviceId },
       });
     }

@@ -38,7 +38,7 @@ describe('fetchNextPuzzle', () => {
     // Arrange
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve(MOCK_API_RESPONSE),
+      text: () => Promise.resolve(JSON.stringify(MOCK_API_RESPONSE)),
     });
 
     // Act
