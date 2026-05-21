@@ -109,7 +109,12 @@ Every change — feature, fix, or refactor — follows this pipeline. The full p
 - **Feature branches or worktrees** for all work. Never commit directly to main.
 - **Commits** happen after every artifact delivery (plan, individual tasks, completed feature), not just at the end.
 - **Verification before completion.** Superpowers `verification-before-completion` requires running build + tests + verifying output before claiming done. Evidence before assertions.
-- **PR description Key Decisions section** lists intentional design choices to prevent reviewers flagging them as bugs.
+- **PR description shape — keep it lean.** The body exists to help a reviewer (and future-you grepping git history) decide what's intentional. Default structure:
+  - **Summary** — 2-4 bullets on what changed and net LOC.
+  - **Key Decisions** — **max 3-5 items.** Only include a decision if (a) a reviewer would actively question its absence, (b) it documents a non-obvious tradeoff future-you would want to grep for, or (c) it captures a HITL fork the user explicitly chose between. **Skip:** workarounds already in CLAUDE.md (reference the doc instead), patterns established in prior PRs ("same as #N's X"), implementation details the diff makes obvious.
+  - **Test plan** — one line. "415/415 vitest, 17/17 Playwright, smoke verified X+Y+Z." Outcomes, not steps.
+  - **Drop:** "After this slice" / "Remaining work" sections. File follow-up issues instead.
+  Target: ~40-60 line PR bodies, not 100+. Key Decisions exists to prevent reviewer churn, not to comprehensively narrate every micro-choice.
 
 ## Agent Teams
 
@@ -418,6 +423,6 @@ The `architecture` skill is consulted at two points: during `brainstorming` (des
 
 - **Sweep enforcement:** every review finding includes a grep command. Fix agents fix ALL matches, not just the reported file.
 - **Cross-stack contract alignment:** when backend and frontend run in parallel, the frontend API service task MUST read the actual backend DTOs before writing interfaces.
-- **PR Key Decisions section:** include intentional design choices in PR descriptions to prevent reviewers flagging them as bugs.
+- **PR Key Decisions section:** include intentional design choices in PR descriptions to prevent reviewers flagging them as bugs. **Cap at 3-5 items and ~40-60 line bodies overall** — see the "PR description shape" rule under Change Workflow above for the full convention.
 - **Two review passes max** — after pass 2, the PR is considered ready for merge.
 - **Architecture drift = blocking finding.** A `architecture: drift in <file>` finding from the architecture skill blocks merge unless the PR is explicitly marked as introducing a documented exception (in the Key Decisions section).
