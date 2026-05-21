@@ -104,7 +104,18 @@ export function DailyFlow() {
    */
   const handleSolved = useCallback(
     (solution: number[][], elapsedMs: number) => {
-      if (query.data?.kind !== 'playing') return;
+      // Defensive guard: `DailyGameBoard` is only mounted when
+      // `query.data.kind === 'playing'`, so this branch shouldn't be
+      // reachable today. Warn (not silently drop) so any future code
+      // path that re-mounts the board against a non-playing data kind
+      // surfaces in the console rather than the click vanishing.
+      if (query.data?.kind !== 'playing') {
+        console.warn(
+          '[DailyFlow] onSolved fired while query.data.kind=%s; dropping submit',
+          query.data?.kind ?? 'pending',
+        );
+        return;
+      }
       mutation.mutate({
         payload: query.data.payload,
         solution,
