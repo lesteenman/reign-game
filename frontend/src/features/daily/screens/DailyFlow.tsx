@@ -16,15 +16,15 @@ const styledAny = styled as any;
 
 // Centered column for the loading + submitting states. NOT a card (no
 // border/shadow — these are transient indicators while a network
-// round-trip is in flight).
+// round-trip is in flight). Layout-only — font props live on the
+// `<LoadingCaption>` Text child so Tamagui can apply them via its
+// text-style channel rather than relying on CSS cascade from a
+// View-derived `<div>` wrapper.
 const LoadingPanel = styledAny(View, {
   name: 'DailyFlowLoadingPanel',
   alignItems: 'center',
   gap: 16,
   paddingVertical: 48,
-  fontFamily: '"Nunito Sans", system-ui, sans-serif',
-  fontWeight: '600',
-  color: '$body',
 });
 
 // Error message paragraph inside an error Card. `<p>` element + zero
@@ -41,13 +41,21 @@ const ErrorText = styledAny(Text, {
   margin: 0,
 });
 
-// Caption line under the spinner ("Loading…", "Submitting…"). Extracted
-// as a named styled component so the `margin: 0` prop typechecks —
-// v2-RC's `Partial<TextStyle>` inference rejects raw numeric props on
-// inline `<Text>` JSX (same workaround pattern as PageShell's
-// HeaderSpacer in #216).
+// Caption line under the spinner ("Loading…", "Submitting…"). Carries
+// the font props because Tamagui's text-style channel applies them
+// reliably on `<Text>`-derived components; cascading from
+// `LoadingPanel`'s View wrapper was unreliable (Tamagui doesn't
+// propagate font props through View-`<div>` to Text children).
+// Extracted as a named styled component (not inline `<Text margin={0}>`)
+// because v2-RC's `Partial<TextStyle>` inference rejects raw numeric
+// props on inline JSX — same workaround pattern as PageShell's
+// HeaderSpacer in #216.
 const LoadingCaption = styledAny(Text, {
   name: 'DailyFlowLoadingCaption',
+  fontFamily: '"Nunito Sans", system-ui, sans-serif',
+  fontWeight: '600',
+  fontSize: '$4',
+  color: '$body',
   margin: 0,
 });
 
