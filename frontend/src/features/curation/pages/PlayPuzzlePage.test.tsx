@@ -314,11 +314,52 @@ describe('PlayPuzzlePage no-puzzles state (FE-04)', () => {
   });
 });
 
+describe('PlayPuzzlePage — saveState failure is tolerated (#176 review-finding)', () => {
+  // The pre-#176 useEffect-based loader swallowed `saveState` errors
+  // and the user could still play the in-memory puzzle (degraded mode:
+  // no resume on refresh). The TanStack migration must preserve that
+  // tolerance — surfacing the persistence error as a user-visible
+  // "Try Again" UI would block play and burn the fetched puzzle on
+  // every retry. Regression test: when saveState rejects, the game
+  // must still render.
+
+  it('renders the GameBoard when fetchNextPuzzle succeeds but saveState rejects', async () => {
+    // Arrange — fetch ok, IDB write blows up (quota, private mode, etc.)
+    mockLoadState.mockResolvedValue(null);
+    mockSaveState.mockRejectedValueOnce(new Error('QuotaExceededError'));
+    // Suppress the console.warn the hook emits in this branch — its
+    // presence is the contract; the test asserts the warn fired below.
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Act
+    renderPage('/play?flow=curation&size=5&mode=standard');
+    const timer = await screen.findByTestId('timer-display');
+
+    // Assert — GameBoard mounted, error UI did NOT mount
+    expect(timer).toBeInTheDocument();
+    expect(screen.queryByTestId('error-state')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('no-puzzles-state')).not.toBeInTheDocument();
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('saveState failed'),
+      expect.any(Error),
+    );
+
+    warnSpy.mockRestore();
+  });
+});
+
 describe('PlayPuzzlePage metadata display (FE-05)', () => {
+  // After the Services→TanStack migration (#176), the loading state's
+  // PageShell renders `page-header` BEFORE `useQuery` resolves the
+  // load+fetch cascade; `waitForHeader()` no longer implies the
+  // GameBoard has mounted. Tests here wait on `timer-display` (only
+  // present in the loaded GameBoard) before asserting against
+  // `puzzle-metadata`'s presence or absence.
+
   it('shows metadata when puzzle has metadata', async () => {
     // Arrange & Act
     renderPage('/play?flow=curation&size=5&mode=standard');
-    await waitForHeader();
+    await screen.findByTestId('timer-display');
 
     // Assert
     const metadata = screen.getByTestId('puzzle-metadata');
@@ -334,7 +375,7 @@ describe('PlayPuzzlePage metadata display (FE-05)', () => {
       metadata: { ...MOCK_PUZZLE_WITH_METADATA.metadata!, generationDurationMs: 450 },
     });
     renderPage('/play?flow=curation&size=5&mode=standard');
-    await waitForHeader();
+    await screen.findByTestId('timer-display');
 
     // Assert
     const metadata = screen.getByTestId('puzzle-metadata');
@@ -345,7 +386,7 @@ describe('PlayPuzzlePage metadata display (FE-05)', () => {
     // Arrange
     mockFetchResult = () => Promise.resolve(FALLBACK_PUZZLE);
     renderPage('/play?flow=curation&size=5&mode=standard');
-    await waitForHeader();
+    await screen.findByTestId('timer-display');
 
     // Assert
     expect(screen.queryByTestId('puzzle-metadata')).not.toBeInTheDocument();
@@ -364,7 +405,7 @@ describe('PlayPuzzlePage metadata display (FE-05)', () => {
       startedAt: Date.now(),
     });
     renderPage('/play?flow=curation&size=5&mode=standard');
-    await waitForHeader();
+    await screen.findByTestId('timer-display');
 
     // Assert
     expect(screen.queryByTestId('puzzle-metadata')).not.toBeInTheDocument();
