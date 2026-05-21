@@ -1,6 +1,7 @@
-import type { CSSProperties } from 'react';
+import { styled, Text } from 'tamagui';
 import { PageShell } from '@shared/components/PageShell';
 import { SignInButton } from '@shared/auth/SignInButton';
+import { Card } from '@shared/components/Card';
 import { CompactSecondaryLink } from '@shared/components/Button';
 
 type LandingState = 'anonymous' | 'forbidden';
@@ -9,42 +10,34 @@ interface AdminLandingPageProps {
   state: LandingState;
 }
 
-// Card width cap: beyond this, the heading + body + single CTA stop
-// feeling like a focused landing and start looking like a sparse dialog
-// on desktop. 480px keeps the card comfortably readable at any breakpoint.
-const CARD_MAX_WIDTH_PX = 480;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const styledAny = styled as any;
 
-// Card styling aligned with BRAND_GUIDELINES §5.5: 2px ink border,
-// 10px radius, 3px ink offset shadow, surface background.
-const cardStyle: CSSProperties = {
-  backgroundColor: 'var(--color-surface)',
-  border: '2px solid var(--color-ink)',
-  borderRadius: 'var(--radius)',
-  boxShadow: '0 3px 0 var(--color-ink)',
-  padding: '32px 24px',
-  maxWidth: CARD_MAX_WIDTH_PX,
-  width: '100%',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: '16px',
+// Render as `<h2>` so screen readers + Testing Library's heading-role
+// queries find the card title. Tamagui Text defaults to `<span>`;
+// the `render: <h2 />` override matches the pattern used by
+// PageShell's title (#176 PageShell slice). Margin: 0 zeros out the
+// browser UA stylesheet's default block margin on `<h2>`.
+const CardHeading = styledAny(Text, {
+  name: 'AdminCardHeading',
+  fontSize: '$7',
+  fontWeight: '800',
+  letterSpacing: -0.16,
+  color: '$ink',
   textAlign: 'center',
-};
-
-const headingStyle: CSSProperties = {
+  render: <h2 />,
   margin: 0,
-  fontSize: '1.5rem',
-  fontWeight: 800,
-  letterSpacing: '-0.01em',
-  color: 'var(--color-ink)',
-};
+});
 
-const bodyStyle: CSSProperties = {
+const CardBody = styledAny(Text, {
+  name: 'AdminCardBody',
+  fontSize: '$4',
+  color: '$body',
+  lineHeight: '$1',
+  textAlign: 'center',
+  render: <p />,
   margin: 0,
-  fontSize: '1rem',
-  color: 'var(--color-body)',
-  lineHeight: 1.5,
-};
+});
 
 /**
  * Landing page rendered at `/admin` when the visitor is not authorised
@@ -59,22 +52,22 @@ export function AdminLandingPage({ state }: AdminLandingPageProps) {
   if (state === 'anonymous') {
     return (
       <PageShell>
-        <div style={cardStyle} data-testid="admin-landing-anonymous">
-          <h2 style={headingStyle}>Admin Access</h2>
-          <p style={bodyStyle}>Sign in to access the admin panel.</p>
+        <Card size="large" data-testid="admin-landing-anonymous">
+          <CardHeading>Admin Access</CardHeading>
+          <CardBody>Sign in to access the admin panel.</CardBody>
           <SignInButton />
-        </div>
+        </Card>
       </PageShell>
     );
   }
 
   return (
     <PageShell>
-      <div style={cardStyle} data-testid="admin-landing-forbidden">
-        <h2 style={headingStyle}>No Admin Access</h2>
-        <p style={bodyStyle}>This account doesn&apos;t have admin access.</p>
+      <Card size="large" data-testid="admin-landing-forbidden">
+        <CardHeading>No Admin Access</CardHeading>
+        <CardBody>This account doesn&apos;t have admin access.</CardBody>
         <CompactSecondaryLink to="/">Home</CompactSecondaryLink>
-      </div>
+      </Card>
     </PageShell>
   );
 }

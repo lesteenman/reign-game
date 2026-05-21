@@ -1,12 +1,55 @@
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { styled, Text, View } from 'tamagui';
 import { PageShell } from '@shared/components/PageShell';
 import { PrimaryButton, SecondaryButton } from '@shared/components/Button';
+import { Card } from '@shared/components/Card';
+import { Spinner } from '@shared/components/Spinner';
 import { ApiError } from '@shared/api';
 import { useDailyPuzzle } from '@features/daily/hooks/useDailyPuzzle';
 import { useSubmitDaily } from '@features/daily/hooks/useSubmitDaily';
 import { DailyGameBoard } from './DailyGameBoard';
 import { PostCompletionScreen } from './PostCompletionScreen';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const styledAny = styled as any;
+
+// Centered column for the loading + submitting states. NOT a card (no
+// border/shadow — these are transient indicators while a network
+// round-trip is in flight).
+const LoadingPanel = styledAny(View, {
+  name: 'DailyFlowLoadingPanel',
+  alignItems: 'center',
+  gap: 16,
+  paddingVertical: 48,
+  fontFamily: '"Nunito Sans", system-ui, sans-serif',
+  fontWeight: '600',
+  color: '$body',
+});
+
+// Error message paragraph inside an error Card. `<p>` element + zero
+// margin (browser UA stylesheet on `<p>` adds vertical margin we don't
+// want inside the card's gap-16 layout). Color is destructive (full
+// brand red) to signal the failure clearly.
+const ErrorText = styledAny(Text, {
+  name: 'DailyFlowErrorText',
+  fontSize: '$5',
+  fontWeight: '700',
+  color: '$destructive',
+  textAlign: 'center',
+  render: <p />,
+  margin: 0,
+});
+
+// Caption line under the spinner ("Loading…", "Submitting…"). Extracted
+// as a named styled component so the `margin: 0` prop typechecks —
+// v2-RC's `Partial<TextStyle>` inference rejects raw numeric props on
+// inline `<Text>` JSX (same workaround pattern as PageShell's
+// HeaderSpacer in #216).
+const LoadingCaption = styledAny(Text, {
+  name: 'DailyFlowLoadingCaption',
+  margin: 0,
+});
 
 /**
  * Daily Puzzle flow chrome.
@@ -130,10 +173,10 @@ export function DailyFlow() {
   if (query.isPending) {
     return (
       <PageShell onBack={handleBack}>
-        <div data-testid="daily-loading" style={loadingStyle}>
+        <LoadingPanel data-testid="daily-loading">
           <Spinner />
-          <p style={{ margin: 0 }}>Loading today&apos;s daily…</p>
-        </div>
+          <LoadingCaption>Loading today&apos;s daily…</LoadingCaption>
+        </LoadingPanel>
       </PageShell>
     );
   }
@@ -141,12 +184,12 @@ export function DailyFlow() {
   if (query.error) {
     return (
       <PageShell onBack={handleBack}>
-        <div data-testid="daily-error" style={errorCardStyle}>
-          <p style={errorTextStyle}>{loadErrorCopy(query.error)}</p>
+        <Card size="compact" data-testid="daily-error">
+          <ErrorText>{loadErrorCopy(query.error)}</ErrorText>
           <SecondaryButton onClick={retryFetch} data-testid="daily-retry">
             Try again
           </SecondaryButton>
-        </div>
+        </Card>
       </PageShell>
     );
   }
@@ -170,10 +213,10 @@ export function DailyFlow() {
   if (mutation.isPending) {
     return (
       <PageShell onBack={handleBack} subtitle={subtitle}>
-        <div data-testid="daily-submitting" style={loadingStyle}>
+        <LoadingPanel data-testid="daily-submitting">
           <Spinner />
-          <p style={{ margin: 0 }}>Submitting…</p>
-        </div>
+          <LoadingCaption>Submitting…</LoadingCaption>
+        </LoadingPanel>
       </PageShell>
     );
   }
@@ -191,12 +234,12 @@ export function DailyFlow() {
   if (mutation.isError) {
     return (
       <PageShell onBack={handleBack} subtitle={subtitle}>
-        <div data-testid="daily-submit-error" style={errorCardStyle}>
-          <p style={errorTextStyle}>{submitErrorCopy(mutation.error)}</p>
+        <Card size="compact" data-testid="daily-submit-error">
+          <ErrorText>{submitErrorCopy(mutation.error)}</ErrorText>
           <PrimaryButton onClick={retrySubmit} data-testid="daily-submit-retry">
             Try again
           </PrimaryButton>
-        </div>
+        </Card>
       </PageShell>
     );
   }
@@ -208,71 +251,3 @@ export function DailyFlow() {
   );
 }
 
-// --- Shared inline style tokens -----------------------------------------
-// BRAND_GUIDELINES §5.5 card pattern: surface bg, 2px ink border,
-// layered offset shadow, 24px padding. Inline because no shared
-// <ErrorCard /> primitive exists yet — falling back to guideline values.
-
-const loadingStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: '16px',
-  padding: '48px 0',
-  fontFamily: '"Nunito Sans", system-ui, sans-serif',
-  fontWeight: 600,
-  color: 'var(--color-body)',
-};
-
-const errorCardStyle: React.CSSProperties = {
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  gap: '16px',
-  backgroundColor: 'var(--color-surface)',
-  border: '2px solid var(--color-ink)',
-  borderRadius: 'var(--radius)',
-  boxShadow: '0 3px 0 var(--color-ink)',
-  padding: '24px',
-  maxWidth: 480,
-  width: '100%',
-  fontFamily: '"Nunito Sans", system-ui, sans-serif',
-};
-
-const errorTextStyle: React.CSSProperties = {
-  margin: 0,
-  color: 'var(--color-destructive)',
-  fontWeight: 700,
-  fontSize: '1.125rem',
-};
-
-/**
- * Lightweight CSS spinner using brand colors. No shared <Spinner />
- * primitive exists in the codebase yet, so we render inline with
- * BRAND_GUIDELINES §1 colors and §6.1 timing tokens.
- */
-function Spinner() {
-  return (
-    <div
-      role="status"
-      aria-label="Loading"
-      style={{
-        width: 32,
-        height: 32,
-        borderRadius: '50%',
-        border: '3px solid var(--color-border)',
-        borderTopColor: 'var(--color-accent)',
-        animation: 'daily-flow-spin 800ms linear infinite',
-      }}
-    >
-      <style>{`
-        @keyframes daily-flow-spin {
-          to { transform: rotate(360deg); }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          [role="status"][aria-label="Loading"] { animation: none; }
-        }
-      `}</style>
-    </div>
-  );
-}
