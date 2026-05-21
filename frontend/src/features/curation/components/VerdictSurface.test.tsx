@@ -18,7 +18,7 @@ vi.mock('@shared/game/hooks/useUpdatePuzzleStatus', () => ({
 }));
 
 import { VerdictSurface } from './VerdictSurface';
-import { ApiError } from '@services/api';
+import { ApiError } from '@shared/api';
 
 const baseProps = {
   puzzleId: 'puz-test-123',

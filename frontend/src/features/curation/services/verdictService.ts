@@ -1,4 +1,4 @@
-import { apiPut, ApiError } from '@services/api';
+import { apiPut, ApiError } from '@shared/api';
 import type { SubmitVerdictArgs } from '@shared/types/verdict';
 
 export type { SubmitVerdictArgs };

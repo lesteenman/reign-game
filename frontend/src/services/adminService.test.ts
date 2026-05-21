@@ -48,7 +48,7 @@ describe('fetchPoolStatus', () => {
     // Arrange
     globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve(MOCK_POOL_STATUS),
+      text: () => Promise.resolve(JSON.stringify(MOCK_POOL_STATUS)),
     });
 
     // Act
@@ -72,7 +72,7 @@ describe('fetchPoolStatus', () => {
 
     // Act & Assert
     const { fetchPoolStatus } = await import('./adminService');
-    const { ApiError } = await import('./api');
+    const { ApiError } = await import('@shared/api');
     try {
       await fetchPoolStatus();
       expect.fail('should have thrown');
@@ -126,7 +126,7 @@ describe('updateConfig', () => {
 
     // Act & Assert
     const { updateConfig } = await import('./adminService');
-    const { ApiError } = await import('./api');
+    const { ApiError } = await import('@shared/api');
     try {
       await updateConfig(5, 'standard', MOCK_CONFIG);
       expect.fail('should have thrown');
@@ -190,7 +190,7 @@ describe('createConfig', () => {
 
     // Act & Assert
     const { createConfig } = await import('./adminService');
-    const { ApiError } = await import('./api');
+    const { ApiError } = await import('@shared/api');
     try {
       await createConfig(createPayload);
       expect.fail('should have thrown');
@@ -263,7 +263,7 @@ describe('triggerReplenish', () => {
 
     // Act & Assert
     const { triggerReplenish } = await import('./adminService');
-    const { ApiError } = await import('./api');
+    const { ApiError } = await import('@shared/api');
     try {
       await triggerReplenish();
       expect.fail('should have thrown');

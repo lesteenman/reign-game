@@ -14,7 +14,7 @@ A single-page Progressive Web App (PWA) that renders the Reign puzzle game. Thre
 | UI primitives | Tamagui 2 RC config + provider + Vite compiler plugin all wired (#176 kickoff). Token/theme system mirrors `index.css`'s CSS custom properties as literal hex for compiler extraction. **First Tamagui-migrated component: `Button.tsx` (#208).** Per-component migration is incremental — most chrome still uses inline `style={}` until each component lands its own Tamagui slice. One residual `className=` in `Cell.tsx` (keyframe-animation hook, not Tailwind). | Tamagui 2 RC primitives + theme tokens (per-component) |
 | Tailwind | Gone (`tailwindcss` + `@tailwindcss/vite` removed in #176; `@import "tailwindcss"` removed from `index.css`; build precache -9 KB). The remaining `className=` in `Cell.tsx` is for a plain-CSS keyframe-animation hook, not Tailwind. | Gone |
 | Server state | Hand-rolled `useState<LoadState>` / `useState<FlowState>` discriminated unions in `PlayPuzzlePage` + `DailyFlow`; bespoke `useEffect` fetch + cancel | TanStack `useQuery` / `useMutation` |
-| `services/*` | Four service modules with three near-identical fetch helpers (`apiFetch` / `apiPost` / `apiPut`) plus a fourth fork (`dailyService.ts`) that bypasses `api.ts` for header injection | Hooks own the I/O; leaf components consume hooks |
+| `services/*` | Three legacy service modules (`adminService`, `dailyService`, `puzzleService`). `api.ts` was consolidated into `shared/api/` and the trio of near-identical helpers (`apiFetch` / `apiPost` / `apiPut`) collapsed to one `apiRequest` + thin `apiGet` / `apiPut` / `apiPost` wrappers (#120). | Hooks own the I/O; leaf components consume hooks |
 | `engine/` | Pure TS (verified: no React, no `fetch`, no DOM) | Same — already conforming |
 | `storage/` | Hand-rolled IndexedDB wrapper, single source of truth for persisted shapes | Same — already conforming |
 
@@ -71,6 +71,14 @@ Pure-TS puzzle domain. No React, no fetch, no DOM. See `src/engine/README.md`.
 - `validator.ts` — solution validator.
 - Tests: `constraints.test.ts`, `validator.test.ts`.
 
+### `src/shared/api/` *(2026-05-21: moved from `src/services/api.ts` in #120)*
+
+Cross-feature backend fetch client. Replaces the legacy `services/api.ts` and collapses its `apiFetch` / `apiPut` / `apiPost` trio into one internal `apiRequest(method, path, body, opts)` with thin method-specific wrappers (`apiGet`, `apiPut`, `apiPost`). Single unified empty-body handling — every method resolves to `{}` on empty 200/204, where the old `apiFetch` would throw `SyntaxError: Unexpected end of JSON input`.
+
+- `client.ts` — `apiRequest` + `apiGet` / `apiPut` / `apiPost` + `ApiError`.
+- `index.ts` — barrel re-export (consumers `import { apiGet } from '@shared/api'`).
+- Tests: `client.test.ts` (URL composition, ApiError shape, empty-body parity across all three methods, network-error propagation).
+
 ### `src/shared/hooks/` *(2026-05-18: PWA-related additions from #116)*
 
 Cross-feature reusable hooks.
@@ -104,18 +112,18 @@ Bulletproof React shared-component layer. Every page and feature consumes from h
 
 ### `src/services/`
 
-Legacy backend client modules. New code uses `features/<feature>/services/` or wraps services in shared hooks (`shared/game/hooks/useUpdatePuzzleStatus`).
+Legacy backend client modules. New code uses `features/<feature>/services/` or wraps services in shared hooks (`shared/game/hooks/useUpdatePuzzleStatus`). The shared fetch base moved to `shared/api/` in #120; only three feature-specific services remain here.
 
-- `api.ts` — shared fetch base (`apiFetch` / `apiPut` / `apiPost`) + `ApiError`. Tests in `api.test.ts`.
 - `puzzleService.ts` — just `updatePuzzleStatus` after #176's split (cross-feature; used by both curation + daily via `shared/game/hooks/useUpdatePuzzleStatus`).
 - `adminService.ts` — pool / config CRUD (`fetchPoolStatus`, `updateConfig`, `createConfig`, `triggerReplenish`).
-- `dailyService.ts` — daily flow (`getDaily`, `submitDailyResult`); bypasses `api.ts` to inject `X-Device-Id`.
+- `dailyService.ts` — daily flow (`getDaily`, `submitDailyResult`); injects `X-Device-Id` via `apiGet` / `apiPost`'s `options.headers`.
 
 Already migrated out of this folder:
 
+- `api.ts` → `shared/api/` (#120 — collapsed `apiFetch` / `apiPut` / `apiPost` into one `apiRequest` + thin wrappers; renamed `apiFetch` to `apiGet`).
 - `verdictService.ts` → `features/curation/services/` (#176, PR #202).
 - `landingService.ts` → `features/curation/services/enabled-modes-service.ts` (#176, PR #203 — renamed; only CurationPage ever consumed it).
-- `puzzleService.ts::fetchNextPuzzle` → `features/curation/services/fetch-next-puzzle-service.ts` (#176, this PR — single-feature consumer once GamePage moved to features/curation/).
+- `puzzleService.ts::fetchNextPuzzle` → `features/curation/services/fetch-next-puzzle-service.ts` (#176, PR #205 — single-feature consumer once GamePage moved to features/curation/).
 
 ### `src/storage/`
 
