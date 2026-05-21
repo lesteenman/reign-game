@@ -1,6 +1,5 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
-import tsconfigPaths from "vite-tsconfig-paths";
 import { tamaguiPlugin } from "@tamagui/vite-plugin";
 import { VitePWA } from "vite-plugin-pwa";
 
@@ -18,10 +17,15 @@ declare const process: { env: Record<string, string | undefined> };
 // Google Fonts mirrors the original T-113 setup.
 
 export default defineConfig(({ mode }) => ({
+  // Resolve @app/@shared/@features/@engine/@theme/@storage aliases
+  // from tsconfig.app.json so vite + vitest match tsc + IDE. Vite 8
+  // shipped this as a native option (replaces the `vite-tsconfig-paths`
+  // plugin we used in #198). Both `npm test` and `npm run build`
+  // previously nagged us to migrate; #200 closes that.
+  resolve: {
+    tsconfigPaths: true,
+  },
   plugins: [
-    // Resolve @app/@shared/@features/@engine/@theme/@storage aliases
-    // from tsconfig.app.json so vite + vitest match tsc + IDE.
-    tsconfigPaths(),
     react(),
     // Tamagui compiler — hoists styles at build time instead of computing
     // them at runtime. Pin held at @tamagui/vite-plugin@2.0.0-rc.34
