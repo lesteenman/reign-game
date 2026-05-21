@@ -1,32 +1,22 @@
 import { useUser } from "@clerk/react";
-import type { CSSProperties, ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { AdminPage } from '@features/admin/pages/AdminPage';
 import { AdminLandingPage } from '@features/admin/pages/AdminLandingPage';
 import { PageShell } from '@shared/components/PageShell';
+import { Spinner } from '@shared/components/Spinner';
 import { getClerkUserRole } from '@shared/auth/role';
 
-const loadingStyle: CSSProperties = {
-  textAlign: 'center',
-  padding: '24px',
-  color: 'var(--color-muted)',
-  fontSize: '0.875rem',
-};
-
 /**
- * Tiny pulse spinner — the project doesn't ship a shared Spinner yet,
- * so we use a minimal dots animation that degrades gracefully under
- * `prefers-reduced-motion`. Kept inline to avoid a global CSS addition.
+ * Admin-route loading indicator — Clerk is still deciding whether the
+ * visitor is signed in / has the admin role. Uses the shared `<Spinner>`
+ * (added in #176 chrome-cards slice) so this auth-path indicator
+ * matches DailyFlow's loading state byte-for-byte.
  */
 function AdminLoading() {
   return (
     <PageShell>
-      <div
-        data-testid="admin-loading"
-        role="status"
-        aria-live="polite"
-        style={loadingStyle}
-      >
-        Loading...
+      <div data-testid="admin-loading" aria-live="polite">
+        <Spinner />
       </div>
     </PageShell>
   );
