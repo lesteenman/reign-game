@@ -1,6 +1,21 @@
 import { defaultConfig } from "@tamagui/config/v4";
 import { createTamagui } from "tamagui";
 
+/* Animations. We rely on `defaultConfig.animations` (CSS driver from
+ * @tamagui/config/v4 — already an `@tamagui/animations-css` instance)
+ * rather than registering our own. The default set ships
+ * `quickerLessBouncy: 100ms ease-out` which matches BRAND_GUIDELINES
+ * §5.4's button-press timing (current `transition: transform 100ms
+ * ease-out`). Adding our own driver here would override defaultConfig's
+ * full animation menu (slow/medium/lazy/bouncy/etc.) which we may want
+ * for sheets + modals later. Reign components should reference keys by
+ * intent, not duration; canonical mapping:
+ *
+ *   button hover/press         → "quickerLessBouncy" (100ms ease-out)
+ *   (future) sheet open/close  → "medium"           (300ms ease-out)
+ *   (future) toast slide       → "quick"            (150ms ease-out)
+ */
+
 /* =====================================================================
  * SYNC DISCIPLINE: the token values below mirror `frontend/src/index.css`.
  *
@@ -16,7 +31,8 @@ import { createTamagui } from "tamagui";
  * for compiler-readability + a single mental model (always check
  * index.css first, then propagate).
  *
- * Last full sync: 2026-05-20 (#176 Tamagui kickoff slice).
+ * Last full sync: 2026-05-20 (#208 Button migration — added `mutedBg`
+ * for Ghost-button hover per BRAND_GUIDELINES §5.4).
  * ===================================================================== */
 
 const lightColors = {
@@ -26,6 +42,11 @@ const lightColors = {
   surface: '#FFFFFF',
   body: '#6B6358',
   muted: '#9C9488',
+  // Soft surface tint used for muted-context hover states (e.g. GhostButton hover).
+  // Sits between `background` (#F8F6F3) and `border` (#D6CFC5) so the
+  // hover affordance reads as a subtle "page surface darkening" rather
+  // than a hard outlined block.
+  mutedBg: '#EDE7DA',
   border: '#D6CFC5',
   // Accent
   accent: '#4F46E5',
@@ -47,6 +68,7 @@ const darkColors = {
   surface: '#1F1C18',
   body: '#9C9488',
   muted: '#6B6358',
+  mutedBg: '#2A2620',
   border: '#3D3830',
   accent: '#818CF8',
   accentHover: '#A5B4FC',

@@ -62,7 +62,11 @@ describe('UserMenu', () => {
     const { container } = render(<UserMenu />);
 
     // Assert — no flicker: no button, no link, nothing on first paint.
-    expect(container.firstChild).toBeNull();
+    // `<TamaguiProvider>` wraps with an empty `<span>` font scope, so
+    // we can't assert `firstChild === null`. Check that the user-facing
+    // tree is empty instead (no text, no interactive elements).
+    expect(container.textContent).toBe('');
+    expect(container.querySelector('button, a, [role="button"]')).toBeNull();
   });
 
   it('renders the Clerk UserButton when a user is signed in without admin role', () => {
