@@ -5,11 +5,22 @@ The daily puzzle feature — one puzzle per UTC calendar day, with a speed-based
 ## Contents
 
 ```
+hooks/
+  useDailyPuzzle.ts         TanStack useQuery: IDB short-circuit → getDaily,
+                            surfaces either solved-payload or playing-payload.
+  useSubmitDaily.ts         TanStack useMutation: submitDailyResult + IDB persist;
+                            normalizes 409 to a synthetic success.
 screens/
-  DailyFlow.tsx             Entry point. State machine: loading → playing → submitting → solved.
+  DailyFlow.tsx             Composes the two hooks; renders 7 states driven by
+                            query/mutation flags (loading / error / IDB-solved /
+                            playing / submitting / submit-solved / submit-error).
   DailyGameBoard.tsx        Adapts the daily payload to the shared GameBoard contract.
   PostCompletionScreen.tsx  Post-solve view: solve time, rank, countdown to next puzzle.
 ```
+
+## State pipeline
+
+Pre-#176 daily-half slice, `DailyFlow` hand-rolled a 6-arm `useState<FlowState>` discriminated union + a 76-line `useEffect` driving the load cascade + a `stateRef`-stabilised `handleSolved` callback. The migration replaced all of that with `useDailyPuzzle` (read) + `useSubmitDaily` (write); render branches read directly from query/mutation flags. Server-state branching is now uniform across the daily and curation flows.
 
 ## Entry point
 

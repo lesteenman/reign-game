@@ -277,9 +277,21 @@ describe('DailyFlow', () => {
   // --- Chunk 6: submit wiring + state machine -------------------------
 
   it('transitions playing -> submitting -> solved on successful submit', async () => {
-    // Arrange
+    // Arrange — defer the submit so the submitting state is observable
+    // long enough to assert against. With a synchronous `mockResolvedValue`
+    // the mutation transitions idle → pending → settled inside one React
+    // batch and the pending render never paints — the test would either
+    // miss `daily-submitting` entirely or be ordering-fragile. Holding
+    // the promise pending across the assertion makes the intermediate
+    // state observable, then resolving lets the transition to solved
+    // complete deterministically.
     mockGetDaily.mockResolvedValue(MOCK_PAYLOAD);
-    mockSubmitDailyResult.mockResolvedValue(MOCK_SUBMIT_RESPONSE);
+    let resolveSubmit: (value: DailySubmitResponse) => void = () => {};
+    mockSubmitDailyResult.mockReturnValue(
+      new Promise<DailySubmitResponse>((resolve) => {
+        resolveSubmit = resolve;
+      }),
+    );
     renderDailyFlow();
     await waitFor(() => {
       expect(screen.getByTestId('daily-game-board-stub')).toBeInTheDocument();
@@ -288,8 +300,11 @@ describe('DailyFlow', () => {
     // Act
     fireEvent.click(screen.getByTestId('daily-stub-solve'));
 
-    // Assert — submitting indicator first, then PostCompletionScreen.
-    expect(screen.getByTestId('daily-submitting')).toBeInTheDocument();
+    // Assert — submitting indicator visible while the POST is pending.
+    await screen.findByTestId('daily-submitting');
+
+    // Resolve the submit and verify the transition to solved.
+    resolveSubmit(MOCK_SUBMIT_RESPONSE);
     await waitFor(() => {
       expect(screen.getByTestId('daily-post-completion')).toBeInTheDocument();
     });
@@ -486,8 +501,9 @@ describe('DailyFlow', () => {
     // Act
     fireEvent.click(screen.getByTestId('daily-stub-solve'));
 
-    // Assert
-    expect(screen.getByTestId('daily-submitting')).toBeInTheDocument();
+    // Assert — `findBy` waits for the mutation's pending render (see
+    // the "playing -> submitting -> solved" test above for context).
+    await screen.findByTestId('daily-submitting');
     expect(screen.getByText(/submitting/i)).toBeInTheDocument();
 
     // Cleanup the pending promise so the test exits cleanly.
