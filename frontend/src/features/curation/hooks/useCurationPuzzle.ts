@@ -69,11 +69,14 @@ interface UseCurationPuzzleArgs {
  * states that need explicit human action, not transient failures
  * worth auto-retrying.
  *
- * `refetchOnWindowFocus: false` — re-running the queryFn on focus
- * would call `saveState` with a brand-new `startedAt` if the saved
- * slot was somehow missed, resetting the visible timer. The game's
- * own visibility-handling logic already manages timer resume/pause
- * via `GameBoard` + `useTimer`.
+ * `refetchOnWindowFocus: false` — re-running the queryFn on focus is
+ * idempotent on the saved-hit branch (returns the persisted state
+ * untouched), but the saved-miss branch isn't: it calls
+ * `createFreshGameState` which sets `startedAt: Date.now()` and
+ * triggers a fresh `saveState`, resetting the visible timer. The
+ * game's own visibility-handling logic already manages timer
+ * resume/pause via `GameBoard` + `useTimer`, so an automatic
+ * window-focus refetch is at best redundant and at worst regressing.
  */
 export function useCurationPuzzle({ flowType, size, mode }: UseCurationPuzzleArgs) {
   const { loadState, saveState } = useGameStorage();
@@ -85,11 +88,20 @@ export function useCurationPuzzle({ flowType, size, mode }: UseCurationPuzzleArg
     retry: false,
     refetchOnWindowFocus: false,
     queryFn: async () => {
-      // flowType is guaranteed non-null here because `enabled` gates the
-      // query off when it's null. The `!` is the BR-acceptable shape
-      // for "TanStack-gated invariant proven at the call boundary".
-      const ft = flowType!;
-      const saved = await loadState(ft, flowId);
+      // `enabled: false` blocks the auto-trigger but NOT manual
+      // `refetch()` calls. The actual guard is `PlayPuzzlePage`'s
+      // `if (flowType === null) return <RedirectToHome />` early
+      // return — the page never renders the Retry button when
+      // `flowType` is null, so the queryFn can't be reached from the
+      // UI. Defensive throw here in case some future caller wires
+      // `refetch()` to a non-page surface (test, devtool, etc.).
+      if (flowType === null) {
+        throw new Error(
+          'useCurationPuzzle: queryFn invoked with flowType === null. ' +
+            'Caller must gate refetch on a non-null flowType.',
+        );
+      }
+      const saved = await loadState(flowType, flowId);
       if (saved && saved.status !== 'solved') {
         return {
           puzzle: saved.puzzle,
@@ -104,10 +116,27 @@ export function useCurationPuzzle({ flowType, size, mode }: UseCurationPuzzleArg
       }
 
       // Miss or solved-leftover (defensive — clear-on-solve should
-      // have removed it). Fetch fresh, persist, surface.
+      // have removed it). Fetch fresh, then try to persist before
+      // surfacing.
       const puzzle = await fetchNextPuzzle(size, mode);
-      const gameState = createFreshGameState(ft, flowId, puzzle);
-      await saveState(gameState);
+      const gameState = createFreshGameState(flowType, flowId, puzzle);
+
+      // Tolerate `saveState` failure: the puzzle was fetched
+      // successfully and is playable in-memory, so we surface it
+      // even if persistence fails (IDB quota, browser private-mode,
+      // etc.). The degraded path is "no resume on refresh" — better
+      // than blocking play and burning the fetched puzzle by
+      // surfacing a generic error UI that would re-fetch on Retry.
+      // Logged so devs notice via the console; not user-visible.
+      try {
+        await saveState(gameState);
+      } catch (err) {
+        console.warn(
+          '[useCurationPuzzle] saveState failed; continuing without persistence',
+          err,
+        );
+      }
+
       return {
         puzzle: gameState.puzzle,
         flowType: gameState.flowType,
