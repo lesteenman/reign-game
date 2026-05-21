@@ -315,10 +315,17 @@ describe('PlayPuzzlePage no-puzzles state (FE-04)', () => {
 });
 
 describe('PlayPuzzlePage metadata display (FE-05)', () => {
+  // After the Services→TanStack migration (#176), the loading state's
+  // PageShell renders `page-header` BEFORE `useQuery` resolves the
+  // load+fetch cascade; `waitForHeader()` no longer implies the
+  // GameBoard has mounted. Tests here wait on `timer-display` (only
+  // present in the loaded GameBoard) before asserting against
+  // `puzzle-metadata`'s presence or absence.
+
   it('shows metadata when puzzle has metadata', async () => {
     // Arrange & Act
     renderPage('/play?flow=curation&size=5&mode=standard');
-    await waitForHeader();
+    await screen.findByTestId('timer-display');
 
     // Assert
     const metadata = screen.getByTestId('puzzle-metadata');
@@ -334,7 +341,7 @@ describe('PlayPuzzlePage metadata display (FE-05)', () => {
       metadata: { ...MOCK_PUZZLE_WITH_METADATA.metadata!, generationDurationMs: 450 },
     });
     renderPage('/play?flow=curation&size=5&mode=standard');
-    await waitForHeader();
+    await screen.findByTestId('timer-display');
 
     // Assert
     const metadata = screen.getByTestId('puzzle-metadata');
@@ -345,7 +352,7 @@ describe('PlayPuzzlePage metadata display (FE-05)', () => {
     // Arrange
     mockFetchResult = () => Promise.resolve(FALLBACK_PUZZLE);
     renderPage('/play?flow=curation&size=5&mode=standard');
-    await waitForHeader();
+    await screen.findByTestId('timer-display');
 
     // Assert
     expect(screen.queryByTestId('puzzle-metadata')).not.toBeInTheDocument();
@@ -364,7 +371,7 @@ describe('PlayPuzzlePage metadata display (FE-05)', () => {
       startedAt: Date.now(),
     });
     renderPage('/play?flow=curation&size=5&mode=standard');
-    await waitForHeader();
+    await screen.findByTestId('timer-display');
 
     // Assert
     expect(screen.queryByTestId('puzzle-metadata')).not.toBeInTheDocument();
