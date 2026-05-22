@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useLayoutEffect, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUser } from '@clerk/react';
+import { styled, Text, View } from 'tamagui';
 import { Grid } from '@shared/game/components/grid/Grid';
 import { useGame } from '@shared/game/hooks/useGame';
 import { useTimer } from '@shared/game/hooks/useTimer';
@@ -11,6 +12,74 @@ import { getClerkUserRole } from '@shared/auth/role';
 import type { PuzzleData, CellState } from '@engine/types';
 import type { FlowType, GameState, GameHistory, CompletionRecord } from '@storage/types';
 import type { AdminVerdictSurfaceComponent } from '@shared/game/types/admin-verdict-surface';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const styledAny = styled as any;
+
+const ModalBackdrop = styledAny(View, {
+  name: 'GameBoardModalBackdrop',
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  alignItems: 'center',
+  justifyContent: 'center',
+  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  backdropFilter: 'blur(4px)',
+  borderRadius: 10,
+  zIndex: 50,
+});
+
+const ModalPanel = styledAny(View, {
+  name: 'GameBoardModalPanel',
+  backgroundColor: '$surface',
+  borderWidth: 2,
+  borderColor: '$ink',
+  borderRadius: 10,
+  padding: 32,
+  alignItems: 'center',
+  gap: 16,
+  maxWidth: '90%',
+  // BRAND_GUIDELINES §5.6 layered shadow: hard 4px ink offset plus a
+  // soft 12px gaussian glow. Tamagui's `shadowOffset`/`shadowRadius`
+  // pair only emits one composite, so the soft glow goes through a
+  // raw boxShadow string on top of the hard-shadow primitives.
+  shadowColor: '$ink',
+  shadowOffset: { width: 0, height: 4 },
+  shadowRadius: 0,
+  shadowOpacity: 1,
+  boxShadow: '0 4px 0 var(--color-ink), 0 12px 32px rgba(0,0,0,0.08)',
+});
+
+const ModalHeading = styledAny(Text, {
+  name: 'GameBoardModalHeading',
+  fontSize: '$7',
+  fontWeight: '700',
+  color: '$success',
+  textAlign: 'center',
+  render: <h2 />,
+  margin: 0,
+});
+
+const ModalTime = styledAny(Text, {
+  name: 'GameBoardModalTime',
+  fontFamily: '"Space Mono", ui-monospace, monospace',
+  fontSize: '$7',
+  fontWeight: '700',
+  textAlign: 'center',
+  render: <p />,
+  margin: 0,
+  // `fontVariantNumeric: 'tabular-nums'` set at the usage site below
+  // via the raw `style` prop — Tamagui v2-RC leaks unknown style keys
+  // as lowercase DOM attributes.
+});
+
+const ModalButtonRow = styledAny(View, {
+  name: 'GameBoardModalButtonRow',
+  flexDirection: 'row',
+  gap: 12,
+});
 
 /** Format seconds as MM:SS (under 1h) or H:MM:SS (1h+). Hour digit is
  * un-padded; presence of the leading `H:` itself signals hour-scale. */
@@ -408,61 +477,16 @@ export function GameBoard({
 
         {/* Completion overlay */}
         {ready && showCompletion && (
-          <div
-            data-testid="completion-overlay"
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              backgroundColor: 'rgba(0, 0, 0, 0.5)',
-              backdropFilter: 'blur(4px)',
-              borderRadius: 'var(--radius)',
-              zIndex: 50,
-            }}
-          >
-            <div
-              style={{
-                // Completion overlay card — 32px padding matches
-                // BRAND_GUIDELINES §5.6 prominent modal.
-                backgroundColor: 'var(--color-surface)',
-                border: '2px solid var(--color-ink)',
-                borderRadius: 'var(--radius)',
-                padding: '32px',
-                boxShadow: '0 4px 0 var(--color-ink), 0 12px 32px rgba(0,0,0,0.08)',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '16px',
-                maxWidth: '90%',
-              }}
-            >
-              <h2
-                style={{
-                  fontSize: '1.5rem',
-                  fontWeight: 700,
-                  margin: 0,
-                  color: 'var(--color-success)',
-                }}
-              >
-                Puzzle Complete!
-              </h2>
-              <p
-                style={{
-                  fontFamily: '"Space Mono", ui-monospace, monospace',
-                  fontSize: '1.5rem',
-                  fontWeight: 700,
-                  fontVariantNumeric: 'tabular-nums',
-                  margin: 0,
-                }}
-              >
+          <ModalBackdrop data-testid="completion-overlay">
+            <ModalPanel>
+              <ModalHeading>Puzzle Complete!</ModalHeading>
+              <ModalTime style={{ fontVariantNumeric: 'tabular-nums' }}>
                 {formatTime(completionTime)}
-              </p>
-              <div style={{ display: 'flex', gap: '12px' }}>
+              </ModalTime>
+              <ModalButtonRow>
                 <PrimaryButton onClick={handlePlayAgain}>Play Again</PrimaryButton>
                 <SecondaryButton onClick={handleGoHome}>Home</SecondaryButton>
-              </div>
+              </ModalButtonRow>
               {isAdmin && AdminVerdictSurface && (
                 <AdminVerdictSurface
                   variant="completion"
@@ -473,8 +497,8 @@ export function GameBoard({
                   playTimeMs={completionTime * 1000}
                 />
               )}
-            </div>
-          </div>
+            </ModalPanel>
+          </ModalBackdrop>
         )}
       </div>
 
