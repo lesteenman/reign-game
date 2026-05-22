@@ -1,27 +1,33 @@
-import type { CSSProperties } from 'react';
 import { Download } from 'lucide-react';
+import { styled, Text, View } from 'tamagui';
 import { Icon } from './Icon';
 import { useInstallPrompt } from '@shared/hooks/useInstallPrompt';
 
-// Style: small text button in the PageShell header cluster. Visually
-// parallel to the dark-mode toggle (transparent background,
-// color-muted text, 44px hit target). Tamagui migration tracked in
-// #176.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const styledAny = styled as any;
 
-const buttonStyle: CSSProperties = {
-  background: 'none',
-  border: 'none',
-  cursor: 'pointer',
-  fontSize: '0.875rem',
-  fontWeight: 600,
-  padding: '8px 12px',
-  color: 'var(--color-muted)',
-  lineHeight: 1,
-  minHeight: 44,
-  display: 'flex',
+const InstallButtonBase = styledAny(View, {
+  name: 'InstallButton',
+  flexDirection: 'row',
   alignItems: 'center',
   justifyContent: 'center',
-};
+  gap: 6,
+  paddingHorizontal: 12,
+  paddingVertical: 8,
+  minHeight: 44,
+  borderWidth: 0,
+  backgroundColor: 'transparent',
+  cursor: 'pointer',
+  color: '$muted',
+  animation: 'quickerLessBouncy',
+  hoverStyle: { color: '$ink' },
+});
+
+const InstallLabel = styledAny(Text, {
+  name: 'InstallButtonLabel',
+  fontSize: '$3',
+  fontWeight: '600',
+});
 
 /**
  * Compact install CTA in the PageShell header. Visible only when the
@@ -33,16 +39,15 @@ export function InstallButton() {
   const { canInstall, isStandalone, promptInstall } = useInstallPrompt();
   if (!canInstall || isStandalone) return null;
   return (
-    <button
-      type="button"
-      data-testid="install-button"
+    <InstallButtonBase
+      render={<button type="button" />}
       onClick={() => { void promptInstall(); }}
       aria-label="Install Reign as an app"
       title="Install Reign"
-      style={buttonStyle}
+      data-testid="install-button"
     >
       <Icon as={Download} size={16} />
-      <span style={{ marginLeft: 6 }}>Install</span>
-    </button>
+      <InstallLabel>Install</InstallLabel>
+    </InstallButtonBase>
   );
 }
