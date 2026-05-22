@@ -29,8 +29,9 @@ frontend/src/
 All cross-folder imports use `@layer/...` aliases. Only within-folder
 siblings (`./X`) stay relative. Configured in `tsconfig.app.json` +
 `tsconfig.json` (for Playwright esbuild) + `vite.config.ts` (via
-`vite-tsconfig-paths`). Enforced by ESLint rule `no-restricted-imports`
-in `eslint.config.js`.
+Vite 8's native `resolve.tsconfigPaths: true` — was the
+`vite-tsconfig-paths` plugin pre-#200). Enforced by ESLint rule
+`no-restricted-imports` in `eslint.config.js`.
 
 | Alias | Maps to | Status |
 |---|---|---|
