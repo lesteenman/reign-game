@@ -23,6 +23,9 @@
     "react-router-dom": "^7.15.1",
     "tamagui": "2.0.0-rc.42"
   },
+  "overrides": {
+    "js-cookie": "3.0.7"
+  },
   "devDependencies": {
     "@clerk/testing": "^2.0.29",
     "@eslint/js": "^9.39.4",
