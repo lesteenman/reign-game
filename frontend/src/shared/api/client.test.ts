@@ -3,14 +3,9 @@ import type { PuzzleData } from '@engine/types';
 
 /**
  * Tests for the consolidated `apiRequest` client and its `apiGet` /
- * `apiPut` / `apiPost` wrappers (#120). Replaces the pre-#120 split
- * tests in `src/services/api.test.ts` that only covered `apiFetch`.
- *
- * Special focus on the empty-body / 204-No-Content path: pre-#120,
- * `apiFetch` called `response.json()` directly and would throw
- * `SyntaxError: Unexpected end of JSON input` on empty responses; only
- * `apiPut` / `apiPost` did the text-then-parse dance. The consolidated
- * `apiRequest` applies that safe handling to every method.
+ * `apiPut` / `apiPost` wrappers. Includes empty-body / 204-No-Content
+ * coverage across all three methods to pin the text-then-parse path
+ * that makes empty responses resolve to `{}` (not throw).
  */
 
 const MOCK_PUZZLE: PuzzleData = {

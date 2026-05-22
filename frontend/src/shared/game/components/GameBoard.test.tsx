@@ -24,7 +24,7 @@ vi.mock('@clerk/react', () => ({
 }));
 
 const mockUpdateStatus = vi.fn().mockResolvedValue(undefined);
-vi.mock('@services/puzzleService', () => ({
+vi.mock('@shared/game/services/puzzleService', () => ({
   updatePuzzleStatus: (...args: unknown[]) => mockUpdateStatus(...args),
 }));
 

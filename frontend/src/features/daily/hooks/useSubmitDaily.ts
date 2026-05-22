@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { submitDailyResult } from '@services/dailyService';
+import { submitDailyResult } from '@features/daily/services/dailyService';
 import { useGameStorage } from '@shared/game/hooks/useGameStorage';
 import { dateFromAssignedAt } from '@shared/dates';
 import { ApiError } from '@shared/api';

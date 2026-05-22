@@ -41,10 +41,11 @@ Vite 8's native `resolve.tsconfigPaths: true` — was the
 | `@engine/*` | `src/engine/*` | BR target home |
 | `@theme/*` | `src/theme/*` | BR target home |
 | `@storage/*` | `src/storage/*` | BR target home |
-| `@services/*` | `src/services/*` | Transitional — `adminService` / `dailyService` / `puzzleService` migrate per #176's Services→TanStack slice. `api.ts` already moved to `shared/api/` in #120 (use `@shared/api`). |
 
-When a legacy alias's contents fully migrate, drop the alias from
-`tsconfig.app.json` and `tsconfig.json`.
+All aliases above are BR target homes. The pre-#176 transitional
+`@services/*` alias is gone — service modules live with their owning
+feature (`features/admin/services/adminService`, `features/daily/services/dailyService`,
+`shared/game/services/puzzleService`).
 
 ### Import rules
 

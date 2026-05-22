@@ -3,7 +3,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider } from '@theme/ThemeContext';
 import { DailyFlow } from './DailyFlow';
-import { ApiError } from '@shared/api-errors';
+import { ApiError } from '@shared/api';
 import type { DailyPuzzlePayload, DailySubmitResponse } from '@shared/types/daily';
 
 // Mock the daily service so the component's data-fetch + submit
@@ -11,9 +11,9 @@ import type { DailyPuzzlePayload, DailySubmitResponse } from '@shared/types/dail
 // per test to drive each branch of the daily-flow state machine.
 const mockGetDaily = vi.fn();
 const mockSubmitDailyResult = vi.fn();
-vi.mock('@services/dailyService', async () => {
-  const actual = await vi.importActual<typeof import('@services/dailyService')>(
-    '@services/dailyService',
+vi.mock('@features/daily/services/dailyService', async () => {
+  const actual = await vi.importActual<typeof import('@features/daily/services/dailyService')>(
+    '@features/daily/services/dailyService',
   );
   return {
     ...actual,
