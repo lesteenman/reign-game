@@ -5,6 +5,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { styled, Text, View } from 'tamagui';
 import { PageShell } from '@shared/components/PageShell';
 import { SecondaryButton } from '@shared/components/Button';
 
@@ -18,6 +19,105 @@ export interface PostCompletionScreenProps {
    */
   now?: Date;
 }
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const styledAny = styled as any;
+
+const Card = styledAny(View, {
+  name: 'PostCompletionCard',
+  alignItems: 'center',
+  gap: 24,
+  backgroundColor: '$surface',
+  borderWidth: 2,
+  borderColor: '$ink',
+  borderRadius: 10,
+  shadowColor: '$ink',
+  shadowOffset: { width: 0, height: 3 },
+  shadowRadius: 0,
+  shadowOpacity: 1,
+  paddingHorizontal: 24,
+  paddingVertical: 32,
+  maxWidth: 480,
+  width: '100%',
+  marginVertical: 24,
+  fontFamily: '"Nunito Sans", system-ui, sans-serif',
+});
+
+const Heading = styledAny(Text, {
+  name: 'PostCompletionHeading',
+  fontSize: '$8',
+  lineHeight: '$1',
+  fontWeight: '800',
+  color: '$ink',
+  letterSpacing: -0.3,
+  textAlign: 'center',
+  render: <h1 />,
+  margin: 0,
+});
+
+const SolveTime = styledAny(Text, {
+  name: 'PostCompletionSolveTime',
+  fontFamily: '"Space Mono", ui-monospace, monospace',
+  fontSize: 36,
+  fontWeight: '700',
+  color: '$ink',
+  textAlign: 'center',
+  // `font-variant-numeric: tabular-nums` set at the usage site via the
+  // raw `style` prop. Tamagui v2-RC leaks unknown style keys as
+  // lowercase DOM attributes (`fontvariantnumeric`); the inline
+  // `style={}` channel goes through React's normal camelCase →
+  // kebab-case translation instead.
+});
+
+const RankLine = styledAny(Text, {
+  name: 'PostCompletionRank',
+  fontSize: '$5',
+  fontWeight: '600',
+  color: '$body',
+  textAlign: 'center',
+  render: <p />,
+  margin: 0,
+});
+
+const RankNumber = styledAny(Text, {
+  name: 'PostCompletionRankNumber',
+  color: '$accent',
+  fontWeight: '700',
+});
+
+const CountdownBlock = styledAny(View, {
+  name: 'PostCompletionCountdown',
+  alignItems: 'center',
+  gap: 4,
+  marginTop: 8,
+});
+
+const CountdownLabel = styledAny(Text, {
+  name: 'PostCompletionCountdownLabel',
+  fontSize: '$3',
+  color: '$muted',
+  fontWeight: '500',
+  textAlign: 'center',
+});
+
+const CountdownValue = styledAny(Text, {
+  name: 'PostCompletionCountdownValue',
+  fontFamily: '"Space Mono", ui-monospace, monospace',
+  fontSize: '$6',
+  fontWeight: '700',
+  color: '$muted',
+  textAlign: 'center',
+});
+
+const SubmittedAt = styledAny(Text, {
+  name: 'PostCompletionSubmittedAt',
+  fontSize: '$2',
+  color: '$muted',
+  fontWeight: '400',
+  textAlign: 'center',
+  render: <p />,
+  margin: 0,
+});
 
 /** Pads a non-negative integer to a 2-digit string. */
 function pad2(n: number): string {
@@ -116,119 +216,43 @@ export function PostCompletionScreen({
 
   return (
     <PageShell onBack={handleBack}>
-      <div
-        data-testid="daily-post-completion"
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '24px',
-          backgroundColor: 'var(--color-surface)',
-          border: '2px solid var(--color-ink)',
-          borderRadius: 'var(--radius)',
-          boxShadow: '0 3px 0 var(--color-ink)',
-          padding: '32px 24px',
-          maxWidth: 480,
-          width: '100%',
-          margin: '24px auto',
-          fontFamily: '"Nunito Sans", system-ui, sans-serif',
-          textAlign: 'center',
-        }}
-      >
-        <h1
-          style={{
-            margin: 0,
-            fontSize: '1.875rem',
-            lineHeight: 1.27,
-            fontWeight: 800,
-            color: 'var(--color-ink)',
-            letterSpacing: '-0.01em',
-          }}
-        >
-          Done for today
-        </h1>
+      <Card data-testid="daily-post-completion">
+        <Heading>Done for today</Heading>
 
-        <div
+        <SolveTime
           data-testid="daily-solve-time"
-          style={{
-            fontFamily: '"Space Mono", ui-monospace, monospace',
-            fontSize: '2.25rem',
-            fontWeight: 700,
-            color: 'var(--color-ink)',
-            fontVariantNumeric: 'tabular-nums',
-            lineHeight: 1.22,
-          }}
           aria-label={`Solve time ${formatSolveTime(serverElapsedMs)}`}
+          style={{ fontVariantNumeric: 'tabular-nums' }}
         >
           {formatSolveTime(serverElapsedMs)}
-        </div>
+        </SolveTime>
 
         {typeof leaderboardRank === 'number' && (
-          <p
-            data-testid="daily-leaderboard-rank"
-            style={{
-              margin: 0,
-              fontSize: '1.125rem',
-              fontWeight: 600,
-              color: 'var(--color-body)',
-            }}
-          >
+          <RankLine data-testid="daily-leaderboard-rank">
             Today&apos;s rank:{' '}
-            <span style={{ color: 'var(--color-accent)', fontWeight: 700 }}>
-              #{leaderboardRank}
-            </span>
-          </p>
+            <RankNumber>#{leaderboardRank}</RankNumber>
+          </RankLine>
         )}
 
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '4px',
-            marginTop: '8px',
-          }}
-        >
-          <span
-            style={{
-              fontSize: '0.875rem',
-              color: 'var(--color-muted)',
-              fontWeight: 500,
-            }}
-          >
-            Next puzzle in
-          </span>
-          <span
+        <CountdownBlock>
+          <CountdownLabel>Next puzzle in</CountdownLabel>
+          <CountdownValue
             data-testid="daily-countdown"
-            style={{
-              fontFamily: '"Space Mono", ui-monospace, monospace',
-              fontSize: '1.5rem',
-              fontWeight: 700,
-              color: 'var(--color-muted)',
-              fontVariantNumeric: 'tabular-nums',
-            }}
             aria-live="polite"
+            style={{ fontVariantNumeric: 'tabular-nums' }}
           >
             {countdownText}
-          </span>
-        </div>
+          </CountdownValue>
+        </CountdownBlock>
 
-        <p
-          data-testid="daily-submitted-at"
-          style={{
-            margin: 0,
-            fontSize: '0.75rem',
-            color: 'var(--color-muted)',
-            fontWeight: 400,
-          }}
-        >
+        <SubmittedAt data-testid="daily-submitted-at">
           Submitted at {submittedAtText}
-        </p>
+        </SubmittedAt>
 
         <SecondaryButton onClick={handleBack} data-testid="daily-back-home">
           Back to home
         </SecondaryButton>
-      </div>
+      </Card>
     </PageShell>
   );
 }
