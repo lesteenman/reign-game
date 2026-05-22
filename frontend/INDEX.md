@@ -10,11 +10,11 @@ A single-page Progressive Web App (PWA) that renders the Reign puzzle game. Thre
 
 | | Current (today) | Target (per `frontend/CLAUDE.md` + `architecture` skill) |
 |---|---|---|
-| Folder shape | Mostly BR feature-folder. Remaining legacy: `services/` (four cross-feature service files). Target: pure feature-folder with no legacy layered dirs. | Feature-folder: `app/`, `engine/`, `features/{daily,curation,admin,landing}/`, `shared/{auth,components,game,hooks,types}/`, `theme/`, `storage/` (note: `auth` and `game` live under `shared/` because they are genuinely cross-feature, not single-feature concerns — see #196 + #204's BR-incorrect-framing analysis) |
+| Folder shape | Pure BR feature-folder. `app/`, `engine/`, `features/{daily,curation,admin,landing}/`, `shared/{api,auth,components,game,hooks,types}/`, `theme/`, `storage/`. The pre-#176 `src/services/` legacy dir is gone (modules live with their owning feature). | Same — conforming |
 | UI primitives | Tamagui-styled chrome via `Button`, `IconButton`, `PageShell`, `Card`, `Spinner`, `OfflineBanner`, `InstallButton`, plus local styled wrappers in `PostCompletionScreen` and `GameBoard` completion-overlay. Tokens mirror `index.css` CSS custom properties as literal hex for compiler extraction. One residual `className=` in `Cell.tsx` (keyframe-animation hook, not Tailwind). | Tamagui 2 RC primitives + theme tokens (per-component) |
 | Tailwind | Gone (`tailwindcss` + `@tailwindcss/vite` removed in #176; `@import "tailwindcss"` removed from `index.css`; build precache -9 KB). The remaining `className=` in `Cell.tsx` is for a plain-CSS keyframe-animation hook, not Tailwind. | Gone |
 | Server state | Both screens on TanStack: `PlayPuzzlePage` uses `useCurationPuzzle` (#176 curation half), `DailyFlow` uses `useDailyPuzzle` + `useSubmitDaily` (#176 daily half). No more hand-rolled `useState<LoadState>` / `useState<FlowState>` discriminated unions; all server-state branching is driven by query/mutation flags. | Same — already conforming |
-| `services/*` | Three legacy service modules (`adminService`, `dailyService`, `puzzleService`). `api.ts` was consolidated into `shared/api/` and the trio of near-identical helpers (`apiFetch` / `apiPost` / `apiPut`) collapsed to one `apiRequest` + thin `apiGet` / `apiPut` / `apiPost` wrappers (#120). | Hooks own the I/O; leaf components consume hooks |
+| `services/*` | Each service lives with its owning feature: `features/admin/services/adminService`, `features/daily/services/dailyService`, `shared/game/services/puzzleService`. Cross-feature fetch base is `@shared/api` (collapsed `apiFetch` / `apiPost` / `apiPut` into one `apiRequest` + thin `apiGet` / `apiPut` / `apiPost` wrappers in #120). | Hooks own the I/O; leaf components consume hooks |
 | `engine/` | Pure TS (verified: no React, no `fetch`, no DOM) | Same — already conforming |
 | `storage/` | Hand-rolled IndexedDB wrapper, single source of truth for persisted shapes | Same — already conforming |
 
@@ -112,21 +112,6 @@ Bulletproof React shared-component layer. Every page and feature consumes from h
 - `OfflineBanner.tsx` — *(2026-05-18: #116)* global offline indicator slotted into `PageShell`; renders when `useConnectivity()` returns `false`.
 - `InstallButton.tsx` — *(2026-05-18: #116 follow-up)* compact install CTA in the PageShell header right-cluster.
 - Tests: `Icon.test.tsx`, `PageShell.test.tsx`, `Button.test.tsx`, `IconButton.test.tsx`, `Card.test.tsx`, `Spinner.test.tsx`, `OfflineBanner.test.tsx`, `InstallButton.test.tsx`.
-
-### `src/services/`
-
-Legacy backend client modules. New code uses `features/<feature>/services/` or wraps services in shared hooks (`shared/game/hooks/useUpdatePuzzleStatus`). The shared fetch base moved to `shared/api/` in #120; only three feature-specific services remain here.
-
-- `puzzleService.ts` — just `updatePuzzleStatus` after #176's split (cross-feature; used by both curation + daily via `shared/game/hooks/useUpdatePuzzleStatus`).
-- `adminService.ts` — pool / config CRUD (`fetchPoolStatus`, `updateConfig`, `createConfig`, `triggerReplenish`).
-- `dailyService.ts` — daily flow (`getDaily`, `submitDailyResult`); injects `X-Device-Id` via `apiGet` / `apiPost`'s `options.headers`.
-
-Already migrated out of this folder:
-
-- `api.ts` → `shared/api/` (#120 — collapsed `apiFetch` / `apiPut` / `apiPost` into one `apiRequest` + thin wrappers; renamed `apiFetch` to `apiGet`).
-- `verdictService.ts` → `features/curation/services/` (#176, PR #202).
-- `landingService.ts` → `features/curation/services/enabled-modes-service.ts` (#176, PR #203 — renamed; only CurationPage ever consumed it).
-- `puzzleService.ts::fetchNextPuzzle` → `features/curation/services/fetch-next-puzzle-service.ts` (#176, PR #205 — single-feature consumer once GamePage moved to features/curation/).
 
 ### `src/storage/`
 

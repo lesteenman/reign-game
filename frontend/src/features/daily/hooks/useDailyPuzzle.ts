@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { getDaily } from '@services/dailyService';
+import { getDaily } from '@features/daily/services/dailyService';
 import { useGameStorage } from '@shared/game/hooks/useGameStorage';
 import { todayUtcDate } from '@shared/dates';
 import { ApiError } from '@shared/api';

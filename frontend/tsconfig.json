@@ -17,8 +17,7 @@
       "@features/*": ["./src/features/*"],
       "@engine/*": ["./src/engine/*"],
       "@theme/*": ["./src/theme/*"],
-      "@storage/*": ["./src/storage/*"],
-      "@services/*": ["./src/services/*"]
+      "@storage/*": ["./src/storage/*"]
     }
   }
 }

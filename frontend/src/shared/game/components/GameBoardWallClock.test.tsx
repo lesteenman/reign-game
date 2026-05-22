@@ -19,7 +19,7 @@ vi.mock('@clerk/react', () => ({
 // puzzleService stub — GameBoard's solve effect calls updatePuzzleStatus
 // in non-delegated mode. The tests below stay in delegated mode (onSolve-
 // Detected wired), so this stub is defensive only.
-vi.mock('@services/puzzleService', () => ({
+vi.mock('@shared/game/services/puzzleService', () => ({
   updatePuzzleStatus: vi.fn().mockResolvedValue(undefined),
 }));
 

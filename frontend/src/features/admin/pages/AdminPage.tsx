@@ -13,7 +13,7 @@ import {
   updateConfig,
   createConfig as createConfigApi,
   triggerReplenish,
-} from '@services/adminService';
+} from '@features/admin/services/adminService';
 
 const labelStyle: React.CSSProperties = {
   display: 'flex',

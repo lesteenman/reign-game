@@ -51,7 +51,7 @@ vi.mock('@features/curation/services/fetch-next-puzzle-service', () => ({
   },
 }));
 
-vi.mock('@services/puzzleService', () => ({
+vi.mock('@shared/game/services/puzzleService', () => ({
   updatePuzzleStatus: (...args: unknown[]) => mockUpdateStatus(...args),
 }));
 
