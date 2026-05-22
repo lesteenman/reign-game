@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"regexp"
 
 	"github.com/go-chi/chi/v5"
 
@@ -207,15 +208,56 @@ func writeDailySubmitError(w http.ResponseWriter, err error) {
 // resolveDailyPlayer maps a request to (playerID, isAnonymous, ok).
 // A signed-in Clerk user wins over X-Device-Id so users who happen to
 // send both end up with their stable user ID. Returns ok=false when
-// neither identifier is present — caller emits 401.
+// neither identifier is present (caller emits 401). A present-but-
+// malformed X-Device-Id is treated as absent — the caller sees the
+// same 401 as a missing header. This is the "generic error messages
+// in auth" rule (backend/CLAUDE.md): no client-observable difference
+// between "you didn't authenticate" and "your header failed
+// validation", so attackers can't probe the validator's bounds.
 func resolveDailyPlayer(r *http.Request) (playerID string, isAnonymous, ok bool) {
 	if u, present := auth.UserFromContextOK(r.Context()); present && u != nil && u.ID != "" {
 		return u.ID, false, true
 	}
-	if device := r.Header.Get(dailyDeviceHeader); device != "" {
-		return device, true, true
+	device := r.Header.Get(dailyDeviceHeader)
+	if device == "" {
+		return "", false, false
 	}
-	return "", false, false
+	if err := validateDeviceID(device); err != nil {
+		return "", false, false
+	}
+	return device, true, true
+}
+
+// deviceIDPattern accepts URL-safe ASCII identifiers between 16 and
+// 64 characters. The shape is what `crypto.randomUUID()` and similar
+// browser APIs produce (with or without dashes) plus opaque tokens
+// the client might generate via base64url. Length cap shields the
+// header path from megabyte-scale payloads; the charset rule blocks
+// control characters and anything that needs escaping downstream.
+var deviceIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
+
+const (
+	deviceIDMinLength = 16
+	deviceIDMaxLength = 64
+)
+
+// errInvalidDeviceID is the sentinel for X-Device-Id values that fail
+// shape validation. Returned by validateDeviceID and surfaced as HTTP
+// 400 by the daily handlers.
+var errInvalidDeviceID = errors.New("invalid device id")
+
+// validateDeviceID enforces the X-Device-Id shape contract:
+// length 16-64 chars + URL-safe ASCII only. Returns errInvalidDeviceID
+// on violation. An empty string is invalid; callers should branch on
+// non-empty before calling.
+func validateDeviceID(id string) error {
+	if len(id) < deviceIDMinLength || len(id) > deviceIDMaxLength {
+		return errInvalidDeviceID
+	}
+	if !deviceIDPattern.MatchString(id) {
+		return errInvalidDeviceID
+	}
+	return nil
 }
 
 // writeDailyError emits the canonical {"error":"<msg>"} body for

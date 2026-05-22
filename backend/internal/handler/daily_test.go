@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/clerk/clerk-sdk-go/v2"
@@ -109,6 +110,54 @@ func validSubmitBody() *bytes.Buffer {
 }
 
 // ---------------------------------------------------------------------------
+// X-Device-Id shape validation (handler-level integration)
+// ---------------------------------------------------------------------------
+
+func TestDailyGetHandler_RejectsMalformedDeviceID(t *testing.T) {
+	cases := []struct {
+		name     string
+		deviceID string
+	}{
+		{"too short", "short"},
+		{"5MB header", string(make([]byte, 5*1024*1024))},
+		{"control chars", "deviceid\x00\x01\x02null"},
+		{"contains spaces", "device id with spaces"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Arrange — service is a stub that would 200 on any call;
+			// the handler must reject before reaching the service.
+			svc := &stubDailyService{getDailyView: happyGetView()}
+			router := mountDailyGet(svc)
+			req := httptest.NewRequest(http.MethodGet, "/api/daily/2026-05-02", http.NoBody)
+			req.Header.Set("X-Device-Id", tc.deviceID)
+			rec := httptest.NewRecorder()
+
+			// Act
+			router.ServeHTTP(rec, req)
+
+			// Assert — 401 with the canonical "unauthenticated" envelope.
+			// Per the project's "generic error messages in auth" rule,
+			// a malformed device id is indistinguishable from a missing
+			// one — both look like "you didn't authenticate" so attackers
+			// can't probe validator bounds. The handler still blocks the
+			// request before any DynamoDB call, which is what matters
+			// for the underlying threat.
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("status: got %d want 401 (body=%q)", rec.Code, rec.Body.String())
+			}
+			if !strings.Contains(rec.Body.String(), "unauthenticated") {
+				t.Errorf("body missing canonical message: %q", rec.Body.String())
+			}
+			if svc.getDailyCalled {
+				t.Errorf("service was called — handler should reject before DDB")
+			}
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
 // GET auth matrix
 // ---------------------------------------------------------------------------
 
@@ -120,9 +169,9 @@ func TestDailyGetHandler_AuthMatrix(t *testing.T) {
 		wantStatus int
 	}{
 		{"no identity returns 401", "", "", http.StatusUnauthorized},
-		{"device header alone passes (200)", "", "dev_abc", http.StatusOK},
+		{"device header alone passes (200)", "", "test-device-id-12345", http.StatusOK},
 		{"userID alone passes (200)", "user_xyz", "", http.StatusOK},
-		{"userID wins over device (200)", "user_xyz", "dev_abc", http.StatusOK},
+		{"userID wins over device (200)", "user_xyz", "test-device-id-12345", http.StatusOK},
 	}
 
 	for _, tc := range cases {
@@ -160,7 +209,7 @@ func TestDailyGetHandler_HappyPath(t *testing.T) {
 	svc := &stubDailyService{getDailyView: view}
 	router := mountDailyGet(svc)
 	req := httptest.NewRequest(http.MethodGet, "/api/daily/2026-05-02", http.NoBody)
-	req.Header.Set("X-Device-Id", "dev_abc")
+	req.Header.Set("X-Device-Id", "test-device-id-12345")
 	rec := httptest.NewRecorder()
 
 	// Act
@@ -199,8 +248,8 @@ func TestDailyGetHandler_HappyPath(t *testing.T) {
 	if !svc.getDailyCalled {
 		t.Error("GetDaily was not called")
 	}
-	if svc.lastGetInput.PlayerID != "dev_abc" || !svc.lastGetInput.IsAnonymous {
-		t.Errorf("GetInput: got (%q, anon=%t) want (dev_abc, true)", svc.lastGetInput.PlayerID, svc.lastGetInput.IsAnonymous)
+	if svc.lastGetInput.PlayerID != "test-device-id-12345" || !svc.lastGetInput.IsAnonymous {
+		t.Errorf("GetInput: got (%q, anon=%t) want (test-device-id-12345, true)", svc.lastGetInput.PlayerID, svc.lastGetInput.IsAnonymous)
 	}
 	if svc.lastGetInput.Date != "2026-05-02" {
 		t.Errorf("GetInput.Date: got %q want 2026-05-02", svc.lastGetInput.Date)
@@ -231,7 +280,7 @@ func TestDailyGetHandler_SentinelErrors(t *testing.T) {
 			svc := &stubDailyService{getDailyErr: tc.svcErr}
 			router := mountDailyGet(svc)
 			req := httptest.NewRequest(http.MethodGet, "/api/daily/2026-05-02", http.NoBody)
-			req.Header.Set("X-Device-Id", "dev_abc")
+			req.Header.Set("X-Device-Id", "test-device-id-12345")
 			rec := httptest.NewRecorder()
 
 			// Act
@@ -260,9 +309,9 @@ func TestDailySubmitHandler_AuthMatrix(t *testing.T) {
 		wantStatus int
 	}{
 		{"no identity returns 401", "", "", http.StatusUnauthorized},
-		{"device header alone passes (200)", "", "dev_abc", http.StatusOK},
+		{"device header alone passes (200)", "", "test-device-id-12345", http.StatusOK},
 		{"userID alone passes (200)", "user_xyz", "", http.StatusOK},
-		{"userID wins over device (200)", "user_xyz", "dev_abc", http.StatusOK},
+		{"userID wins over device (200)", "user_xyz", "test-device-id-12345", http.StatusOK},
 	}
 
 	for _, tc := range cases {
@@ -317,7 +366,7 @@ func TestDailySubmitHandler_BodyValidation(t *testing.T) {
 			router := mountDailySubmit(svc)
 			req := httptest.NewRequest(http.MethodPost, "/api/daily/2026-05-02/result",
 				bytes.NewBufferString(tc.body))
-			req.Header.Set("X-Device-Id", "dev_abc")
+			req.Header.Set("X-Device-Id", "test-device-id-12345")
 			rec := httptest.NewRecorder()
 
 			// Act
@@ -348,7 +397,7 @@ func TestDailySubmitHandler_HappyPath(t *testing.T) {
 	svc := &stubDailyService{submitDailyResult: result}
 	router := mountDailySubmit(svc)
 	req := httptest.NewRequest(http.MethodPost, "/api/daily/2026-05-02/result", validSubmitBody())
-	req.Header.Set("X-Device-Id", "dev_abc")
+	req.Header.Set("X-Device-Id", "test-device-id-12345")
 	rec := httptest.NewRecorder()
 
 	// Act
@@ -374,8 +423,8 @@ func TestDailySubmitHandler_HappyPath(t *testing.T) {
 	if !svc.submitDailyCalled {
 		t.Error("SubmitDaily was not called")
 	}
-	if svc.lastSubmitInput.PlayerID != "dev_abc" || !svc.lastSubmitInput.IsAnonymous {
-		t.Errorf("SubmitInput: got (%q, anon=%t) want (dev_abc, true)", svc.lastSubmitInput.PlayerID, svc.lastSubmitInput.IsAnonymous)
+	if svc.lastSubmitInput.PlayerID != "test-device-id-12345" || !svc.lastSubmitInput.IsAnonymous {
+		t.Errorf("SubmitInput: got (%q, anon=%t) want (test-device-id-12345, true)", svc.lastSubmitInput.PlayerID, svc.lastSubmitInput.IsAnonymous)
 	}
 	if svc.lastSubmitInput.Date != "2026-05-02" {
 		t.Errorf("SubmitInput.Date: got %q want 2026-05-02", svc.lastSubmitInput.Date)
@@ -414,7 +463,7 @@ func TestDailySubmitHandler_SentinelErrors(t *testing.T) {
 			svc := &stubDailyService{submitDailyErr: tc.svcErr}
 			router := mountDailySubmit(svc)
 			req := httptest.NewRequest(http.MethodPost, "/api/daily/2026-05-02/result", validSubmitBody())
-			req.Header.Set("X-Device-Id", "dev_abc")
+			req.Header.Set("X-Device-Id", "test-device-id-12345")
 			rec := httptest.NewRecorder()
 
 			// Act
