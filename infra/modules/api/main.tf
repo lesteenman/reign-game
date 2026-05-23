@@ -184,12 +184,19 @@ resource "aws_api_gateway_resource" "api_proxy" {
   path_part   = "{proxy+}"
 }
 
-# ANY on /api/{proxy+} — covers every HTTP method the backend serves
+# ANY on /api/{proxy+} — covers every HTTP method the backend serves.
+# api_key_required = true gates every /api/* request behind the
+# usage-plan-bound API key below. The key is browser-distributed (baked
+# into the frontend bundle at build time), so it acts as a namespace
+# token, not a secret. Its value is to bind callers to the usage plan
+# so the per-key throttle applies; without it, requests fall to API
+# Gateway's account-wide default throttle, which is much higher.
 resource "aws_api_gateway_method" "api_proxy_any" {
-  rest_api_id   = aws_api_gateway_rest_api.api.id
-  resource_id   = aws_api_gateway_resource.api_proxy.id
-  http_method   = "ANY"
-  authorization = "NONE"
+  rest_api_id      = aws_api_gateway_rest_api.api.id
+  resource_id      = aws_api_gateway_resource.api_proxy.id
+  http_method      = "ANY"
+  authorization    = "NONE"
+  api_key_required = true
 }
 
 # Lambda integration for /api/{proxy+}
@@ -212,4 +219,45 @@ resource "aws_api_gateway_method_settings" "api" {
     throttling_burst_limit = 50
     throttling_rate_limit  = 100
   }
+}
+
+# Browser-distributed API key bound to a usage plan with per-key
+# throttle. AWS auto-generates the value when `value` is omitted.
+# Frontend reads it as `VITE_API_KEY` at build time and sends it as
+# `x-api-key` on every request. Anyone can scrape it from the bundle
+# — that's intentional; the key is a namespace token, not a secret.
+# Its purpose is to bind callers to the usage plan so the per-key
+# throttle below caps total app traffic.
+resource "aws_api_gateway_api_key" "client" {
+  name        = "${var.project_name}-${var.environment}-client"
+  description = "Browser-distributed key for the Reign frontend; bound to the client usage plan."
+  enabled     = true
+}
+
+# Usage plan with per-key throttle. 50 rps / 100 burst is well above
+# expected legitimate traffic (a single user solving the daily
+# generates ~3-5 requests across page load + submit) and bounds the
+# steady-state damage of a scraped-key attack. No daily quota: a
+# quota that gets burned by an attacker would lock out legitimate
+# users for hours, which is a worse failure mode than letting the
+# rate-limit absorb the spike.
+resource "aws_api_gateway_usage_plan" "client" {
+  name        = "${var.project_name}-${var.environment}-client"
+  description = "Per-key throttle for the browser-distributed API key."
+
+  api_stages {
+    api_id = aws_api_gateway_rest_api.api.id
+    stage  = aws_api_gateway_stage.api.stage_name
+  }
+
+  throttle_settings {
+    rate_limit  = 50
+    burst_limit = 100
+  }
+}
+
+resource "aws_api_gateway_usage_plan_key" "client" {
+  key_id        = aws_api_gateway_api_key.client.id
+  key_type      = "API_KEY"
+  usage_plan_id = aws_api_gateway_usage_plan.client.id
 }
