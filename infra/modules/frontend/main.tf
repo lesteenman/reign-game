@@ -39,13 +39,25 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
 # for older clients that don't honor CSP.
 #
 # The CSP allowlist covers:
-#   - script/connect/frame: Clerk's two production hosts (`*.clerk.com`
-#     and `*.clerk.accounts.dev`) for sign-in widget + auth API calls
-#     made by `@clerk/clerk-react`
-#   - style 'unsafe-inline': Tamagui injects runtime styles for some
-#     primitives; tightening this requires a nonce pipeline (deferred)
+#   - script: Clerk FAPI (`*.clerk.com`, `*.clerk.accounts.dev`) +
+#     Cloudflare Turnstile (`challenges.cloudflare.com`) which Clerk
+#     uses for bot defence on sign-up
+#   - connect: same Clerk hosts plus `clerk-telemetry.com` (+ subdomains)
+#     which the Clerk JS SDK pings asynchronously
+#   - frame: same Clerk hosts + Turnstile challenge frame
+#   - style 'unsafe-inline': Clerk's mounted sign-in / user-button
+#     widgets inject inline styles at runtime; Tamagui's compiler
+#     statically extracts ours, but the Clerk widget DOM lives inside
+#     the same document. Tightening to nonces requires opting both
+#     into a nonce pipeline (deferred)
+#   - font: Google Fonts (`fonts.gstatic.com`) for Nunito Sans + Space
+#     Mono, both imported from index.css; `data:` for inline glyphs
+#   - style: Google Fonts CSS host (`fonts.googleapis.com`) for the
+#     `@import` in index.css
 #   - img: Clerk avatar / image CDNs plus `data:` for inline icons
-#   - worker/manifest: PWA service worker (`/sw.js`) + Web App Manifest
+#   - worker: PWA service worker (`/sw.js`); `blob:` covers Workbox-
+#     generated workers + Clerk worker bootstrap
+#   - manifest: PWA Web App Manifest
 #
 # Future tightening targets when traffic ramps:
 #   - Replace `'unsafe-inline'` in style-src with nonces or hashes
@@ -79,13 +91,13 @@ resource "aws_cloudfront_response_headers_policy" "security" {
     content_security_policy {
       content_security_policy = join("; ", [
         "default-src 'self'",
-        "script-src 'self' https://*.clerk.com https://*.clerk.accounts.dev",
-        "style-src 'self' 'unsafe-inline'",
-        "font-src 'self' data:",
+        "script-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://challenges.cloudflare.com",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' data: https://fonts.gstatic.com",
         "img-src 'self' data: https://img.clerk.com https://images.clerk.dev",
-        "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev",
-        "frame-src 'self' https://*.clerk.com",
-        "worker-src 'self'",
+        "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk-telemetry.com https://*.clerk-telemetry.com",
+        "frame-src 'self' https://*.clerk.com https://challenges.cloudflare.com",
+        "worker-src 'self' blob:",
         "manifest-src 'self'",
         "object-src 'none'",
         "base-uri 'self'",
@@ -104,7 +116,7 @@ resource "aws_cloudfront_response_headers_policy" "security" {
   custom_headers_config {
     items {
       header   = "Permissions-Policy"
-      value    = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=()"
+      value    = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=(), interest-cohort=(), browsing-topics=()"
       override = true
     }
   }
