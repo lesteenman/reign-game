@@ -41,12 +41,6 @@ resource "aws_cloudfront_distribution" "frontend" {
   # yet" intermediate state apply cleanly (no aliases, default cert).
   aliases = var.acm_certificate_arn != "" ? var.domain_aliases : []
 
-  # Optional WAFv2 Web ACL (CLOUDFRONT scope, must live in us-east-1).
-  # Provisioned by the `waf` module at the root. Empty string leaves the
-  # distribution unprotected — useful for the "ARN not set yet" bootstrap
-  # state.
-  web_acl_id = var.web_acl_arn
-
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
     origin_id                = "s3-frontend"

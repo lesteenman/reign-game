@@ -29,17 +29,6 @@ module "api" {
   clerk_secret_key      = var.clerk_secret_key
 }
 
-module "waf" {
-  source = "./modules/waf"
-
-  providers = {
-    aws.us_east_1 = aws.us_east_1
-  }
-
-  project_name = var.project_name
-  environment  = var.environment
-}
-
 module "frontend" {
   source = "./modules/frontend"
 
@@ -49,7 +38,6 @@ module "frontend" {
   api_gateway_stage   = module.api.api_gateway_stage
   domain_aliases      = var.domain_aliases
   acm_certificate_arn = var.acm_certificate_arn
-  web_acl_arn         = module.waf.web_acl_arn
 }
 
 module "daily_cron" {

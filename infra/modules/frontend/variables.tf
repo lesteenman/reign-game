@@ -29,9 +29,3 @@ variable "acm_certificate_arn" {
   type        = string
   default     = ""
 }
-
-variable "web_acl_arn" {
-  description = "ARN of an AWS WAFv2 Web ACL (CLOUDFRONT scope, must live in us-east-1) to attach to the CloudFront distribution. Empty string leaves the distribution unprotected."
-  type        = string
-  default     = ""
-}

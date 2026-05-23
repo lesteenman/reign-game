@@ -96,10 +96,24 @@ jobs:
           echo "::add-mask::${PUBLISHABLE_KEY}"
           echo "publishable_key=${PUBLISHABLE_KEY}" >> "$GITHUB_OUTPUT"
 
+      - name: Fetch API Gateway client key from Terraform
+        id: api_key
+        run: |
+          # Browser-distributed API key bound to the client usage plan.
+          # AWS auto-generates the value; Terraform exports it as a
+          # sensitive output. Frontend bakes it into the bundle so every
+          # /api/* request carries `x-api-key` and binds to the usage
+          # plan's per-key throttle.
+          API_KEY=$(terraform -chdir=infra output -raw client_api_key_value)
+          # Mask even though it's browser-public — keeps it out of build logs.
+          echo "::add-mask::${API_KEY}"
+          echo "value=${API_KEY}" >> "$GITHUB_OUTPUT"
+
       - name: Build frontend
         working-directory: frontend
         env:
           VITE_CLERK_PUBLISHABLE_KEY: ${{ steps.clerk.outputs.publishable_key }}
+          VITE_API_KEY: ${{ steps.api_key.outputs.value }}
         run: npm run build
 
       - name: Sync frontend to S3

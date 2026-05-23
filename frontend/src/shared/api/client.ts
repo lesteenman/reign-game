@@ -18,6 +18,15 @@
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
+// Browser-distributed API key bound to the AWS API Gateway usage plan.
+// Baked into the bundle at build time by CD. Anyone can scrape it from
+// the bundle — that's intentional. Its role is to identify callers to
+// the usage plan so the per-key throttle applies. Empty in local dev
+// (Vite proxies straight to the Go backend, no API Gateway) and in
+// tests; the header is only attached when non-empty so dev + test
+// don't ship an empty `x-api-key: ` line that API Gateway would 403.
+const API_KEY = import.meta.env.VITE_API_KEY || '';
+
 /** Error thrown on non-2xx API responses. Includes the HTTP status code. */
 export class ApiError extends Error {
   constructor(
@@ -58,6 +67,9 @@ async function apiRequest<T>(
   const headers: Record<string, string> = { ...options?.headers };
   if (hasBody && headers['Content-Type'] === undefined) {
     headers['Content-Type'] = 'application/json';
+  }
+  if (API_KEY && headers['x-api-key'] === undefined) {
+    headers['x-api-key'] = API_KEY;
   }
 
   const response = await fetch(url.toString(), {

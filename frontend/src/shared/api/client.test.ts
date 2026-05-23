@@ -173,6 +173,78 @@ describe('empty-body handling — unified across all methods', () => {
   });
 });
 
+describe('x-api-key header (browser-distributed AWS API Gateway key)', () => {
+  // The client reads VITE_API_KEY at module load. vi.stubEnv +
+  // vi.resetModules (in the global beforeEach) lets each case lock
+  // in a different value before the dynamic import.
+
+  test('attaches x-api-key when VITE_API_KEY is set', async () => {
+    // Arrange
+    vi.stubEnv('VITE_API_KEY', 'sample-api-key-from-aws');
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('{}'),
+    });
+
+    // Act
+    const { apiGet } = await import('./client');
+    await apiGet('/api/x');
+
+    // Assert
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const init = calls[0]![1] as RequestInit;
+    expect((init.headers as Record<string, string>)['x-api-key']).toBe(
+      'sample-api-key-from-aws',
+    );
+
+    vi.unstubAllEnvs();
+  });
+
+  test('omits x-api-key when VITE_API_KEY is empty (dev / test path)', async () => {
+    // Arrange
+    vi.stubEnv('VITE_API_KEY', '');
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('{}'),
+    });
+
+    // Act
+    const { apiGet } = await import('./client');
+    await apiGet('/api/x');
+
+    // Assert
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const init = calls[0]![1] as RequestInit;
+    expect(
+      (init.headers as Record<string, string>)['x-api-key'],
+    ).toBeUndefined();
+
+    vi.unstubAllEnvs();
+  });
+
+  test('caller-provided x-api-key wins over the bundle default', async () => {
+    // Arrange
+    vi.stubEnv('VITE_API_KEY', 'bundle-default');
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('{}'),
+    });
+
+    // Act
+    const { apiGet } = await import('./client');
+    await apiGet('/api/x', { headers: { 'x-api-key': 'caller-override' } });
+
+    // Assert
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const init = calls[0]![1] as RequestInit;
+    expect((init.headers as Record<string, string>)['x-api-key']).toBe(
+      'caller-override',
+    );
+
+    vi.unstubAllEnvs();
+  });
+});
+
 describe('ApiError on non-2xx', () => {
   test('throws ApiError with server-provided message', async () => {
     // Arrange
