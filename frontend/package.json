@@ -15,7 +15,7 @@
   },
   "dependencies": {
     "@clerk/react": "^6.6.4",
-    "@tamagui/config": "2.0.0-rc.42",
+    "@tamagui/config": "2.0.0",
     "@tanstack/react-query": "^5.100.10",
     "lucide-react": "^1.16.0",
     "react": "^19.2.6",
