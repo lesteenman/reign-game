@@ -21,7 +21,7 @@
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.15.1",
-    "tamagui": "2.0.0-rc.42"
+    "tamagui": "2.0.0"
   },
   "overrides": {
     "js-cookie": "3.0.7"
