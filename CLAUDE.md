@@ -139,6 +139,7 @@ This project is built by agents with a human supervisor who is NOT actively watc
 - NEVER assume you know what the human would choose.
 - ALWAYS present options and wait for an explicit response.
 - Confirm alignment before moving to the next phase.
+- **Under the Refinement + Autonomous Execution Contract (below), this rule is UNCHANGED.** That contract front-loads design forks into batched refinement so fewer surface mid-flight; residual unclarity during execution is **notify-and-hold**, never an assumption.
 
 **Think Before Coding (everyday form — applies to implementation ambiguity):**
 - State assumptions explicitly. If material, ask.
@@ -155,6 +156,67 @@ This project is built by agents with a human supervisor who is NOT actively watc
 - Second stall on the same chunk → split into smaller batches (~3-5 tool uses each).
 - Recurring stall after splitting → escalate via `PushNotification`. Never re-dispatch a third time.
 - If a stalled agent had completed its work in the working tree, the lead agent commits it. That is the only takeover mode.
+
+## Refinement + Autonomous Execution Contract
+
+Adopted 2026-06-03. Governs how multi-issue work runs when the supervisor (team lead + Product Owner) is not actively checking in. **Goal:** the supervisor batches their involvement into **refinement**; execution then runs autonomously against written specs. This does **not** relax the HITL rule — it front-loads design forks so fewer arise mid-flight, and defines exactly what to do with the ones that still do.
+
+Shape: **batched refinement (always together) → Definition of Ready gate → autonomous execution with notify-and-hold on residual unclarity → autonomous merge for low-risk / hold-open for the risk-class set → end-of-session digest.**
+
+### 1. Definition of Ready (the gate)
+
+An issue enters "Up Next" / autonomous execution only once **all** of these are settled, together, in refinement. If any is blank at execution time, that is unclarity → notify + hold (§3), never an assumption.
+
+- [ ] **Problem + PO rationale** — what, and why (the user value).
+- [ ] **Acceptance criteria** — explicit, enumerated, testable. Not "make it work."
+- [ ] **Design forks resolved** — every option-decision made and recorded. No open "should we X or Y" remains.
+- [ ] **Test-plan sketch** — what proves it: unit / integration / e2e. Cross-boundary contracts flagged for real-wire verification (Change Workflow step 6 / lesson 12).
+- [ ] **Edge cases enumerated.**
+- [ ] **Out-of-scope** stated explicitly.
+- [ ] **Dependencies + sequencing** — which issues it depends on; independent vs stacked (stacking is the exception, §2).
+- [ ] **Risk class tagged** — does it hit the merge-hold set (§4)? Determines merge vs hold-open.
+- [ ] **Boundaries crossed** — which service boundaries it touches (drives integration verification).
+
+Refinement output is persisted to the **issue** (criteria + decisions in body/comments) plus a `writing-plans` plan doc on the branch. **GitHub is the source of truth for progress** — a context reset is recoverable from issue + PR state.
+
+### 2. Refinement protocol
+
+- Always **together** — this is where HITL lives. The supervisor is team lead + Product Owner and makes the calls; I prep (pre-analyze candidates, surface ambiguities + options + dependencies, draft the Definition-of-Ready fill) so the session is decision-making, not discovery.
+- Refine a **small batch** (start 2–3 issues; expand only after calibration — see Rollout). Small batches bound both review blast-radius and spec rot.
+- **Sequence by dependency; put independent issues first** so completed work banks before any surprise hang. Select batches to **minimize stacking** — prefer independent breadth over stacked depth.
+
+### 3. Execution contract
+
+I work the Ready issues **one after another**, a PR per issue.
+
+- **Notify-and-hold on any residual unclarity.** If execution uncovers something not settled in refinement — an ambiguous criterion, a contract that doesn't behave as specced, a missed design implication — `PushNotification` immediately and **hold until answered. Do not assume, do not skip ahead.** Strict sequential hold for v1: a single surprise stalls the run until the supervisor answers; the only lever that buys duration back is Definition-of-Ready quality.
+- **Park-and-continue applies to exactly one case:** a *completed* PR that is non-blocking for downstream work but requires supervisor approval to merge (the risk-class set, §4). Leave it open and proceed to the next independent issue. This is the only time work moves on with something outstanding.
+- **Issue is wrong, not just unclear** — mis-scope, duplicate, should-be-split, obsoleted: route to the supervisor as Product Owner (notify + hold). Never silently redefine or "tidy" the backlog.
+- Each PR still runs the full Change Workflow gates (integration verification, `requesting-code-review`, `security-review-final` when triggered). Autonomy changes *who decides design*, not *whether the gates run*.
+
+### 4. Merge authority
+
+- **Merge autonomously** a PR that is fully green — CI + `requesting-code-review` + security gate — **and outside the hold set.**
+- **Hold-for-supervisor-merge set = the Security Deep-Review Trigger list** (auth, middleware, Lambda handlers, dependency manifests, `infra/**/*.tf`, `.github/workflows/**`, anything with `secret`/`token`/`key`/`credential`) **∪ any change that could materially impact AWS cost.** These stay open for explicit approval.
+- Also held: any PR where my own code-review/security pass surfaced a finding I could **not** fully resolve.
+- **Merge = deploy** (CD ships to acc on merge to main). Autonomous merge is safe in proportion to the post-deploy verification gate: **#241 (GitHub Environments + Deployments verification) is a stated prerequisite for widening autonomous merge** — until it lands, keep the hold set conservative.
+
+### 5. Re-entry digest
+
+When the supervisor returns, the deliverable is a **single digest** (not "go read N PRs cold"), via `PushNotification` + session summary:
+
+- **Merged** — what shipped (and therefore deployed to acc).
+- **Open PRs awaiting you** — each with its hold reason (risk class / unresolved finding) + a one-line review pointer.
+- **Parked / held questions** — any notify-and-hold still outstanding, with the question + options + my recommendation so it's answerable in one line.
+- **Retro flags** — possibly-critical points: forks I hit that Definition of Ready should have caught (→ feeds back into §1), stalls, anything that smelled like drift.
+
+### 6. HITL reconciliation
+
+The HITL Rule is **unchanged**: the supervisor clarifies, I do not assume. This contract changes only *when* the clarifying happens — design forks are resolved up front in batched refinement, so fewer surface mid-execution. The autonomy granted is over **execution decisions inside a Ready issue**, never over design forks or scope. When genuinely unsure whether something is a small clarification or a real fork: **park and ask** — holding has been made cheap on purpose.
+
+### Rollout & calibration
+
+Treat the first 2–3 batches as **calibration, not production**: start small, measure rework rate (PRs needing rework) and stall cost (how often/long the run holds on a surprise), and expand batch size only as the data supports it. The `retro` skill tunes the Definition of Ready from whatever forks slipped through. Revisit an "advance to a demonstrably-independent Ready issue while one is parked" exception (§3) **only** if calibration shows sequential-hold stalls are expensive — earn it with data.
 
 ## Build Commands
 
