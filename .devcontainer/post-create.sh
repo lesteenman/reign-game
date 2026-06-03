@@ -116,6 +116,22 @@ rm -rf /tmp/awscliv2.zip /tmp/aws
 echo "--- Configuring git hooks path ---"
 git config core.hooksPath .githooks
 
+# Git auth over HTTPS using the project PAT. The dev container intentionally
+# mounts no ~/.ssh (docker-compose.yml keeps host credentials on the host),
+# so the committed `git@github.com:` remote can't fetch or push from inside —
+# SSH fails with "Host key verification failed". Rewrite SSH GitHub URLs to
+# HTTPS and supply the PAT via a credential helper that reads
+# $GITHUB_PERSONAL_ACCESS_TOKEN at call time, so the token never lands in
+# ~/.gitconfig. Same fine-grained PAT the GitHub MCP already uses (.env.local).
+echo "--- Configuring git auth (HTTPS + PAT) ---"
+if [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
+  git config --global url."https://github.com/".insteadOf "git@github.com:"
+  git config --global credential.helper \
+    '!f() { test "$1" = get && printf "username=x-access-token\npassword=%s\n" "${GITHUB_PERSONAL_ACCESS_TOKEN}"; }; f'
+else
+  echo "    GITHUB_PERSONAL_ACCESS_TOKEN unset — skipping; git over SSH won't work in-container." >&2
+fi
+
 # Dependency download — pre-warm caches so first build is fast.
 echo "--- Downloading Go modules ---"
 ( cd backend && go mod download )
