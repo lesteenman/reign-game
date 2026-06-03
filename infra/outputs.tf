@@ -37,3 +37,9 @@ output "clerk_publishable_key_param_name" {
   description = "SSM Parameter Store name for the Clerk publishable key. CD reads this and passes the fetched value to the frontend build as VITE_CLERK_PUBLISHABLE_KEY."
   value       = module.api.clerk_publishable_key_param_name
 }
+
+output "client_api_key_value" {
+  description = "Browser-distributed API Gateway key bound to the client usage plan. CD reads this and bakes it into the frontend build as VITE_API_KEY so every /api/* request carries x-api-key."
+  value       = module.api.client_api_key_value
+  sensitive   = true
+}
