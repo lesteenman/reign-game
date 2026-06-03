@@ -30,6 +30,98 @@ resource "aws_cloudfront_origin_access_control" "frontend" {
   signing_protocol                  = "sigv4"
 }
 
+# Security response headers attached to every cache behavior. CSP is
+# enforced (not report-only) — an empty acc environment lets us catch
+# breakages immediately rather than promote from report-only weeks
+# later. HSTS deliberately skips the `preload` directive: the preload
+# list is a near-permanent commitment and the acc domain may move.
+# X-Frame-Options DENY is kept alongside CSP `frame-ancestors 'none'`
+# for older clients that don't honor CSP.
+#
+# The CSP allowlist covers:
+#   - script: Clerk FAPI (`*.clerk.com`, `*.clerk.accounts.dev`) +
+#     Cloudflare Turnstile (`challenges.cloudflare.com`) which Clerk
+#     uses for bot defence on sign-up
+#   - connect: same Clerk hosts plus `clerk-telemetry.com` (+ subdomains)
+#     which the Clerk JS SDK pings asynchronously
+#   - frame: same Clerk hosts + Turnstile challenge frame
+#   - style 'unsafe-inline': Clerk's mounted sign-in / user-button
+#     widgets inject inline styles at runtime; Tamagui's compiler
+#     statically extracts ours, but the Clerk widget DOM lives inside
+#     the same document. Tightening to nonces requires opting both
+#     into a nonce pipeline (deferred)
+#   - font: Google Fonts (`fonts.gstatic.com`) for Nunito Sans + Space
+#     Mono, both imported from index.css; `data:` for inline glyphs
+#   - style: Google Fonts CSS host (`fonts.googleapis.com`) for the
+#     `@import` in index.css
+#   - img: Clerk avatar / image CDNs plus `data:` for inline icons
+#   - worker: PWA service worker (`/sw.js`); `blob:` covers Workbox-
+#     generated workers + Clerk worker bootstrap
+#   - manifest: PWA Web App Manifest
+#
+# Future tightening targets when traffic ramps:
+#   - Replace `'unsafe-inline'` in style-src with nonces or hashes
+#   - Add a `report-uri` / `report-to` endpoint to surface violations
+#   - Add `preload` to HSTS once the prod domain is stable
+resource "aws_cloudfront_response_headers_policy" "security" {
+  name = "${var.project_name}-${var.environment}-security"
+
+  security_headers_config {
+    strict_transport_security {
+      access_control_max_age_sec = 63072000
+      include_subdomains         = true
+      preload                    = false
+      override                   = true
+    }
+
+    content_type_options {
+      override = true
+    }
+
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = true
+    }
+
+    content_security_policy {
+      content_security_policy = join("; ", [
+        "default-src 'self'",
+        "script-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://challenges.cloudflare.com",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "font-src 'self' data: https://fonts.gstatic.com",
+        "img-src 'self' data: https://img.clerk.com https://images.clerk.dev",
+        "connect-src 'self' https://*.clerk.com https://*.clerk.accounts.dev https://clerk-telemetry.com https://*.clerk-telemetry.com",
+        "frame-src 'self' https://*.clerk.com https://challenges.cloudflare.com",
+        "worker-src 'self' blob:",
+        "manifest-src 'self'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+        "frame-ancestors 'none'",
+        "upgrade-insecure-requests",
+      ])
+      override = true
+    }
+  }
+
+  # Permissions-Policy has no first-class block in the AWS provider —
+  # ship via custom_headers_config. Disables sensors and payment APIs
+  # the puzzle game has no reason to access; reduces the impact of a
+  # successful XSS by removing the relevant attack surface.
+  custom_headers_config {
+    items {
+      header   = "Permissions-Policy"
+      value    = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), accelerometer=(), gyroscope=(), magnetometer=(), interest-cohort=(), browsing-topics=()"
+      override = true
+    }
+  }
+}
+
 # CloudFront distribution
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
@@ -76,6 +168,8 @@ resource "aws_cloudfront_distribution" "frontend" {
     target_origin_id       = "api-gateway"
     viewer_protocol_policy = "redirect-to-https"
 
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
+
     forwarded_values {
       query_string = true
       headers      = ["Authorization"]
@@ -96,29 +190,32 @@ resource "aws_cloudfront_distribution" "frontend" {
   # is 24h). Managed CachingDisabled forces revalidation on every
   # request. Same logic applies to the Workbox runtime bundles. See GH #116.
   ordered_cache_behavior {
-    path_pattern           = "/sw.js"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "s3-frontend"
-    viewer_protocol_policy = "redirect-to-https"
-    cache_policy_id        = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # AWS managed CachingDisabled
+    path_pattern               = "/sw.js"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    target_origin_id           = "s3-frontend"
+    viewer_protocol_policy     = "redirect-to-https"
+    cache_policy_id            = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # AWS managed CachingDisabled
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
   }
 
   ordered_cache_behavior {
-    path_pattern           = "/workbox-*.js"
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "s3-frontend"
-    viewer_protocol_policy = "redirect-to-https"
-    cache_policy_id        = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # AWS managed CachingDisabled
+    path_pattern               = "/workbox-*.js"
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    target_origin_id           = "s3-frontend"
+    viewer_protocol_policy     = "redirect-to-https"
+    cache_policy_id            = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # AWS managed CachingDisabled
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
   }
 
   default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD", "OPTIONS"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "s3-frontend"
-    viewer_protocol_policy = "redirect-to-https"
-    cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized managed policy
+    allowed_methods            = ["GET", "HEAD", "OPTIONS"]
+    cached_methods             = ["GET", "HEAD"]
+    target_origin_id           = "s3-frontend"
+    viewer_protocol_policy     = "redirect-to-https"
+    cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized managed policy
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
   }
 
   # SPA fallback: serve index.html for 404s
