@@ -7,7 +7,7 @@ volumes, not the host filesystem.
 ## What's inside
 
 - Claude Code (via the official Anthropic devcontainer feature)
-- Go 1.26.3, Node 24, Terraform — versions pinned to match
+- Go 1.26.4, Node 24, Terraform — versions pinned to match
   `.github/workflows/ci.yml`
 - `task` v3.50.0, `golangci-lint` v2.11.4, `gitleaks` 8.30.1,
   `govulncheck` v1.3.0
@@ -301,7 +301,7 @@ side.
 Inside the container:
 
 ```bash
-go version            # go1.26.3
+go version            # go1.26.4
 node --version        # v24.x
 task --version        # 3.50.0
 terraform -version    # 1.x
