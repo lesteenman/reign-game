@@ -93,9 +93,9 @@ Every change — feature, fix, or refactor — follows this pipeline. The full p
 
 ```
 1. Issue triage           → pick or open a GitHub issue; capture acceptance criteria in issue comments
-2. Worktree or branch     → Superpowers `using-git-worktrees` (preferred) or feature branch on the main repo (solo dev). **Do this BEFORE brainstorming** so the spec/plan commits land on the feature branch from the start, not on local main where the next worktree won't pick them up.
-3. Brainstorm             → Superpowers `brainstorming` skill (Socratic refinement) + `architecture` skill (design-time layered/feature-folder check) + `glossary` skill (vocab alignment)
-4. Plan                   → Superpowers `writing-plans` skill (decompose into 2–5 min tasks). For multi-approach exploration: `parallel-plan` skill first to compare 5 approaches, then `writing-plans` to decompose the chosen one.
+2. Refine to Ready        → `refinement` skill (composes Superpowers `brainstorming` + `architecture` design-time check + `glossary`). Output is a **Definition-of-Ready comment on the GitHub issue** — **no branch, no commits, no spec file** at this stage. See the Refinement + Autonomous Execution Contract below.
+3. Branch                 → **AT implementation start (not before refinement)**: Superpowers `using-git-worktrees` (preferred) or feature branch. The Ready issue is the handoff unit; the branch carries the plan + code.
+4. Plan                   → Superpowers `writing-plans` skill (decompose into 2–5 min tasks) — the **first implementation step on the branch**, optionally alongside a committed design doc. For multi-approach exploration: `parallel-plan` skill first to compare 5 approaches, then `writing-plans` to decompose the chosen one.
 5. TDD execution          → Superpowers `subagent-driven-development` or `executing-plans`, gated by `test-driven-development`. Subagents auto-load the relevant subdirectory CLAUDE.md (`backend/CLAUDE.md`, `frontend/CLAUDE.md`, `infra/CLAUDE.md`) based on the file paths they touch.
 6. Integration verification → **For any change that crosses a service boundary (frontend↔backend, backend↔DB, backend↔SQS, frontend↔SW, frontend↔CloudFront edge), exercise the real wire before opening a PR.** Choose the lightest form that fits: (a) `playwright-cli` against `task dev:up` for one-off verifications where adding a permanent test would be ceremony — e.g. "does this single new endpoint accept the method I expect" or "does my CSS change render right"; (b) a durable Playwright e2e spec under `frontend/playwright/e2e/` (run via `task e2e:up && task test:e2e`) when the contract is worth catching regressions on long-term — e.g. the connectivity probe in `offline-banner.spec.ts`, where a frontend↔backend method mismatch shipped to merge in #179 because unit tests on both sides agreed on a contract that never existed. Default to (a); promote to (b) when the same boundary will keep getting touched. Unit tests on both sides do NOT prove the contract — see lesson 12. Skip only when the diff is purely within one layer (a pure-engine refactor, a frontend visual tweak with no new API calls, etc.).
 7. Inter-task review      → Superpowers `requesting-code-review` + the `architecture` skill's review-time drift greps. Findings get a SWEEP grep command — fix agents fix ALL matches, not just the reported file.
@@ -177,10 +177,11 @@ An issue enters "Up Next" / autonomous execution only once **all** of these are 
 - [ ] **Risk class tagged** — does it hit the merge-hold set (§4)? Determines merge vs hold-open.
 - [ ] **Boundaries crossed** — which service boundaries it touches (drives integration verification).
 
-Refinement output is persisted to the **issue** (criteria + decisions in body/comments) plus a `writing-plans` plan doc on the branch. **GitHub is the source of truth for progress** — a context reset is recoverable from issue + PR state.
+Refinement output is persisted as a **Definition-of-Ready comment on the GitHub issue** — the canonical Ready record. **Refinement creates no branch and no commits** (see the `refinement` skill). The `writing-plans` plan doc and any committed design doc come later, on the implementation branch. **GitHub is the source of truth for progress** — a context reset is recoverable from issue + PR state.
 
 ### 2. Refinement protocol
 
+- Driven by the **`refinement` skill** (`.claude/skills/refinement/`), which composes `superpowers:brainstorming` for the design conversation but **redirects its output to the issue DoR comment and defers branch + `writing-plans` to implementation**. The brainstorming skill is authored to defer to project preferences, so this is the supported override — do **not** shadow it by name in `.claude/skills/`.
 - Always **together** — this is where HITL lives. The supervisor is team lead + Product Owner and makes the calls; I prep (pre-analyze candidates, surface ambiguities + options + dependencies, draft the Definition-of-Ready fill) so the session is decision-making, not discovery.
 - Refine a **small batch** (start 2–3 issues; expand only after calibration — see Rollout). Small batches bound both review blast-radius and spec rot.
 - **Sequence by dependency; put independent issues first** so completed work banks before any surprise hang. Select batches to **minimize stacking** — prefer independent breadth over stacked depth.
@@ -450,6 +451,7 @@ GitHub Actions are pinned to commit SHAs (#113), not tags. The pin only buys saf
 Project-local skills in `.claude/skills/` (invoked by reading their `SKILL.md` and following the instructions):
 
 - `architecture` — Per-area architecture rules (backend layered, frontend feature-folders, infra modules-vs-envs) with design-time and review-time drift greps
+- `refinement` — Take backlog issues to Definition of Ready (composes `superpowers:brainstorming`, output to the issue DoR comment, no branch until implementation). See the Refinement + Autonomous Execution Contract.
 - `parallel-plan` — Fan-out parallel approach comparison (5 approaches in parallel, then synthesize)
 - `glossary` — Ubiquitous language glossary management
 - `playwright-cli` — Browser automation for e2e testing (Microsoft's `@playwright/cli`)
