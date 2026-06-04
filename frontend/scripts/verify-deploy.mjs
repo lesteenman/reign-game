@@ -57,7 +57,9 @@ page.on('console', (m) => {
   let host = '';
   try {
     host = new URL(m.location()?.url || '').host;
-  } catch {}
+  } catch {
+    /* ignore unparseable/relative URLs */
+  }
   if (host && host === baseHost) appErrors.push(`console: ${m.text().slice(0, 150)} (${m.location().url})`);
   else ignoredErrors.push(`${m.text().slice(0, 80)} (${host || 'no-origin'})`);
 });
@@ -67,7 +69,9 @@ page.on('response', (r) => {
     if (u.host === baseHost && u.pathname.startsWith('/api/')) {
       apiResponses.push({ path: u.pathname, status: r.status() });
     }
-  } catch {}
+  } catch {
+    /* ignore unparseable/relative URLs */
+  }
 });
 
 // '/play?flow=daily' is the real daily entry (router.tsx) -> DailyFlow,
