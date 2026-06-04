@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  deployments: write # create the acc Deployment record (#241)
 
 jobs:
   deploy:

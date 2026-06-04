@@ -64,18 +64,23 @@ page.on('console', (m) => {
 page.on('response', (r) => {
   try {
     const u = new URL(r.url());
-    if (u.host === new URL(BASE).host && u.pathname.startsWith('/api/')) {
+    if (u.host === baseHost && u.pathname.startsWith('/api/')) {
       apiResponses.push({ path: u.pathname, status: r.status() });
     }
   } catch {}
 });
 
-for (const path of ['/', '/daily']) {
+// '/play?flow=daily' is the real daily entry (router.tsx) -> DailyFlow,
+// which makes a keyed /api/daily/* call. A stale bundle without x-api-key
+// would 403/401 there — the #225-class catch. Landing ('/') only fires
+// the keyless health probe, so it can't catch a missing key on its own.
+for (const path of ['/', '/play?flow=daily']) {
   try {
     await page.goto(BASE + path, { waitUntil: 'networkidle', timeout: 45000 });
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(2500);
   } catch (e) {
     fail(`navigation to ${path} failed: ${e.message.split('\n')[0]}`);
+    break;
   }
 }
 await browser.close();
