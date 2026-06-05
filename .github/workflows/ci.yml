@@ -92,11 +92,11 @@ jobs:
       # every step in the job (including npm ci) carries no
       # supply-chain risk. The secret key (CLERK_SECRET_KEY) is NOT
       # set here — the integration job has no backend.
-      # Env-mapping: GitHub secret named CLERK_PUBLISHABLE_KEY (the Path A
-      # name, shared with the CD pipeline) is exposed to Vite under the
+      # Env-mapping: GitHub secret named CI_CLERK_PUBLISHABLE_KEY (CI's own copy;
+      # the acc Environment holds CD's CLERK_PUBLISHABLE_KEY) is exposed to Vite under the
       # VITE_-prefixed env var name that Vite requires for browser-bundle
       # injection. Same value, two names — no separate Path C secret.
-      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.CI_CLERK_PUBLISHABLE_KEY }}
     defaults:
       run:
         working-directory: frontend
@@ -168,11 +168,11 @@ jobs:
       # CLERK_SECRET_KEY is NOT set here — it stays step-scoped on
       # `task e2e:up` only, closing the supply-chain exfiltration window
       # via npm ci. (See PR-#89 review-local Security MAJOR finding.)
-      # Env-mapping: GitHub secret named CLERK_PUBLISHABLE_KEY (the Path A
-      # name, shared with the CD pipeline) is exposed to Vite under the
+      # Env-mapping: GitHub secret named CI_CLERK_PUBLISHABLE_KEY (CI's own copy;
+      # the acc Environment holds CD's CLERK_PUBLISHABLE_KEY) is exposed to Vite under the
       # VITE_-prefixed env var name that Vite requires for browser-bundle
       # injection. Same value, two names — no separate Path C secret.
-      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.CI_CLERK_PUBLISHABLE_KEY }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -232,7 +232,7 @@ jobs:
       # safe). Dev-tenant keys ONLY (CW-12, design-grill Finding 1).
       - name: Bring up e2e stack
         env:
-          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CI_CLERK_SECRET_KEY }}
         run: task e2e:up
 
       # Step-level env: test-user credentials are consumed by Playwright's
@@ -253,7 +253,7 @@ jobs:
       - name: Run e2e project
         working-directory: frontend
         env:
-          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_SECRET_KEY: ${{ secrets.CI_CLERK_SECRET_KEY }}
           E2E_CLERK_TEST_USER_EMAIL: ${{ secrets.E2E_CLERK_TEST_USER_EMAIL }}
           # E2E_CLERK_TEST_*_PASSWORD: stored and step-scoped here for future
           # test flexibility (e.g. password-strategy admin sign-in via Clerk's
@@ -311,8 +311,8 @@ jobs:
 
       - uses: aws-actions/configure-aws-credentials@99214aa6889fcddfa57764031d71add364327e59 # v6.1.3
         with:
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
+          role-to-assume: ${{ secrets.CI_AWS_ROLE_ARN }}
+          aws-region: ${{ vars.CI_AWS_REGION }}
 
       - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
         with:
@@ -331,9 +331,9 @@ jobs:
       - name: Terraform Init
         run: |
           terraform init \
-            -backend-config="bucket=${{ secrets.TF_VAR_TERRAFORM_STATE_BUCKET }}" \
-            -backend-config="key=${{ vars.TF_VAR_TERRAFORM_STATE_PREFIX }}/terraform.tfstate" \
-            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="bucket=${{ secrets.CI_TF_VAR_TERRAFORM_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.CI_TF_VAR_TERRAFORM_STATE_PREFIX }}/terraform.tfstate" \
+            -backend-config="region=${{ vars.CI_AWS_REGION }}" \
             -backend-config="use_lockfile=true"
 
       - name: Terraform Validate
@@ -359,13 +359,13 @@ jobs:
         # take the same -var set as CD apply" was captured on 2026-05-08
         # but never applied to the workflow until now.
         env:
-          TF_VAR_clerk_publishable_key: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
-          TF_VAR_clerk_secret_key: ${{ secrets.CLERK_SECRET_KEY }}
-          TF_VAR_domain_aliases: ${{ vars.DOMAIN_ALIASES }}
-          TF_VAR_acm_certificate_arn: ${{ vars.ACM_CERTIFICATE_ARN }}
+          TF_VAR_clerk_publishable_key: ${{ secrets.CI_CLERK_PUBLISHABLE_KEY }}
+          TF_VAR_clerk_secret_key: ${{ secrets.CI_CLERK_SECRET_KEY }}
+          TF_VAR_domain_aliases: ${{ vars.CI_DOMAIN_ALIASES }}
+          TF_VAR_acm_certificate_arn: ${{ vars.CI_ACM_CERTIFICATE_ARN }}
         run: |
           terraform plan -no-color -out=tfplan \
-            -var="aws_region=${{ vars.AWS_REGION }}" \
+            -var="aws_region=${{ vars.CI_AWS_REGION }}" \
             -var="lambda_zip_path=${{ github.workspace }}/backend/build/lambda.zip" \
             -var="daily_cron_lambda_zip_path=${{ github.workspace }}/backend/build/daily-cron.zip"
         continue-on-error: true

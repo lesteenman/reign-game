@@ -7,11 +7,24 @@ on:
 permissions:
   contents: read
   id-token: write
+  deployments: write # create the acc Deployment record (#241)
 
 jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    # Attaching the job to the `acc` Environment does two things:
+    # (1) the deploy secrets/vars resolve from the environment (the bare
+    # repo-level copies were retired — see infra/CLAUDE.md), and (2) GitHub
+    # auto-creates a Deployment record + status for acc (visible in the
+    # Environments view / PR timeline) with no extra script. The post-deploy
+    # verification step below is the job's last step, so a failed check
+    # fails the job and the Deployment auto-marks `failure`.
+    # NOTE: this changes the OIDC `sub` to `repo:...:environment:acc` — the
+    # deploy role's trust policy must allow that subject (#241).
+    environment:
+      name: acc
+      url: https://reign.acc.steenman.me
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -125,3 +138,20 @@ jobs:
         run: |
           DIST_ID=$(terraform -chdir=infra output -raw frontend_distribution_id)
           aws cloudfront create-invalidation --distribution-id "${DIST_ID}" --paths "/*"
+
+      # Post-deploy verification — gates the (native) acc Deployment status.
+      # Last step of the job, so a failure marks the Deployment `failure`.
+      # Probes the live site only (no secrets); see frontend/scripts/verify-deploy.mjs.
+      - name: Cache Playwright browsers
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install Playwright chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Post-deploy verification
+        working-directory: frontend
+        run: node scripts/verify-deploy.mjs https://reign.acc.steenman.me
