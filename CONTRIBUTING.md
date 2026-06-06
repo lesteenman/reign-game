@@ -18,11 +18,11 @@ maintained in parallel.
 
 ### Claude Code Setup
 
-This project uses [Claude Code](https://claude.ai/code) with custom agents and skills for development workflows. If you use Claude Code:
+This project uses [Claude Code](https://claude.ai/code) with custom skills for development workflows. If you use Claude Code:
 
 1. **Install Claude Code** — follow the [official docs](https://docs.anthropic.com/en/docs/claude-code)
 
-2. **Install required plugins** — these skills are used by the frontend-dev, ui-ux-designer, and design-flow agents:
+2. **Install required plugins** — these skills back the project's visual design work:
 
    ```bash
    # Frontend design guidance
@@ -34,9 +34,9 @@ This project uses [Claude Code](https://claude.ai/code) with custom agents and s
 
    The marketplace for `ui-ux-pro-max` is hosted at `github:nextlevelbuilder/ui-ux-pro-max-skill`. If the install prompts for a marketplace source, use that.
 
-3. **Verify setup** — the project-local settings (`.claude/settings.json`) and all agent definitions (`.claude/agents/`) are committed to the repo and will be picked up automatically.
+3. **Verify setup** — the project-local settings (`.claude/settings.json`) and all skill definitions (`.claude/skills/`) are committed to the repo and picked up automatically.
 
-Without these plugins, agents that reference `skills/frontend-design/SKILL.md` or `skills/ui-ux-pro-max/SKILL.md` will fail during visual design phases. Non-visual work (backend, infrastructure, tests) is unaffected.
+Without these plugins, visual design work that references `skills/frontend-design/SKILL.md` or `skills/ui-ux-pro-max/SKILL.md` will fail. Non-visual work (backend, infrastructure, tests) is unaffected.
 
 ## Development Workflow
 
