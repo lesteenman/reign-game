@@ -237,10 +237,7 @@ export function PostCompletionScreen({
         <Heading>Done for today</Heading>
 
         {synthetic409 ? (
-          <AlreadySubmitted
-            data-testid="daily-already-submitted"
-            role="status"
-          >
+          <AlreadySubmitted data-testid="daily-already-submitted">
             Already submitted earlier today
           </AlreadySubmitted>
         ) : (
