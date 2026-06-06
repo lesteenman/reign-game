@@ -14,6 +14,12 @@ export interface PostCompletionScreenProps {
   submittedAt: string; // RFC3339
   leaderboardRank?: number; // present only for signed-in users
   /**
+   * True when the solve was already recorded server-side (409). Shows
+   * an "already submitted" message in place of the (synthetic 0:00)
+   * solve time and submission timestamp.
+   */
+  synthetic409?: boolean;
+  /**
    * Optional injection point for "now" so countdown logic is
    * deterministic in tests. Defaults to `new Date()`.
    */
@@ -67,6 +73,16 @@ const SolveTime = styledAny(Text, {
   // lowercase DOM attributes (`fontvariantnumeric`); the inline
   // `style={}` channel goes through React's normal camelCase →
   // kebab-case translation instead.
+});
+
+const AlreadySubmitted = styledAny(Text, {
+  name: 'PostCompletionAlreadySubmitted',
+  fontSize: '$5',
+  fontWeight: '600',
+  color: '$body',
+  textAlign: 'center',
+  render: <p />,
+  margin: 0,
 });
 
 const RankLine = styledAny(Text, {
@@ -180,6 +196,7 @@ export function PostCompletionScreen({
   serverElapsedMs,
   submittedAt,
   leaderboardRank,
+  synthetic409,
   now,
 }: PostCompletionScreenProps) {
   const navigate = useNavigate();
@@ -219,13 +236,19 @@ export function PostCompletionScreen({
       <Card data-testid="daily-post-completion">
         <Heading>Done for today</Heading>
 
-        <SolveTime
-          data-testid="daily-solve-time"
-          aria-label={`Solve time ${formatSolveTime(serverElapsedMs)}`}
-          style={{ fontVariantNumeric: 'tabular-nums' }}
-        >
-          {formatSolveTime(serverElapsedMs)}
-        </SolveTime>
+        {synthetic409 ? (
+          <AlreadySubmitted data-testid="daily-already-submitted">
+            Already submitted earlier today
+          </AlreadySubmitted>
+        ) : (
+          <SolveTime
+            data-testid="daily-solve-time"
+            aria-label={`Solve time ${formatSolveTime(serverElapsedMs)}`}
+            style={{ fontVariantNumeric: 'tabular-nums' }}
+          >
+            {formatSolveTime(serverElapsedMs)}
+          </SolveTime>
+        )}
 
         {typeof leaderboardRank === 'number' && (
           <RankLine data-testid="daily-leaderboard-rank">
@@ -245,9 +268,11 @@ export function PostCompletionScreen({
           </CountdownValue>
         </CountdownBlock>
 
-        <SubmittedAt data-testid="daily-submitted-at">
-          Submitted at {submittedAtText}
-        </SubmittedAt>
+        {!synthetic409 && (
+          <SubmittedAt data-testid="daily-submitted-at">
+            Submitted at {submittedAtText}
+          </SubmittedAt>
+        )}
 
         <SecondaryButton onClick={handleBack} data-testid="daily-back-home">
           Back to home

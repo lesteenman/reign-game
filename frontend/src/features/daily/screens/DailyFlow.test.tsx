@@ -325,10 +325,14 @@ describe('DailyFlow', () => {
     // Act
     fireEvent.click(screen.getByTestId('daily-stub-solve'));
 
-    // Assert
+    // Assert — post-completion shows the "already submitted" copy, not 0:00
     await waitFor(() => {
       expect(screen.getByTestId('daily-post-completion')).toBeInTheDocument();
     });
+    expect(screen.getByTestId('daily-already-submitted')).toHaveTextContent(
+      'Already submitted earlier today',
+    );
+    expect(screen.queryByTestId('daily-solve-time')).not.toBeInTheDocument();
   });
 
   it('transitions playing -> submit-error -> playing on retry', async () => {

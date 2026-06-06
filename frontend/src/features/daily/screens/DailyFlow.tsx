@@ -235,6 +235,7 @@ export function DailyFlow() {
         serverElapsedMs={mutation.data.result.serverElapsedMs}
         submittedAt={mutation.data.submittedAt}
         leaderboardRank={mutation.data.result.leaderboardRank}
+        synthetic409={mutation.data.synthetic409}
       />
     );
   }
