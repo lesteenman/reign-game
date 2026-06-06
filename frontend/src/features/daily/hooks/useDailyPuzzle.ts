@@ -58,12 +58,14 @@ export type CurrentDailyState =
  * `retry: false` — the error state is a user-visible UI with an
  * explicit Try Again button; auto-retry would mask it.
  *
- * `refetchOnWindowFocus: false` — re-running the queryFn on focus
- * would re-issue the GET. The daily endpoint returns the same payload
- * for the same UTC day so the data wouldn't change, but the extra
- * round-trip is wasted. If the user is mid-play, refetch would also
- * race the submit-mutation's persistence on the same `(daily, date)`
- * IDB slot.
+ * `refetchOnWindowFocus: true` — the daily has a cross-tab case: solve
+ * in tab A, refocus tab B (mid-play), and the server now answers
+ * `solved` while tab B still shows the playing board. Re-running the
+ * queryFn on focus (IDB short-circuit → `getDaily`) propagates that
+ * `solved` outcome to the UI, which already branches on it. The IDB
+ * slot is keyed `(daily, date)` and the read path is identity-stable
+ * when nothing changed, so a refocus mid-play returns the same playing
+ * state without clobbering local placement.
  *
  * Defensive `kind: 'solved'` from the GET requires both
  * `serverElapsedMs` AND `submittedAt`. A `console.warn` fires when
@@ -77,7 +79,7 @@ export function useDailyPuzzle() {
   return useQuery<CurrentDailyState, ApiError | Error>({
     queryKey: ['daily', todayUtcDate()],
     retry: false,
-    refetchOnWindowFocus: false,
+    refetchOnWindowFocus: true,
     queryFn: async () => {
       // Step 1: IDB short-circuit.
       try {
