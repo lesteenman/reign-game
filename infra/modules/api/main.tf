@@ -82,7 +82,10 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
           "dynamodb:Query",
           "dynamodb:TransactWriteItems"
         ]
-        Resource = var.puzzle_table_arn
+        # Index ARN included so the api Lambda can Query the ready-index GSI
+        # (CountReady/NextReady). The generator only writes the readyPoolKey
+        # attribute via PutPuzzle and never reads the GSI.
+        Resource = [var.puzzle_table_arn, "${var.puzzle_table_arn}/index/*"]
       }
     ]
   })

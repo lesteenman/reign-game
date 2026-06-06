@@ -208,9 +208,14 @@ func writeFixture(dir string, f fixture) error {
 // deterministic.
 func puzzleItem(pk, sk string, seed int64, p *generator.Puzzle, solution [][]bool, approved bool) map[string]any {
 	item := map[string]any{
-		"PK":                   s(pk),
-		"SK":                   s(sk),
-		"status":               s("ready"),
+		"PK":     s(pk),
+		"SK":     s(sk),
+		"status": s("ready"),
+		// readyPoolKey mirrors repository.PutPuzzle: the sparse ready-index
+		// key, present on ready rows and equal to the PK value. Fixtures are
+		// loaded via raw put-item (not PutPuzzle), so it must be set here or
+		// the e2e backend's GSI-backed CountReady/NextReady won't see them.
+		"readyPoolKey":         s(pk),
 		"regionMap":            listOfListOfInt(p.Regions),
 		"solution":             listOfListOfBool(solution),
 		"difficulty":           n(int(p.Difficulty)),

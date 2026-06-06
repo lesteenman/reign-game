@@ -17,6 +17,9 @@
   "maxTier": {
     "N": "3"
   },
+  "readyPoolKey": {
+    "S": "9#standard"
+  },
   "regionMap": {
     "L": [
       {
