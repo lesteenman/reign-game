@@ -21,6 +21,13 @@ updates:
     groups:
       frontend-minor-patch:
         update-types: ["minor", "patch"]
+    # eslint 10 is held until eslint-plugin-react and eslint-plugin-import
+    # ship eslint ^10 peer support (see #251). The major bump breaks the
+    # npm peer graph, which this repo refuses to override. Minor/patch
+    # eslint bumps still flow via the frontend-minor-patch group above.
+    ignore:
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: gomod
     directory: /backend
