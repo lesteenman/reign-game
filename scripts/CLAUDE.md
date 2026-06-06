@@ -1,8 +1,8 @@
 # Scripts — Dev-Stack Lifecycle
 
 The dev/e2e stacks run via `Taskfile.yml` tasks backed by `scripts/dev/lib.sh`. Operational commands
-(what to run) live in `/CLAUDE.md` → Commands. This file covers how the lifecycle works and the shell
-pitfalls to know before editing it.
+(what to run) live in `/CLAUDE.md` → Commands. This file covers how the lifecycle works. The shell
+pitfalls to know before editing the lifecycle tasks are in a comment block at the head of `Taskfile.yml`.
 
 ## How the dev stack works
 

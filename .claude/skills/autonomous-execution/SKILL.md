@@ -1,6 +1,6 @@
 ---
 name: autonomous-execution
-description: Work a batch of Ready (Definition-of-Ready) GitHub issues one after another while the supervisor is away — one PR per issue, full Change Workflow gates per PR, notify-and-hold on any surprise, autonomous merge for low-risk work, hold-open for the risk set, end-of-session digest on return. Trigger when picking up "Up Next" issues for an autonomous run, or when the user says "work the ready issues", "run the backlog", "pick up Up Next".
+description: Trigger when picking up Ready issues from the project board's "Up Next" column for an autonomous implementation run, or when the user says "work the ready issues", "run the backlog", or "pick up Up Next". Runs Ready issues one PR at a time with the full Change Workflow gates, notify-and-hold on surprises, autonomous merge for low-risk work, and an end-of-session digest.
 ---
 
 # Autonomous Execution

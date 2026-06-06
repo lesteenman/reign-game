@@ -260,8 +260,9 @@ changes: Vite HMR handles most; restart only after editing `vite.config.ts` or s
 | LocalStack    | 4566 | `task dev:up:localstack`   |
 
 The frontend binds `--host 0.0.0.0` for mobile testing over LAN; the Vite proxy forwards `/api/*` to
-`localhost:5181`. All backend routes live under `/api/`. How the lifecycle tasks work internally, and
-the Taskfile shell pitfalls to know before editing them, are in `scripts/CLAUDE.md`.
+`localhost:5181`. All backend routes live under `/api/`. How the lifecycle tasks work internally is in
+`scripts/CLAUDE.md`; the shell pitfalls to know before editing them are in a comment block at the head
+of `Taskfile.yml`.
 
 ## Git Hooks
 
