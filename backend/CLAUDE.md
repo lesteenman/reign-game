@@ -61,6 +61,8 @@ Stdlib `log` only — no `slog`, no third-party loggers. Small project, small su
 ## Testing (TDD — non-negotiable)
 
 Project-wide TDD rule in `/CLAUDE.md`. Backend-specific:
+- Structure every test Arrange-Act-Assert with explicit `// Arrange`, `// Act`, `// Assert` comments.
+- Run a single test: `go test -run TestName ./internal/<pkg>/...`.
 - Aim for above 90% coverage on services and repositories.
 - Test happy + unhappy + edge cases. Boundary values, NaN, Inf, empty strings, max values.
 - Mock external dependencies (AWS clients, Clerk client), not the unit under test.
