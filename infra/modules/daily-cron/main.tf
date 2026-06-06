@@ -88,6 +88,17 @@ resource "aws_iam_role_policy" "daily_cron_sqs" {
   })
 }
 
+# Explicit log group so retention is bounded (AWS auto-creates the group on
+# first invocation with "Never expire"). Name must equal /aws/lambda/<fn>
+# exactly so the Lambda adopts this group instead of auto-creating a second.
+# NOTE: in any environment where the Lambda has already run, the group
+# already exists and must be `terraform import`-ed before the first apply
+# (see this PR's description) or apply fails with "log group already exists".
+resource "aws_cloudwatch_log_group" "daily_cron" {
+  name              = "/aws/lambda/${local.function_name}"
+  retention_in_days = 30
+}
+
 # Daily-cron Lambda function
 resource "aws_lambda_function" "daily_cron" {
   function_name = local.function_name
