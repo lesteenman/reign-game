@@ -121,15 +121,15 @@ git config core.hooksPath .githooks
 # so the committed `git@github.com:` remote can't fetch or push from inside —
 # SSH fails with "Host key verification failed". Rewrite SSH GitHub URLs to
 # HTTPS and supply the PAT via a credential helper that reads
-# $GITHUB_PERSONAL_ACCESS_TOKEN at call time, so the token never lands in
-# ~/.gitconfig. Same fine-grained PAT the GitHub MCP already uses (.env.local).
+# $GH_TOKEN at call time, so the token never lands in ~/.gitconfig. The same
+# GH_TOKEN powers the `gh` CLI (.env.local).
 echo "--- Configuring git auth (HTTPS + PAT) ---"
-if [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ]; then
+if [ -n "${GH_TOKEN:-}" ]; then
   git config --global url."https://github.com/".insteadOf "git@github.com:"
   git config --global credential.helper \
-    '!f() { test "$1" = get && printf "username=x-access-token\npassword=%s\n" "${GITHUB_PERSONAL_ACCESS_TOKEN}"; }; f'
+    '!f() { test "$1" = get && printf "username=x-access-token\npassword=%s\n" "${GH_TOKEN}"; }; f'
 else
-  echo "    GITHUB_PERSONAL_ACCESS_TOKEN unset — skipping; git over SSH won't work in-container." >&2
+  echo "    GH_TOKEN unset — skipping; git over SSH won't work in-container." >&2
 fi
 
 # Dependency download — pre-warm caches so first build is fast.
