@@ -116,8 +116,8 @@ Pick the flow by size:
 
 1. **Triage** — pick or open a GitHub issue.
 2. **Refine to Ready** — the `preparing-ready-issues` skill (batch pickup, dependency sequencing,
-   calibration) drives the `refining-an-issue` skill per issue (the design conversation + the full DoR
-   checklist). `refining-an-issue` is also invoked alone to refine a single issue further.
+   one-issue-at-a-time driving) drives the `refining-an-issue` skill per issue (the design conversation
+   + the full DoR checklist). `refining-an-issue` is also invoked alone to refine a single issue further.
 
 ### Implementation workflow
 
