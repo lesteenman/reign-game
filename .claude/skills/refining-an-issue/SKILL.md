@@ -19,10 +19,10 @@ source of truth). Branch, plan, and code are the *implementation* phase, which i
 ## Procedure
 
 1. **Run the design conversation via `superpowers:brainstorming`.** Use it for what it's good at:
-   Socratic, one question at a time, 2–3 approaches with a recommendation, design presented in
-   sections. Pull in `architecture` (design-time drift check) and `glossary` (vocab) as that skill
-   directs. **HITL: resolve every design fork with the supervisor. Never assume** — an unresolved fork
-   is the thing refinement exists to close.
+   Socratic questioning, 2–3 approaches with a recommendation, design presented in sections (its
+   "one question at a time" default is adapted in step 2). Pull in `architecture` (design-time drift
+   check) and `glossary` (vocab) as that skill directs. **HITL: resolve every design fork with the
+   supervisor. Never assume** — an unresolved fork is the thing refinement exists to close.
 
 2. **Redirect brainstorming's terminal steps** (the deliberate override; the skill is authored to
    defer to project preferences, so this works with the grain):
@@ -30,15 +30,22 @@ source of truth). Branch, plan, and code are the *implementation* phase, which i
      GitHub issue as the DoR comment.**
    - Its terminal step is `writing-plans` — **do NOT invoke it here.** `writing-plans` is the first
      *implementation* step, on the branch, later.
+   - Its **"one question at a time"** default → ask the supervisor's design-fork questions through the
+     **`AskUserQuestion` tool**. You MAY put multiple questions in one call **only if every question
+     belongs to *this* issue.** **Never** include another issue's fork in the same call — a call
+     spanning more than one issue is forbidden, however related or trivial. (This is the
+     one-issue-at-a-time rule; the `preparing-ready-issues` driver keeps the issues themselves
+     sequential — finish and confirm this issue before the next one's conversation starts.)
    - Do **not** create a branch.
 
 3. **Post the Definition of Ready as an issue comment.** Fill every box of the checklist below. Any
    blank box means not Ready. Include the resolved design.
 
-4. **Move the issue to "Up Next."** Once the DoR comment is posted, run `task board:up-next ISSUE=<n>`
-   so the card lands in the project board's Up Next column automatically. The supervisor reviews via
-   that column rather than gating each move. Requires `GH_TOKEN` (Projects: read/write) in
-   `.devcontainer/.env.local`.
+4. **Confirm with the supervisor, then move to "Up Next."** Post the DoR, then get the supervisor's
+   confirmation of *this* issue's DoR — the per-issue focus checkpoint (see `preparing-ready-issues` →
+   One issue at a time). Only then run `task board:up-next ISSUE=<n>` so the card lands in the project
+   board's Up Next column, and only then start the next issue's conversation. Requires `GH_TOKEN`
+   (Projects: read/write) in `.devcontainer/.env.local`.
 
 ## Definition of Ready (the gate)
 
@@ -67,5 +74,9 @@ Surface only via notify-and-hold on a genuine surprise, plus the end-of-session 
 - ❌ Creating a branch or committing a spec file during refinement (premature; clutters git).
 - ❌ Invoking `writing-plans` as part of refinement (that's implementation).
 - ❌ Answering your own design fork to "keep moving" (violates HITL — notify-and-hold instead).
+- ❌ A single `AskUserQuestion` call carrying forks for **more than one issue** (cross-issue batching —
+  forbidden however related, independent, or trivial; see `preparing-ready-issues` → One issue at a
+  time). Same-issue, multi-question calls are fine.
+- ❌ Posting more than one issue's DoR in a turn, or posting issue B's DoR before issue A is confirmed.
 - ❌ Overriding `superpowers:brainstorming` by name in `.claude/skills/` (forks a tuned skill, loses
   upstream updates). Compose it, don't shadow it.
