@@ -6,7 +6,7 @@ CD/deploy failures are NOT this routine's concern — they surface through the p
 
 ## Authentication
 
-Use `curl` with the token inlined in each request. The fine-grained PAT is scoped to lesteenman/reign-game with Metadata:read, Dependabot alerts:read, Issues:write. Do NOT use the `gh` CLI — it is not available in this environment.
+Use `curl` with the token inlined in each request. The fine-grained PAT is scoped to lesteenman/reign-game with Metadata:read and Dependabot alerts:read (read-only — this routine alerts via a push notification, it does not write to GitHub). Do NOT use the `gh` CLI — it is not available in this environment.
 
 The actual PAT is embedded in the routine prompt configured in the Claude Code web interface (not stored here — secrets must not be committed to the repo). Replace `<TOKEN>` in every curl command below with the PAT from the routine prompt.
 
@@ -51,43 +51,25 @@ If the response contains `{"error": "..."}`: the PAT doesn't have Dependabot sco
 
 ## Step 2 — Decide whether to alert
 
-If the list is empty: print `"all green at $(date -u +%FT%TZ)"` to your own log and exit silently. Do NOT create any GitHub issue or take any other action.
+If the list is empty: print `"all green at $(date -u +%FT%TZ)"` to your own log and exit silently. Do NOT send a notification or take any other action.
 
 If the list is non-empty: proceed to Step 3.
 
-## Step 3 — Open a GitHub issue with the findings
+## Step 3 — Notify the user
 
-Create the issue via a `curl` POST (the `gh` CLI is not available here). Build the body, then POST it:
+Send a single push notification via the `PushNotification` tool. Do **not** open a GitHub issue: Dependabot already tracks the advisory in the repo's Security tab and usually has an open PR for the fix, so a tracked issue would just duplicate that. The notification is a lightweight "go triage" ping; GitHub holds the durable record.
 
-```bash
-curl -s -X POST \
-  -H "Authorization: token <TOKEN>" \
-  -H "Accept: application/vnd.github+json" \
-  "https://api.github.com/repos/lesteenman/reign-game/issues" \
-  -d "$(python3 -c '
-import json
-body = """## Dependabot alerts (critical + high)
+Keep it to one line, under 200 chars:
 
-- **<severity>** — <package>: <summary>
-  <url>
-
-## Notes
-
-Surfaced by the **Reign Dependabot monitor** routine. Close this issue once the underlying problem is fixed."""
-print(json.dumps({
-    "title": "[Monitor] <YYYY-MM-DD HH:MM UTC>: <M> Dependabot alert(s)",
-    "labels": ["area:devops", "type:bug", "priority:p0", "status:blocks-prod"],
-    "body": body,
-}))
-')"
+```
+<M> critical/high Dependabot alert(s): <top package> (<severity>)[, +<N> more] — https://github.com/lesteenman/reign-game/security/dependabot
 ```
 
-Fill the `<...>` placeholders from Step 1 (one bullet per alert; use the actual count in the title). After successful creation, print the issue URL.
+Name the highest-severity package; if more than one alert, append `, +<N> more`. The link points at the repo's Dependabot alerts page so the user can triage from there.
 
 ## Constraints
 
 - Do NOT retry any API call more than once.
-- Do NOT comment on existing issues — always create a fresh issue.
+- Do NOT create GitHub issues or comment on existing ones — alerting is via the push notification only.
 - Do NOT modify CI/CD config, code, or any other state.
-- Do NOT close any issues.
 - Stop after one pass. No follow-up actions.

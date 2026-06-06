@@ -151,7 +151,7 @@ the `executing-ready-issues` skill. Each issue runs the per-PR pipeline below:
     post-deploy verification gate (GitHub Environments + Deployments, #241) — don't inline-watch with
     `gh run watch`. CI green is not CD green: TF state can fail on drift, IAM can fail to attach, frontend
     sync can fail post-build. The scheduled routine now watches only Dependabot (critical/high alerts →
-    `priority:p0` issue).
+    push notification, not a tracked issue — Dependabot's own PR + Security tab hold the record).
 11. **Retro** — the `retro` skill on shipped features.
 
 ### Pipeline rules
