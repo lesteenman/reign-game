@@ -22,6 +22,22 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   restrict_public_buckets = true
 }
 
+# Explicit at-rest encryption with SSE-S3 (AES256). The bucket holds
+# public static frontend assets (no secrets), so the AWS-owned SSE-S3 key
+# is the right fit — SSE-KMS would add key cost + per-request KMS calls +
+# a kms:Decrypt grant on the OAC path for no compliance benefit.
+# Functionally identical to the AWS default; declared for audit visibility
+# and drift prevention.
+resource "aws_s3_bucket_server_side_encryption_configuration" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
 # Origin Access Control for CloudFront -> S3
 resource "aws_cloudfront_origin_access_control" "frontend" {
   name                              = "${var.project_name}-${var.environment}-oac"
