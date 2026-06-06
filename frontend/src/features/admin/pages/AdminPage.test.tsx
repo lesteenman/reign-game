@@ -108,9 +108,10 @@ describe('AdminPage', () => {
     // Act
     fireEvent.click(screen.getByTestId('replenish-all'));
 
-    // Assert
+    // Assert — replenish-all calls the service with no size/mode.
+    // (useReplenish forwards undefined for both via triggerReplenish(size, mode).)
     await waitFor(() => {
-      expect(mockTriggerReplenish).toHaveBeenCalledWith();
+      expect(mockTriggerReplenish).toHaveBeenCalledWith(undefined, undefined);
     });
   });
 
@@ -150,6 +151,47 @@ describe('AdminPage', () => {
     // Assert
     await waitFor(() => {
       expect(screen.getByText('Pool Management')).toBeInTheDocument();
+    });
+  });
+
+  it('shows the optimistic config value immediately, then settles after invalidation', async () => {
+    // Arrange — a deferred updateConfig so the optimistic state is observable
+    // before the server responds; the post-save refetch returns the new value.
+    let resolveSave!: (v: unknown) => void;
+    mockUpdateConfig.mockReturnValue(
+      new Promise((r) => {
+        resolveSave = r;
+      }),
+    );
+    renderAdmin();
+    await screen.findByTestId('pool-table');
+    expect(screen.getByText('2 / 3')).toBeInTheDocument();
+
+    // Act — open the 5x5 edit form, bump the threshold to 9, save.
+    fireEvent.click(screen.getByTestId('edit-5-standard'));
+    fireEvent.change(screen.getByLabelText('Threshold'), {
+      target: { value: '9' },
+    });
+    fireEvent.click(screen.getByTestId('save-config'));
+
+    // Assert — the optimistic value renders in the table while the request
+    // is still pending (server hasn't resolved yet).
+    await waitFor(() => {
+      expect(screen.getByText('2 / 9')).toBeInTheDocument();
+    });
+
+    // The settled refetch returns the persisted pool with the new threshold.
+    mockFetchPoolStatus.mockResolvedValue({
+      combos: [
+        { ...MOCK_POOL.combos[0]!, config: { threshold: 9, enabled: true } },
+        MOCK_POOL.combos[1]!,
+      ],
+    });
+    resolveSave({ size: 5, mode: 'standard', threshold: 9, enabled: true });
+
+    // The value remains after the background invalidation refetch settles.
+    await waitFor(() => {
+      expect(screen.getByText('2 / 9')).toBeInTheDocument();
     });
   });
 

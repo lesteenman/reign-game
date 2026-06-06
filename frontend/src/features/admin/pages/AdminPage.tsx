@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageShell } from '@shared/components/PageShell';
 import { MODES } from '@engine/types';
@@ -8,12 +8,10 @@ import type {
   ConfigBody,
   ConfigCreateRequest,
 } from '@shared/types/admin';
-import {
-  fetchPoolStatus,
-  updateConfig,
-  createConfig as createConfigApi,
-  triggerReplenish,
-} from '@features/admin/services/adminService';
+import { useAdminPool } from '@features/admin/hooks/useAdminPool';
+import { useReplenish } from '@features/admin/hooks/useReplenish';
+import { useUpdateConfig } from '@features/admin/hooks/useUpdateConfig';
+import { useCreateConfig } from '@features/admin/hooks/useCreateConfig';
 
 const labelStyle: React.CSSProperties = {
   display: 'flex',
@@ -313,9 +311,23 @@ function CreateConfigForm({
 /** Admin page for puzzle pool management. */
 export function AdminPage() {
   const navigate = useNavigate();
-  const [combos, setCombos] = useState<ComboStatus[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+
+  const poolQuery = useAdminPool();
+  const replenish = useReplenish();
+  const updateConfigMutation = useUpdateConfig();
+  const createConfigMutation = useCreateConfig();
+
+  const combos = poolQuery.data?.combos ?? [];
+  const loading = poolQuery.isPending;
+  // Mutation failures land here too — each handler maps its rejection to a
+  // user-facing message. The query's own error takes precedence on first load.
+  const [mutationError, setMutationError] = useState<string | null>(null);
+  const error = poolQuery.isError
+    ? poolQuery.error instanceof Error
+      ? poolQuery.error.message
+      : 'Failed to load pool status'
+    : mutationError;
+
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   // Edit state
@@ -330,46 +342,37 @@ export function AdminPage() {
   const [createSize, setCreateSize] = useState(7);
   const [createMode, setCreateMode] = useState<Mode>('standard');
 
-  const [saving, setSaving] = useState(false);
+  const saving =
+    updateConfigMutation.isPending || createConfigMutation.isPending;
 
-  const loadPool = useCallback(async () => {
-    try {
-      setError(null);
-      const data = await fetchPoolStatus();
-      setCombos(data.combos);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load pool status');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadPool();
-  }, [loadPool]);
-
-  const handleReplenishAll = async () => {
-    try {
-      setStatusMessage(null);
-      const result = await triggerReplenish();
-      setStatusMessage(
-        `Triggered ${result.triggered.length} combo(s), skipped ${result.skipped.length}`,
-      );
-      await loadPool();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Replenish failed');
-    }
+  const handleReplenishAll = () => {
+    setStatusMessage(null);
+    setMutationError(null);
+    replenish.mutate(
+      {},
+      {
+        onSuccess: (result) =>
+          setStatusMessage(
+            `Triggered ${result.triggered.length} combo(s), skipped ${result.skipped.length}`,
+          ),
+        onError: (err) =>
+          setMutationError(err instanceof Error ? err.message : 'Replenish failed'),
+      },
+    );
   };
 
-  const handleReplenishCombo = async (size: number, mode: Mode) => {
-    try {
-      setStatusMessage(null);
-      await triggerReplenish(size, mode);
-      setStatusMessage(`Replenish triggered for ${comboLabel(size, mode)}`);
-      await loadPool();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Replenish failed');
-    }
+  const handleReplenishCombo = (size: number, mode: Mode) => {
+    setStatusMessage(null);
+    setMutationError(null);
+    replenish.mutate(
+      { size, mode },
+      {
+        onSuccess: () =>
+          setStatusMessage(`Replenish triggered for ${comboLabel(size, mode)}`),
+        onError: (err) =>
+          setMutationError(err instanceof Error ? err.message : 'Replenish failed'),
+      },
+    );
   };
 
   const handleEdit = (combo: ComboStatus) => {
@@ -378,21 +381,21 @@ export function AdminPage() {
     setEditConfig({ ...combo.config });
   };
 
-  const handleSaveEdit = async () => {
+  const handleSaveEdit = () => {
     if (!editingCombo) return;
-    setSaving(true);
-    try {
-      await updateConfig(editingCombo.size, editingCombo.mode, editConfig);
-      setStatusMessage(
-        `Config updated for ${comboLabel(editingCombo.size, editingCombo.mode)}`,
-      );
-      setEditingCombo(null);
-      await loadPool();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed');
-    } finally {
-      setSaving(false);
-    }
+    const { size, mode } = editingCombo;
+    setMutationError(null);
+    updateConfigMutation.mutate(
+      { size, mode, config: editConfig },
+      {
+        onSuccess: () => {
+          setStatusMessage(`Config updated for ${comboLabel(size, mode)}`);
+          setEditingCombo(null);
+        },
+        onError: (err) =>
+          setMutationError(err instanceof Error ? err.message : 'Save failed'),
+      },
+    );
   };
 
   const handleShowCreate = () => {
@@ -403,23 +406,21 @@ export function AdminPage() {
     setCreateMode('standard');
   };
 
-  const handleSaveCreate = async () => {
-    setSaving(true);
-    try {
-      const payload: ConfigCreateRequest = {
-        ...newComboConfig,
-        size: createSize,
-        mode: createMode,
-      };
-      await createConfigApi(payload);
-      setStatusMessage(`Created config for ${comboLabel(createSize, createMode)}`);
-      setShowCreate(false);
-      await loadPool();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Create failed');
-    } finally {
-      setSaving(false);
-    }
+  const handleSaveCreate = () => {
+    const payload: ConfigCreateRequest = {
+      ...newComboConfig,
+      size: createSize,
+      mode: createMode,
+    };
+    setMutationError(null);
+    createConfigMutation.mutate(payload, {
+      onSuccess: () => {
+        setStatusMessage(`Created config for ${comboLabel(createSize, createMode)}`);
+        setShowCreate(false);
+      },
+      onError: (err) =>
+        setMutationError(err instanceof Error ? err.message : 'Create failed'),
+    });
   };
 
   return (
@@ -508,7 +509,7 @@ export function AdminPage() {
           </div>
         )}
 
-        {!loading && !error && (
+        {poolQuery.isSuccess && (
           <div
             data-testid="pool-table"
             style={{

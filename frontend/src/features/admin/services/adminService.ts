@@ -9,8 +9,10 @@ import type {
 } from '@shared/types/admin';
 
 /** Fetch the current pool status for all combos. */
-export async function fetchPoolStatus(): Promise<PoolStatus> {
-  return apiGet<PoolStatus>('/api/admin/pool');
+export async function fetchPoolStatus(
+  signal?: AbortSignal,
+): Promise<PoolStatus> {
+  return apiGet<PoolStatus>('/api/admin/pool', { signal });
 }
 
 /** Update the config for an existing combo. */
