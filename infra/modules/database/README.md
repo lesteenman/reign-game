@@ -30,7 +30,7 @@ None — this module does not define IAM. Callers (api, generation, daily-cron m
 
 ## Gotchas
 
-- **No explicit `server_side_encryption` block.** AWS defaults to encryption with an AWS-owned key; the audit-compliant form would set `server_side_encryption { enabled = true }`. Tracked as a follow-up cleanup.
+- **At-rest encryption is explicit** via `server_side_encryption { enabled = true }` (AWS-owned key). Functionally identical to the AWS default, but declared for audit/compliance visibility and drift prevention.
 - **No GSIs.** Every access pattern is keyed by `PK / SK`. New access patterns require either a GSI here (a Terraform change) or an item-shape change (a backend code change). Discuss before adding GSIs — they double cost.
 - **No `point_in_time_recovery` enabled.** Acceptable for the acc env where the puzzle pool can be regenerated; prod should re-evaluate.
 - **`force_destroy` is NOT set.** A destroy will fail if items exist — appropriate guard against accidental wipe.
