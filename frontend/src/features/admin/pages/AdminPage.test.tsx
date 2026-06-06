@@ -195,6 +195,27 @@ describe('AdminPage', () => {
     });
   });
 
+  it('keeps the pool table visible when a mutation fails (only initial-fetch errors hide it)', async () => {
+    // Arrange — the initial pool load succeeds; the save mutation rejects.
+    mockUpdateConfig.mockRejectedValue(new Error('Save failed'));
+    renderAdmin();
+    await screen.findByTestId('pool-table');
+
+    // Act — open the 5x5 edit form and save (mutation will reject).
+    fireEvent.click(screen.getByTestId('edit-5-standard'));
+    fireEvent.click(screen.getByTestId('save-config'));
+
+    // Assert — the mutation error surfaces, but the table stays mounted
+    // (the render gate is poolQuery.isSuccess, not the mutation state), and
+    // the optimistic patch rolls back to the original value.
+    await waitFor(() => {
+      expect(screen.getByTestId('error-message')).toBeInTheDocument();
+    });
+    expect(screen.getByText('Save failed')).toBeInTheDocument();
+    expect(screen.getByTestId('pool-table')).toBeInTheDocument();
+    expect(screen.getByText('2 / 3')).toBeInTheDocument();
+  });
+
   it('shows Add Combo button after loading', async () => {
     // Act (arrange is the default mocks from beforeEach)
     renderAdmin();
