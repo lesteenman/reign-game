@@ -147,10 +147,11 @@ the `executing-ready-issues` skill. Each issue runs the per-PR pipeline below:
 9. **Finish branch** — `superpowers:finishing-a-development-branch`. HARD GATE: steps 6+7+8 must have
    run on the branch diff first. Then `superpowers:verification-before-completion` — run build + tests
    and confirm output before claiming done. Evidence before assertions.
-10. **CD** — merge deploys to `acc` (the acceptance environment). The scheduled monitor routine watches
-    CD + Dependabot and opens a `priority:p0` issue on failure — don't inline-watch with `gh run watch`.
-    CI green is not CD green: TF state can fail on drift, IAM can fail to attach, frontend sync can fail
-    post-build.
+10. **CD** — merge deploys to `acc` (the acceptance environment). CD/deploy failures surface through the
+    post-deploy verification gate (GitHub Environments + Deployments, #241) — don't inline-watch with
+    `gh run watch`. CI green is not CD green: TF state can fail on drift, IAM can fail to attach, frontend
+    sync can fail post-build. The scheduled routine now watches only Dependabot (critical/high alerts →
+    `priority:p0` issue).
 11. **Retro** — the `retro` skill on shipped features.
 
 ### Pipeline rules
