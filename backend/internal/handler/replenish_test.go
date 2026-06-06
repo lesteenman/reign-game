@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -49,6 +50,7 @@ func keyFor(size int, mode string) string {
 
 // mockMessagePublisher implements handler.MessagePublisher for testing.
 type mockMessagePublisher struct {
+	mu        sync.Mutex
 	published []message.GenerationRequest
 	err       error
 }
@@ -57,7 +59,21 @@ func (m *mockMessagePublisher) PublishGenerationRequest(_ context.Context, req *
 	if m.err != nil {
 		return m.err
 	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.published = append(m.published, *req)
+	return nil
+}
+
+func (m *mockMessagePublisher) PublishBatch(_ context.Context, reqs []*message.GenerationRequest) error {
+	if m.err != nil {
+		return m.err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, req := range reqs {
+		m.published = append(m.published, *req)
+	}
 	return nil
 }
 

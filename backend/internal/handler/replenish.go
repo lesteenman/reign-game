@@ -29,6 +29,7 @@ type PoolCounter interface {
 // MessagePublisher publishes generation requests to the SQS queue.
 type MessagePublisher interface {
 	PublishGenerationRequest(ctx context.Context, req *message.GenerationRequest) error
+	PublishBatch(ctx context.Context, reqs []*message.GenerationRequest) error
 }
 
 // ReplenishHandler creates an HTTP handler for POST /admin/replenish.

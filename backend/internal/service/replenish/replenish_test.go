@@ -3,6 +3,7 @@ package replenish_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -61,8 +62,10 @@ func (f *fakePoolCounter) CountReady(_ context.Context, size int, mode string) (
 }
 
 type fakePublisher struct {
-	published []message.GenerationRequest
-	err       error
+	mu         sync.Mutex
+	published  []message.GenerationRequest
+	err        error
+	batchCalls int
 }
 
 func (f *fakePublisher) PublishGenerationRequest(_ context.Context, req *message.GenerationRequest) error {
@@ -70,6 +73,19 @@ func (f *fakePublisher) PublishGenerationRequest(_ context.Context, req *message
 		return f.err
 	}
 	f.published = append(f.published, *req)
+	return nil
+}
+
+func (f *fakePublisher) PublishBatch(_ context.Context, reqs []*message.GenerationRequest) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.batchCalls++
+	if f.err != nil {
+		return f.err
+	}
+	for _, req := range reqs {
+		f.published = append(f.published, *req)
+	}
 	return nil
 }
 
@@ -149,6 +165,51 @@ func TestSweep_MixedBelowAndAbove(t *testing.T) {
 	}
 	if pub.published[0].MaxAttempts != 10 {
 		t.Errorf("MaxAttempts = %d, want 10", pub.published[0].MaxAttempts)
+	}
+}
+
+func TestSweep_MultiCombo_BatchesAndPreservesConfigOrder(t *testing.T) {
+	// Arrange — an empty multi-combo pool. Each enabled combo is below
+	// threshold by a different deficit, exercising chunking (>10) and the
+	// concurrent publish. Result order must follow config iteration order
+	// regardless of goroutine completion order.
+	pub := &fakePublisher{}
+	deps := replenish.SweepDeps{
+		Configs: &fakeConfigReader{all: []configsvc.ConfigView{
+			enabledConfig(5, "standard", 25, 1), // needed 25 -> 3 batches
+			enabledConfig(7, "standard", 4, 2),  // needed 4
+			enabledConfig(9, "standard", 12, 3), // needed 12 -> 2 batches
+		}},
+		Counter:   &fakePoolCounter{counts: map[string]int{}},
+		Publisher: pub,
+	}
+
+	// Act
+	got, err := replenish.Sweep(context.Background(), deps, replenish.Filter{})
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wantOrder := []struct {
+		size  int
+		count int
+	}{{5, 25}, {7, 4}, {9, 12}}
+	if len(got.Triggered) != len(wantOrder) {
+		t.Fatalf("triggered len = %d, want %d (%+v)", len(got.Triggered), len(wantOrder), got.Triggered)
+	}
+	for i, w := range wantOrder {
+		if got.Triggered[i].Size != w.size || got.Triggered[i].Count != w.count {
+			t.Errorf("triggered[%d] = %+v, want size=%d count=%d", i, got.Triggered[i], w.size, w.count)
+		}
+	}
+	if len(pub.published) != 25+4+12 {
+		t.Errorf("published = %d, want %d", len(pub.published), 25+4+12)
+	}
+	// Publishing must go through PublishBatch (one call per combo), not the
+	// serial per-message PublishGenerationRequest path.
+	if pub.batchCalls != 3 {
+		t.Errorf("PublishBatch calls = %d, want 3 (one per triggered combo)", pub.batchCalls)
 	}
 }
 
