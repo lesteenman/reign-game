@@ -108,17 +108,20 @@ If ANY list is non-empty: proceed to Step 4.
 
 ## Step 4 — Open a GitHub issue with the findings
 
-Use the `mcp__github__issue_write` MCP tool (NOT `gh issue create` — `gh` is not available):
+Use `gh issue create`:
 
+```bash
+gh issue create \
+  --repo lesteenman/reign-game \
+  --title "[Monitor] <YYYY-MM-DD HH:MM UTC>: <N> CD failure(s) + <M> Dependabot alert(s)" \
+  --label "area:devops" --label "type:bug" --label "priority:p0" --label "status:blocks-prod" \
+  --body "$(cat <<'EOF'
+<markdown — see template below>
+EOF
+)"
 ```
-method: create
-owner: lesteenman
-repo: reign-game
-title: "[Monitor] <YYYY-MM-DD HH:MM UTC>: <N> CD failure(s) + <M> Dependabot alert(s)"
-  (Omit either half if count is 0. E.g.: "[Monitor] 2026-05-16 07:00 UTC: 1 CD failure")
-labels: ["area:devops", "type:bug", "priority:p0", "status:blocks-prod"]
-body: (markdown — see template below)
-```
+
+(Omit either count half if it is 0. E.g.: `[Monitor] 2026-05-16 07:00 UTC: 1 CD failure`.)
 
 Body template:
 ```markdown
