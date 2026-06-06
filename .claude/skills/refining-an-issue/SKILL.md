@@ -39,7 +39,8 @@ source of truth). Branch, plan, and code are the *implementation* phase, which i
    - Do **not** create a branch.
 
 3. **Post the Definition of Ready as an issue comment.** Fill every box of the checklist below. Any
-   blank box means not Ready. Include the resolved design.
+   blank box means not Ready. Include the resolved design. Post **only this issue's** DoR — never bundle
+   another issue's DoR into the same turn.
 
 4. **Confirm with the supervisor, then move to "Up Next."** Post the DoR, then get the supervisor's
    confirmation of *this* issue's DoR — the per-issue focus checkpoint (see `preparing-ready-issues` →

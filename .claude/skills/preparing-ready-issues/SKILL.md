@@ -1,6 +1,6 @@
 ---
 name: preparing-ready-issues
-description: Use when prepping a batch of backlog GitHub issues for autonomous execution — the user says "let's refine", "refinement session", "do a refinement batch", or points at several issues to take to Definition of Ready together. For refining a single named issue, use the refining-an-issue skill directly.
+description: Use when prepping a batch of backlog GitHub issues for autonomous execution — the user says "let's refine", "refinement session", "do a refinement batch", or points at several issues to take to Definition of Ready as a batch. For refining a single named issue, use the refining-an-issue skill directly.
 ---
 
 # Preparing Ready Issues
@@ -30,7 +30,8 @@ dependencies, draft the Definition-of-Ready fills — so the session is decision
    non-negotiable.
 
 3. **Confirm the Ready set.** A session ends when each issue has its DoR comment posted and the
-   supervisor confirms. The issues move to "Up Next." Hand off to `executing-ready-issues`.
+   supervisor confirms. (Each issue was already confirmed per step 2 — this is the closing handoff, not
+   a second gate.) The issues move to "Up Next." Hand off to `executing-ready-issues`.
 
 GitHub is the source of truth for progress — a context reset is recoverable from issue + PR state.
 
