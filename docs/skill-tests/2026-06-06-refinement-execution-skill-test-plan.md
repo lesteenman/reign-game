@@ -71,3 +71,29 @@ Three pressure scenarios. Each: concrete options, real constraints, "what do you
 ## Reporting
 
 Per your standing instruction: **report findings, don't auto-apply.** Output = a table of hit-rates + every verbatim rationalization from misses + a proposed fix per failing test, held for your approval. Renames (if you chose any above) happen separately.
+
+---
+
+## Results (run 2026-06-06)
+
+**Step 0 (feasibility):** PASS — subagents see the project skill registry and name skills correctly.
+
+| Test | Result | Verdict |
+|---|---|---|
+| A1 refine #214 | refining-an-issue 3/3 | ✅ |
+| A2 single issue, no "refine" word | refining-an-issue 3/3 | ✅ |
+| A3 "refinement session" | preparing-ready-issues 3/3 | ✅ |
+| A4 implicit batch | preparing-ready-issues 3/3 | ✅ |
+| A5 "they're Ready, go work them" | executing-ready-issues 3/3 | ✅ |
+| A6 "refine the algorithm" | refining-an-issue 0/3 → **1/3 after fix** | ⚠️ partial (accepted) |
+| A7 "refine the backlog" | preparing-ready-issues 3/3, no disambiguation | ⚠️ defensible |
+| B preparing-ready-issues behavior | 3/3 (small batch, dep-sequenced, no branch, per-issue DoR, confirm Ready) | ✅ |
+| F2 only-Ready + sequential | 6/6 (skip not-Ready #73; one PR per issue) | ✅ |
+| F3 selection back-and-forth | 3/3 (propose candidates, defer count to supervisor, 2–3) | ✅ |
+| C1/2/3 discipline (hold/notify/route-to-PO) | 9/9 | ✅ |
+
+**Questions answered:** refining-an-issue fires both standalone (A1/A2) and nested inside a session (B). preparing-ready-issues proposes-and-confirms batch selection (F3). executing-ready-issues runs only Ready issues, sequentially, one PR each (F2), and holds the discipline lines (C).
+
+**Fix applied:** negative-scope clause added to refining-an-issue (A6 0/3 → 1/3; literal "refine X" still pulls 2/3 — accepted, low real-world risk).
+
+**Methodological caveat:** RED baselines (agent told not to use the skill) are unreliable — subagents with Skill access surfaced skill-specific detail anyway, so the "is the skill differentially load-bearing vs CLAUDE.md" question is not cleanly answerable here. Behavioral conclusions stand; the load-bearing comparison does not.
