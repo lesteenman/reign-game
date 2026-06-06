@@ -12,9 +12,9 @@ Move first-checkout setup into a doc. Delete the agents.
 ## Decisions (resolved with supervisor)
 
 1. **Refinement + Autonomous Execution Contract → skills.** CLAUDE.md keeps only a pointer.
-   - `refinement-session` skill (new) — pick up a batch, sequence, loop refinement, confirm Ready.
-   - `refinement` skill (update) — per-issue DoR work; absorbs the full DoR checklist so it stands alone.
-   - `autonomous-execution` skill (new) — execution contract, merge authority + hold-set, re-entry digest, HITL reconciliation.
+   - `preparing-ready-issues` skill (new) — pick up a batch, sequence, loop refinement, confirm Ready.
+   - `refining-an-issue` skill (update) — per-issue DoR work; absorbs the full DoR checklist so it stands alone.
+   - `executing-ready-issues` skill (new) — execution contract, merge authority + hold-set, re-entry digest, HITL reconciliation.
 2. **Setup → `SETUP.md`.** A doc fits human first-checkout better than a skill. CLAUDE.md keeps one line.
 3. **Lessons → distributed.** Domain/workflow lessons fold into their logical section; a short
    "Cross-cutting lessons" remainder holds the few with no home. Historical lessons (#6, #7) dropped.
@@ -38,8 +38,8 @@ Move first-checkout setup into a doc. Delete the agents.
 
 ## Artifacts
 
-- New: `SETUP.md`, `.claude/skills/refinement-session/SKILL.md`, `.claude/skills/autonomous-execution/SKILL.md`
-- Updated: `CLAUDE.md` (full rewrite), `.claude/skills/refinement/SKILL.md`
+- New: `SETUP.md`, `.claude/skills/preparing-ready-issues/SKILL.md`, `.claude/skills/executing-ready-issues/SKILL.md`
+- Updated: `CLAUDE.md` (full rewrite), `.claude/skills/refining-an-issue/SKILL.md`
 - Deleted: `.claude/agents/*` (6 files)
 
 ## Verification

@@ -1,14 +1,14 @@
 ---
-name: refinement-session
-description: Run a refinement session with the supervisor — pick up a small batch of backlog GitHub issues, sequence them by dependency, take each to Definition of Ready (via the refinement skill), and confirm the Ready set so it can move to "Up Next" for autonomous execution. Trigger when the user says "let's refine", "refinement session", "do a refinement batch", or wants to prep backlog issues for an autonomous run. For a single named issue, use the refinement skill directly.
+name: preparing-ready-issues
+description: Use when prepping a batch of backlog GitHub issues for autonomous execution — the user says "let's refine", "refinement session", "do a refinement batch", or points at several issues to take to Definition of Ready together. For refining a single named issue, use the refining-an-issue skill directly.
 ---
 
-# Refinement Session
+# Preparing Ready Issues
 
 A refinement session is where the supervisor (team lead + Product Owner) batches their involvement.
 The session picks up several issues together, refines each to Definition of Ready, and hands a Ready
 set to autonomous execution. This is the *design* half of the contract; execution is the
-`autonomous-execution` skill.
+`executing-ready-issues` skill.
 
 The supervisor makes the calls. I prep — pre-analyze candidates, surface ambiguities, options, and
 dependencies, draft the Definition-of-Ready fills — so the session is decision-making, not discovery.
@@ -19,13 +19,13 @@ dependencies, draft the Definition-of-Ready fills — so the session is decision
    **Sequence by dependency, independent issues first** so completed work banks before any surprise
    hang. Choose batches that **minimize PR stacking** — prefer independent breadth over stacked depth.
 
-2. **Refine each issue.** Run the `refinement` skill per issue. That skill owns the per-issue work:
+2. **Refine each issue.** Run the `refining-an-issue` skill per issue. That skill owns the per-issue work:
    the design conversation, the Definition-of-Ready checklist, and posting the DoR comment to GitHub.
    Refine the batch **together with the supervisor** — this is where HITL lives. Resolve every design
    fork now; an unresolved fork is the thing refinement exists to close.
 
 3. **Confirm the Ready set.** A session ends when each issue has its DoR comment posted and the
-   supervisor confirms. The issues move to "Up Next." Hand off to `autonomous-execution`.
+   supervisor confirms. The issues move to "Up Next." Hand off to `executing-ready-issues`.
 
 GitHub is the source of truth for progress — a context reset is recoverable from issue + PR state.
 

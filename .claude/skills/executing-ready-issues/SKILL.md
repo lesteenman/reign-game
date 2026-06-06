@@ -1,12 +1,12 @@
 ---
-name: autonomous-execution
-description: Trigger when picking up Ready issues from the project board's "Up Next" column for an autonomous implementation run, or when the user says "work the ready issues", "run the backlog", or "pick up Up Next". Runs Ready issues one PR at a time with the full Change Workflow gates, notify-and-hold on surprises, autonomous merge for low-risk work, and an end-of-session digest.
+name: executing-ready-issues
+description: Use when picking up Ready (Definition-of-Ready) issues from the project board's "Up Next" column to implement them autonomously while the supervisor is away, or when the user says "work the ready issues", "run the backlog", or "pick up Up Next".
 ---
 
-# Autonomous Execution
+# Executing Ready Issues
 
-The supervisor batches their involvement into refinement (see the `refinement-session` and
-`refinement` skills). Once issues are Ready, execution runs against the written DoR specs with the
+The supervisor batches their involvement into refinement (see the `preparing-ready-issues` and
+`refining-an-issue` skills). Once issues are Ready, execution runs against the written DoR specs with the
 supervisor away. This skill is the execution half of the contract. It does **not** relax the HITL
 rule — refinement front-loads the design forks; this defines what to do with the few that still
 surface.

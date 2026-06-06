@@ -1,14 +1,14 @@
 ---
-name: refinement
-description: Take one backlog GitHub issue to Definition of Ready, together with the supervisor (HITL), BEFORE any implementation. Composes superpowers:brainstorming for the design conversation but redirects its output to the GitHub issue and creates no branch or commits. Trigger when the user says "refine #N", or when the refinement-session skill is processing a batch. For picking up and sequencing a batch of issues, use the refinement-session skill.
+name: refining-an-issue
+description: Use when taking a single backlog GitHub issue to Definition of Ready before implementation — the user says "refine #N", wants to tighten or settle one issue's acceptance criteria, scope, or open design questions, or the preparing-ready-issues skill is processing a batch. For picking up and sequencing a whole batch of issues, use the preparing-ready-issues skill instead.
 ---
 
-# Refinement
+# Refining an Issue
 
 Refinement turns one backlog issue into a **Definition of Ready** spec that the implementation phase
 can run against autonomously. It is **always done with the supervisor** — this is where HITL lives.
-For picking up and sequencing a batch, the `refinement-session` skill drives; it calls this skill per
-issue. Execution against the Ready spec is the `autonomous-execution` skill.
+For picking up and sequencing a batch, the `preparing-ready-issues` skill drives; it calls this skill per
+issue. Execution against the Ready spec is the `executing-ready-issues` skill.
 
 ## The one rule that makes this different from plain brainstorming
 
@@ -41,7 +41,7 @@ source of truth). Branch, plan, and code are the *implementation* phase, which i
 ## Definition of Ready (the gate)
 
 An issue is Ready only once **all** of these are settled, together, in refinement. A blank box at
-execution time is unclarity — the `autonomous-execution` skill notifies and holds, never assumes.
+execution time is unclarity — the `executing-ready-issues` skill notifies and holds, never assumes.
 
 - [ ] **Problem + PO rationale** — what, and why (the user value).
 - [ ] **Acceptance criteria** — explicit, enumerated, testable. Not "make it work."
@@ -56,7 +56,7 @@ execution time is unclarity — the `autonomous-execution` skill notifies and ho
 
 ## Then what
 
-Implementation is a **separate phase** (the `autonomous-execution` skill). At implementation start:
+Implementation is a **separate phase** (the `executing-ready-issues` skill). At implementation start:
 create the branch, run `superpowers:writing-plans` (plan doc on the branch), execute, open the PR.
 Surface only via notify-and-hold on a genuine surprise, plus the end-of-session digest.
 

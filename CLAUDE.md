@@ -115,13 +115,15 @@ Pick the flow by size:
 ### Refinement workflow
 
 1. **Triage** — pick or open a GitHub issue.
-2. **Refine to Ready** — the `refinement-session` skill (batch pickup, dependency sequencing,
-   calibration) drives the `refinement` skill per issue (the design conversation + the full DoR
-   checklist). `refinement` is also invoked alone to refine a single issue further.
+2. **Refine to Ready** — the `preparing-ready-issues` skill (batch pickup, dependency sequencing,
+   calibration) drives the `refining-an-issue` skill per issue (the design conversation + the full DoR
+   checklist). `refining-an-issue` is also invoked alone to refine a single issue further.
 
 ### Implementation workflow
 
-Once issues are Ready:
+Once issues are Ready, working a batch of them autonomously — a PR per issue, notify-and-hold on
+surprises, autonomous merge for low-risk work, hold-open for the risk set, end-of-session digest — is
+the `executing-ready-issues` skill. Each issue runs the per-PR pipeline below:
 
 3. **Branch** — `superpowers:using-git-worktrees` or a feature branch, at implementation start.
 4. **Plan** — `superpowers:writing-plans` (decompose into 2–5 min tasks), the first step on the branch.
