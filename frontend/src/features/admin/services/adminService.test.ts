@@ -62,6 +62,24 @@ describe('fetchPoolStatus', () => {
     expect(url).toContain('/api/admin/pool');
   });
 
+  test('forwards an AbortSignal to fetch', async () => {
+    // Arrange
+    const controller = new AbortController();
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve(JSON.stringify(MOCK_POOL_STATUS)),
+    });
+
+    // Act
+    const { fetchPoolStatus } = await import('./adminService');
+    await fetchPoolStatus(controller.signal);
+
+    // Assert
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const init = calls[0]![1] as RequestInit;
+    expect(init.signal).toBe(controller.signal);
+  });
+
   test('throws ApiError on server error', async () => {
     // Arrange
     globalThis.fetch = vi.fn().mockResolvedValue({

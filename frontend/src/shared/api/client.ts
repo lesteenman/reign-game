@@ -41,6 +41,7 @@ export class ApiError extends Error {
 export interface ApiOptions {
   params?: Record<string, string>;
   headers?: Record<string, string>;
+  signal?: AbortSignal;
 }
 
 type Method = 'GET' | 'PUT' | 'POST';
@@ -75,6 +76,7 @@ async function apiRequest<T>(
   const response = await fetch(url.toString(), {
     method,
     headers,
+    signal: options?.signal,
     ...(hasBody ? { body: JSON.stringify(body) } : {}),
   });
 

@@ -76,6 +76,47 @@ describe('apiGet', () => {
   });
 });
 
+describe('AbortSignal forwarding', () => {
+  test('apiGet forwards a caller-provided signal to fetch', async () => {
+    // Arrange
+    const controller = new AbortController();
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      text: () => Promise.resolve('{}'),
+    });
+
+    // Act
+    const { apiGet } = await import('./client');
+    await apiGet('/api/x', { signal: controller.signal });
+
+    // Assert
+    const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+    const init = calls[0]![1] as RequestInit;
+    expect(init.signal).toBe(controller.signal);
+  });
+
+  test('aborting the signal rejects the request', async () => {
+    // Arrange — fetch honours the abort by rejecting with an AbortError.
+    globalThis.fetch = vi.fn().mockImplementation(
+      (_url: string, init: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            reject(new DOMException('Aborted', 'AbortError'));
+          });
+        }),
+    );
+
+    // Act
+    const controller = new AbortController();
+    const { apiGet } = await import('./client');
+    const promise = apiGet('/api/x', { signal: controller.signal });
+    controller.abort();
+
+    // Assert
+    await expect(promise).rejects.toThrow('Aborted');
+  });
+});
+
 describe('apiPut + apiPost', () => {
   test('apiPut sends method PUT with JSON body + Content-Type', async () => {
     // Arrange
