@@ -157,6 +157,29 @@ describe('PostCompletionScreen', () => {
     );
   });
 
+  it('shows "already submitted" copy and hides solve time + submitted-at when synthetic409', () => {
+    // Arrange + Act
+    renderScreen({ ...BASE_PROPS, synthetic409: true });
+
+    // Assert
+    expect(screen.getByTestId('daily-already-submitted')).toHaveTextContent(
+      'Already submitted earlier today',
+    );
+    expect(screen.queryByTestId('daily-solve-time')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('daily-submitted-at')).not.toBeInTheDocument();
+  });
+
+  it('renders solve time and no "already submitted" copy when synthetic409 absent', () => {
+    // Arrange + Act
+    renderScreen(BASE_PROPS);
+
+    // Assert — regression: normal success path still shows solve time
+    expect(screen.getByTestId('daily-solve-time')).toHaveTextContent('1:15');
+    expect(
+      screen.queryByTestId('daily-already-submitted'),
+    ).not.toBeInTheDocument();
+  });
+
   it('countdown cleans up on unmount', () => {
     // Arrange
     vi.useFakeTimers();

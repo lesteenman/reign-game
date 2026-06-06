@@ -22,6 +22,8 @@ export interface SubmitDailySuccess {
   result: DailySubmitResponse;
   submittedAt: string;
   payload: DailyPuzzlePayload;
+  /** True when synthesized from a 409 "already solved" response. */
+  synthetic409?: boolean;
 }
 
 /** Empty cells grid sized to the payload's grid dimension — minimal
@@ -99,6 +101,7 @@ export function useSubmitDaily() {
             result: { serverElapsedMs: 0 },
             submittedAt: new Date().toISOString(),
             payload,
+            synthetic409: true,
           };
         }
         throw err;
