@@ -11,8 +11,16 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 )
+
+// countConcurrency bounds how many per-combo CountReady queries run in
+// parallel during a LoadPool. Small enough to stay well under DynamoDB
+// connection limits, large enough to collapse the admin pool's cold-start
+// fan-out from O(combos) serial round-trips to one bounded wave.
+const countConcurrency = 8
 
 // Store is the persistence surface used by Service.
 type Store interface {
@@ -57,28 +65,43 @@ func (s *Service) LoadPool(ctx context.Context) ([]ComboEntry, error) {
 		return nil, fmt.Errorf("loading configs: %w", err)
 	}
 
-	entries := make([]ComboEntry, 0, len(configs))
+	// Count each enabled combo concurrently (bounded), writing results by
+	// index so the entries + timing breakdown stay in config order
+	// regardless of goroutine completion order. Disabled combos are filled
+	// in directly with ReadyCount=0 and a -1ms "skipped" sentinel — no query.
+	entries := make([]ComboEntry, len(configs))
+	countMsByIdx := make([]int64, len(configs))
+
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(countConcurrency)
+	for i := range configs {
+		cfg := configs[i]
+		entries[i] = ComboEntry{Config: cfg, ReadyCount: 0}
+		if !cfg.Enabled {
+			countMsByIdx[i] = -1 // sentinel for "skipped (config disabled)"
+			continue
+		}
+		g.Go(func() error {
+			countStart := time.Now()
+			readyCount, cerr := s.store.CountReady(gctx, cfg.Size, cfg.Mode)
+			countMsByIdx[i] = time.Since(countStart).Milliseconds()
+			if cerr != nil {
+				log.Printf("admin pool: failed to count ready for %d#%s: %v count_%d#%s_ms=%d", cfg.Size, cfg.Mode, cerr, cfg.Size, cfg.Mode, countMsByIdx[i])
+				return fmt.Errorf("counting ready puzzles for %d#%s: %w", cfg.Size, cfg.Mode, cerr)
+			}
+			entries[i].ReadyCount = readyCount
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+
 	// Each entry: "<size>#<mode>=<ms>ms" — terse so a single log line
 	// shows the per-combo breakdown without bloating the format.
 	countTimings := make([]string, 0, len(configs))
-	for _, cfg := range configs {
-		readyCount := 0
-		countMs := int64(-1) // sentinel for "skipped (config disabled)"
-		if cfg.Enabled {
-			countStart := time.Now()
-			readyCount, err = s.store.CountReady(ctx, cfg.Size, cfg.Mode)
-			countMs = time.Since(countStart).Milliseconds()
-			if err != nil {
-				log.Printf("admin pool: failed to count ready for %d#%s: %v count_%d#%s_ms=%d", cfg.Size, cfg.Mode, err, cfg.Size, cfg.Mode, countMs)
-				return nil, fmt.Errorf("counting ready puzzles for %d#%s: %w", cfg.Size, cfg.Mode, err)
-			}
-		}
-		countTimings = append(countTimings, fmt.Sprintf("%d#%s=%dms", cfg.Size, cfg.Mode, countMs))
-
-		entries = append(entries, ComboEntry{
-			Config:     cfg,
-			ReadyCount: readyCount,
-		})
+	for i, cfg := range configs {
+		countTimings = append(countTimings, fmt.Sprintf("%d#%s=%dms", cfg.Size, cfg.Mode, countMsByIdx[i]))
 	}
 
 	log.Printf(
