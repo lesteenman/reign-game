@@ -29,3 +29,9 @@ variable "acm_certificate_arn" {
   type        = string
   default     = ""
 }
+
+variable "tags" {
+  description = "Tags applied to every taggable resource created by this module."
+  type        = map(string)
+  default     = {}
+}

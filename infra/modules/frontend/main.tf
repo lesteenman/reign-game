@@ -11,6 +11,8 @@ resource "aws_s3_bucket" "frontend" {
   # fails on the existing build artifacts. CD re-syncs the frontend
   # to the recreated bucket on the next apply.
   force_destroy = true
+
+  tags = var.tags
 }
 
 resource "aws_s3_bucket_public_access_block" "frontend" {
@@ -143,6 +145,8 @@ resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
   default_root_object = "index.html"
   comment             = "${var.project_name} ${var.environment} frontend"
+
+  tags = var.tags
 
   # Only attach aliases when an ACM cert is supplied. CloudFront rejects
   # aliases without a matching cert, so this guard makes the "ARN not set

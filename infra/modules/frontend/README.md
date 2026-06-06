@@ -14,6 +14,7 @@ Provisions the public frontend delivery surface: a private S3 bucket for the SPA
 | `api_gateway_stage` | string | (required) | API Gateway stage — used as the `origin_path` on the API origin. |
 | `domain_aliases` | list(string) | `[]` | Alternate domain names. Only applied when `acm_certificate_arn != ""`. |
 | `acm_certificate_arn` | string | `""` | ARN of a `us-east-1` ACM cert covering every `domain_alias`. Empty keeps the default `*.cloudfront.net` cert. |
+| `tags` | map(string) | `{}` | Applied to every **taggable** resource in this module (the S3 bucket + the CloudFront distribution). |
 
 ## Outputs
 
@@ -39,6 +40,6 @@ Provisions the public frontend delivery surface: a private S3 bucket for the SPA
 - **`/api/*` cookie forwarding is whitelist-only** (`__session`, `__client_uat`). Adding unrelated cookies would poison CloudFront's cache key for any future cacheable `/api/*` response. Today the TTLs are all 0 so caching is off, but the whitelist is defense in depth.
 - **SPA fallback maps 403 + 404 → 200 / `/index.html`.** This is what makes client-side routes like `/admin/curate` work. Don't remove without coordinating with the frontend router.
 - **No `response_headers_policy_id` attached** — issue #114. Missing HSTS / X-Content-Type-Options / CSP at the edge.
-- **No tags on any resource in this module.** Inconsistent with the rest of the codebase (api/database/generation/daily-cron all tag). Tracked as a follow-up consistency fix.
+- **`var.tags` applies only to the two taggable resources** — `aws_s3_bucket.frontend` and `aws_cloudfront_distribution.frontend`. The rest of the module's resources have no `tags` argument in the AWS provider and reject one (plan error): `aws_cloudfront_origin_access_control`, `aws_cloudfront_response_headers_policy`, `aws_s3_bucket_server_side_encryption_configuration`, `aws_s3_bucket_policy`, `aws_s3_bucket_public_access_block`.
 - **Two ordered cache behaviors target `/sw.js` and `/workbox-*.js`** with the AWS managed `CachingDisabled` policy (`4135ea2d-6df8-44a3-9df3-4b5a84be39ad`) so service-worker updates propagate without waiting for edge TTL. Added in #116.
 - **The CloudFront distribution's `comment` is `"<project> <env> frontend"`** — fine for ops UX. Don't put PII or runtime data there.
