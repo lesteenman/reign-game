@@ -12,6 +12,8 @@ volumes, not the host filesystem.
 - `task` v3.50.0, `golangci-lint` v2.11.4, `gitleaks` 8.30.1,
   `govulncheck` v1.3.0
 - `aws-cli` v2.34.45 — `aws sso login`, `aws s3 ...`, etc.
+- `gh` (GitHub CLI, via the devcontainer feature) — PR/issue/run ops, git
+  HTTPS auth, and the `task board:up-next` board move; reads `GH_TOKEN`
 - `uv` 0.11.12 (provides `uvx`, used by the AWS MCP proxy)
 - Docker CLI with the host socket mounted
 
@@ -86,14 +88,16 @@ run `claude` in that terminal.
 
 ## MCP servers
 
-Three MCP servers are wired up via `.mcp.json` at the repo root and are
+Two MCP servers are wired up via `.mcp.json` at the repo root and are
 loaded by Claude Code automatically when it starts in this project:
 
 | Server | Provides | Auth |
 |---|---|---|
 | `terraform` | Terraform Registry lookups (providers, modules, resources) — pulls `hashicorp/terraform-mcp-server` | None for registry browsing |
 | `aws` | AWS API access via the [Agent Toolkit's hosted MCP](https://docs.aws.amazon.com/agent-toolkit/) — `uvx mcp-proxy-for-aws@latest` | Local AWS SDK creds (SSO) |
-| `github` | GitHub API (issues, PRs, comments, contents) — pulls `ghcr.io/github/github-mcp-server` | Personal access token |
+
+GitHub operations (issues, PRs, runs, the project board) go through the
+`gh` CLI, not an MCP server — `gh` reads `GH_TOKEN` from `.env.local`.
 
 ### One-time setup
 
@@ -141,14 +145,18 @@ AWS_PROFILE=<name>` in your interactive shell session.
 cache are intentionally not mounted at all. The cli cache is
 auto-refreshed from the SSO bearer when needed.)
 
-**2. `GITHUB_PERSONAL_ACCESS_TOKEN`** — for the `github` MCP server.
+**2. `GH_TOKEN`** — for the `gh` CLI and git HTTPS auth.
 
-Create a fine-grained PAT at <https://github.com/settings/personal-access-tokens>
-scoped to `lesteenman/reign-game` with these repository permissions:
+`gh` reads `GH_TOKEN` natively; the `post-create.sh` git credential helper
+reads the same value, so it powers PR/issue/run ops, `git push`/`pull`, and
+the `task board:up-next` board move. Create a fine-grained PAT at
+<https://github.com/settings/personal-access-tokens> scoped to
+`lesteenman/reign-game` with these repository permissions:
 
 - Contents: read/write
 - Pull requests: read/write
 - Issues: read/write
+- Projects: read/write (for `task board:up-next` — Projects v2 is GraphQL-only and needs a project-write credential)
 - Actions: read (so the agent can poll CI status)
 - Metadata: read (mandatory)
 
@@ -177,7 +185,7 @@ the project-specific `DYNAMODB_ENDPOINT`/`SQS_ENDPOINT` directly.
 ### Verifying the MCP servers
 
 Inside the container, after `claude` is running, ask it `what MCP tools do
-you have?` — you should see Terraform/AWS/GitHub tool prefixes. Or from a
+you have?` — you should see Terraform/AWS tool prefixes. Or from a
 separate shell:
 
 ```bash

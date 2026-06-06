@@ -35,8 +35,10 @@ source of truth). Branch, plan, and code are the *implementation* phase, which i
 3. **Post the Definition of Ready as an issue comment.** Fill every box of the checklist below. Any
    blank box means not Ready. Include the resolved design.
 
-4. **Confirm Ready with the supervisor.** Refinement ends when the DoR comment is posted and the
-   supervisor confirms. The issue can move to "Up Next."
+4. **Move the issue to "Up Next."** Once the DoR comment is posted, run `task board:up-next ISSUE=<n>`
+   so the card lands in the project board's Up Next column automatically. The supervisor reviews via
+   that column rather than gating each move. Requires `GH_TOKEN` (Projects: read/write) in
+   `.devcontainer/.env.local`.
 
 ## Definition of Ready (the gate)
 
