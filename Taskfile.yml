@@ -247,12 +247,16 @@ tasks:
         # and the puzzle-pool DynamoDB table must be ACTIVE. LocalStack health
         # returns ready before init scripts complete.
         echo "waiting for init (puzzle-generation queue + puzzle-pool table)..."
+        # Probe from the host via the published port instead of `docker
+        # compose exec awslocal`, which adds ~200-500ms of container-exec
+        # overhead per call (two calls per iteration, up to 60 iterations).
+        export AWS_ACCESS_KEY_ID=test AWS_SECRET_ACCESS_KEY=test AWS_REGION=us-east-1
         for i in $(seq 1 60); do
           q_ok=n
-          if docker compose exec -T localstack awslocal sqs get-queue-url --queue-name puzzle-generation >/dev/null 2>&1; then
+          if aws --endpoint-url {{.LOCALSTACK_URL}} sqs get-queue-url --queue-name puzzle-generation >/dev/null 2>&1; then
             q_ok=y
           fi
-          t_ok=$(docker compose exec -T localstack awslocal dynamodb describe-table --table-name puzzle-pool --query 'Table.TableStatus' --output text 2>/dev/null || true)
+          t_ok=$(aws --endpoint-url {{.LOCALSTACK_URL}} dynamodb describe-table --table-name puzzle-pool --query 'Table.TableStatus' --output text 2>/dev/null || true)
           if [ "$q_ok" = "y" ] && [ "$t_ok" = "ACTIVE" ]; then
             echo "LocalStack ready (queue + table provisioned)"
             exit 0
