@@ -1,6 +1,6 @@
 ---
 name: refining-an-issue
-description: Use when taking a single backlog GitHub issue to Definition of Ready before implementation — the user says "refine #N", wants to tighten or settle one issue's acceptance criteria, scope, or open design questions, or the preparing-ready-issues skill is processing a batch. For picking up and sequencing a whole batch of issues, use the preparing-ready-issues skill instead.
+description: Use when taking a single tracked backlog GitHub issue to Definition of Ready before implementation — the user says "refine #N", or wants to settle one issue's acceptance criteria, scope, or open design questions, or the preparing-ready-issues skill is processing a batch. Not for improving or optimizing code, algorithms, or performance — this shapes an issue's spec, it does not change code. For a whole batch of issues, use preparing-ready-issues instead.
 ---
 
 # Refining an Issue
