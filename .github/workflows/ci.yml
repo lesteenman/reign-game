@@ -92,11 +92,14 @@ jobs:
       # every step in the job (including npm ci) carries no
       # supply-chain risk. The secret key (CLERK_SECRET_KEY) is NOT
       # set here — the integration job has no backend.
-      # Env-mapping: GitHub secret named CI_CLERK_PUBLISHABLE_KEY (CI's own copy;
-      # the acc Environment holds CD's CLERK_PUBLISHABLE_KEY) is exposed to Vite under the
-      # VITE_-prefixed env var name that Vite requires for browser-bundle
-      # injection. Same value, two names — no separate Path C secret.
-      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.CI_CLERK_PUBLISHABLE_KEY }}
+      # Env-mapping: GitHub repository VARIABLE named CI_CLERK_PUBLISHABLE_KEY
+      # (CI's own copy; the acc Environment holds CD's CLERK_PUBLISHABLE_KEY) is
+      # exposed to Vite under the VITE_-prefixed env var name that Vite requires
+      # for browser-bundle injection. It is a variable, not a secret, because the
+      # publishable key is browser-safe AND because Actions secrets are withheld
+      # from Dependabot PR runs — variables are not, so this required check passes
+      # for Dependabot dep bumps too.
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.CI_CLERK_PUBLISHABLE_KEY }}
     defaults:
       run:
         working-directory: frontend
@@ -161,6 +164,12 @@ jobs:
     # tasks in multiple `dir:`-scoped subtasks. npm scripts that run in
     # frontend/ set working-directory per-step.
     runs-on: ubuntu-latest
+    # Skipped for Dependabot: e2e needs the real CI_CLERK_SECRET_KEY (+ test-user
+    # creds) for live Clerk sign-in, and Actions secrets are withheld from
+    # Dependabot PR runs. Mirrors the Terraform Plan guard below. (The publishable
+    # key alone — a variable — keeps the required frontend-integration check green
+    # for Dependabot; only this real-secret e2e job is skipped.)
+    if: github.actor != 'dependabot[bot]'
     env:
       # Same rationale as frontend-integration: VITE_CLERK_PUBLISHABLE_KEY
       # must be visible when Vite starts (inside `task e2e:up:frontend`)
@@ -168,11 +177,11 @@ jobs:
       # CLERK_SECRET_KEY is NOT set here — it stays step-scoped on
       # `task e2e:up` only, closing the supply-chain exfiltration window
       # via npm ci. (See PR-#89 review-local Security MAJOR finding.)
-      # Env-mapping: GitHub secret named CI_CLERK_PUBLISHABLE_KEY (CI's own copy;
-      # the acc Environment holds CD's CLERK_PUBLISHABLE_KEY) is exposed to Vite under the
-      # VITE_-prefixed env var name that Vite requires for browser-bundle
-      # injection. Same value, two names — no separate Path C secret.
-      VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.CI_CLERK_PUBLISHABLE_KEY }}
+      # Env-mapping: GitHub repository VARIABLE named CI_CLERK_PUBLISHABLE_KEY
+      # (CI's own copy; the acc Environment holds CD's CLERK_PUBLISHABLE_KEY) is
+      # exposed to Vite under the VITE_-prefixed env var name that Vite requires
+      # for browser-bundle injection (variable, not secret — browser-safe).
+      VITE_CLERK_PUBLISHABLE_KEY: ${{ vars.CI_CLERK_PUBLISHABLE_KEY }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -359,7 +368,7 @@ jobs:
         # take the same -var set as CD apply" was captured on 2026-05-08
         # but never applied to the workflow until now.
         env:
-          TF_VAR_clerk_publishable_key: ${{ secrets.CI_CLERK_PUBLISHABLE_KEY }}
+          TF_VAR_clerk_publishable_key: ${{ vars.CI_CLERK_PUBLISHABLE_KEY }}
           TF_VAR_clerk_secret_key: ${{ secrets.CI_CLERK_SECRET_KEY }}
           TF_VAR_domain_aliases: ${{ vars.CI_DOMAIN_ALIASES }}
           TF_VAR_acm_certificate_arn: ${{ vars.CI_ACM_CERTIFICATE_ARN }}
