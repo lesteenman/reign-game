@@ -19,6 +19,27 @@ vars:
   SQS_QUEUE_HOST:
     sh: echo "${SQS_QUEUE_HOST:-http://sqs.us-east-1.localhost.localstack.cloud:4566}"
 
+# Shell pitfalls (read before editing process-lifecycle cmds).
+#
+# Task runs `cmds:` in its built-in interpreter (mvdan.cc/sh), not bash. It
+# mostly matches POSIX but diverges where it bites process-lifecycle code:
+#   - `$!` after a background job returns a goroutine handle, not an OS PID —
+#     capturing it stores garbage.
+#   - `kill -0` against external OS PIDs is unreliable.
+#   - `disown` is unimplemented.
+#   - `set -e` around command substitution differs from bash.
+# When a task tracks a backgrounded process by PID (anything without a port),
+# wrap the block in a bash heredoc:
+#   cmds:
+#     - |
+#       bash <<'BASH'
+#       set -e
+#       nohup long-running-cmd > log 2>&1 </dev/null &
+#       echo $! > pid
+#       BASH
+# Port-based lifecycle (`lsof -ti:PORT`) works fine in Task's shell and is
+# preferred whenever a port exists.
+
 tasks:
   build:backend:
     desc: Build the Go backend

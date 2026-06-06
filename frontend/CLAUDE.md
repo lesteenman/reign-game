@@ -104,7 +104,8 @@ Drift detection grep examples (the architecture skill codifies these):
 ## Testing (TDD — non-negotiable)
 
 Project-wide TDD rule in `/CLAUDE.md`. Frontend-specific:
-- **Vitest** for unit tests. Co-located with source: `Foo.tsx` + `Foo.test.tsx`.
+- Structure every test Arrange-Act-Assert with explicit `// Arrange`, `// Act`, `// Assert` comments.
+- **Vitest** for unit tests. Co-located with source: `Foo.tsx` + `Foo.test.tsx`. Run a single file: `npx vitest run <path/to/file.test.tsx>`.
 - **Playwright** for e2e in `frontend/playwright/e2e/`; integration specs in `frontend/playwright/integration/`. See `.claude/skills/playwright-cli/` for browser automation patterns.
 - Aim for above 90% coverage on hooks and services.
 - Use `frontend/src/shared/test-utils.tsx` (wraps RTL `render` with providers); import as `@shared/test-utils`.

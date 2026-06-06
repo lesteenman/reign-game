@@ -204,8 +204,7 @@ This rule lives here as well as in `infra/CLAUDE.md`. Drift between the two is w
 |---|---|
 | Starting Superpowers `brainstorming` for a feature | Read this skill. Validate the emerging design against the rules above. Append verdict to the brainstorm output. |
 | Starting Superpowers `writing-plans` for a feature | Read the verdict from the design-time check. Each task in the plan should respect the rules. |
-| Running Superpowers `requesting-code-review` | Run all three review-time greps. Add findings to the review output with severity. |
-| `code-review-final` agent | Same as above; this skill is the canonical check. |
+| Running Superpowers `requesting-code-review` | Run all three review-time greps. Add findings to the review output with severity. This skill is the canonical check. |
 | Anyone proposing to add a new top-level directory | Stop. Read this skill. The directory tree is part of the architecture. |
 
 ## Updating this skill

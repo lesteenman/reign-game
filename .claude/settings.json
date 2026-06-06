@@ -91,15 +91,6 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Agent",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'if echo \"$TOOL_INPUT\" | grep -qiE \"full-e2e-test|backend-dev|frontend-dev|code-review-final|security-review-final\"; then echo \"STOP: This agent MUST be spawned via TeamCreate, not the Agent tool. TeamCreate gives the agent access to Skill(), CLAUDE.md context, and SendMessage. Re-do this using TeamCreate.\"; fi'"
-          }
-        ]
-      },
-      {
         "matcher": "Write|Edit",
         "hooks": [
           {

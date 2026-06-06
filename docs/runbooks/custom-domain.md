@@ -36,7 +36,7 @@ The cert lives in `accounts/reign-game` (us-east-1, account-level resource) and 
    - The landing page renders.
    - DevTools → Network: `/api/health` returns 200.
    - Sign-in flow works (if Clerk is configured).
-   - Per devops-engineer.md lesson 7: "Open the deployed URL after CD succeeds and verify the user-visible feature actually works." Don't trust CI-green alone.
+   - Open the deployed URL after CD succeeds and verify the user-visible feature actually works. Don't trust CI-green alone (CLAUDE.md → Cross-cutting lessons: "CI green is not CD green").
 
 ## Rollback
 
