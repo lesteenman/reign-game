@@ -32,6 +32,13 @@ resource "aws_dynamodb_table" "puzzle_pool" {
     projection_type = "ALL"
   }
 
+  # Explicit at-rest encryption with the AWS-owned key. Functionally
+  # identical to the AWS default, but declared so audit/compliance tooling
+  # sees it and so the setting can't silently drift.
+  server_side_encryption {
+    enabled = true
+  }
+
   tags = {
     Project     = var.project_name
     Environment = var.environment
