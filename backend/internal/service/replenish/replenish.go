@@ -25,9 +25,17 @@ import (
 	"log"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/eriksteenman/reign-game/backend/internal/message"
 	configsvc "github.com/eriksteenman/reign-game/backend/internal/service/config"
 )
+
+// sweepPublishConcurrency bounds the number of combos whose SQS publishes
+// run in parallel during a Sweep. Small enough to stay well under SQS
+// connection limits, large enough to collapse a multi-combo sweep's
+// publish latency.
+const sweepPublishConcurrency = 8
 
 // DefaultWindow is the default per-combo debounce duration for reactive
 // top-ups. Picked to match the order-of-magnitude of one generator
@@ -66,6 +74,7 @@ type PoolCounter interface {
 // MessagePublisher publishes generation requests to the SQS queue.
 type MessagePublisher interface {
 	PublishGenerationRequest(ctx context.Context, req *message.GenerationRequest) error
+	PublishBatch(ctx context.Context, reqs []*message.GenerationRequest) error
 }
 
 // AutoReplenishClaimer coordinates concurrent reactive top-ups via a
@@ -141,6 +150,17 @@ func Sweep(ctx context.Context, deps SweepDeps, filter Filter) (Result, error) {
 		Skipped:   []SkippedEntry{},
 	}
 
+	// triggered holds the per-combo requests to publish, assembled in
+	// config iteration order. Counting stays serial (parallel counting is
+	// #117); only the publish below is concurrent. Building Triggered here
+	// keeps Result deterministic regardless of goroutine completion order.
+	type publishJob struct {
+		size int
+		mode string
+		reqs []*message.GenerationRequest
+	}
+	var jobs []publishJob
+
 	for i := range allConfigs {
 		cfg := allConfigs[i]
 		if !cfg.Enabled {
@@ -168,22 +188,45 @@ func Sweep(ctx context.Context, deps SweepDeps, filter Filter) (Result, error) {
 		}
 
 		needed := cfg.Threshold - count
+		reqs := make([]*message.GenerationRequest, needed)
 		for j := 0; j < needed; j++ {
-			req := &message.GenerationRequest{
+			reqs[j] = &message.GenerationRequest{
 				Size:        cfg.Size,
 				Mode:        cfg.Mode,
 				MaxAttempts: cfg.MaxAttempts,
 			}
-			if err := deps.Publisher.PublishGenerationRequest(ctx, req); err != nil {
-				return result, fmt.Errorf("publishing generation request for %d#%s: %w", cfg.Size, cfg.Mode, err)
-			}
 		}
+		jobs = append(jobs, publishJob{
+			size: cfg.Size,
+			mode: cfg.Mode,
+			reqs: reqs,
+		})
 
 		result.Triggered = append(result.Triggered, TriggeredEntry{
 			Size:  cfg.Size,
 			Mode:  cfg.Mode,
 			Count: needed,
 		})
+	}
+
+	// Publish each combo's batch concurrently, bounded. The first failing
+	// goroutine's error is returned (siblings cancelled); the partial
+	// Result accumulated above is returned alongside it, matching the prior
+	// fail-fast 500 behaviour. needed == 0 combos produced no job, so no
+	// empty PublishBatch call is issued.
+	g, gctx := errgroup.WithContext(ctx)
+	g.SetLimit(sweepPublishConcurrency)
+	for i := range jobs {
+		job := jobs[i]
+		g.Go(func() error {
+			if err := deps.Publisher.PublishBatch(gctx, job.reqs); err != nil {
+				return fmt.Errorf("publishing generation requests for %d#%s: %w", job.size, job.mode, err)
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return result, err
 	}
 
 	return result, nil

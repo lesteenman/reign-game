@@ -14,6 +14,7 @@ require (
 	github.com/clerk/clerk-sdk-go/v2 v2.6.0
 	github.com/go-chi/chi/v5 v5.3.0
 	github.com/go-jose/go-jose/v3 v3.0.5
+	golang.org/x/sync v0.20.0
 )
 
 require (
