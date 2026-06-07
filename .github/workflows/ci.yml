@@ -483,3 +483,14 @@ jobs:
 
       - name: NPM Audit
         run: cd frontend && npm audit --package-lock-only --audit-level=moderate
+
+      # Self-enforce the SHA-pin guarantee from #113/#194: fail if any
+      # workflow reintroduces a mutable `uses: …@vN` tag ref. Matches the
+      # `uses:` ref specifically so the trailing `# vX.Y.Z` pin comment
+      # (and composite/docker refs) don't false-positive.
+      - name: Ensure all Actions are SHA-pinned
+        run: |
+          if grep -rnE 'uses:\s*[^@]+@v[0-9]' .github/workflows/; then
+            echo "::error::Found unpinned Actions ref(s). Pin to a 40-char commit SHA with a '# vX.Y.Z' trailing comment."
+            exit 1
+          fi
