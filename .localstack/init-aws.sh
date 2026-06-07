@@ -22,9 +22,12 @@ create_table_if_missing() {
       --attribute-definitions \
         AttributeName=PK,AttributeType=S \
         AttributeName=SK,AttributeType=S \
+        AttributeName=readyPoolKey,AttributeType=S \
       --key-schema \
         AttributeName=PK,KeyType=HASH \
         AttributeName=SK,KeyType=RANGE \
+      --global-secondary-indexes \
+        'IndexName=ready-index,KeySchema=[{AttributeName=readyPoolKey,KeyType=HASH}],Projection={ProjectionType=ALL}' \
       --billing-mode PAY_PER_REQUEST
   fi
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -129,6 +130,15 @@ func TestPutPuzzle(t *testing.T) {
 			if status != "ready" {
 				t.Errorf("status = %q, want %q", status, "ready")
 			}
+			// The sparse-index key is written on every ready PUT and
+			// equals the PK value.
+			rpk, ok := capturedInput.Item["readyPoolKey"].(*types.AttributeValueMemberS)
+			if !ok {
+				t.Fatalf("readyPoolKey missing or wrong type: %v", capturedInput.Item["readyPoolKey"])
+			}
+			if rpk.Value != tt.wantPK {
+				t.Errorf("readyPoolKey = %q, want %q", rpk.Value, tt.wantPK)
+			}
 		})
 	}
 }
@@ -189,8 +199,10 @@ func TestNextReady(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
+			var capturedInput *dynamodb.QueryInput
 			mock := &mockDynamoDBClient{
 				queryFunc: func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+					capturedInput = params
 					if tt.queryErr != nil {
 						return nil, tt.queryErr
 					}
@@ -215,6 +227,29 @@ func TestNextReady(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
+			// The query must target the sparse ready-index, key on
+			// readyPoolKey, cap at one item (now safe — the index holds
+			// only ready rows), and carry no status FilterExpression.
+			if capturedInput == nil {
+				t.Fatal("Query was not called")
+			}
+			if capturedInput.IndexName == nil || *capturedInput.IndexName != "ready-index" {
+				t.Errorf("IndexName = %v, want %q", capturedInput.IndexName, "ready-index")
+			}
+			if capturedInput.KeyConditionExpression == nil ||
+				!strings.Contains(*capturedInput.KeyConditionExpression, "readyPoolKey") {
+				t.Errorf("KeyConditionExpression = %v, want one referencing readyPoolKey", capturedInput.KeyConditionExpression)
+			}
+			if capturedInput.Limit == nil || *capturedInput.Limit != 1 {
+				t.Errorf("Limit = %v, want 1", capturedInput.Limit)
+			}
+			if capturedInput.FilterExpression != nil {
+				t.Errorf("FilterExpression = %v, want nil", *capturedInput.FilterExpression)
+			}
+			if rpk, ok := capturedInput.ExpressionAttributeValues[":rpk"].(*types.AttributeValueMemberS); !ok ||
+				rpk.Value != fmt.Sprintf("%d#%s", tt.size, tt.mode) {
+				t.Errorf(":rpk = %v, want %q", capturedInput.ExpressionAttributeValues[":rpk"], fmt.Sprintf("%d#%s", tt.size, tt.mode))
+			}
 			if tt.wantNil {
 				if result != nil {
 					t.Fatalf("expected nil result, got %+v", result)
@@ -226,6 +261,12 @@ func TestNextReady(t *testing.T) {
 			}
 			if result.ID != tt.wantID {
 				t.Errorf("ID = %q, want %q", result.ID, tt.wantID)
+			}
+			// Projection ALL means PK/SK are returned, so GridSize/Mode
+			// (parsed from PK) and ID (the SK) must still be populated.
+			if result.GridSize != tt.size || result.Mode != tt.mode {
+				t.Errorf("identity = (size=%d, mode=%q); want (%d, %q)",
+					result.GridSize, result.Mode, tt.size, tt.mode)
 			}
 		})
 	}
@@ -302,9 +343,17 @@ func TestMarkServed(t *testing.T) {
 			if sk != tt.sk {
 				t.Errorf("SK = %q, want %q", sk, tt.sk)
 			}
-			// Verify the update expression sets both status and servedAt.
+			// Verify the update expression sets both status and servedAt
+			// and removes the sparse-index key (served rows leave the index).
 			if capturedInput.UpdateExpression == nil {
 				t.Fatal("UpdateExpression is nil")
+			}
+			expr := *capturedInput.UpdateExpression
+			if !strings.Contains(expr, "SET") || !strings.Contains(expr, "servedAt") {
+				t.Errorf("UpdateExpression = %q, want a SET of status + servedAt", expr)
+			}
+			if !strings.Contains(expr, "REMOVE readyPoolKey") {
+				t.Errorf("UpdateExpression = %q, want REMOVE readyPoolKey", expr)
 			}
 			statusVal := capturedInput.ExpressionAttributeValues[":status"].(*types.AttributeValueMemberS).Value
 			if statusVal != "served" {
@@ -323,27 +372,41 @@ func TestMarkServed(t *testing.T) {
 
 func TestUpdateStatus(t *testing.T) {
 	tests := []struct {
-		name        string
-		pk          string
-		sk          string
-		status      string
-		updateErr   error
-		wantErr     bool
-		wantNotFoun bool
+		name          string
+		pk            string
+		sk            string
+		status        string
+		updateErr     error
+		wantErr       bool
+		wantNotFoun   bool
+		wantSetRPK    bool
+		wantRemoveRPK bool
+		wantRPKValue  string
 	}{
 		{
-			name:    "updates status to solved",
-			pk:      "7#standard",
-			sk:      "puzzle-uuid-1",
-			status:  "solved",
-			wantErr: false,
+			name:         "updates status to ready sets readyPoolKey",
+			pk:           "7#standard",
+			sk:           "puzzle-uuid-0",
+			status:       "ready",
+			wantErr:      false,
+			wantSetRPK:   true,
+			wantRPKValue: "7#standard",
 		},
 		{
-			name:    "updates status to skipped",
-			pk:      "9#double",
-			sk:      "puzzle-uuid-2",
-			status:  "skipped",
-			wantErr: false,
+			name:          "updates status to solved removes readyPoolKey",
+			pk:            "7#standard",
+			sk:            "puzzle-uuid-1",
+			status:        "solved",
+			wantErr:       false,
+			wantRemoveRPK: true,
+		},
+		{
+			name:          "updates status to skipped removes readyPoolKey",
+			pk:            "9#double",
+			sk:            "puzzle-uuid-2",
+			status:        "skipped",
+			wantErr:       false,
+			wantRemoveRPK: true,
 		},
 		{
 			name:      "propagates DynamoDB error",
@@ -402,6 +465,27 @@ func TestUpdateStatus(t *testing.T) {
 			if capturedInput.ConditionExpression == nil || *capturedInput.ConditionExpression != "attribute_exists(PK)" {
 				t.Errorf("ConditionExpression = %v, want attribute_exists(PK)", capturedInput.ConditionExpression)
 			}
+			// A transition to "ready" SETs readyPoolKey (= the PK value);
+			// any other target status REMOVEs it so the row leaves the
+			// sparse index.
+			expr := *capturedInput.UpdateExpression
+			if tt.wantSetRPK {
+				if !strings.Contains(expr, "readyPoolKey = :rpk") {
+					t.Errorf("UpdateExpression = %q, want SET readyPoolKey", expr)
+				}
+				rpk, ok := capturedInput.ExpressionAttributeValues[":rpk"].(*types.AttributeValueMemberS)
+				if !ok || rpk.Value != tt.wantRPKValue {
+					t.Errorf(":rpk = %v, want %q", capturedInput.ExpressionAttributeValues[":rpk"], tt.wantRPKValue)
+				}
+			}
+			if tt.wantRemoveRPK {
+				if !strings.Contains(expr, "REMOVE readyPoolKey") {
+					t.Errorf("UpdateExpression = %q, want REMOVE readyPoolKey", expr)
+				}
+				if _, ok := capturedInput.ExpressionAttributeValues[":rpk"]; ok {
+					t.Error(":rpk should not be set when removing readyPoolKey")
+				}
+			}
 		})
 	}
 }
@@ -444,8 +528,10 @@ func TestCountReady(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
+			var capturedInput *dynamodb.QueryInput
 			mock := &mockDynamoDBClient{
 				queryFunc: func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+					capturedInput = params
 					if tt.queryErr != nil {
 						return nil, tt.queryErr
 					}
@@ -471,6 +557,28 @@ func TestCountReady(t *testing.T) {
 			}
 			if count != tt.want {
 				t.Errorf("count = %d, want %d", count, tt.want)
+			}
+			// The count must come from the sparse ready-index — keyed on
+			// readyPoolKey, SelectCount, and with no status FilterExpression.
+			if capturedInput == nil {
+				t.Fatal("Query was not called")
+			}
+			if capturedInput.IndexName == nil || *capturedInput.IndexName != "ready-index" {
+				t.Errorf("IndexName = %v, want %q", capturedInput.IndexName, "ready-index")
+			}
+			if capturedInput.KeyConditionExpression == nil ||
+				!strings.Contains(*capturedInput.KeyConditionExpression, "readyPoolKey") {
+				t.Errorf("KeyConditionExpression = %v, want one referencing readyPoolKey", capturedInput.KeyConditionExpression)
+			}
+			if capturedInput.Select != types.SelectCount {
+				t.Errorf("Select = %v, want %v", capturedInput.Select, types.SelectCount)
+			}
+			if capturedInput.FilterExpression != nil {
+				t.Errorf("FilterExpression = %v, want nil", *capturedInput.FilterExpression)
+			}
+			if rpk, ok := capturedInput.ExpressionAttributeValues[":rpk"].(*types.AttributeValueMemberS); !ok ||
+				rpk.Value != fmt.Sprintf("%d#%s", tt.size, tt.mode) {
+				t.Errorf(":rpk = %v, want %q", capturedInput.ExpressionAttributeValues[":rpk"], fmt.Sprintf("%d#%s", tt.size, tt.mode))
 			}
 		})
 	}

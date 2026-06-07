@@ -18,6 +18,20 @@ resource "aws_dynamodb_table" "puzzle_pool" {
     type = "S"
   }
 
+  # Sparse ready-index key: written only while a puzzle is "ready" (carries
+  # the PK value). Backs the ready-index GSI so CountReady/NextReady read
+  # only ready rows instead of scanning a partition and filtering.
+  attribute {
+    name = "readyPoolKey"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "ready-index"
+    hash_key        = "readyPoolKey"
+    projection_type = "ALL"
+  }
+
   tags = {
     Project     = var.project_name
     Environment = var.environment

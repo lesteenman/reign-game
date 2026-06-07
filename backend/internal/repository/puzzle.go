@@ -15,6 +15,12 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
+// readyIndexName is the sparse global secondary index over readyPoolKey.
+// readyPoolKey carries the PK value ("{size}#{mode}") only while a row is
+// "ready", so the index holds exactly the ready puzzles — CountReady and
+// NextReady query it directly instead of scanning a partition and filtering.
+const readyIndexName = "ready-index"
+
 // DynamoDBAPI defines the DynamoDB operations used by PuzzleRepository.
 // Keeping this minimal makes testing straightforward via mock implementations.
 type DynamoDBAPI interface {
@@ -189,6 +195,10 @@ func (r *PuzzleRepository) PutPuzzle(ctx context.Context, puzzle *PuzzleRecord) 
 	pk := buildPK(puzzle.GridSize, puzzle.Mode)
 	item["PK"] = &types.AttributeValueMemberS{Value: pk}
 	item["SK"] = &types.AttributeValueMemberS{Value: puzzle.ID}
+	// readyPoolKey is the sparse ready-index key — present only on ready
+	// rows. PutPuzzle always writes status="ready", so set it here; it is
+	// removed when the row transitions away from ready (MarkServed/UpdateStatus).
+	item["readyPoolKey"] = &types.AttributeValueMemberS{Value: pk}
 
 	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName: aws.String(r.tableName),
@@ -206,20 +216,17 @@ func (r *PuzzleRepository) PutPuzzle(ctx context.Context, puzzle *PuzzleRecord) 
 func (r *PuzzleRepository) NextReady(ctx context.Context, size int, mode string) (*PuzzleRecord, error) {
 	pk := buildPK(size, mode)
 
-	// Note: DynamoDB Limit applies before FilterExpression, so we cannot
-	// use Limit=1 here — it would read one item and discard it if the
-	// status doesn't match. Instead we scan the full partition (small,
-	// typically <60 items) and filter server-side.
+	// Query the sparse ready-index. It holds only ready rows, so Limit=1
+	// is safe: there is no FilterExpression for DynamoDB's read-then-filter
+	// to drop the single item against. The projection is ALL, so the
+	// returned item still carries PK/SK and every attribute.
 	output, err := r.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(r.tableName),
-		KeyConditionExpression: aws.String("PK = :pk"),
-		FilterExpression:       aws.String("#status = :status"),
-		ExpressionAttributeNames: map[string]string{
-			"#status": "status",
-		},
+		IndexName:              aws.String(readyIndexName),
+		KeyConditionExpression: aws.String("readyPoolKey = :rpk"),
+		Limit:                  aws.Int32(1),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk":     &types.AttributeValueMemberS{Value: pk},
-			":status": &types.AttributeValueMemberS{Value: "ready"},
+			":rpk": &types.AttributeValueMemberS{Value: pk},
 		},
 	})
 	if err != nil {
@@ -266,7 +273,7 @@ func (r *PuzzleRepository) MarkServed(ctx context.Context, pk, sk string) error 
 			"PK": &types.AttributeValueMemberS{Value: pk},
 			"SK": &types.AttributeValueMemberS{Value: sk},
 		},
-		UpdateExpression:    aws.String("SET #status = :status, servedAt = :servedAt"),
+		UpdateExpression:    aws.String("SET #status = :status, servedAt = :servedAt REMOVE readyPoolKey"),
 		ConditionExpression: aws.String("attribute_exists(PK)"),
 		ExpressionAttributeNames: map[string]string{
 			"#status": "status",
@@ -290,20 +297,30 @@ func (r *PuzzleRepository) MarkServed(ctx context.Context, pk, sk string) error 
 // UpdateStatus updates a puzzle's status to the given value. See
 // MarkServed for the attribute_exists rationale.
 func (r *PuzzleRepository) UpdateStatus(ctx context.Context, pk, sk, status string) error {
+	// Keep readyPoolKey in lockstep with status: SET it (= the PK value)
+	// when transitioning to "ready", REMOVE it otherwise, so the sparse
+	// ready-index always mirrors the set of ready rows.
+	values := map[string]types.AttributeValue{
+		":status": &types.AttributeValueMemberS{Value: status},
+	}
+	updateExpr := "SET #status = :status REMOVE readyPoolKey"
+	if status == "ready" {
+		updateExpr = "SET #status = :status, readyPoolKey = :rpk"
+		values[":rpk"] = &types.AttributeValueMemberS{Value: pk}
+	}
+
 	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName: aws.String(r.tableName),
 		Key: map[string]types.AttributeValue{
 			"PK": &types.AttributeValueMemberS{Value: pk},
 			"SK": &types.AttributeValueMemberS{Value: sk},
 		},
-		UpdateExpression:    aws.String("SET #status = :status"),
+		UpdateExpression:    aws.String(updateExpr),
 		ConditionExpression: aws.String("attribute_exists(PK)"),
 		ExpressionAttributeNames: map[string]string{
 			"#status": "status",
 		},
-		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":status": &types.AttributeValueMemberS{Value: status},
-		},
+		ExpressionAttributeValues: values,
 	})
 	if err != nil {
 		var ccfe *types.ConditionalCheckFailedException
@@ -666,16 +683,14 @@ func (r *PuzzleRepository) TryClaimAutoReplenish(ctx context.Context, size int, 
 func (r *PuzzleRepository) CountReady(ctx context.Context, size int, mode string) (int, error) {
 	pk := buildPK(size, mode)
 
+	// Count off the sparse ready-index — it holds only ready rows, so no
+	// status FilterExpression is needed and DDB reads only the ready items.
 	output, err := r.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:              aws.String(r.tableName),
-		KeyConditionExpression: aws.String("PK = :pk"),
-		FilterExpression:       aws.String("#status = :status"),
-		ExpressionAttributeNames: map[string]string{
-			"#status": "status",
-		},
+		IndexName:              aws.String(readyIndexName),
+		KeyConditionExpression: aws.String("readyPoolKey = :rpk"),
 		ExpressionAttributeValues: map[string]types.AttributeValue{
-			":pk":     &types.AttributeValueMemberS{Value: pk},
-			":status": &types.AttributeValueMemberS{Value: "ready"},
+			":rpk": &types.AttributeValueMemberS{Value: pk},
 		},
 		Select: types.SelectCount,
 	})
