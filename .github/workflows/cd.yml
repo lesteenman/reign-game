@@ -9,6 +9,14 @@ permissions:
   id-token: write
   deployments: write # create the acc Deployment record (#241)
 
+# Serialize deploys. `terraform apply` takes the S3 state lock; concurrent
+# applies from rapid merges race that lock and fail ("Error acquiring the
+# state lock"). Queueing (cancel-in-progress: false) is mandatory here — a
+# mid-apply must never be interrupted, and every merged commit must deploy.
+concurrency:
+  group: cd-acc
+  cancel-in-progress: false
+
 jobs:
   deploy:
     name: Build & Deploy

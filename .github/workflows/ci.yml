@@ -364,7 +364,12 @@ jobs:
           TF_VAR_domain_aliases: ${{ vars.CI_DOMAIN_ALIASES }}
           TF_VAR_acm_certificate_arn: ${{ vars.CI_ACM_CERTIFICATE_ARN }}
         run: |
-          terraform plan -no-color -out=tfplan \
+          # -lock=false: a PR plan is read-only wrt state, so it must not
+          # contend with a concurrent CD `terraform apply` for the S3 state
+          # lock (that race failed CI Terraform Plan jobs during rapid
+          # merges). Worst case is planning against state mid-write, which is
+          # acceptable for an advisory PR-only check.
+          terraform plan -no-color -lock=false -out=tfplan \
             -var="aws_region=${{ vars.CI_AWS_REGION }}" \
             -var="lambda_zip_path=${{ github.workspace }}/backend/build/lambda.zip" \
             -var="daily_cron_lambda_zip_path=${{ github.workspace }}/backend/build/daily-cron.zip"
