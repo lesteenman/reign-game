@@ -143,17 +143,19 @@ resource "aws_cloudfront_response_headers_policy" "security" {
 # Origin request policy for the /api/* behavior: forwards exactly what the
 # backend needs and nothing that would break the API Gateway custom origin.
 # Headers: Authorization (Clerk bearer) + x-api-key (API Gateway usage-plan
-# key the frontend sends). Cookies: the two Clerk session cookies. Query
-# strings: all. Host is deliberately NOT forwarded — a forwarded Host would
-# not match the API Gateway domain and would 403 at the origin. Note: the
-# AWS provider has no `tags` argument on origin request policies.
+# key the frontend sends) + X-Device-Id (anonymous identity — the daily and
+# other anonymous endpoints 401 without it). Cookies: the two Clerk session
+# cookies. Query strings: all. Host is deliberately NOT forwarded — a
+# forwarded Host would not match the API Gateway domain and would 403 at the
+# origin. Note: the AWS provider has no `tags` argument on origin request
+# policies.
 resource "aws_cloudfront_origin_request_policy" "api" {
   name = "${var.project_name}-${var.environment}-api-origin"
 
   headers_config {
     header_behavior = "whitelist"
     headers {
-      items = ["Authorization", "x-api-key"]
+      items = ["Authorization", "x-api-key", "X-Device-Id"]
     }
   }
 
