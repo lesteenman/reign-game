@@ -140,6 +140,35 @@ resource "aws_cloudfront_response_headers_policy" "security" {
   }
 }
 
+# Origin request policy for the /api/* behavior: forwards exactly what the
+# backend needs and nothing that would break the API Gateway custom origin.
+# Headers: Authorization (Clerk bearer) + x-api-key (API Gateway usage-plan
+# key the frontend sends). Cookies: the two Clerk session cookies. Query
+# strings: all. Host is deliberately NOT forwarded — a forwarded Host would
+# not match the API Gateway domain and would 403 at the origin. Note: the
+# AWS provider has no `tags` argument on origin request policies.
+resource "aws_cloudfront_origin_request_policy" "api" {
+  name = "${var.project_name}-${var.environment}-api-origin"
+
+  headers_config {
+    header_behavior = "whitelist"
+    headers {
+      items = ["Authorization", "x-api-key"]
+    }
+  }
+
+  cookies_config {
+    cookie_behavior = "whitelist"
+    cookies {
+      items = ["__session", "__client_uat"]
+    }
+  }
+
+  query_strings_config {
+    query_string_behavior = "all"
+  }
+}
+
 # CloudFront distribution
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
@@ -172,15 +201,13 @@ resource "aws_cloudfront_distribution" "frontend" {
     }
   }
 
-  # Route /api/* to API Gateway (no caching, forward all methods + query strings).
-  # The Authorization header is forwarded so credentials reach the Lambda.
-  # Clerk session cookies (__session, __client_uat) are forwarded so the
-  # backend's RequireAuth middleware can verify the Clerk session. Only the
-  # Clerk-specific cookies are whitelisted to avoid forwarding unrelated
-  # cookies that would disrupt CloudFront's cache
-  # key for any future cacheable /api/* response. min_ttl/default_ttl/max_ttl
-  # are 0, so cache hit ratios on /api/* aren't affected anyway; whitelisting
-  # is defense-in-depth.
+  # Route /api/* to API Gateway. Caching is disabled (managed
+  # CachingDisabled policy), and forwarding is controlled by the custom
+  # origin request policy below: Authorization + x-api-key headers, the
+  # Clerk session cookies (__session, __client_uat), and all query strings
+  # reach the Lambda. The whitelists are deliberately narrow — a managed
+  # all-headers/all-cookies policy would forward Host (breaking the API
+  # Gateway custom origin) and unrelated cookies.
   ordered_cache_behavior {
     path_pattern           = "/api/*"
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
@@ -188,20 +215,9 @@ resource "aws_cloudfront_distribution" "frontend" {
     target_origin_id       = "api-gateway"
     viewer_protocol_policy = "redirect-to-https"
 
+    cache_policy_id            = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # AWS managed CachingDisabled
+    origin_request_policy_id   = aws_cloudfront_origin_request_policy.api.id
     response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
-
-    forwarded_values {
-      query_string = true
-      headers      = ["Authorization"]
-      cookies {
-        forward           = "whitelist"
-        whitelisted_names = ["__session", "__client_uat"]
-      }
-    }
-
-    min_ttl     = 0
-    default_ttl = 0
-    max_ttl     = 0
   }
 
   # PWA service worker — never cache at the edge. The browser registers
