@@ -111,6 +111,15 @@ resource "aws_iam_role_policy" "generator_dynamodb" {
   })
 }
 
+# Explicit log group so retention is bounded (AWS auto-creates the group on
+# first invocation with "Never expire"). The name must equal /aws/lambda/<fn>
+# exactly so the Lambda writes to this managed group instead of auto-creating
+# a duplicate.
+resource "aws_cloudwatch_log_group" "generator" {
+  name              = "/aws/lambda/${local.function_name}"
+  retention_in_days = 30
+}
+
 # Generator Lambda function
 resource "aws_lambda_function" "generator" {
   function_name = local.function_name
