@@ -3,7 +3,10 @@ package pool_test
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 	"github.com/eriksteenman/reign-game/backend/internal/service/pool"
@@ -29,13 +32,13 @@ func TestLoadPool_HappyPath_EnabledCombosGetCount_DisabledSkipped(t *testing.T) 
 		{Size: 7, Mode: "double", Enabled: false},
 		{Size: 9, Mode: "standard", Enabled: true},
 	}
-	countReadyCalls := 0
+	var countReadyCalls atomic.Int32
 	store := &fakeStore{
 		getAllConfigs: func(_ context.Context) ([]repository.ConfigRecord, error) {
 			return configs, nil
 		},
 		countReady: func(_ context.Context, size int, mode string) (int, error) {
-			countReadyCalls++
+			countReadyCalls.Add(1)
 			// Return a distinct count per combo so we can verify routing.
 			if size == 5 && mode == "standard" {
 				return 10, nil
@@ -76,8 +79,71 @@ func TestLoadPool_HappyPath_EnabledCombosGetCount_DisabledSkipped(t *testing.T) 
 		t.Errorf("entries[2].ReadyCount = %d, want 3", entries[2].ReadyCount)
 	}
 	// Only 2 enabled combos → CountReady called exactly twice.
-	if countReadyCalls != 2 {
-		t.Errorf("CountReady called %d times, want 2 (disabled combo must be skipped)", countReadyCalls)
+	if got := countReadyCalls.Load(); got != 2 {
+		t.Errorf("CountReady called %d times, want 2 (disabled combo must be skipped)", got)
+	}
+}
+
+func TestLoadPool_CountReadyCallsRunConcurrently(t *testing.T) {
+	// Arrange — three enabled combos. Each CountReady blocks until it has
+	// observed at least 2 callers in flight at once, proving the per-combo
+	// counts are parallelized (the serial implementation would deadlock the
+	// barrier and time out, so a bounded wait drives the assertion).
+	configs := []repository.ConfigRecord{
+		{Size: 5, Mode: "standard", Enabled: true},
+		{Size: 7, Mode: "standard", Enabled: true},
+		{Size: 9, Mode: "standard", Enabled: true},
+	}
+	var inFlight atomic.Int32
+	var maxInFlight atomic.Int32
+	var wg sync.WaitGroup
+	wg.Add(3)
+	store := &fakeStore{
+		getAllConfigs: func(_ context.Context) ([]repository.ConfigRecord, error) {
+			return configs, nil
+		},
+		countReady: func(_ context.Context, _ int, _ string) (int, error) {
+			cur := inFlight.Add(1)
+			for {
+				prev := maxInFlight.Load()
+				if cur <= prev || maxInFlight.CompareAndSwap(prev, cur) {
+					break
+				}
+			}
+			// Let the other goroutines spin up before returning so the
+			// concurrency window is observable.
+			wg.Done()
+			wg.Wait()
+			inFlight.Add(-1)
+			return 1, nil
+		},
+	}
+	svc := pool.New(store)
+
+	// Act — guard with a timeout: serial execution can never satisfy the
+	// 3-way wg.Wait barrier, so it would hang rather than pass.
+	done := make(chan struct{})
+	var entries []pool.ComboEntry
+	var err error
+	go func() {
+		entries, err = svc.LoadPool(context.Background())
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("LoadPool did not run CountReady concurrently (barrier timed out — counts are still serial)")
+	}
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(entries) != 3 {
+		t.Fatalf("entries length = %d, want 3", len(entries))
+	}
+	if got := maxInFlight.Load(); got < 2 {
+		t.Errorf("max concurrent CountReady = %d, want >= 2 (counts should be parallel)", got)
 	}
 }
 
@@ -87,13 +153,13 @@ func TestLoadPool_AllDisabled_NoCountReadyCalled(t *testing.T) {
 		{Size: 5, Mode: "standard", Enabled: false},
 		{Size: 7, Mode: "double", Enabled: false},
 	}
-	countReadyCalled := false
+	var countReadyCalled atomic.Bool
 	store := &fakeStore{
 		getAllConfigs: func(_ context.Context) ([]repository.ConfigRecord, error) {
 			return configs, nil
 		},
 		countReady: func(_ context.Context, _ int, _ string) (int, error) {
-			countReadyCalled = true
+			countReadyCalled.Store(true)
 			return 0, nil
 		},
 	}
@@ -109,7 +175,7 @@ func TestLoadPool_AllDisabled_NoCountReadyCalled(t *testing.T) {
 	if len(entries) != 2 {
 		t.Fatalf("entries length = %d, want 2", len(entries))
 	}
-	if countReadyCalled {
+	if countReadyCalled.Load() {
 		t.Error("CountReady must not be called when all configs are disabled")
 	}
 	for i, e := range entries {
