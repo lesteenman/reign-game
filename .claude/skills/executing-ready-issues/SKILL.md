@@ -45,6 +45,22 @@ trigger fires). Autonomy changes *who decides design*, not *whether the gates ru
   post-deploy verification gate. **#241 (GitHub Environments + Deployments verification) is the stated
   prerequisite for widening autonomous merge** — until it lands, keep the hold set conservative.
 
+## Merge mechanics (stacked PRs, deploy cadence)
+
+When a batch contains stacked PRs (B based on A) or overlapping files, the order and method matter:
+
+- **Never `--delete-branch` a stacked base until its children are retargeted.** GitHub *closes* (does
+  not auto-retarget) a PR whose base branch is deleted, and a closed PR can't be reopened once its base
+  is gone — you have to recreate it. Sequence: merge A **keeping its branch** → retarget B's base to
+  `main` (`gh pr edit B --base main`) → **rebase B's branch onto `main` and force-push** (a base change
+  alone does not fire CI; only a push does) → merge B → then delete the leftover branches.
+- **Merge one PR per CD apply.** CD has no apply-serialization unless the `cd-acc` concurrency group is
+  in place; rapid merges otherwise race the Terraform state lock and fail. Wait for each merge's CD run
+  to drain (`gh run list --workflow CD` shows no in_progress/queued) before merging the next.
+- **Overlapping files conflict after the first merge.** Two PRs editing the same file in the same region
+  (e.g. #118 GSI + #164 SSE both in `modules/database/main.tf`) — the second goes CONFLICTING once the
+  first lands. Rebase it on `main`, resolve to keep both blocks, force-push.
+
 ## Re-entry digest
 
 When the supervisor returns, deliver a **single digest** (not "go read N PRs cold"), via
