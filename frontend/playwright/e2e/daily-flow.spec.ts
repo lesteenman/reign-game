@@ -43,6 +43,19 @@ import { test, expect } from "@playwright/test";
 const DAILY_TILE_TESTID = "tile-daily";
 const DAILY_GAME_BOARD_TESTID = "daily-game-board";
 const DAILY_POST_COMPLETION_TESTID = "daily-post-completion";
+const DAILY_RECYCLE_LINE_TESTID = "daily-recycle-line";
+
+/**
+ * Device id the e2e seed pre-seeds a solved PLAY row against, on the
+ * recycle-mode DAILY#<today> schedule row (#150). The recycle-line spec
+ * pins localStorage `reign.deviceId` to this value so the GET resolves
+ * to the seeded solved play, returns isRecycle=true, and renders
+ * PostCompletionScreen with the recycle line. Must match the value in
+ * Taskfile.yml e2e:seed (recycle_device).
+ */
+const RECYCLE_SEED_DEVICE_ID = "e2e-recycle-device-150";
+/** localStorage key the SPA reads the anonymous deviceId from. */
+const DEVICE_ID_STORAGE_KEY = "reign.deviceId";
 
 /** Today's date as YYYY-MM-DD in UTC — matches DailyFlow.todayUtcDate. */
 function todayUtcDate(): string {
@@ -251,5 +264,77 @@ test.describe("Daily flow", () => {
       dailyApiCalls,
       `DP-27 short-circuit must skip the network round-trip; got: ${dailyApiCalls.join(", ")}`,
     ).toEqual([]);
+  });
+
+  test("recycle day (#150) — recycle line renders on the network-backed PostCompletionScreen", async ({
+    page,
+  }) => {
+    // Real-wire proof for #150: the backend derives `isRecycle` on
+    // GET /api/daily/{date} from the schedule row's `mode` attribute,
+    // and the frontend renders the recycle line only on the *network*
+    // path (the IDB short-circuit hardcodes isRecycle=false — see
+    // useDailyPuzzle.ts). So this MUST drive the GET, not the cache.
+    //
+    // The e2e seed (Taskfile.yml e2e:seed) pre-seeds, for today (UTC):
+    //   - a DAILY#<today> schedule row with mode=recycle
+    //   - a solved PLAY#<RECYCLE_SEED_DEVICE_ID>/DAILY#<today> row
+    // We pin localStorage `reign.deviceId` to that device so the GET
+    // resolves to the seeded solved play (outcome=solved, with
+    // serverElapsedMs + submittedAt), which makes useDailyPuzzle return
+    // kind:'solved' from the network payload carrying isRecycle=true,
+    // and DailyFlow renders PostCompletionScreen with the recycle line.
+
+    // Arrange: bind the storage origin, pin the seeded device id, and
+    // wipe IndexedDB so the GET path runs (no DP-27 short-circuit).
+    await page.goto("/");
+    await page.evaluate(
+      ({ deviceId, deviceKey }) => {
+        localStorage.setItem(deviceKey, deviceId);
+        return new Promise<void>((resolve, reject) => {
+          const req = indexedDB.deleteDatabase("reign-game");
+          req.onsuccess = () => resolve();
+          req.onerror = () => reject(req.error);
+          req.onblocked = () => resolve();
+        });
+      },
+      {
+        deviceId: RECYCLE_SEED_DEVICE_ID,
+        deviceKey: DEVICE_ID_STORAGE_KEY,
+      },
+    );
+
+    // Track the GET so we can prove the recycle line came from the wire,
+    // not a cached short-circuit.
+    const dailyGets: string[] = [];
+    page.on("request", (req) => {
+      if (
+        req.method() === "GET" &&
+        req.url().includes("/api/daily/") &&
+        !req.url().includes("/result")
+      ) {
+        dailyGets.push(req.url());
+      }
+    });
+
+    // Act: navigate into the daily flow.
+    await page.goto("/play?flow=daily");
+
+    // Assert: PostCompletionScreen renders (the seeded play is solved)
+    // and the recycle line is present with the exact copy.
+    await expect(
+      page.getByTestId(DAILY_POST_COMPLETION_TESTID),
+    ).toBeVisible({ timeout: 15_000 });
+    const recycleLine = page.getByTestId(DAILY_RECYCLE_LINE_TESTID);
+    await expect(recycleLine).toBeVisible();
+    await expect(recycleLine).toHaveText(
+      "Today's puzzle is a recycle of a recent day.",
+    );
+
+    // The recycle flag must have arrived over the wire — at least one
+    // GET /api/daily/{date} fired (no cache short-circuit).
+    expect(
+      dailyGets.length,
+      `recycle line must come from the network GET, not the IDB short-circuit`,
+    ).toBeGreaterThan(0);
   });
 });
