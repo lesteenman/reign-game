@@ -13,6 +13,16 @@ output "api_gateway_stage" {
   value       = aws_api_gateway_stage.api.stage_name
 }
 
+output "lambda_function_name" {
+  description = "API Lambda function name (CloudWatch AWS/Lambda FunctionName dimension)"
+  value       = aws_lambda_function.api.function_name
+}
+
+output "api_gateway_name" {
+  description = "REST API name (CloudWatch AWS/ApiGateway ApiName dimension)"
+  value       = aws_api_gateway_rest_api.api.name
+}
+
 output "clerk_publishable_key_param_name" {
   description = "SSM Parameter Store name for the Clerk publishable key. The CD workflow reads this at frontend build time."
   value       = aws_ssm_parameter.clerk_publishable_key.name

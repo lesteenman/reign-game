@@ -45,6 +45,31 @@ module "frontend" {
   }
 }
 
+module "monitoring" {
+  source = "./modules/monitoring"
+
+  project_name = var.project_name
+  environment  = var.environment
+
+  api_function_name        = module.api.lambda_function_name
+  generator_function_name  = module.generation.generator_function_name
+  daily_cron_function_name = module.daily_cron.lambda_function_name
+
+  api_gateway_name  = module.api.api_gateway_name
+  api_gateway_stage = module.api.api_gateway_stage
+
+  generation_queue_name = module.generation.queue_name
+  generation_dlq_name   = module.generation.dlq_name
+
+  puzzle_table_name          = module.database.puzzle_table_name
+  cloudfront_distribution_id = module.frontend.cloudfront_distribution_id
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
 module "daily_cron" {
   source = "./modules/daily-cron"
 
