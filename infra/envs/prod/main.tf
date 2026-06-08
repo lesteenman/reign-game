@@ -1,12 +1,12 @@
 module "database" {
-  source = "./modules/database"
+  source = "../../modules/database"
 
   project_name = var.project_name
   environment  = var.environment
 }
 
 module "generation" {
-  source = "./modules/generation"
+  source = "../../modules/generation"
 
   project_name      = var.project_name
   environment       = var.environment
@@ -16,7 +16,7 @@ module "generation" {
 }
 
 module "api" {
-  source = "./modules/api"
+  source = "../../modules/api"
 
   project_name          = var.project_name
   environment           = var.environment
@@ -30,7 +30,7 @@ module "api" {
 }
 
 module "frontend" {
-  source = "./modules/frontend"
+  source = "../../modules/frontend"
 
   project_name        = var.project_name
   environment         = var.environment
@@ -45,8 +45,24 @@ module "frontend" {
   }
 }
 
+module "daily_cron" {
+  source = "../../modules/daily-cron"
+
+  name_prefix            = "${var.project_name}-${var.environment}"
+  puzzle_pool_table_name = module.database.puzzle_table_name
+  puzzle_pool_table_arn  = module.database.puzzle_table_arn
+  generation_queue_arn   = module.generation.queue_arn
+  generation_queue_url   = module.generation.queue_url
+  lambda_zip_path        = var.daily_cron_lambda_zip_path
+
+  tags = {
+    Project     = var.project_name
+    Environment = var.environment
+  }
+}
+
 module "monitoring" {
-  source = "./modules/monitoring"
+  source = "../../modules/monitoring"
 
   project_name = var.project_name
   environment  = var.environment
@@ -63,22 +79,6 @@ module "monitoring" {
 
   puzzle_table_name          = module.database.puzzle_table_name
   cloudfront_distribution_id = module.frontend.cloudfront_distribution_id
-
-  tags = {
-    Project     = var.project_name
-    Environment = var.environment
-  }
-}
-
-module "daily_cron" {
-  source = "./modules/daily-cron"
-
-  name_prefix            = "${var.project_name}-${var.environment}"
-  puzzle_pool_table_name = module.database.puzzle_table_name
-  puzzle_pool_table_arn  = module.database.puzzle_table_arn
-  generation_queue_arn   = module.generation.queue_arn
-  generation_queue_url   = module.generation.queue_url
-  lambda_zip_path        = var.daily_cron_lambda_zip_path
 
   tags = {
     Project     = var.project_name

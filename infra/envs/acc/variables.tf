@@ -10,7 +10,7 @@ variable "project_name" {
 }
 
 variable "environment" {
-  description = "Deployment environment. Currently 'acc' — this stack serves the acceptance domain reign.acc.steenman.me. Future real-prod env (reign.steenman.me) will set this to 'prod' via per-env tfvars or a separate workspace."
+  description = "Deployment environment. 'acc' — this stack serves the acceptance domain reign.acc.steenman.me. The prod env lives in ../prod with environment='prod'."
   type        = string
   default     = "acc"
 }

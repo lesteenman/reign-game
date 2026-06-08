@@ -9,9 +9,8 @@
 # are safe to leave (they can be removed after the first successful apply).
 #
 # These assume the groups already exist — true for acc, whose Lambdas have
-# run. A brand-new environment whose Lambdas have never been invoked has no
-# group to import yet; drop or guard these when standing up such an env
-# (the future prod env, #132).
+# run. The prod env (../prod) has no such import blocks: its Lambdas have
+# never been invoked, so there is no group to adopt on the first apply.
 import {
   to = module.api.aws_cloudwatch_log_group.api
   id = "/aws/lambda/${var.project_name}-${var.environment}-api"

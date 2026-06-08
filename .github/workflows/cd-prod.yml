@@ -1,0 +1,165 @@
+name: CD Prod
+
+# Manual, gated promotion to production. Never auto-runs: the only trigger
+# is workflow_dispatch. The `ref` input picks the known-good commit (or tag)
+# to promote — defaults to the main branch HEAD. The `prod` GitHub
+# Environment carries a required-reviewer protection rule, so a human must
+# approve before the deploy job runs (deliberate confirm + audit trail).
+#
+# First real apply is a runbook step (docs/runbooks/prod-launch.md): it
+# depends on the prod Environment secrets/vars being populated, the ACM
+# cert + Clerk prod tenant + DNS existing, and the deploy role's trust
+# policy allowing repo:lesteenman/reign-game:environment:prod. Until then a
+# dispatch fails cleanly at configure-aws-credentials (empty AWS_ROLE_ARN)
+# rather than half-applying.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Git ref (branch, tag, or SHA) to promote to prod. Defaults to the main branch HEAD."
+        required: false
+        default: main
+
+permissions:
+  contents: read
+  id-token: write
+  deployments: write # create the prod Deployment record (mirrors acc, #241)
+
+# Serialize prod deploys on their own group (separate from cd-acc). A prod
+# `terraform apply` takes the reign-game/prod S3 state lock; queueing
+# (cancel-in-progress: false) ensures a mid-apply is never interrupted.
+concurrency:
+  group: cd-prod
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & Deploy (prod)
+    runs-on: ubuntu-latest
+    # The `prod` Environment (a) resolves the deploy secrets/vars from the
+    # environment and (b) enforces the required-reviewer approval gate and
+    # auto-creates a Deployment record + status for prod. The post-deploy
+    # verification step is the job's last step, so a failed check fails the
+    # job and the Deployment auto-marks `failure`.
+    # NOTE: the OIDC `sub` is repo:lesteenman/reign-game:environment:prod —
+    # the deploy role's trust policy must allow that subject (runbook step).
+    environment:
+      name: prod
+      url: https://reign.steenman.me
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.ref }}
+
+      - uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6.2.0
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version: "1.26.4"
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+
+      - uses: arduino/setup-task@b91d5d2c96a56797b48ac1e0e89220bf64044611 # v2.0.0
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build reproducible Lambda zip
+        run: task build:lambda
+
+      - name: Frontend install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Terraform Init
+        working-directory: infra/envs/prod
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ secrets.TF_VAR_TERRAFORM_STATE_BUCKET }}" \
+            -backend-config="key=${{ vars.TF_VAR_TERRAFORM_STATE_PREFIX }}/terraform.tfstate" \
+            -backend-config="region=${{ vars.AWS_REGION }}" \
+            -backend-config="use_lockfile=true"
+
+      - name: Terraform Apply
+        working-directory: infra/envs/prod
+        env:
+          # Initial-apply-only inputs for the Clerk SSM parameters (prod
+          # tenant: pk_live/sk_live). Both parameters use lifecycle
+          # { ignore_changes = [value] }, so rotating them later requires
+          # changing them in the SSM console — Terraform will not overwrite.
+          TF_VAR_clerk_publishable_key: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
+          TF_VAR_clerk_secret_key: ${{ secrets.CLERK_SECRET_KEY }}
+          # The us-east-1 ACM cert ARN covering reign.steenman.me, from the
+          # prod Environment. The domain alias itself lives in
+          # infra/envs/prod/terraform.tfvars (public, fixed config).
+          TF_VAR_acm_certificate_arn: ${{ vars.ACM_CERTIFICATE_ARN }}
+        run: |
+          terraform apply -auto-approve \
+            -var="aws_region=${{ vars.AWS_REGION }}" \
+            -var="lambda_zip_path=${{ github.workspace }}/backend/build/lambda.zip" \
+            -var="daily_cron_lambda_zip_path=${{ github.workspace }}/backend/build/daily-cron.zip"
+
+      - name: Fetch Clerk publishable key from SSM
+        id: clerk
+        run: |
+          # SSM is the source of truth so rotations done in the SSM console
+          # flow through to subsequent frontend builds without a TF change.
+          PARAM_NAME=$(terraform -chdir=infra/envs/prod output -raw clerk_publishable_key_param_name)
+          PUBLISHABLE_KEY=$(aws ssm get-parameter \
+            --name "${PARAM_NAME}" \
+            --query 'Parameter.Value' \
+            --output text)
+          echo "::add-mask::${PUBLISHABLE_KEY}"
+          echo "publishable_key=${PUBLISHABLE_KEY}" >> "$GITHUB_OUTPUT"
+
+      - name: Fetch API Gateway client key from Terraform
+        id: api_key
+        run: |
+          # Browser-distributed API key bound to the client usage plan.
+          API_KEY=$(terraform -chdir=infra/envs/prod output -raw client_api_key_value)
+          echo "::add-mask::${API_KEY}"
+          echo "value=${API_KEY}" >> "$GITHUB_OUTPUT"
+
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          VITE_CLERK_PUBLISHABLE_KEY: ${{ steps.clerk.outputs.publishable_key }}
+          VITE_API_KEY: ${{ steps.api_key.outputs.value }}
+        run: npm run build
+
+      - name: Sync frontend to S3
+        run: |
+          BUCKET=$(terraform -chdir=infra/envs/prod output -raw frontend_bucket_name)
+          aws s3 sync frontend/dist/ "s3://${BUCKET}" --delete
+
+      - name: Invalidate CloudFront cache
+        run: |
+          DIST_ID=$(terraform -chdir=infra/envs/prod output -raw frontend_distribution_id)
+          aws cloudfront create-invalidation --distribution-id "${DIST_ID}" --paths "/*"
+
+      # Post-deploy verification — gates the (native) prod Deployment status.
+      # Last step of the job, so a failure marks the Deployment `failure`.
+      # Probes the live site only (no secrets); see frontend/scripts/verify-deploy.mjs.
+      - name: Cache Playwright browsers
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+      - name: Install Playwright chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Post-deploy verification
+        working-directory: frontend
+        run: node scripts/verify-deploy.mjs https://reign.steenman.me

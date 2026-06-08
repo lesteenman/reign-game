@@ -1,5 +1,8 @@
 *.tfvars
 *.tfvars.json
+# Per-env terraform.tfvars are committed config (env identity + public
+# domain alias only — no secrets). Cert/Clerk/state values come from CI/CD.
+!envs/*/terraform.tfvars
 .terraform/
 .terraform.lock.hcl
 *.tfstate

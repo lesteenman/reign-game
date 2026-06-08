@@ -214,7 +214,7 @@ frontend/
 
 ```
 infra/
-├── modules/
+├── modules/                     # Shared, reusable modules (composed by each env root)
 │   ├── frontend/                # S3 + CloudFront
 │   ├── api/                     # API Gateway + Lambda + Clerk SSM keys + IAM (Phase 6 admin auth lives here, R-089)
 │   ├── daily-cron/              # daily-cron Lambda + EventBridge schedules + IAM (Phase 8, R-8-01)
@@ -223,12 +223,17 @@ infra/
 │   │   └── variables.tf
 │   ├── database/                # DynamoDB tables
 │   └── generation/              # SQS puzzle-generation queue + DLQ (Phase 4)
-├── environments/
-│   └── prod/                    # Production tfvars (single env initially)
-├── main.tf
-├── variables.tf
-├── outputs.tf
-└── backend.tf                   # Terraform state backend (S3)
+└── envs/                        # Thin per-env roots (backend key + tfvars; call ../../modules/*)
+    ├── acc/                     # Acceptance (state key reign-game/acc); auto-deploys via cd.yml
+    │   ├── main.tf              # Module composition (database → generation → api → frontend → daily_cron)
+    │   ├── variables.tf
+    │   ├── outputs.tf
+    │   ├── versions.tf
+    │   ├── backend.tf           # Terraform state backend (S3)
+    │   ├── imports.tf           # One-time CloudWatch log-group adoption (acc-only, #162)
+    │   └── terraform.tfvars     # environment="acc"
+    └── prod/                    # Production (state key reign-game/prod); manual cd-prod.yml; first apply = runbook (#132)
+        └── terraform.tfvars     # environment="prod", domain_aliases=["reign.steenman.me"] (+ same root files as acc, no imports.tf)
 ```
 
 ## Design
