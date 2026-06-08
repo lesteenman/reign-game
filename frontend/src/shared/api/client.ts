@@ -27,6 +27,18 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 // don't ship an empty `x-api-key: ` line that API Gateway would 403.
 const API_KEY = import.meta.env.VITE_API_KEY || '';
 
+/**
+ * Returns the `x-api-key` header object, or an empty object when no key
+ * is configured (local dev / tests). Callers spread it into a fetch
+ * `headers` so the header is omitted entirely when the key is empty —
+ * the same truthy guard `apiRequest` applies, exported so non-client
+ * fetches (e.g. the connectivity probe) bind to the usage plan without
+ * duplicating the env read.
+ */
+export function apiKeyHeader(): Record<string, string> {
+  return API_KEY ? { 'x-api-key': API_KEY } : {};
+}
+
 /** Error thrown on non-2xx API responses. Includes the HTTP status code. */
 export class ApiError extends Error {
   constructor(
@@ -69,8 +81,8 @@ async function apiRequest<T>(
   if (hasBody && headers['Content-Type'] === undefined) {
     headers['Content-Type'] = 'application/json';
   }
-  if (API_KEY && headers['x-api-key'] === undefined) {
-    headers['x-api-key'] = API_KEY;
+  if (headers['x-api-key'] === undefined) {
+    Object.assign(headers, apiKeyHeader());
   }
 
   const response = await fetch(url.toString(), {
