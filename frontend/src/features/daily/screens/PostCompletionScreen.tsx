@@ -208,7 +208,6 @@ export function PostCompletionScreen({
   const [currentTime, setCurrentTime] = useState<Date>(initialNow);
 
   useEffect(() => {
-    setCurrentTime(initialNow);
     const interval = setInterval(() => {
       // Read wall-clock time directly instead of incrementing the
       // previous value by 1000ms. Browsers throttle setInterval on
@@ -219,7 +218,7 @@ export function PostCompletionScreen({
       setCurrentTime(new Date());
     }, 1000);
     return () => clearInterval(interval);
-  }, [initialNow]);
+  }, []);
 
   const target = useMemo(() => nextUtcMidnight(currentTime), [currentTime]);
   const remainingMs = target.getTime() - currentTime.getTime();

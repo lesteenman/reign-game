@@ -11,7 +11,7 @@
     "test:integration": "playwright test --project=integration",
     "test:e2e": "PLAYWRIGHT_SKIP_WEBSERVER=1 playwright test --project=e2e",
     "test:playwright": "playwright test",
-    "lint": "eslint ."
+    "lint": "eslint . --max-warnings 0"
   },
   "dependencies": {
     "@clerk/react": "^6.7.3",

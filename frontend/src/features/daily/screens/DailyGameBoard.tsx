@@ -89,6 +89,11 @@ export function DailyGameBoard({ payload, onSolved }: DailyGameBoardProps) {
   // gets a fresh canvas rather than a frozen pre-solved grid.
   const [restored, setRestored] = useState<RestoredState | null>(null);
   const [restoreReady, setRestoreReady] = useState(false);
+  // Stable fallback start time, captured once on mount, used when no
+  // in-progress state is restored. Seeding via a lazy initializer keeps
+  // Date.now() out of the render body and gives GameBoard a constant
+  // startedAt anchor across re-renders.
+  const [fallbackStartedAt] = useState(() => Date.now());
 
   useEffect(() => {
     let cancelled = false;
@@ -162,7 +167,7 @@ export function DailyGameBoard({ payload, onSolved }: DailyGameBoardProps) {
   const initialHistory = restored?.history ?? EMPTY_HISTORY;
   const timerElapsed = restored?.timerElapsed ?? 0;
   const timerResumedAt = restored?.timerResumedAt ?? null;
-  const startedAt = restored?.startedAt ?? Date.now();
+  const startedAt = restored?.startedAt ?? fallbackStartedAt;
 
   // Match PageShell's flex-column layout. Without it, GameBoard's
   // delegated render (fragment of timer / grid / metadata / actions)

@@ -207,6 +207,11 @@ export function GameBoard({
   const assignedAtMs = assignedAt ? new Date(assignedAt).getTime() : null;
   const isWallClockAnchored = assignedAtMs !== null && !Number.isNaN(assignedAtMs);
   const [ready, setReady] = useState(false);
+  // Intentional one-render mount flag: gates the debounced-save effect and
+  // the completion overlay so neither fires on the first synchronous render
+  // before layout settles. The single mount transition is the deliberate
+  // behaviour here, not a cascading-render bug.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useLayoutEffect(() => { setReady(true); }, []);
 
   const {
@@ -274,26 +279,44 @@ export function GameBoard({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Wall-clock tick — re-renders the timer display every second when
-  // anchored on `assignedAt`. No pause-on-hide; the leaderboard ticks
-  // too (`serverElapsedMs = submittedAt − assignedAt`).
-  const [, setWallClockTick] = useState(0);
+  // Wall-clock elapsed seconds for `assignedAt`-anchored flows. Computed
+  // from `Date.now()` inside the interval callback (a timer event, not
+  // render) so the timer display reads pure state. Lazy initializer seeds
+  // the first render; the interval resyncs every second. No pause-on-hide;
+  // the leaderboard ticks too (`serverElapsedMs = submittedAt − assignedAt`).
+  const [wallClockElapsed, setWallClockElapsed] = useState(() =>
+    assignedAtMs !== null ? Math.max(0, Math.floor((Date.now() - assignedAtMs) / 1000)) : 0,
+  );
   useEffect(() => {
-    if (!isWallClockAnchored) return;
+    if (!isWallClockAnchored || assignedAtMs === null) return;
     if (isSolved) return;
-    const id = setInterval(() => setWallClockTick((t) => t + 1), 1000);
+    const id = setInterval(
+      () => setWallClockElapsed(Math.max(0, Math.floor((Date.now() - assignedAtMs) / 1000))),
+      1000,
+    );
     return () => clearInterval(id);
-  }, [isWallClockAnchored, isSolved]);
+  }, [isWallClockAnchored, assignedAtMs, isSolved]);
 
-  // Refs for debounced saves
+  // Refs for debounced saves. These mirror the latest cells / history /
+  // timer / solved state so the save, visibility, beforeunload and solve
+  // effects (and the pointer/keyboard handlers) read the current value
+  // without re-subscribing on every change. They are read only outside
+  // render (in effects and event handlers), so the mirror is synced in an
+  // effect that runs after commit — never written during render.
   const cellsRef = useRef(cells);
-  cellsRef.current = cells;
   const historyRef = useRef(history);
-  historyRef.current = history;
   const timerRef = useRef(timer);
-  timerRef.current = timer;
   const isSolvedRef = useRef(isSolved);
-  isSolvedRef.current = isSolved;
+  // Stable ref for the optional solve-event delegate so the solve effect's
+  // deps don't churn when the caller passes an inline arrow.
+  const onSolveDetectedRef = useRef(onSolveDetected);
+  useEffect(() => {
+    cellsRef.current = cells;
+    historyRef.current = history;
+    timerRef.current = timer;
+    isSolvedRef.current = isSolved;
+    onSolveDetectedRef.current = onSolveDetected;
+  });
 
   // Debounced save on cell or history changes
   useEffect(() => {
@@ -325,7 +348,7 @@ export function GameBoard({
     }
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
-  }, [puzzle, saveState, isWallClockAnchored]);
+  }, [puzzle, flowType, flowId, saveState, isWallClockAnchored]);
 
   // Before unload: best-effort save. Wall-clock-anchored flows skip
   // the pause (nothing to pause) but still snapshot cells/history.
@@ -338,12 +361,7 @@ export function GameBoard({
     }
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [puzzle, saveState, isWallClockAnchored]);
-
-  // Stable ref for the optional solve-event delegate so the solve
-  // effect's deps don't churn when the caller passes an inline arrow.
-  const onSolveDetectedRef = useRef(onSolveDetected);
-  onSolveDetectedRef.current = onSolveDetected;
+  }, [puzzle, flowType, flowId, saveState, isWallClockAnchored]);
 
   // Handle puzzle completion. Clear-on-solve (ST-07): the Flow Slot is
   // removed so the next visit to this `(flowType, flowId)` URL fetches
@@ -457,7 +475,7 @@ export function GameBoard({
       >
         {formatTime(
           isWallClockAnchored && assignedAtMs !== null
-            ? Math.max(0, Math.floor((Date.now() - assignedAtMs) / 1000))
+            ? wallClockElapsed
             : timer.elapsed,
         )}
       </div>

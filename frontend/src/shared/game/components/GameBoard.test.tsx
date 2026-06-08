@@ -31,6 +31,11 @@ vi.mock('@shared/game/services/puzzleService', () => ({
 const emptyGrid5 = (): CellState[][] =>
   Array.from({ length: 5 }, () => Array<CellState>(5).fill('empty'));
 
+// Fixed render-time `startedAt` anchor. Captured once at module load so
+// the value isn't read impurely (Date.now()) during a component render —
+// these tests don't assert on the precise startedAt value.
+const FIXED_STARTED_AT = Date.now();
+
 beforeEach(() => {
   useUserMock.mockReset();
   // Default admin so the Skip-gating test starts from the admin-shows
@@ -74,7 +79,7 @@ function Harness({
       initialHistory={EMPTY_HISTORY}
       timerElapsed={0}
       timerResumedAt={null}
-      startedAt={Date.now()}
+      startedAt={FIXED_STARTED_AT}
       navigate={navigate}
       saveState={async () => {}}
       clearState={async () => {}}
@@ -168,7 +173,7 @@ describe('GameBoard — timer starts on mount, not on first tap', () => {
           initialHistory={EMPTY_HISTORY}
           timerElapsed={0}
           timerResumedAt={null}
-          startedAt={Date.now()}
+          startedAt={FIXED_STARTED_AT}
           navigate={navigate}
           saveState={async (s) => {
             lastSavedTimer = s.timer;

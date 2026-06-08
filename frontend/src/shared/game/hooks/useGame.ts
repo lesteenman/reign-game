@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo, useReducer } from 'react';
+import { useState, useCallback, useRef, useMemo, useReducer, useEffect } from 'react';
 import type { CellState, Conflict, PuzzleData } from '@engine/types';
 import { getAllConflicts } from '@engine/constraints';
 import { cellKey } from '@engine/cellKey';
@@ -168,9 +168,12 @@ export function useGame(
 
   // cellsRef mirrors the reducer's cells so handlePointerDown can stay
   // reference-stable — it reads cell state at the moment of pointer-down,
-  // not at callback setup, so a ref is the right shape.
+  // not at callback setup, so a ref is the right shape. Synced in an
+  // effect (read only inside the pointer handler, never during render).
   const cellsRef = useRef(cells);
-  cellsRef.current = cells;
+  useEffect(() => {
+    cellsRef.current = cells;
+  });
 
   // Commit dispatches a pure compute function; the reducer owns the state
   // read, so no external cells mirror is needed on the write path.

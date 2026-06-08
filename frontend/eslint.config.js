@@ -115,14 +115,13 @@ export default tseslint.config(
           caughtErrorsIgnorePattern: '^_',
         },
       ],
-      // Classic hooks rules only. eslint-plugin-react-hooks@7's
-      // `recommended` preset adds new React-Compiler-aware rules
-      // (`react-hooks/purity`, `react-hooks/refs`, etc.) that flag
-      // pre-existing patterns in the codebase (e.g. `Date.now()` during
-      // render). Adopting them is out of scope for #198 (path aliases +
-      // ESLint enforcement); file a follow-up to enable + fix sites.
-      'react-hooks/rules-of-hooks': 'error',
-      'react-hooks/exhaustive-deps': 'warn',
+      // Full eslint-plugin-react-hooks@7 recommended preset, including
+      // the React-Compiler-aware rules (`react-hooks/purity`,
+      // `react-hooks/refs`, `react-hooks/set-state-in-effect`, etc.).
+      // `exhaustive-deps` is escalated to error so missing-dependency
+      // bugs block CI rather than warning silently.
+      ...reactHooks.configs['recommended-latest'].rules,
+      'react-hooks/exhaustive-deps': 'error',
       // We don't use prop-types in TS; React.configs.recommended turns
       // this on by default.
       'react/prop-types': 'off',
