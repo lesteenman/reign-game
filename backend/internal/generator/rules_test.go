@@ -133,14 +133,8 @@ func ruleByID(id ruleID) ruleFunc {
 		return ruleSingleLineRegion
 	case ruleR5:
 		return ruleSingleRegionLine
-	case ruleR6:
-		return ruleLockedKSetInLine
 	case ruleR7:
 		return ruleAdjacencyForcing
-	case ruleR8:
-		return ruleKLineSubset
-	case ruleR9:
-		return ruleRegionPairExclusion
 	}
 	panic("unknown ruleID")
 }
@@ -317,44 +311,6 @@ func TestRuleR5_SingleRegionLine(t *testing.T) {
 	}
 }
 
-// TestRuleR6_LockedKSetInLine: a row with exactly k candidates all sharing
-// a region. Eliminate that region's candidates outside the row.
-func TestRuleR6_LockedKSetInLine(t *testing.T) {
-	t.Parallel()
-
-	// Arrange — 4x4 k=1. Row 0 reduced to a single cand at (0, 0),
-	// region 0. This is the k=1 form; the content of R6 beyond R3 is
-	// "eliminate region cands elsewhere." Place the mark and then check
-	// R6's region elimination.
-	//
-	// Because R3 would also handle this, we construct a test where R6
-	// fires WITHOUT having R3 fire first: use the cands = k locked set
-	// shape but do not let R3 run.
-	regionMap := [][]int{
-		{0, 0, 1, 1},
-		{2, 2, 1, 1},
-		{0, 3, 3, 3},
-		{2, 2, 3, 3},
-	}
-	s := buildState(t, regionMap, 4, 1)
-	// Reduce row 0 to a single cand at (0, 0). Region 0 also covers
-	// (2, 0). R6 should eliminate (2, 0) from cands.
-	s.eliminateCand(0, 1)
-	s.eliminateCand(0, 2)
-	s.eliminateCand(0, 3)
-
-	// Act
-	changed := ruleLockedKSetInLine(s)
-
-	// Assert
-	if !changed {
-		t.Fatal("expected R6 changed=true")
-	}
-	if s.cands[2]&(uint16(1)<<0) != 0 {
-		t.Errorf("row 2: expected col 0 (region 0) eliminated, got cands=%04b", s.cands[2])
-	}
-}
-
 // TestRuleR7_AdjacencyForcing: placing a mark at X would force an
 // adjacent mark. Eliminate X.
 func TestRuleR7_AdjacencyForcing(t *testing.T) {
@@ -400,174 +356,6 @@ func TestRuleR7_AdjacencyForcing(t *testing.T) {
 	// Row 0 col 1 should be eliminated.
 	if s.cands[0]&(uint16(1)<<1) != 0 {
 		t.Errorf("row 0: expected col 1 eliminated by R7, got cands=%05b", s.cands[0])
-	}
-}
-
-// TestRuleR8_KLineSubset: at k=2, two rows needing 2 marks each whose
-// combined candidates span only 2 columns — those 2 columns hold all 4
-// marks. Eliminate those columns in other rows.
-func TestRuleR8_KLineSubset(t *testing.T) {
-	t.Parallel()
-
-	// Arrange — 6x6 k=2. Rows 0 and 1 reduced to cands only in cols 0, 3.
-	// That gives 2 rows needing 2 marks each, combined cands = {0, 3}.
-	// R8 should eliminate cols 0, 3 candidates in rows 2..5.
-	regionMap := rowStripeMap(6) // row-stripes (any map works for R8 rows test)
-	s := buildState(t, regionMap, 6, 2)
-	// Reduce row 0 and row 1 candidates to cols 0, 3. (cols 0 and 3 have
-	// gap 3 >= 2 so both can be marks in the same row.)
-	for c := 0; c < 6; c++ {
-		if c == 0 || c == 3 {
-			continue
-		}
-		s.eliminateCand(0, c)
-		s.eliminateCand(1, c)
-	}
-	// Sanity: rowNeed[0] = rowNeed[1] = 2, combined cands = {0, 3}.
-	if s.rowNeed[0] != 2 || s.rowNeed[1] != 2 {
-		t.Fatalf("setup failure: rowNeed 0=%d 1=%d", s.rowNeed[0], s.rowNeed[1])
-	}
-	if (s.cands[0] | s.cands[1]) != 0b001001 {
-		t.Fatalf("setup failure: combined cands=%06b", s.cands[0]|s.cands[1])
-	}
-
-	// Act
-	changed := ruleKLineSubset(s)
-
-	// Assert
-	if !changed {
-		t.Fatal("expected R8 changed=true")
-	}
-	// Rows 2..5 should have cols 0, 3 eliminated.
-	for r := 2; r < 6; r++ {
-		if s.cands[r]&0b001001 != 0 {
-			t.Errorf("row %d: expected cols 0, 3 eliminated, got cands=%06b", r, s.cands[r])
-		}
-	}
-}
-
-// TestRuleR9_RegionPairExclusion: R9 is DISABLED as of R-066 due to an
-// unsound precondition in the original implementation (the rule fired
-// when two regions' combined row-cands == k, without verifying those
-// two regions MUST jointly supply all k of the row's marks). The
-// original test exercised the unsound elimination; it is retained but
-// rewritten to document the disabled state.
-func TestRuleR9_RegionPairExclusion(t *testing.T) {
-	t.Parallel()
-	// Arrange — minimal k=2 state.
-	regionMap := make([][]int, 9)
-	for r := range regionMap {
-		regionMap[r] = make([]int, 9)
-		for c := range regionMap[r] {
-			regionMap[r][c] = r
-		}
-	}
-	s := buildState(t, regionMap, 9, 2)
-
-	// Act
-	changed := ruleRegionPairExclusion(s)
-
-	// Assert — rule is disabled; must not fire.
-	if changed {
-		t.Fatal("R9 is disabled (R-066 soundness finding); expected no change")
-	}
-}
-
-// TestRuleR9_RegionPairExclusion_Original_Unsound retains the original
-// R9 fixture for historical reference — the fixture now proves the
-// original rule was UNSOUND: given row 0 cands = {col 0 (reg 0), col 5
-// (reg 1), col 7 (reg 2)} and k=2, the original rule eliminated col 7
-// but a valid solution exists with the row 0 marks at {col 0, col 7}
-// (region 0 contributes col 0, region 1 contributes its 2 marks
-// elsewhere, region 2 contributes col 7).
-func TestRuleR9_RegionPairExclusion_Original_Unsound(t *testing.T) {
-	t.Parallel()
-
-	// Arrange — 9x9 k=2.
-	// Row 0 region layout: {0, 0, 1, 1, 2, 2, 3, 3, 4}.
-	// The rest of the grid is padded with regions 5..8.
-	// On row 0, regions 0 and 1 together have cands at cols 0-3 (4 cells).
-	// If we eliminate cols 2 and 3 on row 0, combined regions 0 and 1
-	// have cands = {0, 1} — only k=2 cells. But row 0's total cands
-	// would be cols 0, 1, 4, 5, 6, 7, 8, so other-region cands (4-8) exist.
-	// For R9 to fire, we need the combined region cells to EQUAL the row's
-	// total cands (i.e., no other-region cells on the row). Let's construct
-	// that:
-	//
-	// Row 0: regions 0 and 1 cover cols 0, 1, 2, 3. Other cols 4-8 are
-	// occupied by regions 2..8 on row 0 as well. Reduce row 0 cands to
-	// cols 0, 1 only (both region 0 or 1). Then no other-region cands
-	// on row 0 — R9 has nothing to do. Not useful.
-	//
-	// Better test: make row 0's cands span regions 0, 1, and 2 initially
-	// with region 0 at cols 0, 1 and region 1 at cols 4, 5 and region 2
-	// at col 7. After some eliminations, region 0 has cands only at col
-	// 0; region 1 has cands only at col 5; region 2 has cand at col 7.
-	// Combined region 0 + region 1 cands on row 0 = {0, 5} = 2 cells.
-	// Other-region cand at col 7 can be eliminated by R9.
-	regionMap := make([][]int, 9)
-	for r := range regionMap {
-		regionMap[r] = make([]int, 9)
-		for c := range regionMap[r] {
-			regionMap[r][c] = r
-		}
-	}
-	// Override row 0 to span three regions.
-	regionMap[0] = []int{0, 0, 0, 1, 1, 1, 2, 2, 2}
-	// Override row 1 to keep row 0's regions visible:
-	regionMap[1] = []int{0, 0, 0, 1, 1, 1, 2, 2, 2}
-	// Other rows take their own region id (3..8 on rows 2..8, but rows
-	// 2..8 are regions 2..8 which clash with row 0's region 2. Keep
-	// simple: let rows 2..8 be regions 3..9 — but we only have ids 0..8.
-	// Rename rows 2..8 to use ids 3..9? N=9 means region ids in [0, 9).
-	// Use:
-	regionMap[2] = []int{3, 3, 3, 3, 3, 3, 3, 3, 3}
-	regionMap[3] = []int{4, 4, 4, 4, 4, 4, 4, 4, 4}
-	regionMap[4] = []int{5, 5, 5, 5, 5, 5, 5, 5, 5}
-	regionMap[5] = []int{6, 6, 6, 6, 6, 6, 6, 6, 6}
-	regionMap[6] = []int{7, 7, 7, 7, 7, 7, 7, 7, 7}
-	regionMap[7] = []int{8, 8, 8, 8, 8, 8, 8, 8, 8}
-	// Row 8 needs to provide marks for regions 0, 1, 2 (each needs k=2;
-	// row 0+row 1 = 2 marks each if regions 0..2 cover both rows 0..1).
-	// Actually regions 0..2 span rows 0 AND 1 — each region has 6 cells
-	// (3 on row 0, 3 on row 1), needs 2 marks. That's fine.
-	// But N=9 k=2 needs each column to have 2 marks; row 8 must exist.
-	regionMap[8] = []int{0, 1, 2, 0, 1, 2, 0, 1, 2}
-	// Whoops — this sprinkles region 0 onto row 8 which changes regNeed[0]
-	// cell count. Let's just use row 8 = region 0 entirely and make
-	// the map "cheat" — this is just an R9 unit test, not an end-to-end
-	// puzzle.
-	regionMap[8] = []int{0, 0, 0, 1, 1, 1, 2, 2, 2}
-	// Now region 0 spans rows 0, 1, 8 cols 0-2 (9 cells); region 1 spans
-	// rows 0, 1, 8 cols 3-5 (9 cells); region 2 spans rows 0, 1, 8 cols
-	// 6-8 (9 cells). regNeed[0..2] = 2 each.
-
-	s := buildState(t, regionMap, 9, 2)
-	// Eliminate row 0 cands except cols 0 (region 0), 5 (region 1), 7
-	// (region 2). That gives row 0 cands = {0, 5, 7} — regions 0, 1, 2.
-	// Combined region 0 + region 1 cells on row 0 = {0, 5} = 2 cells.
-	// R9 should eliminate other-region cands on row 0 — which is col 7
-	// (region 2).
-	for c := 0; c < 9; c++ {
-		if c == 0 || c == 5 || c == 7 {
-			continue
-		}
-		s.eliminateCand(0, c)
-	}
-	if s.cands[0] != (uint16(1)<<0 | uint16(1)<<5 | uint16(1)<<7) {
-		t.Fatalf("setup: expected cands[0] = 0,5,7; got %09b", s.cands[0])
-	}
-
-	// Act — call the ORIGINAL (unsound) implementation.
-	changed := ruleRegionPairExclusionOriginal(s)
-
-	// Assert — demonstrates the original unsoundness. Col 7 is eliminated
-	// despite being a valid row-0 mark under at least one solution.
-	if !changed {
-		t.Fatal("expected original R9 to fire (and unsoundly eliminate col 7)")
-	}
-	if s.cands[0]&(uint16(1)<<7) != 0 {
-		t.Errorf("unsound R9: expected col 7 eliminated, got cands=%09b", s.cands[0])
 	}
 }
 
@@ -687,7 +475,7 @@ func TestNecessity_R3(t *testing.T) {
 	runNecessityOnPartial(t, "R3_partial_5x5_4pre", factory, ruleR3)
 }
 
-// Higher-tier necessity tests (R4..R9) use minimal partial solverStates —
+// Higher-tier necessity tests (R4, R5, R7) use minimal partial solverStates —
 // the same fixtures the per-rule unit tests build — and assert that without
 // R_i, (a) the distinctive elimination R_i would have made does NOT happen,
 // and (b) the solver stalls (rule was genuinely needed for forward progress).
@@ -804,48 +592,6 @@ func TestNecessity_R5(t *testing.T) {
 	)
 }
 
-// r6Fixture builds the k=1 4x4 state used in TestRuleR6_LockedKSetInLine
-// with tracing enabled. Row 0 reduced to a single cand at (0,0); region 0
-// covers (0,0) and (2,0). R6 would eliminate (2,0).
-//
-// Subsumption finding: R6's precondition (rowNeed==k AND cands==k AND
-// shared-region) is a STRICT superset of R3's (rowNeed==cands). R3 always
-// fires first; after placement regNeed[0] drops to 0 and R2 eliminates
-// (2,0). End-state is identical with or without R6. The necessity test
-// therefore uses the trace: without R6, no ruleR6 events are recorded.
-// See rules.go R6 GoDoc for the full finding.
-func r6Fixture() *solverState {
-	regionMap := [][]int{
-		{0, 0, 1, 1},
-		{2, 2, 1, 1},
-		{0, 3, 3, 3},
-		{2, 2, 3, 3},
-	}
-	s := newSolverState(regionMap, 4, 1)
-	s.eliminateCand(0, 1)
-	s.eliminateCand(0, 2)
-	s.eliminateCand(0, 3)
-	s.trace = make(ruleTrace, 0, 32)
-	return s
-}
-
-// TestNecessity_R6: trace-level necessity signal. Removing R6 from the
-// registry produces a trace without any ruleR6 events. End-state is
-// subsumed by R3+R2 (documented in rules.go R6 GoDoc).
-func TestNecessity_R6(t *testing.T) {
-	t.Parallel()
-	s := r6Fixture()
-	outcome := solveWith(s, rulesetMinus(ruleR6))
-	for _, ev := range s.trace {
-		if ev.Rule == ruleR6 {
-			t.Errorf("without R6: trace should contain no ruleR6 events, found %+v", ev)
-		}
-	}
-	if outcome != OutcomeSolved && outcome != OutcomeStalled {
-		t.Errorf("without R6: expected Solved or Stalled outcome, got %v", outcome)
-	}
-}
-
 // r7Fixture builds a 5x5 k=1 state where R7's distinctive elimination is
 // not subsumed by any other rule. Column 0 cands reduced to rows 0 and 1
 // (colNeed=1); placing (0,1) would force R1 to eliminate both col-0 cands
@@ -871,10 +617,9 @@ func r7Fixture() *solverState {
 }
 
 // TestNecessity_R7: on r7Fixture, R7 eliminates (0,1) and (1,1). Without
-// R7, R3 cannot fire (no row/col/region has cands == need), R4/R5 don't
-// match (column 0 is in region 0 which spans rows 0, 1, 2), R6 doesn't
-// match (no row reduced to k locked cells sharing a region). Solver
-// stalls with (0,1) still a candidate.
+// R7, R3 cannot fire (no row/col/region has cands == need) and R4/R5 don't
+// match (column 0 is in region 0 which spans rows 0, 1, 2). Solver stalls
+// with (0,1) still a candidate.
 func TestNecessity_R7(t *testing.T) {
 	t.Parallel()
 	runNecessityDistinctiveElimination(t, "R7_5x5_adjacencyForcing",
@@ -883,112 +628,6 @@ func TestNecessity_R7(t *testing.T) {
 			t.Helper()
 			if s.cands[0]&(uint16(1)<<1) == 0 {
 				t.Errorf("without R7: (0,1) should still be a candidate, cands[0]=%05b", s.cands[0])
-			}
-		},
-	)
-}
-
-// r8Fixture builds the 6x6 k=2 state used in TestRuleR8_KLineSubset. Rows
-// 0, 1 reduced to cands {0, 3} each — the classic 2-row X-wing. R8
-// eliminates cols 0, 3 in rows 2..5.
-//
-// Subsumption finding: R8's precondition (rowNeed[r]==k=2 AND combined
-// cands on k rows count == k) forces each row's cands count to be at most
-// k. Combined with rowNeed==k, each row's cands count == k exactly, which
-// is R3's row-axis firing precondition. R3 (Tier 1) always fires before
-// R8 (Tier 4). Therefore R8 never fires in any reachable state — the
-// rule is structurally subsumed.
-//
-// We exercise R8's direct single-invocation behavior in the unit test
-// above. For necessity, we assert an execution-level signal: removing R8
-// from the registry produces a trace with no ruleR8 events. This proves
-// R8 was absent from the pruned solve, which is the strictest necessity
-// signal available given the subsumption.
-func r8Fixture() *solverState {
-	regionMap := rowStripeMap(6)
-	s := newSolverState(regionMap, 6, 2)
-	for c := 0; c < 6; c++ {
-		if c == 0 || c == 3 {
-			continue
-		}
-		s.eliminateCand(0, c)
-		s.eliminateCand(1, c)
-	}
-	s.trace = make(ruleTrace, 0, 32)
-	return s
-}
-
-// TestNecessity_R8: without R8 in the registry, the trace contains no
-// ruleR8 events. The solver still reaches an end state (Contradiction
-// in this pathological X-wing fixture, via R3's eager placement into
-// vertical adjacency), but R8's unique trace contribution is absent —
-// the necessity signal.
-//
-// Honest subsumption finding: R8's precondition is a strict superset of
-// R3's row-axis precondition at k=2. R3 (Tier 1) always fires before R8
-// (Tier 4). R8 as written never contributes deductively distinct progress
-// in the fixed-point loop. Retained for spec clarity; a future slice may
-// move R8 to Tier 1 or weaken its precondition to cands >= rowNeed per
-// row, at which point this test becomes a standard elimination necessity
-// test.
-func TestNecessity_R8(t *testing.T) {
-	t.Parallel()
-	s := r8Fixture()
-	_ = solveWith(s, rulesetMinus(ruleR8))
-	for _, ev := range s.trace {
-		if ev.Rule == ruleR8 {
-			t.Errorf("without R8: trace should contain no ruleR8 events, found %+v", ev)
-		}
-	}
-}
-
-// r9Fixture builds the 9x9 k=2 state used in TestRuleR9_RegionPairExclusion.
-// Row 0 cands = {0, 5, 7}: region 0 contributes col 0, region 1 col 5,
-// region 2 col 7. Combined regions 0+1 span 2 cells on row 0 (k=2) — R9
-// eliminates col 7 (region 2) from row 0.
-func r9Fixture() *solverState {
-	regionMap := make([][]int, 9)
-	for r := range regionMap {
-		regionMap[r] = make([]int, 9)
-		for c := range regionMap[r] {
-			regionMap[r][c] = r
-		}
-	}
-	regionMap[0] = []int{0, 0, 0, 1, 1, 1, 2, 2, 2}
-	regionMap[1] = []int{0, 0, 0, 1, 1, 1, 2, 2, 2}
-	regionMap[2] = []int{3, 3, 3, 3, 3, 3, 3, 3, 3}
-	regionMap[3] = []int{4, 4, 4, 4, 4, 4, 4, 4, 4}
-	regionMap[4] = []int{5, 5, 5, 5, 5, 5, 5, 5, 5}
-	regionMap[5] = []int{6, 6, 6, 6, 6, 6, 6, 6, 6}
-	regionMap[6] = []int{7, 7, 7, 7, 7, 7, 7, 7, 7}
-	regionMap[7] = []int{8, 8, 8, 8, 8, 8, 8, 8, 8}
-	regionMap[8] = []int{0, 0, 0, 1, 1, 1, 2, 2, 2}
-
-	s := newSolverState(regionMap, 9, 2)
-	for c := 0; c < 9; c++ {
-		if c == 0 || c == 5 || c == 7 {
-			continue
-		}
-		s.eliminateCand(0, c)
-	}
-	return s
-}
-
-// TestNecessity_R9: on r9Fixture, R9 eliminates (0,7). Without R9, the
-// solver must find another path to that elimination. R3 cannot fire on
-// row 0 (3 cands, rowNeed=2). R4/R5 don't match (row 0 spans 3 regions).
-// R6 doesn't match (cands=3 != k=2). R7's infeasibility check may or may
-// not catch the forcing. R8 requires rowNeed == k on MULTIPLE rows; only
-// row 0 is reduced here. Without R9, (0,7) remains a candidate — solver
-// stalls.
-func TestNecessity_R9(t *testing.T) {
-	t.Parallel()
-	runNecessityDistinctiveElimination(t, "R9_9x9_regionPairExclusion",
-		r9Fixture, ruleR9,
-		func(t *testing.T, s *solverState) {
-			t.Helper()
-			if s.cands[0]&(uint16(1)<<7) == 0 {
-				t.Errorf("without R9: (0,7) should still be a candidate, cands[0]=%09b", s.cands[0])
 			}
 		},
 	)

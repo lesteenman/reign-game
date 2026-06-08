@@ -51,6 +51,11 @@ var (
 
 	// ErrKUnsupported is returned by New when marksPerUnit is not in {1, 2}.
 	ErrKUnsupported = errors.New("generator: marksPerUnit unsupported (expected 1 or 2)")
+
+	// ErrExpertUnreachable is returned by New when WithDifficulty(Expert) is
+	// requested. Tier 4 holds no rules, so no puzzle classifies as Expert;
+	// requesting it would otherwise exhaust every attempt.
+	ErrExpertUnreachable = errors.New("generator: Expert unreachable: no Tier-4 rules registered")
 )
 
 // Difficulty buckets derived from the rule trace (design.md §8). Zero is the
@@ -65,9 +70,12 @@ const (
 	Easy
 	// Medium puzzles require up to Tier-2 rules.
 	Medium
-	// Hard puzzles require up to Tier-3 rules.
+	// Hard puzzles require up to Tier-3 rules. Hard is the current
+	// difficulty ceiling.
 	Hard
-	// Expert puzzles require Tier-4 rules.
+	// Expert puzzles require Tier-4 rules. Tier 4 is currently empty, so no
+	// puzzle classifies as Expert; the value is retained to document the
+	// concept and is rejected by WithDifficulty.
 	Expert
 )
 
@@ -148,6 +156,9 @@ func WithMaxMutations(n int) Option {
 // WithDifficulty enables the discard-and-retry difficulty filter. Puzzles that
 // classify outside the requested tier are rejected and Generate retries
 // (counted against WithMaxAttempts). DifficultyUnknown disables the filter.
+//
+// Expert is unreachable (Tier 4 has no rules); New fails fast with
+// ErrExpertUnreachable rather than letting every attempt discard.
 func WithDifficulty(d Difficulty) Option {
 	return func(c *config) {
 		c.difficulty = d
@@ -225,6 +236,9 @@ func New(n, marksPerUnit int, opts ...Option) (*Generator, error) {
 	}
 	for _, opt := range opts {
 		opt(cfg)
+	}
+	if cfg.difficulty == Expert {
+		return nil, ErrExpertUnreachable
 	}
 
 	seed := cfg.seed

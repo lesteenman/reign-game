@@ -25,21 +25,18 @@ The orchestrator (`Generator.Generate`) loops up to `WithMaxAttempts` (default `
 
 ## Deductive rules (`rules.go`)
 
-Rules are organized by tier; `solveWith` runs them in tier order and restarts from Tier 1 whenever any rule fires. The fixed point is one full pass over Tiers 1-4 with no firings.
+Rules are organized by tier; `solveWith` runs them in tier order and restarts from Tier 1 whenever any rule fires. The fixed point is one full pass over Tiers 1-4 with no firings. Tier 4 is empty, so classification emits only Tier 1-3 events.
 
-| Rule | Tier | Status | Description |
-|---|---|---|---|
-| R1 `ruleAdjacencyElimination` | 1 | **live** | Eliminate 8-neighbors of every placed mark. |
-| R2 `ruleCountSaturation` | 1 | **live** | Row/col/region whose need == 0 eliminates its remaining cands. |
-| R3 `ruleForcedPlacement` | 1 | **live** | Row/col/region with need == cand-count places all marks (with adjacency soundness check at k=2). |
-| R4 `ruleSingleLineRegion` | 2 | **live** | All of a region's cands lie in one row/col → eliminate non-region cands on that line. |
-| R5 `ruleSingleRegionLine` | 2 | **live** | All of a row's/col's cands lie in one region → eliminate region cands outside that line. |
-| R6 `ruleLockedKSetInLine` | 3 | **subsumed** (live but dead in trace) | Identified by R-064 as a strict superset of R3's row-axis precondition. Necessity test asserts trace-level absence; rule retained for spec clarity and potential future weakening. |
-| R7 `ruleAdjacencyForcing` | 3 | **live** | Eliminate cells whose placement would force an 8-adjacent mark elsewhere. |
-| R8 `ruleKLineSubset` | 4 | **subsumed** (live but dead in trace) | Same R-064 finding as R6 — fully covered by R3 at k=2. Retained for spec clarity. |
-| R9 `ruleRegionPairExclusion` | 4 | **disabled** | Body is `_ = s; return false`. Original implementation was unsound at k=2 (R-066). The unfixed `ruleRegionPairExclusionOriginal` is retained as a fixture for the negative test only; see `TODO(post-R-068)` in the source. |
+| Rule | Tier | Description |
+|---|---|---|
+| R1 `ruleAdjacencyElimination` | 1 | Eliminate 8-neighbors of every placed mark. |
+| R2 `ruleCountSaturation` | 1 | Row/col/region whose need == 0 eliminates its remaining cands. |
+| R3 `ruleForcedPlacement` | 1 | Row/col/region with need == cand-count places all marks (with adjacency soundness check at k=2). |
+| R4 `ruleSingleLineRegion` | 2 | All of a region's cands lie in one row/col → eliminate non-region cands on that line. |
+| R5 `ruleSingleRegionLine` | 2 | All of a row's/col's cands lie in one region → eliminate region cands outside that line. |
+| R7 `ruleAdjacencyForcing` | 3 | Eliminate cells whose placement would force an 8-adjacent mark elsewhere. |
 
-In effect, classification today emits only Tier 1-3 events. Issue #136 documents the dead-in-trace situation for R6 / R8 / R9 — the generator still produces unique solutions via R1..R7 at both k=1 and k=2.
+The generator produces unique solutions via R1..R5, R7 at both k=1 and k=2.
 
 ## Difficulty classifier (`classify.go`)
 
@@ -51,7 +48,7 @@ In effect, classification today emits only Tier 1-3 events. Issue #136 documents
 | 3 | Hard |
 | 4 | Expert |
 
-Because R8 and R9 don't fire in practice, the Expert bucket is currently empty — see `bench/difficulty-distribution.md`.
+Hard is the difficulty ceiling. Tier 4 has no rules, so the Expert bucket is unreachable; the `maxTier == 4` branch is retained defensively and `New` rejects `WithDifficulty(Expert)` with `ErrExpertUnreachable`. See `bench/difficulty-distribution.md`.
 
 ## Seed-capture mechanism
 

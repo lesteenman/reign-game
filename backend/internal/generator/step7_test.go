@@ -146,31 +146,38 @@ func TestGenerateHonorsContextCancellation(t *testing.T) {
 	}
 }
 
-// TestGenerateMaxAttemptsExhausted: if the pipeline can never produce a
-// valid puzzle within maxAttempts, Generate returns ErrMaxAttemptsExhausted.
-// We force this by demanding Expert difficulty at N=6 (where Expert is
-// essentially unreachable).
-func TestGenerateMaxAttemptsExhausted(t *testing.T) {
+// TestNewExpertUnreachable: requesting Expert difficulty fails fast at New
+// because Tier 4 holds no rules — no puzzle could ever classify as Expert,
+// so retrying would only exhaust the attempt budget.
+func TestNewExpertUnreachable(t *testing.T) {
 	t.Parallel()
 
-	// Arrange — Expert at the smallest supported N is vanishingly rare
-	// because the tier-4 rules (R8, R9) are degenerate at k=1 and R6/R8
-	// are subsumed by R3 (see design.md §4.2).
-	g, err := New(6, 1,
-		WithSeed(1),
-		WithMaxAttempts(3),
-		WithDifficulty(Expert),
-	)
-	if err != nil {
-		t.Fatalf("New: %v", err)
-	}
-
 	// Act
-	_, genErr := g.Generate(context.Background())
+	g, err := New(9, 1, WithSeed(1), WithDifficulty(Expert))
 
 	// Assert
-	if !errors.Is(genErr, ErrMaxAttemptsExhausted) {
-		t.Errorf("expected ErrMaxAttemptsExhausted, got %v", genErr)
+	if !errors.Is(err, ErrExpertUnreachable) {
+		t.Errorf("expected ErrExpertUnreachable, got %v", err)
+	}
+	if g != nil {
+		t.Errorf("expected nil Generator on Expert request, got %v", g)
+	}
+}
+
+// TestNewHardSucceeds: Hard is the current difficulty ceiling and remains a
+// valid WithDifficulty target.
+func TestNewHardSucceeds(t *testing.T) {
+	t.Parallel()
+
+	// Act
+	g, err := New(9, 1, WithSeed(1), WithDifficulty(Hard))
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected New error for Hard: %v", err)
+	}
+	if g == nil {
+		t.Fatal("expected non-nil Generator for Hard request")
 	}
 }
 

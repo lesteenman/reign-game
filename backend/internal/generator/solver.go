@@ -17,7 +17,7 @@ const (
 	OutcomeContradiction
 )
 
-// solve runs the deductive rules to fixed point with the full R1..R9
+// solve runs the deductive rules to fixed point with the live R1..R5, R7
 // registry. Returns the outcome. The rule trace on s.trace (if recording) is
 // left at its final state.
 func solve(s *solverState) Outcome {

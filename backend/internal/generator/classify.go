@@ -9,6 +9,9 @@ package generator
 //   - MaxTier == 3                           -> Hard
 //   - MaxTier == 4                           -> Expert
 //
+// No live rule maps to Tier 4 (tier4 is empty), so MaxTier caps at 3 and the
+// Expert branch is unreachable in practice; it is retained defensively.
+//
 // TierCounts is length-5 (indices 0..4; index 0 is unused by convention to
 // keep tier numbers aligned with their slice index). TraceLen is the total
 // number of rule events.

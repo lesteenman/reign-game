@@ -44,14 +44,6 @@ func TestClassifyBuckets(t *testing.T) {
 			},
 			want: Hard,
 		},
-		{
-			name: "tier 4 -> Expert",
-			trace: ruleTrace{
-				{Rule: ruleR1},
-				{Rule: ruleR9},
-			},
-			want: Expert,
-		},
 	}
 
 	for _, tc := range cases {
@@ -79,21 +71,20 @@ func TestClassifyMetrics(t *testing.T) {
 		{Rule: ruleR1}, // tier 1
 		{Rule: ruleR4}, // tier 2
 		{Rule: ruleR7}, // tier 3
-		{Rule: ruleR9}, // tier 4
-		{Rule: ruleR9}, // tier 4
+		{Rule: ruleR7}, // tier 3
 	}
 
 	// Act
 	_, m := classify(trace)
 
 	// Assert
-	if m.MaxTier != 4 {
-		t.Errorf("MaxTier = %d, want 4", m.MaxTier)
+	if m.MaxTier != 3 {
+		t.Errorf("MaxTier = %d, want 3", m.MaxTier)
 	}
-	if m.TraceLen != 6 {
-		t.Errorf("TraceLen = %d, want 6", m.TraceLen)
+	if m.TraceLen != 5 {
+		t.Errorf("TraceLen = %d, want 5", m.TraceLen)
 	}
-	wantCounts := []int{0, 2, 1, 1, 2}
+	wantCounts := []int{0, 2, 1, 2, 0}
 	if !reflect.DeepEqual(m.TierCounts, wantCounts) {
 		t.Errorf("TierCounts = %v, want %v", m.TierCounts, wantCounts)
 	}
