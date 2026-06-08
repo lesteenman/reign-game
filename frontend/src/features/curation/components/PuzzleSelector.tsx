@@ -1,5 +1,5 @@
 import { useState, useCallback, type CSSProperties } from 'react';
-import type { Mode } from '@engine/types';
+import type { Mode } from '@reign/core/engine';
 import type { ModeEntry } from '@shared/types/modes';
 
 /** Selection from the puzzle selector: size and mode. */

@@ -1,17 +1,10 @@
-import type { FlowType } from './types';
+import { idFor } from '@reign/core/storage';
+import type { CompletionRecord, FlowType, GameState, GameStorage } from '@reign/core/storage';
 
 const DB_NAME = 'reign-game';
 const DB_VERSION = 2;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
-
-/**
- * Composite Flow Slot key — the only place the `:` separator appears in
- * production code.
- */
-export function idFor(flowType: FlowType, flowId: string): string {
-  return `${flowType}:${flowId}`;
-}
 
 /**
  * Open (or return cached) the IndexedDB database. The connection is shared
@@ -60,3 +53,54 @@ export function openDB(): Promise<IDBDatabase> {
 export function resetDBCache(): void {
   dbPromise = null;
 }
+
+/**
+ * IndexedDB implementation of `@reign/core`'s `GameStorage` contract.
+ * Each method opens (or reuses) the shared connection and wraps a single
+ * IDB transaction in a promise.
+ */
+export const indexedDbGameStorage: GameStorage = {
+  async saveState(state: GameState): Promise<void> {
+    const db = await openDB();
+    return new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('gameState', 'readwrite');
+      const store = tx.objectStore('gameState');
+      const req = store.put(state);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async loadState(flowType: FlowType, flowId: string): Promise<GameState | null> {
+    const db = await openDB();
+    return new Promise<GameState | null>((resolve, reject) => {
+      const tx = db.transaction('gameState', 'readonly');
+      const store = tx.objectStore('gameState');
+      const req = store.get(idFor(flowType, flowId));
+      req.onsuccess = () => resolve((req.result as GameState) ?? null);
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async clearState(flowType: FlowType, flowId: string): Promise<void> {
+    const db = await openDB();
+    return new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('gameState', 'readwrite');
+      const store = tx.objectStore('gameState');
+      const req = store.delete(idFor(flowType, flowId));
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  },
+
+  async addCompletion(record: CompletionRecord): Promise<void> {
+    const db = await openDB();
+    return new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('completions', 'readwrite');
+      const store = tx.objectStore('completions');
+      const req = store.add(record);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  },
+};

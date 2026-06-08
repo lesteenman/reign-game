@@ -1,7 +1,7 @@
 import { renderHook, act } from '@shared/test-utils';
 import { describe, it, expect } from 'vitest';
 import { useGame } from './useGame';
-import type { PuzzleData } from '@engine/types';
+import type { PuzzleData } from '@reign/core/engine';
 
 const testPuzzle: PuzzleData = {
   puzzleId: 'test-1',
@@ -318,9 +318,9 @@ describe('useGame (undo/redo)', () => {
   it('accepts initialPast/initialFuture for rehydration', () => {
     // Arrange
     const emptyGrid = Array.from({ length: 5 }, () =>
-      Array.from<import('@engine/types').CellState>({ length: 5 }).fill('empty'),
+      Array.from<import('@reign/core/engine').CellState>({ length: 5 }).fill('empty'),
     );
-    const currentCells: import('@engine/types').CellState[][] = emptyGrid.map((r) => [...r]);
+    const currentCells: import('@reign/core/engine').CellState[][] = emptyGrid.map((r) => [...r]);
     currentCells[0]![0] = 'excluded';
 
     // Act — restore a state that already has one undo available
@@ -364,7 +364,7 @@ describe('useGame (Double Queens, mode=double)', () => {
 
   it('2 markers in same row → no conflict for double mode', () => {
     // Arrange
-    const initialCells: import('@engine/types').CellState[][] = [
+    const initialCells: import('@reign/core/engine').CellState[][] = [
       ['marked', 'empty', 'empty', 'marked'],
       ['empty', 'empty', 'empty', 'empty'],
       ['empty', 'empty', 'empty', 'empty'],
@@ -380,7 +380,7 @@ describe('useGame (Double Queens, mode=double)', () => {
 
   it('3 markers in same row → conflict for double mode', () => {
     // Arrange
-    const initialCells: import('@engine/types').CellState[][] = [
+    const initialCells: import('@reign/core/engine').CellState[][] = [
       ['marked', 'marked', 'empty', 'marked'],
       ['empty', 'empty', 'empty', 'empty'],
       ['empty', 'empty', 'empty', 'empty'],
@@ -397,7 +397,7 @@ describe('useGame (Double Queens, mode=double)', () => {
   it('isSolved requires gridSize * 2 markers for double mode', () => {
     // Arrange
     // Only 4 markers (gridSize=4, markersPerUnit=2, need 8) — not solved
-    const initialCells: import('@engine/types').CellState[][] = [
+    const initialCells: import('@reign/core/engine').CellState[][] = [
       ['marked', 'empty', 'empty', 'marked'],
       ['empty', 'empty', 'empty', 'empty'],
       ['empty', 'empty', 'empty', 'empty'],

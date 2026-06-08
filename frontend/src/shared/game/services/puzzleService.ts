@@ -1,4 +1,4 @@
-import type { Mode } from '@engine/types';
+import type { Mode } from '@reign/core/engine';
 import { apiPut } from '@shared/api';
 
 /**

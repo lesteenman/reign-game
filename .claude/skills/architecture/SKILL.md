@@ -71,10 +71,19 @@ Any non-empty result is a finding. Report as: `architecture: <layer> drift in <f
 
 ## Frontend — Bulletproof React feature-folders
 
+The domain layer (engine), theme tokens/types, and the storage interface
+live in the `@reign/core` workspace package (`packages/core`, #130),
+consumed via `@reign/core/{engine,theme,storage}` subpath exports. The
+web-specific remainders stay under `frontend/src/`:
+
 ```
+packages/core/src/
+  engine/       domain layer — pure TS, no React, no I/O. The cross-platform domain.
+  theme/        theme tokens + types (MarkerProps/ExclusionMarkProps/Theme).
+  storage/      GameStorage interface + persisted types (GameState, etc.) + pure utils (idFor, createFreshGameState).
+
 frontend/src/
   app/          app composition (router, providers, entry)
-  engine/       domain layer — pure TS, no React, no I/O (→ @reign/core later)
   features/     product features (each one self-contained)
     auth/
       pages/        components mounted by the router (one or a few)
@@ -85,8 +94,8 @@ frontend/src/
       types/        feature-specific types
     game/  daily/  curation/  admin/  landing/  (same shape)
   shared/       cross-cutting reusables (Tamagui-wrapped chrome, generic hooks, api base, cross-feature types)
-  theme/        design tokens (→ @reign/core later)
-  storage/      IndexedDB wrapper (or fold into shared/lib/storage/ in Track 3 if it stays single-purpose)
+  theme/        app-local theme: ThemeContext, useDarkMode, tactile (tokens+types → @reign/core/theme)
+  storage/      app-local IndexedDB db.ts implementing @reign/core's GameStorage (types/utils/interface → @reign/core/storage)
 ```
 
 ### Rules
@@ -94,12 +103,12 @@ frontend/src/
 | Rule | What it means | Why |
 |---|---|---|
 | **No cross-feature imports** | `features/X` never imports from `features/Y` | Features must be independently deletable |
-| **Shared kernel only** | Cross-feature dependencies go via `shared/`, `engine/`, or `theme/` | Single source of truth |
+| **Shared kernel only** | Cross-feature dependencies go via `shared/` or the `@reign/core` package (engine/theme/storage) | Single source of truth |
 | **`pages/` are routes only** | `features/X/pages/` holds ONLY components mounted directly by the router. Sub-flow components (intermediate screens within a flow) live under `features/X/screens/`. Leaf components live under `features/X/components/`. | Eliminates page-to-page imports; clear distinction between "routed" and "rendered-by-another-component" |
 | **No page-to-page imports** | A page never imports another page, even within the same feature | Use `screens/` for shared sub-flow components |
 | **No `services/*` imports below `pages/`** | Leaf components and screens consume hooks; hooks own I/O. Direct `import { fooFn } from 'services/...'` from a leaf or screen is a violation | Testable, composable, no hidden side effects |
 | **No type imports from `services/*`** | Type definitions belong in `types/` or `engine/`; services may re-export types but consumers must import them from the source | One source of truth per type |
-| **`engine/` is pure** | No React, no I/O, no DOM, no `fetch`. Only imports external libs | It's the cross-platform domain |
+| **`@reign/core` is the leaf** | `packages/core` (engine + theme tokens/types + GameStorage interface) imports no React/DOM/IndexedDB and nothing from `frontend/src`. Only relative + external libs. | It's the cross-platform domain, shared by the web app and the future RN client |
 | **`app/` is the top** | Nothing imports from `app/` | It composes the rest |
 | **Tamagui for chrome** | Use `tamagui` package components for Button, Sheet, Dialog, Select, etc. | Cross-platform accessibility via Radix internals |
 | **Custom on Tamagui primitives** | Game UI (Grid, Cell, Marker) uses `<View>`/`<Stack>`/`<Text>` from `tamagui` | Same code path, ready for RN |
@@ -111,7 +120,7 @@ frontend/src/
 
 When a proposed change introduces or modifies a frontend file:
 
-1. Which feature does it belong to? (Or shared/engine/theme/app/storage?)
+1. Which feature does it belong to? (Or shared/theme/app/storage, or the `@reign/core` package?)
 2. Does it import from another feature? Reject.
 3. Is it a leaf component or a page? If leaf, does it import `services/*`? Reject — should consume a hook.
 4. Is it consuming the backend? If so, design uses `useQuery`/`useMutation`, not manual fetch.
@@ -142,8 +151,11 @@ find frontend/src/features/*/components frontend/src/features/*/screens frontend
 # one slipping through via `useSubmitVerdict.ts: import { submitVerdict, type SubmitVerdictArgs } from '...services/verdictService'`.
 grep -rEn "from .*services/" frontend/src/ --include='*.ts' --include='*.tsx' 2>/dev/null | grep -E "(^[^:]+:[0-9]+:import type|, type )"
 
-# Engine purity — forbidden (React, fetch, DOM)
-grep -rn "from 'react'\|fetch(\|document\.\|window\." frontend/src/engine/
+# @reign/core leaf purity — forbidden (React runtime, fetch, DOM, IndexedDB,
+# and any import from frontend/src). A `import type ... from 'react'` (type-only)
+# in theme/types.ts is allowed; a runtime `from 'react'` is not.
+grep -rn "fetch(\|document\.\|window\.\|navigator\.\|indexedDB\|localStorage\|@app/\|@shared/\|@features/\|@theme/\|@storage/\|frontend/src" packages/core/src/
+grep -rn "^import .* from 'react'\|^import React from 'react'" packages/core/src/  # runtime react import (type-only `import type` is fine)
 
 # Anything imports from app/ — forbidden
 grep -rn "from .*app/" frontend/src/ --include='*.ts' --include='*.tsx' | grep -v "from '\\.\\./app"

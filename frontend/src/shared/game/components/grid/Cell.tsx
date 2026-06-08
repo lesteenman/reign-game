@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import type { CellState } from '@engine/types';
+import type { CellState } from '@reign/core/engine';
 import { useTheme } from '@theme/ThemeContext';
 
 /** Props for the Cell component. */

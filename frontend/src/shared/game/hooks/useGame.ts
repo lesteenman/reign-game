@@ -1,9 +1,9 @@
 import { useState, useCallback, useRef, useMemo, useReducer, useEffect } from 'react';
-import type { CellState, Conflict, PuzzleData } from '@engine/types';
-import { getAllConflicts } from '@engine/constraints';
-import { cellKey } from '@engine/cellKey';
-import type { GameHistory } from '@storage/types';
-import { EMPTY_HISTORY } from '@storage/types';
+import type { CellState, Conflict, PuzzleData } from '@reign/core/engine';
+import { getAllConflicts } from '@reign/core/engine';
+import { cellKey } from '@reign/core/engine';
+import type { GameHistory } from '@reign/core/storage';
+import { EMPTY_HISTORY } from '@reign/core/storage';
 
 type DragIntent = 'exclude' | 'clear' | null;
 

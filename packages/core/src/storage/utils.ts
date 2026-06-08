@@ -1,7 +1,14 @@
-import type { CellState, PuzzleData } from '@engine/types';
+import type { CellState, PuzzleData } from '../engine/types';
 import type { FlowType, GameState } from './types';
 import { EMPTY_HISTORY } from './types';
-import { idFor } from './db';
+
+/**
+ * Composite Flow Slot key — the only place the `:` separator appears in
+ * production code.
+ */
+export function idFor(flowType: FlowType, flowId: string): string {
+  return `${flowType}:${flowId}`;
+}
 
 /**
  * Create a fresh GameState for a newly fetched puzzle in a given Flow Slot.

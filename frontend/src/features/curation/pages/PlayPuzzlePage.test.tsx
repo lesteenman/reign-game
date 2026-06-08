@@ -5,7 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider } from '@theme/ThemeContext';
 import { PlayPuzzlePage } from './PlayPuzzlePage';
 import { FALLBACK_PUZZLE } from '@shared/test-fixtures';
-import type { PuzzleData } from '@engine/types';
+import type { PuzzleData } from '@reign/core/engine';
 
 const MOCK_PUZZLE_WITH_METADATA: PuzzleData = {
   ...FALLBACK_PUZZLE,

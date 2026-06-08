@@ -4,14 +4,14 @@ import {
   NoPuzzlesAvailableError,
 } from '@features/curation/services/fetch-next-puzzle-service';
 import { useGameStorage } from '@shared/game/hooks/useGameStorage';
-import { createFreshGameState } from '@storage/utils';
+import { createFreshGameState } from '@reign/core/storage';
 import {
   EMPTY_HISTORY,
   buildCurationFlowId,
   type FlowType,
   type GameHistory,
-} from '@storage/types';
-import type { CellState, Mode, PuzzleData } from '@engine/types';
+} from '@reign/core/storage';
+import type { CellState, Mode, PuzzleData } from '@reign/core/engine';
 
 /**
  * Shape returned by `useCurationPuzzle` once loaded. Either the resumed

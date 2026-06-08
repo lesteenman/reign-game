@@ -9,8 +9,8 @@ import { useUpdatePuzzleStatus } from '@shared/game/hooks/useUpdatePuzzleStatus'
 import { PageShell } from '@shared/components/PageShell';
 import { PrimaryButton, SecondaryButton, GhostButton } from '@shared/components/Button';
 import { getClerkUserRole } from '@shared/auth/role';
-import type { PuzzleData, CellState } from '@engine/types';
-import type { FlowType, GameState, GameHistory, CompletionRecord } from '@storage/types';
+import type { PuzzleData, CellState } from '@reign/core/engine';
+import type { FlowType, GameState, GameHistory, CompletionRecord } from '@reign/core/storage';
 import type { AdminVerdictSurfaceComponent } from '@shared/game/types/admin-verdict-surface';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

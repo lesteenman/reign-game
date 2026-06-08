@@ -1,0 +1,21 @@
+{
+  "name": "@reign/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./engine": "./src/engine/index.ts",
+    "./theme": "./src/theme/index.ts",
+    "./storage": "./src/storage/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -b"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "react": "^19.2.7",
+    "typescript": "~6.0.3",
+    "vitest": "^4.1.8"
+  }
+}

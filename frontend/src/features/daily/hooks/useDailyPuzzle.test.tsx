@@ -15,7 +15,7 @@ vi.mock('@features/daily/services/dailyService', async () => {
 
 // Mock storage so the IDB short-circuit is a no-op (null) and the
 // queryFn always reaches the network path under test.
-import type { GameState } from '@storage/types';
+import type { GameState } from '@reign/core/storage';
 const mockLoadState = vi.fn<
   (...args: [unknown, unknown]) => Promise<GameState | null>
 >(async () => null);

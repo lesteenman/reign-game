@@ -8,9 +8,9 @@ import {
 import { PageShell } from '@shared/components/PageShell';
 import { SecondaryButton } from '@shared/components/Button';
 import { GameBoard } from '@shared/game/components/GameBoard';
-import type { Mode } from '@engine/types';
-import { isMode } from '@engine/types';
-import { parseFlowType } from '@storage/types';
+import type { Mode } from '@reign/core/engine';
+import { isMode } from '@reign/core/engine';
+import { parseFlowType } from '@reign/core/storage';
 import { VerdictSurface } from '@features/curation/components/VerdictSurface';
 
 /**

@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { triggerReplenish } from '@features/admin/services/adminService';
 import { ADMIN_POOL_KEY } from './useAdminPool';
-import type { Mode } from '@engine/types';
+import type { Mode } from '@reign/core/engine';
 import type { ReplenishResult } from '@shared/types/admin';
 
 /** Args for a replenish mutation. Omit both for "replenish all". */

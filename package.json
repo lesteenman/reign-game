@@ -1,0 +1,8 @@
+{
+  "name": "reign",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "frontend"
+  ]
+}

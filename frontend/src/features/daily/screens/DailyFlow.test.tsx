@@ -25,7 +25,7 @@ vi.mock('@features/daily/services/dailyService', async () => {
 // Mock storage so the per-flow IndexedDB write is observable without
 // needing fake-indexeddb here. Lesson 16 drove the choice to keep the
 // shape inside storage/ — the mock asserts call shape, not row layout.
-import type { GameState } from '@storage/types';
+import type { GameState } from '@reign/core/storage';
 const mockSaveState = vi.fn(async () => {});
 const mockLoadState = vi.fn<(...args: [unknown, unknown]) => Promise<GameState | null>>(async () => null);
 const mockClearState = vi.fn(async () => {});

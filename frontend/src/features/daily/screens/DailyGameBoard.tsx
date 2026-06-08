@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { GameBoard } from '@shared/game/components/GameBoard';
 import { useGameStorage } from '@shared/game/hooks/useGameStorage';
-import { EMPTY_HISTORY } from '@storage/types';
-import type { GameHistory, GameState } from '@storage/types';
-import type { CellState, PuzzleData } from '@engine/types';
+import { EMPTY_HISTORY } from '@reign/core/storage';
+import type { GameHistory, GameState } from '@reign/core/storage';
+import type { CellState, PuzzleData } from '@reign/core/engine';
 import type { DailyPuzzlePayload } from '@shared/types/daily';
 import { dateFromAssignedAt } from '@shared/dates';
 

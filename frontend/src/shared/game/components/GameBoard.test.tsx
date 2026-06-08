@@ -5,8 +5,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider } from '@theme/ThemeContext';
 import { GameBoard } from './GameBoard';
 import { FALLBACK_PUZZLE } from '@shared/test-fixtures';
-import { EMPTY_HISTORY } from '@storage/types';
-import type { CellState } from '@engine/types';
+import { EMPTY_HISTORY } from '@reign/core/storage';
+import type { CellState } from '@reign/core/engine';
 
 // Mock the Clerk hook so admin/non-admin branches are exercisable
 // without booting Clerk. Default to signed-out; tests override per case.

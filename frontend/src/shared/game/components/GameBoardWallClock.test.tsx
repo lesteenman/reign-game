@@ -3,8 +3,8 @@ import { MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ThemeProvider } from '@theme/ThemeContext';
 import { GameBoard, type GameBoardProps } from './GameBoard';
-import type { PuzzleData, CellState } from '@engine/types';
-import { EMPTY_HISTORY } from '@storage/types';
+import type { PuzzleData, CellState } from '@reign/core/engine';
+import { EMPTY_HISTORY } from '@reign/core/storage';
 
 // Clerk hook stub — GameBoard reads `useUser()` for role-gated UI; the
 // wall-clock anchor logic is independent of role.

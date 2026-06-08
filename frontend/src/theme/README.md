@@ -1,6 +1,8 @@
 # `src/theme/`
 
-Theme abstraction and dark-mode hook. Four production files plus three unit tests.
+The web-specific theme wiring and dark-mode hook.
+
+The theme **types** (`MarkerProps`, `ExclusionMarkProps`, `Theme`) live in `@reign/core/theme` (#130). This directory holds the React/DOM-bound remainder: the concrete Tactile theme (which wires app components), the theme context, and the dark-mode hook.
 
 ## Responsibility
 
@@ -15,8 +17,7 @@ Two things wrapped in one directory:
 
 ## Files
 
-- **`types.ts`** — Contracts: `MarkerProps`, `ExclusionMarkProps`, `Theme` (`id`, `name`, `marker: ComponentType<MarkerProps>`, `exclusionMark: ComponentType<ExclusionMarkProps>`, `animations: {placement, conflict, completion}`).
-- **`tactile.ts`** — The default "Tactile" theme. Imports `Marker` + `ExclusionMark` from `components/grid/`; declares animation class names that match the keyframes defined in `index.css`.
+- **`tactile.ts`** — The default "Tactile" theme. Imports `Marker` + `ExclusionMark` from `shared/game/components/grid/` and the `Theme` type from `@reign/core/theme`; declares animation class names that match the keyframes defined in `index.css`. (Stays app-local because it wires React components — not platform-agnostic.)
 - **`ThemeContext.tsx`** — `ThemeContext`, `ThemeProvider` (provides `tactileTheme`), `useTheme()` hook (throws if used outside provider).
 - **`useDarkMode.ts`** — `prefers-color-scheme: dark` initial state with localStorage override (`reign-dark-mode` key). Adds/removes `.dark` class on `document.documentElement`. Returns `{ isDark, toggle }`.
 
@@ -31,6 +32,3 @@ Two things wrapped in one directory:
 - **One theme today, abstraction stays.** Don't inline the Tactile theme — keep the `Theme` indirection so the future Queens theme drops in cleanly.
 - **Lesson 11: no `!important`.** Theme overrides go through props or tokens, never via raw CSS escape hatches.
 
-## Track 3 mapping
-
-Unchanged location (per `frontend/CLAUDE.md` — the theme + storage directories stay at the root of `src/`). The relationship with Tamagui is open: a "Tactile" theme on Tamagui's tokens vs the current hand-rolled `Theme` interface is a Track 3 design call.

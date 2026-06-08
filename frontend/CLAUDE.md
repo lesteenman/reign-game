@@ -6,10 +6,13 @@ This file is auto-loaded by Claude Code when working on files under `frontend/`.
 
 **Feature-folder structure** (Bulletproof React–style). The `architecture` skill enforces these rules at design time and review time.
 
+The engine, theme tokens/types, and storage interface live in
+`@reign/core` (`packages/core`, #130); the web-specific remainders stay
+under `frontend/src/`:
+
 ```
 frontend/src/
   app/          app-level composition: router, providers, entry, framework config
-  engine/       domain layer — pure TS, no React, no I/O (→ @reign/core later)
   features/     product features (each one self-contained)
     auth/
       pages/        components mounted by the router (one or a few)
@@ -20,8 +23,8 @@ frontend/src/
       types/        feature-specific types
     game/  daily/  curation/  admin/  landing/  (same shape)
   shared/       cross-cutting reusables (Tamagui-wrapped chrome, generic hooks, api base, cross-feature types)
-  theme/        design tokens (→ @reign/core later)
-  storage/      IndexedDB wrapper
+  theme/        app-local theme: ThemeContext, useDarkMode, tactile (tokens+types → @reign/core/theme)
+  storage/      app-local IndexedDB db.ts implementing @reign/core's GameStorage (types/utils/interface → @reign/core/storage)
 ```
 
 ### Path aliases (#198)
@@ -38,14 +41,21 @@ Vite 8's native `resolve.tsconfigPaths: true` — was the
 | `@app/*` | `src/app/*` | BR target home |
 | `@shared/*` | `src/shared/*` | BR target home |
 | `@features/*` | `src/features/*` | BR target home |
-| `@engine/*` | `src/engine/*` | BR target home |
-| `@theme/*` | `src/theme/*` | BR target home |
-| `@storage/*` | `src/storage/*` | BR target home |
+| `@theme/*` | `src/theme/*` | app-local theme remainder (ThemeContext/useDarkMode/tactile) |
+| `@storage/*` | `src/storage/*` | app-local storage remainder (db.ts) |
 
-All aliases above are BR target homes. The pre-#176 transitional
+All `@*/*` entries above resolve into `frontend/src`. The pre-#176 transitional
 `@services/*` alias is gone — service modules live with their owning
 feature (`features/admin/services/adminService`, `features/daily/services/dailyService`,
 `shared/game/services/puzzleService`).
+
+The engine, theme tokens/types, and storage interface live in the
+`@reign/core` workspace package (`packages/core`, #130), not in `src`.
+Import them via subpath exports — `@reign/core/engine`,
+`@reign/core/theme`, `@reign/core/storage` — which resolve through the
+npm-workspace symlink, not a tsconfig path. `@reign/core` is the leaf of
+the dependency graph (no React/DOM/IndexedDB, imports nothing from
+`frontend/src`) and is an allowed dependency from every layer.
 
 ### Import rules
 

@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 import type { ReactNode } from "react";
-import type { Theme } from "./types";
+import type { Theme } from "@reign/core/theme";
 import { tactileTheme } from "./tactile";
 
 const ThemeContext = createContext<Theme | null>(null);
