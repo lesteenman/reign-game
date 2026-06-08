@@ -220,7 +220,7 @@ func TestOptionsSetConfigFields(t *testing.T) {
 		WithSeed(seed),
 		WithMaxAttempts(maxAttempts),
 		WithMaxMutations(maxMutations),
-		WithDifficulty(Expert),
+		WithDifficulty(Hard),
 	)
 	if err != nil {
 		t.Fatalf("unexpected New error: %v", err)
@@ -239,7 +239,7 @@ func TestOptionsSetConfigFields(t *testing.T) {
 	if g.cfg.maxMutations != maxMutations {
 		t.Errorf("maxMutations: expected %d, got %d", maxMutations, g.cfg.maxMutations)
 	}
-	if g.cfg.difficulty != Expert {
-		t.Errorf("difficulty: expected %v, got %v", Expert, g.cfg.difficulty)
+	if g.cfg.difficulty != Hard {
+		t.Errorf("difficulty: expected %v, got %v", Hard, g.cfg.difficulty)
 	}
 }

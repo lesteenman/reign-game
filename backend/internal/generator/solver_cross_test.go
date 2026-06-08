@@ -120,7 +120,7 @@ type crossCheckEntry struct {
 // uniqueness). Lacking R-065, we use the symmetry-expanded known-unique
 // corpus. This is enough to catch deductive/brute divergence: any unsound
 // rule fails on ANY corpus entry, and 50 symmetric variants still exercise
-// rules R1..R9 across different spatial configurations.
+// rules R1..R5, R7 across different spatial configurations.
 func buildCrossCheckCorpus(t *testing.T, target int) []crossCheckEntry {
 	t.Helper()
 

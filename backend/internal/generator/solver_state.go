@@ -11,26 +11,25 @@ import (
 // malformed region map, or a region id outside [0, n)).
 var ErrSolverInvalidInput = errors.New("solverState: invalid input")
 
-// ruleID identifies one of the nine deductive rules. The numeric values are
-// stable and match the spec names (R1..R9). Index into ruleTier below to
+// ruleID identifies one of the live deductive rules. The numeric values are
+// stable and match the spec names (R1..R5, R7). Index into ruleTier below to
 // recover the tier for trace aggregation / classification.
 type ruleID uint8
 
 const (
-	ruleR1 ruleID = 1 // Adjacency elimination          (Tier 1)
-	ruleR2 ruleID = 2 // Count saturation               (Tier 1)
-	ruleR3 ruleID = 3 // Forced placement               (Tier 1)
-	ruleR4 ruleID = 4 // Single-line region             (Tier 2)
-	ruleR5 ruleID = 5 // Single-region line             (Tier 2)
-	ruleR6 ruleID = 6 // Locked k-set in line           (Tier 3)
-	ruleR7 ruleID = 7 // Adjacency forcing              (Tier 3)
-	ruleR8 ruleID = 8 // K-line subset (X-wing analogue) (Tier 4)
-	ruleR9 ruleID = 9 // Region pair exclusion          (Tier 4)
+	ruleR1 ruleID = 1 // Adjacency elimination (Tier 1)
+	ruleR2 ruleID = 2 // Count saturation      (Tier 1)
+	ruleR3 ruleID = 3 // Forced placement      (Tier 1)
+	ruleR4 ruleID = 4 // Single-line region    (Tier 2)
+	ruleR5 ruleID = 5 // Single-region line    (Tier 2)
+	ruleR7 ruleID = 7 // Adjacency forcing     (Tier 3)
 )
 
-// ruleTier maps a ruleID to its classifier tier (1..4). Index 0 is unused.
-// Consumed by the R-065 classifier for TierCounts / MaxTier computation;
-// declared here so ruleID and its tier-grouping live together.
+// ruleTier maps a ruleID to its classifier tier (1..4). Index 0 and the
+// indices of retired rules are unused (zero). No live rule maps to tier 4,
+// so MaxTier caps at 3. Consumed by the R-065 classifier for TierCounts /
+// MaxTier computation; declared here so ruleID and its tier-grouping live
+// together.
 var ruleTier = [10]int{ //nolint:unused // consumed by R-065 classifier
 	0, // unused
 	1, // R1
@@ -38,10 +37,10 @@ var ruleTier = [10]int{ //nolint:unused // consumed by R-065 classifier
 	1, // R3
 	2, // R4
 	2, // R5
-	3, // R6
+	0, // unused
 	3, // R7
-	4, // R8
-	4, // R9
+	0, // unused
+	0, // unused
 }
 
 // ruleEvent is a single rule-application record. Minimally a rule id plus the
