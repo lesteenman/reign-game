@@ -96,6 +96,9 @@ export function useDailyPuzzle() {
             regions: persisted.puzzle.regionMap,
             assignedAt: `${persisted.flowId}T00:00:00Z`,
             outcome: 'solved',
+            // Not persisted to IDB; the recycle line only shows on the
+            // network-backed path, not the cached short-circuit.
+            isRecycle: false,
           };
           return {
             kind: 'solved',

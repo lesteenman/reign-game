@@ -79,6 +79,7 @@ const MOCK_PAYLOAD: DailyPuzzlePayload = {
   ],
   assignedAt: '2026-05-02T00:00:00Z',
   outcome: 'started',
+  isRecycle: false,
 };
 
 const MOCK_SUBMIT_RESPONSE: DailySubmitResponse = {

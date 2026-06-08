@@ -256,6 +256,51 @@ func TestDailyGetHandler_HappyPath(t *testing.T) {
 	}
 }
 
+func TestDailyGetHandler_IsRecycleField(t *testing.T) {
+	cases := []struct {
+		name      string
+		isRecycle bool
+	}{
+		{"recycle day -> isRecycle true", true},
+		{"confirm day -> isRecycle false", false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Arrange
+			view := happyGetView()
+			view.IsRecycle = tc.isRecycle
+			svc := &stubDailyService{getDailyView: view}
+			router := mountDailyGet(svc)
+			req := httptest.NewRequest(http.MethodGet, "/api/daily/2026-05-02", http.NoBody)
+			req.Header.Set("X-Device-Id", "test-device-id-12345")
+			rec := httptest.NewRecorder()
+
+			// Act
+			router.ServeHTTP(rec, req)
+
+			// Assert
+			if rec.Code != http.StatusOK {
+				t.Fatalf("status: got %d want 200 (body=%q)", rec.Code, rec.Body.String())
+			}
+			// isRecycle must always be present (no omitempty) — assert on the
+			// raw body so a dropped explicit-false would be caught.
+			if !strings.Contains(rec.Body.String(), `"isRecycle":`) {
+				t.Fatalf("response body missing isRecycle field: %q", rec.Body.String())
+			}
+			var body struct {
+				IsRecycle bool `json:"isRecycle"`
+			}
+			if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+				t.Fatalf("decode: %v", err)
+			}
+			if body.IsRecycle != tc.isRecycle {
+				t.Errorf("isRecycle: got %t want %t", body.IsRecycle, tc.isRecycle)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 // GET sentinel error → status code mappings
 // ---------------------------------------------------------------------------

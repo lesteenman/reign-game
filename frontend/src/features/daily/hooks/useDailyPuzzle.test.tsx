@@ -40,6 +40,7 @@ const PLAYING_PAYLOAD: DailyPuzzlePayload = {
   ],
   assignedAt: '2026-06-06T00:00:00Z',
   outcome: 'started',
+  isRecycle: false,
 };
 
 const SOLVED_PAYLOAD: DailyPuzzlePayload = {

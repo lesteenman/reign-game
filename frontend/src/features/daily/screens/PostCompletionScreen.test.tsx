@@ -180,6 +180,24 @@ describe('PostCompletionScreen', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('renders the recycle line when isRecycle is true', () => {
+    // Arrange + Act
+    renderScreen({ ...BASE_PROPS, isRecycle: true });
+
+    // Assert
+    expect(screen.getByTestId('daily-recycle-line')).toHaveTextContent(
+      "Today's puzzle is a recycle of a recent day.",
+    );
+  });
+
+  it('omits the recycle line when isRecycle is false', () => {
+    // Arrange + Act
+    renderScreen({ ...BASE_PROPS, isRecycle: false });
+
+    // Assert
+    expect(screen.queryByTestId('daily-recycle-line')).not.toBeInTheDocument();
+  });
+
   it('countdown cleans up on unmount', () => {
     // Arrange
     vi.useFakeTimers();

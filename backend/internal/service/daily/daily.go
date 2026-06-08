@@ -84,6 +84,9 @@ type DailyView struct {
 	Outcome         string
 	ServerElapsedMs *int64
 	SubmittedAt     *string
+	// IsRecycle is true when this day's schedule resolved to a recycle of
+	// a recent day's puzzle (schedule Mode == FinalizeModeRecycle).
+	IsRecycle bool
 }
 
 // SubmitInput is the plain-field input to Service.SubmitDaily.
@@ -153,6 +156,7 @@ func (s *Service) FinalizeDaily(
 					"puzzleId":        &types.AttributeValueMemberS{Value: puzzleID},
 					"assignedAt":      &types.AttributeValueMemberS{Value: now},
 					"sourcePartition": &types.AttributeValueMemberS{Value: sourcePartition},
+					"mode":            &types.AttributeValueMemberS{Value: string(mode)},
 					"counters": &types.AttributeValueMemberM{
 						Value: map[string]types.AttributeValue{
 							"started": &types.AttributeValueMemberN{Value: "0"},
@@ -398,6 +402,7 @@ func (s *Service) GetDaily(ctx context.Context, in GetInput) (*DailyView, error)
 		Regions:    puzzle.RegionMap,
 		AssignedAt: play.AssignedAt,
 		Outcome:    play.Outcome,
+		IsRecycle:  schedule.Mode == repository.FinalizeModeRecycle,
 	}
 	if play.Outcome == repository.PlayOutcomeSolved {
 		elapsed := play.ServerElapsedMs

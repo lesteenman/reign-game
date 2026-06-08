@@ -219,7 +219,7 @@ The LandingPage entry point that navigates to `/play?flow=daily` (DP-23). Activa
 On the second visit to the daily after solving, the frontend reads per-flow IndexedDB and renders the post-completion screen without calling `getDaily()`. Lives in `frontend/src/pages/DailyFlow.tsx`; verified by `frontend/playwright/e2e/daily-flow.spec.ts` (already-solved spec).
 
 **Post-completion screen**
-The daily-specific solved-state UI showing solve time, optional leaderboard rank, and a live countdown to the next UTC midnight (DP-25). Lives in `frontend/src/features/daily/screens/PostCompletionScreen.tsx`; recycle-day copy is deferred until the backend response shape carries `isRecycle` metadata.
+The daily-specific solved-state UI showing solve time, optional leaderboard rank, a live countdown to the next UTC midnight (DP-25), and a recycle-day line when the GET response's `isRecycle` flag is set. Lives in `frontend/src/features/daily/screens/PostCompletionScreen.tsx`.
 
 ---
 

@@ -176,6 +176,49 @@ func TestGetDaily_HappyPath_ExistingStartedPlay(t *testing.T) {
 	}
 }
 
+func TestGetDaily_IsRecycle_ReflectsScheduleMode(t *testing.T) {
+	cases := []struct {
+		name          string
+		mode          repository.FinalizeMode
+		wantIsRecycle bool
+	}{
+		{"recycle mode -> IsRecycle true", repository.FinalizeModeRecycle, true},
+		{"confirm mode -> IsRecycle false", repository.FinalizeModeConfirm, false},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Arrange
+			sched := testSchedule()
+			sched.Mode = tc.mode
+			store := &getDailyFakeStore{
+				getScheduleFunc: func(_ context.Context, _ string) (*repository.ScheduleRecord, error) {
+					return sched, nil
+				},
+				getPuzzleFunc: func(_ context.Context, _ int, _, _ string) (*repository.PuzzleRecord, error) {
+					return testPuzzle(), nil
+				},
+				getPlayFunc: func(_ context.Context, _, _ string) (*repository.PlayRecord, error) {
+					return testStartedPlay("player-1"), nil
+				},
+			}
+			svc := daily.New(store, "test-table", fixedClock(testNow), nil)
+			in := daily.GetInput{PlayerID: "player-1", IsAnonymous: false, Date: testDate}
+
+			// Act
+			view, err := svc.GetDaily(context.Background(), in)
+
+			// Assert
+			if err != nil {
+				t.Fatalf("GetDaily unexpected error: %v", err)
+			}
+			if view.IsRecycle != tc.wantIsRecycle {
+				t.Errorf("view.IsRecycle = %t, want %t", view.IsRecycle, tc.wantIsRecycle)
+			}
+		})
+	}
+}
+
 func TestGetDaily_HappyPath_SolvedPlay(t *testing.T) {
 	// Arrange
 	elapsed := int64(12345)

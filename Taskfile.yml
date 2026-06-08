@@ -730,11 +730,63 @@ tasks:
             "puzzleId": {"S": "e2e0000-0000-4000-9000-000000000001"},
             "queuedAt": {"S": "2026-01-01T00:00:00Z"},
             "sourcePartition": {"S": "9#standard"}
-          }' >/dev/null 2>&1 || {
+          }' </dev/null >/dev/null 2>&1 || {
             echo "  FAIL: seeding DAILY-CANDIDATE" >&2
             exit 1
           }
         echo "  seeded DAILY-CANDIDATE -> e2e0000-0000-4000-9000-000000000001"
+
+        # Seed a recycle-mode daily for today (#150 real-wire check).
+        # The recycle line on PostCompletionScreen is sourced from the GET
+        # /api/daily/{date} response isRecycle, which the backend derives
+        # from the schedule row mode attribute. The e2e stack has no T=0
+        # cron, so the schedule row is normally materialised by the
+        # sync-fallback as a confirm day, which never produces a recycle.
+        # We pre-seed the finalized schedule row directly with mode=recycle
+        # so the GET returns isRecycle=true.
+        #
+        # PostCompletionScreen only renders on a solved outcome, and the
+        # recycle line is wired through the network path (the IDB
+        # short-circuit hardcodes isRecycle=false; see useDailyPuzzle.ts).
+        # So we also pre-seed a solved PLAY row for a fixed device id; the
+        # spec pins localStorage reign.deviceId to the same value, wipes
+        # IndexedDB to force the GET, and asserts the recycle line.
+        #
+        # Date is today (UTC), which must match the browser todayUtcDate()
+        # at test time, the same assumption the rest of daily-flow.spec.ts
+        # already makes.
+        today=$(date -u +%F)
+        recycle_device="e2e-recycle-device-150"
+        echo "seeding recycle-mode DAILY#${today} schedule row + solved PLAY row for device ${recycle_device}..."
+        docker compose exec -T localstack awslocal dynamodb put-item \
+          --table-name puzzle-pool-e2e \
+          --item "{
+            \"PK\": {\"S\": \"DAILY#${today}\"},
+            \"SK\": {\"S\": \"<single>\"},
+            \"puzzleId\": {\"S\": \"e2e0000-0000-4000-9000-000000000001\"},
+            \"assignedAt\": {\"S\": \"${today}T00:00:00Z\"},
+            \"sourcePartition\": {\"S\": \"9#standard\"},
+            \"counters\": {\"M\": {\"started\": {\"N\": \"1\"}, \"solved\": {\"N\": \"1\"}}},
+            \"mode\": {\"S\": \"recycle\"}
+          }" </dev/null >/dev/null 2>&1 || {
+            echo "  FAIL: seeding recycle schedule row" >&2
+            exit 1
+          }
+        docker compose exec -T localstack awslocal dynamodb put-item \
+          --table-name puzzle-pool-e2e \
+          --item "{
+            \"PK\": {\"S\": \"PLAY#${recycle_device}\"},
+            \"SK\": {\"S\": \"DAILY#${today}\"},
+            \"outcome\": {\"S\": \"solved\"},
+            \"assignedAt\": {\"S\": \"${today}T00:00:00Z\"},
+            \"submittedAt\": {\"S\": \"${today}T00:01:00Z\"},
+            \"puzzleId\": {\"S\": \"e2e0000-0000-4000-9000-000000000001\"},
+            \"serverElapsedMs\": {\"N\": \"60000\"}
+          }" </dev/null >/dev/null 2>&1 || {
+            echo "  FAIL: seeding recycle solved PLAY row" >&2
+            exit 1
+          }
+        echo "  seeded recycle DAILY#${today} (mode=recycle) + solved PLAY#${recycle_device}"
 
         echo "e2e fixtures ready."
         BASH
