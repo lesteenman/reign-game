@@ -50,10 +50,20 @@ export function useTimer(): UseTimerReturn {
     }, 1000);
   }, [clearTick]);
 
-  // Compute current elapsed from state + Date.now()
-  const elapsed = isRunning
-    ? elapsedAtLastPause + Math.floor((Date.now() - lastResumedAt) / 1000)
-    : elapsedAtLastPause;
+  // Compute current elapsed from state + Date.now(). Reading the wall
+  // clock on demand is the deliberate accuracy mechanism: the `tick`
+  // interval forces a re-render every second and the value is recomputed
+  // from the live clock, so the display resyncs immediately after a
+  // throttled/backgrounded tab and `elapsed` is correct the instant it is
+  // read (callers depend on `restore()` yielding the right value
+  // synchronously, before any interval fires). Driving `elapsed` off an
+  // interval-set state instead would lag the clock and break that
+  // synchronous-read contract, so the impure read stays in render here.
+  const elapsed =
+    lastResumedAt !== null
+      ? // eslint-disable-next-line react-hooks/purity
+        elapsedAtLastPause + Math.floor((Date.now() - lastResumedAt) / 1000)
+      : elapsedAtLastPause;
 
   // Suppress unused variable warning - tick is used to trigger re-renders
   void tick;
