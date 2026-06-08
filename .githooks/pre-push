@@ -21,7 +21,7 @@ fi
 golangci-lint run
 
 echo "--- Backend: test ---"
-go test -short ./... -count=1
+go test -race -short ./... -count=1
 
 # Infrastructure
 echo "--- Terraform: fmt check ---"
