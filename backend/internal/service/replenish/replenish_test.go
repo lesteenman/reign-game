@@ -69,6 +69,8 @@ type fakePublisher struct {
 }
 
 func (f *fakePublisher) PublishGenerationRequest(_ context.Context, req *message.GenerationRequest) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.err != nil {
 		return f.err
 	}
@@ -89,15 +91,30 @@ func (f *fakePublisher) PublishBatch(_ context.Context, reqs []*message.Generati
 	return nil
 }
 
+func (f *fakePublisher) publishedCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return len(f.published)
+}
+
 type fakeClaimer struct {
+	mu       sync.Mutex
 	claim    bool
 	claimErr error
 	calls    int
 }
 
 func (f *fakeClaimer) TryClaimAutoReplenish(_ context.Context, _ int, _ string, _ time.Time, _ time.Duration) (bool, error) {
+	f.mu.Lock()
 	f.calls++
+	f.mu.Unlock()
 	return f.claim, f.claimErr
+}
+
+func (f *fakeClaimer) callCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.calls
 }
 
 func enabledConfig(size int, mode string, threshold, maxAttempts int) configsvc.ConfigView {
@@ -554,13 +571,13 @@ func TestNewAsyncHook_DispatchesGoroutineThatPublishesOnClaim(t *testing.T) {
 	// Assert — goroutine completes well within the publisher fake's no-op latency.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if len(pub.published) == 3 {
+		if pub.publishedCount() == 3 {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	if len(pub.published) != 3 {
-		t.Fatalf("published = %d, want 3", len(pub.published))
+	if pub.publishedCount() != 3 {
+		t.Fatalf("published = %d, want 3", pub.publishedCount())
 	}
 }
 
@@ -579,12 +596,12 @@ func TestNewAsyncHook_AppliesDefaultWindowAndClockWhenZero(t *testing.T) {
 	// Assert — claimer must have been invoked (defaults wired through).
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if claimer.calls == 1 {
+		if claimer.callCount() == 1 {
 			break
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	if claimer.calls != 1 {
-		t.Fatalf("claimer calls = %d, want 1", claimer.calls)
+	if claimer.callCount() != 1 {
+		t.Fatalf("claimer calls = %d, want 1", claimer.callCount())
 	}
 }
