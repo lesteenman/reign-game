@@ -96,6 +96,10 @@ type ScheduleRecord struct {
 	// Counters tracks per-day plays. Updated atomically by the daily
 	// service. Powers recycle decisions and telemetry.
 	Counters ScheduleCounters `dynamodbav:"counters"`
+	// Mode is the FinalizeMode this day resolved to (confirm or recycle).
+	// Stamped at finalize and never overwritten. Empty on rows written
+	// before the field existed; callers treat empty as non-recycle.
+	Mode FinalizeMode `dynamodbav:"mode,omitempty"`
 }
 
 // ScheduleCounters is the {started, solved} pair embedded in the

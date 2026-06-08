@@ -11,6 +11,12 @@ export interface DailyPuzzlePayload {
   outcome: 'started' | 'solved';
   serverElapsedMs?: number;
   submittedAt?: string;
+  /**
+   * True when today's puzzle is a recycle of a recent day. Always
+   * present in the GET response (backend sends explicit false on
+   * non-recycle days).
+   */
+  isRecycle: boolean;
 }
 
 /**

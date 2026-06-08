@@ -210,6 +210,7 @@ export function DailyFlow() {
         serverElapsedMs={query.data.result.serverElapsedMs}
         submittedAt={query.data.submittedAt}
         leaderboardRank={query.data.result.leaderboardRank}
+        isRecycle={query.data.payload.isRecycle}
       />
     );
   }
@@ -236,6 +237,7 @@ export function DailyFlow() {
         submittedAt={mutation.data.submittedAt}
         leaderboardRank={mutation.data.result.leaderboardRank}
         synthetic409={mutation.data.synthetic409}
+        isRecycle={mutation.data.payload.isRecycle}
       />
     );
   }

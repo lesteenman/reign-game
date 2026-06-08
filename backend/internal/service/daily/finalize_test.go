@@ -102,6 +102,9 @@ func TestFinalizeDaily_ConfirmMode_HappyPath(t *testing.T) {
 	if capturedItems[0].Put.ConditionExpression == nil || *capturedItems[0].Put.ConditionExpression != "attribute_not_exists(PK)" {
 		t.Errorf("leg 0 ConditionExpression should be attribute_not_exists(PK)")
 	}
+	if mode := capturedItems[0].Put.Item["mode"].(*types.AttributeValueMemberS).Value; mode != string(repository.FinalizeModeConfirm) {
+		t.Errorf("leg 0 mode = %q, want %q", mode, repository.FinalizeModeConfirm)
+	}
 	// Leg 1 — Update PuzzleRecord lastDailyDate.
 	if capturedItems[1].Update == nil {
 		t.Fatal("leg 1 missing Update")
@@ -157,6 +160,8 @@ func TestFinalizeDaily_RecycleMode_HappyPath(t *testing.T) {
 	}
 	if capturedItems[0].Put == nil {
 		t.Error("recycle leg 0 should be Put (schedule row)")
+	} else if mode := capturedItems[0].Put.Item["mode"].(*types.AttributeValueMemberS).Value; mode != string(repository.FinalizeModeRecycle) {
+		t.Errorf("recycle leg 0 mode = %q, want %q", mode, repository.FinalizeModeRecycle)
 	}
 	if capturedItems[1].Update == nil {
 		t.Error("recycle leg 1 should be Update (PuzzleRecord lastDailyDate)")

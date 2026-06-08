@@ -1,8 +1,3 @@
-// TODO: Recycle-day copy — the backend POST response doesn't yet carry an
-// isRecycle flag. When backend adds the metadata, surface it as an optional
-// prop `isRecycle?: boolean` and render an additional line:
-//   "Today's puzzle is a recycle of yesterday's — fresh puzzle tomorrow."
-
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { styled, Text, View } from 'tamagui';
@@ -19,6 +14,11 @@ export interface PostCompletionScreenProps {
    * solve time and submission timestamp.
    */
   synthetic409?: boolean;
+  /**
+   * True when today's puzzle is a recycle of a recent day. Renders a
+   * supplementary line below the heading.
+   */
+  isRecycle?: boolean;
   /**
    * Optional injection point for "now" so countdown logic is
    * deterministic in tests. Defaults to `new Date()`.
@@ -125,6 +125,16 @@ const CountdownValue = styledAny(Text, {
   textAlign: 'center',
 });
 
+const RecycleLine = styledAny(Text, {
+  name: 'PostCompletionRecycle',
+  fontSize: '$3',
+  color: '$muted',
+  fontWeight: '500',
+  textAlign: 'center',
+  render: <p />,
+  margin: 0,
+});
+
 const SubmittedAt = styledAny(Text, {
   name: 'PostCompletionSubmittedAt',
   fontSize: '$2',
@@ -197,6 +207,7 @@ export function PostCompletionScreen({
   submittedAt,
   leaderboardRank,
   synthetic409,
+  isRecycle,
   now,
 }: PostCompletionScreenProps) {
   const navigate = useNavigate();
@@ -234,6 +245,12 @@ export function PostCompletionScreen({
     <PageShell onBack={handleBack}>
       <Card data-testid="daily-post-completion">
         <Heading>Done for today</Heading>
+
+        {isRecycle && (
+          <RecycleLine data-testid="daily-recycle-line">
+            Today&apos;s puzzle is a recycle of a recent day.
+          </RecycleLine>
+        )}
 
         {synthetic409 ? (
           <AlreadySubmitted data-testid="daily-already-submitted">

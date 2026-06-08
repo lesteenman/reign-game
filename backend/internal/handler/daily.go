@@ -37,7 +37,8 @@ type DailyService interface {
 
 // dailyResponse is the GET 200 response shape. ServerElapsedMs and
 // SubmittedAt are pointer-typed so `omitempty` drops them entirely
-// when outcome != solved.
+// when outcome != solved. IsRecycle is always present (no omitempty) so
+// the contract is unambiguous: explicit false on non-recycle days.
 type dailyResponse struct {
 	PuzzleID        string  `json:"puzzleId"`
 	Grid            int     `json:"grid"`
@@ -46,6 +47,7 @@ type dailyResponse struct {
 	Outcome         string  `json:"outcome"`
 	ServerElapsedMs *int64  `json:"serverElapsedMs,omitempty"`
 	SubmittedAt     *string `json:"submittedAt,omitempty"`
+	IsRecycle       bool    `json:"isRecycle"`
 }
 
 // dailySubmitRequest is the POST /api/daily/{date}/result body shape.
@@ -98,6 +100,7 @@ func DailyGetHandler(svc DailyService) http.Handler {
 			Outcome:         view.Outcome,
 			ServerElapsedMs: view.ServerElapsedMs,
 			SubmittedAt:     view.SubmittedAt,
+			IsRecycle:       view.IsRecycle,
 		}
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
