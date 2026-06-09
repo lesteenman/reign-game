@@ -49,7 +49,8 @@ infra/
     ├── database/             ← Single DynamoDB table `puzzle-pool` (PK/SK, on-demand)  (see modules/database/README.md)
     ├── daily-cron/           ← Daily-puzzle EventBridge Lambda (T-6h ensure + T=0 finalize)  (see modules/daily-cron/README.md)
     ├── frontend/             ← S3 + CloudFront + OAC + bucket policy  (see modules/frontend/README.md)
-    └── generation/           ← Generator Lambda + SQS queue + DLQ + event source mapping  (see modules/generation/README.md)
+    ├── generation/           ← Generator Lambda + SQS queue + DLQ + event source mapping  (see modules/generation/README.md)
+    └── monitoring/           ← CloudWatch dashboard + alarms + SNS alerts topic (no subscriber; see docs/runbooks/monitoring.md)
 ```
 
 ### Workflows that consume this infra
@@ -83,6 +84,9 @@ api  (api_gateway_domain, api_gateway_stage)│
 frontend                                    │
                                             │
 daily_cron  ←─── puzzle_table_*  + generation_queue_* (independent of api + frontend)
+
+monitoring  ←─── resource identifiers from database/generation/api/daily_cron/frontend
+                 (function names, api name+stage, queue+dlq names, table name, distribution id)
 ```
 
 No module references another module — composition happens only at the root. This matches the architecture rule in `.claude/skills/architecture/SKILL.md` (modules-must-not-reference-modules).
