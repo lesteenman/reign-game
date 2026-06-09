@@ -2,7 +2,7 @@
 
 ## Responsibility
 
-Provisions the public frontend delivery surface: a private S3 bucket for the SPA assets, a CloudFront distribution with two origins (S3 for the SPA, API Gateway for `/api/*`), an Origin Access Control + bucket policy that restricts S3 reads to CloudFront, SPA fallback rules (403/404 → `/index.html`), and the conditional ACM cert / domain-alias wiring.
+Provisions the public frontend delivery surface: a private S3 bucket for the SPA assets, a CloudFront distribution with two origins (S3 for the SPA, API Gateway for `/api/*`), an Origin Access Control + bucket policy that restricts S3 reads to CloudFront, SPA routing via a viewer-request CloudFront Function (navigation routes → `/index.html`, leaving `/api/*` and static assets with real status codes), and the conditional ACM cert / domain-alias wiring.
 
 ## Inputs
 
@@ -30,14 +30,15 @@ Provisions the public frontend delivery surface: a private S3 bucket for the SPA
 | `aws_s3_bucket.frontend` | Private bucket for the SPA assets. `force_destroy = true` so env renames can succeed. |
 | `aws_s3_bucket_public_access_block.frontend` | All four public-access settings = `true`. |
 | `aws_cloudfront_origin_access_control.frontend` | OAC: `s3` origin type, `always` signing, `sigv4` protocol — the modern replacement for OAI. |
-| `aws_cloudfront_distribution.frontend` | Two origins (S3 + API Gateway), three ordered behaviors (`/api/*` → API; `/sw.js` + `/workbox-*.js` → S3 with `CachingDisabled`), default behavior → S3, two SPA-fallback custom error responses (403→/index.html, 404→/index.html), conditional aliases + viewer cert (default `*.cloudfront.net` when no ARN supplied; SNI-only `TLSv1.2_2021` when supplied). |
+| `aws_cloudfront_distribution.frontend` | Two origins (S3 + API Gateway), three ordered behaviors (`/api/*` → API; `/sw.js` + `/workbox-*.js` → S3 with `CachingDisabled`), default behavior → S3 with the `spa_router` function on viewer-request, conditional aliases + viewer cert (default `*.cloudfront.net` when no ARN supplied; SNI-only `TLSv1.2_2021` when supplied). |
+| `aws_cloudfront_function.spa_router` | Viewer-request function on the default (S3) behavior. Rewrites SPA navigation routes (extensionless, non-`/api/*`) to `/index.html`; leaves static assets and `/api/*` with real status codes. Code in `spa-router.js`. |
 | `aws_s3_bucket_policy.frontend` | Grants `cloudfront.amazonaws.com` (with `AWS:SourceArn` condition matching this distribution) `s3:GetObject`. |
 
 ## Gotchas
 
 - **`aliases` and `viewer_certificate` are conditionally gated on `acm_certificate_arn != ""`.** CloudFront rejects aliases without a matching cert. The empty-string default keeps a first-time apply working on `*.cloudfront.net`. This is the "intermediate state" pattern documented in the variable + resource comments — don't refactor away the conditional.
 - **`/api/*` uses managed policies** — the AWS managed `CachingDisabled` cache policy plus a custom `aws_cloudfront_origin_request_policy.api`. The forward whitelist is narrow on purpose: headers `Authorization` + `x-api-key` + `X-Device-Id` (anonymous identity — the daily and other anonymous endpoints 401 without it), cookies `__session` + `__client_uat`, all query strings. `Host` is deliberately excluded — a forwarded `Host` would not match the API Gateway custom origin and would 403. A managed all-viewer policy would forward both, so the custom policy stays. (`aws_cloudfront_origin_request_policy` has no `tags` argument in the provider — see the tags gotcha.)
-- **SPA fallback maps 403 + 404 → 200 / `/index.html`.** This is what makes client-side routes like `/admin/curate` work. Don't remove without coordinating with the frontend router.
+- **SPA routing is a viewer-request CloudFront Function (`spa_router`), not custom error responses.** It rewrites extensionless, non-`/api/*` routes to `/index.html` so client-side routes like `/admin/curate` work, while assets return real 404s and `/api/*` keeps real status codes. The earlier distribution-wide `custom_error_response` 403/404 → `/index.html` was removed because custom error responses are distribution-wide and also rewrote `/api/*` errors to `200 /index.html` (masking api-key 403s and real API errors). Keep the function scoped to the default behavior only; don't reintroduce distribution-wide error responses.
 - **No `response_headers_policy_id` attached** — issue #114. Missing HSTS / X-Content-Type-Options / CSP at the edge.
 - **`var.tags` applies only to the two taggable resources** — `aws_s3_bucket.frontend` and `aws_cloudfront_distribution.frontend`. The rest of the module's resources have no `tags` argument in the AWS provider and reject one (plan error): `aws_cloudfront_origin_access_control`, `aws_cloudfront_response_headers_policy`, `aws_cloudfront_origin_request_policy`, `aws_s3_bucket_server_side_encryption_configuration`, `aws_s3_bucket_policy`, `aws_s3_bucket_public_access_block`.
 - **Two ordered cache behaviors target `/sw.js` and `/workbox-*.js`** with the AWS managed `CachingDisabled` policy (`4135ea2d-6df8-44a3-9df3-4b5a84be39ad`) so service-worker updates propagate without waiting for edge TTL. Added in #116.

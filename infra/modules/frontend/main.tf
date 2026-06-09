@@ -171,6 +171,17 @@ resource "aws_cloudfront_origin_request_policy" "api" {
   }
 }
 
+# SPA router: rewrites navigation routes to /index.html at the edge for the S3
+# behavior, leaving /api/* and static assets with real status codes. Associated
+# with the default cache behavior below.
+resource "aws_cloudfront_function" "spa_router" {
+  name    = "${var.project_name}-${var.environment}-spa-router"
+  runtime = "cloudfront-js-2.0"
+  comment = "Rewrite SPA navigation routes to /index.html; leave /api/* and assets untouched."
+  publish = true
+  code    = file("${path.module}/spa-router.js")
+}
+
 # CloudFront distribution
 resource "aws_cloudfront_distribution" "frontend" {
   enabled             = true
@@ -254,19 +265,16 @@ resource "aws_cloudfront_distribution" "frontend" {
     viewer_protocol_policy     = "redirect-to-https"
     cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized managed policy
     response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
-  }
 
-  # SPA fallback: serve index.html for 404s
-  custom_error_response {
-    error_code         = 403
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
-
-  custom_error_response {
-    error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
+    # SPA routing: rewrite navigation routes to /index.html at the edge.
+    # This replaces distribution-wide custom_error_response 403/404 ->
+    # /index.html, which also rewrote /api/* error responses to 200 and masked
+    # real API status codes. Scoped to this S3 behavior only, so /api/* keeps
+    # its real status (e.g. keyless -> 403) and missing assets return 404.
+    function_association {
+      event_type   = "viewer-request"
+      function_arn = aws_cloudfront_function.spa_router.arn
+    }
   }
 
   restrictions {
