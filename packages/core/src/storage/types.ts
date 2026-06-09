@@ -1,4 +1,4 @@
-import type { CellState, Mode, PuzzleData } from '@engine/types';
+import type { CellState, Mode, PuzzleData } from '../engine/types';
 
 /**
  * Top-level mode of play. Determines which API surface produces puzzles

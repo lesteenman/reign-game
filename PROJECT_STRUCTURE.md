@@ -10,7 +10,11 @@ Monorepo layout. Search by domain keyword (e.g., `puzzle`, `grid`, `leaderboard`
 
 ```
 reign-game/
-├── frontend/              # React + TypeScript PWA
+├── package.json           # npm-workspace root (workspaces: packages/*, frontend)
+├── packages/
+│   └── core/              # @reign/core — framework/platform-agnostic shared package
+│                          #   (engine + theme tokens/types + GameStorage interface)
+├── frontend/              # React + TypeScript PWA (workspace app, consumes @reign/core)
 ├── backend/               # Go serverless API (Lambda handlers)
 ├── infra/                 # Terraform infrastructure-as-code
 ├── design/                # UI/UX assets, wireframes, OpenSpec artifacts
@@ -169,15 +173,9 @@ frontend/
 │   │   ├── useGame.ts
 │   │   ├── useGameStorage.ts
 │   │   └── useTimer.ts
-│   ├── engine/                  # Client-side solution validation
-│   │   ├── constraints.ts
-│   │   ├── types.ts
-│   │   └── validator.ts
-│   ├── storage/                 # IndexedDB game state — per-flow Flow Slot keyed (flowType, flowId) in the gameState store
-│   │   ├── db.ts
-│   │   ├── types.ts
-│   │   └── utils.ts
-│   ├── theme/
+│   ├── storage/                 # IndexedDB game state (db.ts implements @reign/core's GameStorage) — per-flow Flow Slot keyed (flowType, flowId)
+│   │   └── db.ts                # types/utils/GameStorage interface moved to @reign/core/storage
+│   ├── theme/                   # app-local ThemeContext/useDarkMode/tactile (tokens+types moved to @reign/core/theme)
 │   ├── test-setup.ts
 │   ├── test-utils.tsx
 │   ├── index.css
@@ -206,8 +204,7 @@ frontend/
 ├── playwright.config.ts
 ├── tsconfig.json
 ├── vitest.config.ts
-├── package.json
-└── package-lock.json
+└── package.json             # workspace member; single lockfile lives at the repo root
 ```
 
 ## Infrastructure

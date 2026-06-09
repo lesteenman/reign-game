@@ -42,13 +42,18 @@ echo "--- Frontend: lint ---"
 cd "$ROOT/frontend"
 npm run lint
 
-echo "--- Frontend: build (includes tsc) ---"
+echo "--- Frontend: build (includes tsc -b across @reign/core + app) ---"
 npm run build
 
 echo "--- Frontend: unit tests ---"
 npx vitest run
 
-echo "--- Frontend: npm audit ---"
+echo "--- Core: unit tests ---"
+cd "$ROOT/packages/core"
+npx vitest run
+
+echo "--- Workspace: npm audit ---"
+cd "$ROOT"
 npm audit --audit-level=moderate
 
 # Secrets

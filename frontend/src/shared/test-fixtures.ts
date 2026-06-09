@@ -1,4 +1,4 @@
-import type { PuzzleData } from '@engine/types';
+import type { PuzzleData } from '@reign/core/engine';
 
 /**
  * Hardcoded 5x5 puzzle used as a deterministic fixture for tests that

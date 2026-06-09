@@ -3,8 +3,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook } from '@shared/test-utils';
 import { useGameStorage } from './useGameStorage';
 import { resetDBCache } from '@storage/db';
-import type { GameState, CompletionRecord } from '@storage/types';
-import type { PuzzleData } from '@engine/types';
+import type { GameState, CompletionRecord } from '@reign/core/storage';
+import type { PuzzleData } from '@reign/core/engine';
 
 const TEST_PUZZLE: PuzzleData = {
   puzzleId: 'test-001',

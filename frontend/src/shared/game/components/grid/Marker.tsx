@@ -1,4 +1,4 @@
-import type { MarkerProps } from "@theme/types";
+import type { MarkerProps } from "@reign/core/theme";
 
 /** Rounded square marker for the Tactile theme. */
 export function Marker({ size, regionIndex: _regionIndex }: MarkerProps) {

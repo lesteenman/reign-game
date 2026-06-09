@@ -7,8 +7,8 @@ import type {
   DailyPuzzlePayload,
   DailySubmitResponse,
 } from '@shared/types/daily';
-import type { GameState } from '@storage/types';
-import type { CellState } from '@engine/types';
+import type { GameState } from '@reign/core/storage';
+import type { CellState } from '@reign/core/engine';
 
 /** Args passed to `mutation.mutate(...)` when the user solves. */
 export interface SubmitDailyArgs {

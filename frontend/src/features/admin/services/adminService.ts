@@ -1,5 +1,5 @@
 import { apiGet, apiPut, apiPost } from '@shared/api';
-import type { Mode } from '@engine/types';
+import type { Mode } from '@reign/core/engine';
 import type {
   ConfigView,
   ConfigUpdateRequest,

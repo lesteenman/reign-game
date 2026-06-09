@@ -161,6 +161,12 @@ tasks:
     cmds:
       - npm test
 
+  test:core:
+    desc: Run @reign/core unit tests
+    dir: packages/core
+    cmds:
+      - npm test
+
   test:e2e:
     desc: Run the Playwright e2e project against the locally-running e2e stack. Loads Clerk creds from frontend/.env.local + backend/.env.local. Assumes `task e2e:up` already ran.
     # dotenv paths resolve relative to `dir:`, NOT the Taskfile's location.
@@ -201,6 +207,7 @@ tasks:
     desc: Run all tests
     deps:
       - test:backend
+      - test:core
       - test:frontend
 
   deploy:

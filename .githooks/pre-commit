@@ -11,7 +11,7 @@ export PATH="$PATH:$(go env GOPATH)/bin"
 
 # Staged files, separated by domain
 STAGED_GO=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^backend/.*\.go$' || true)
-STAGED_TS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^frontend/.*\.(ts|tsx)$' || true)
+STAGED_TS=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^(frontend|packages/core)/.*\.(ts|tsx)$' || true)
 
 if [ -z "$STAGED_GO" ] && [ -z "$STAGED_TS" ]; then
   exit 0
@@ -54,11 +54,14 @@ if [ -n "$STAGED_TS" ]; then
   fi
 
   echo "--- Frontend: eslint ---"
-  if [ -f "$ROOT/frontend/node_modules/.bin/eslint" ]; then
-    "$ROOT/frontend/node_modules/.bin/eslint" .
+  # npm workspaces hoist the eslint bin to the repo-root node_modules/.bin,
+  # so resolve it via npx (from frontend/, where the eslint config lives)
+  # rather than a hardcoded frontend/node_modules path.
+  if command -v npx &>/dev/null; then
+    npx eslint .
   else
-    echo "WARN: frontend/node_modules/.bin/eslint not found, skipping lint"
-    echo "      (re-run \`cd frontend && npm ci\` in this worktree; pre-push will catch it)"
+    echo "WARN: npx not found, skipping lint"
+    echo "      (run \`npm ci\` at the repo root in this worktree; pre-push will catch it)"
   fi
   cd "$ROOT"
 fi

@@ -1,6 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { createFreshGameState } from './utils';
-import type { PuzzleData } from '@engine/types';
+import { createFreshGameState, idFor } from './utils';
+import type { PuzzleData } from '../engine/types';
+
+describe('idFor', () => {
+  it('joins flowType and flowId with a colon', () => {
+    // Arrange + Act + Assert
+    expect(idFor('curation', '5x5-standard')).toBe('curation:5x5-standard');
+    expect(idFor('daily', '2026-04-29')).toBe('daily:2026-04-29');
+    expect(idFor('pack', 'beginner-001')).toBe('pack:beginner-001');
+  });
+});
 
 const BASE_PUZZLE: PuzzleData = {
   puzzleId: 'test-001',

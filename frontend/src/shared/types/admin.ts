@@ -1,4 +1,4 @@
-import type { Mode } from '@engine/types';
+import type { Mode } from '@reign/core/engine';
 
 /**
  * ConfigBody is the payload subset of a CONFIG row — the fields shared

@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { openDB, resetDBCache, idFor } from './db';
+import { openDB, resetDBCache } from './db';
+import { idFor } from '@reign/core/storage';
 
 const DB_NAME = 'reign-game';
 
@@ -26,15 +27,6 @@ async function wipeDB(): Promise<void> {
 
 beforeEach(async () => {
   await wipeDB();
-});
-
-describe('idFor', () => {
-  it('joins flowType and flowId with a colon', () => {
-    // Arrange + Act + Assert
-    expect(idFor('curation', '5x5-standard')).toBe('curation:5x5-standard');
-    expect(idFor('daily', '2026-04-29')).toBe('daily:2026-04-29');
-    expect(idFor('pack', 'beginner-001')).toBe('pack:beginner-001');
-  });
 });
 
 describe('openDB v2 schema', () => {

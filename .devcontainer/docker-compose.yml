@@ -13,8 +13,11 @@ services:
       # ship platform-specific binaries; sharing node_modules between the
       # macOS host and the Linux container via the workspace bind would have
       # both sides fight over the same dir and break the host's `npm test`
-      # the moment the container's `npm ci` ran. This volume override scopes
-      # the Linux install to the container.
+      # the moment the container's `npm ci` ran. These volume overrides scope
+      # the Linux install to the container. npm workspaces hoist most deps to
+      # the root node_modules, so both the root and frontend/ trees need an
+      # override.
+      - root-node-modules:/workspaces/reign-game/node_modules
       - frontend-node-modules:/workspaces/reign-game/frontend/node_modules
       - /var/run/docker.sock:/var/run/docker.sock
       # Host global Claude skills, read-only. Declared here (not in
@@ -62,6 +65,7 @@ services:
 volumes:
   go-mod-cache:
   npm-cache:
+  root-node-modules:
   frontend-node-modules:
   aws-sso-cache:
   playwright-cache:

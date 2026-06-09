@@ -51,9 +51,6 @@ jobs:
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
@@ -61,18 +58,27 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
+      # Single root lockfile — npm workspaces install frontend + @reign/core
+      # from the repo root.
       - name: Install dependencies
         run: npm ci
 
       - name: Lint
+        working-directory: frontend
         run: npm run lint
 
       - name: Build
+        working-directory: frontend
         run: npm run build
 
-      - name: Test
+      - name: Test (app)
+        working-directory: frontend
+        run: npm test
+
+      - name: Test (@reign/core)
+        working-directory: packages/core
         run: npm test
 
   frontend-integration:
@@ -107,7 +113,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       # Cache Playwright browsers (chromium only — see step below).
       # Key includes the lockfile hash; any frontend dep change refreshes
@@ -119,9 +125,11 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
-      - name: Install frontend dependencies
+      # Single root lockfile — npm workspaces install from the repo root.
+      - name: Install dependencies
+        working-directory: ${{ github.workspace }}
         run: npm ci
 
       # Only chromium — playwright.config.ts pins browserName: 'chromium'
@@ -180,7 +188,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       # Go is needed because `task e2e:up:backend` runs `go run ./cmd/api`
       # against the e2e env. setup-go's built-in cache hits the same
@@ -199,10 +207,10 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
-      - name: Install frontend dependencies
-        working-directory: frontend
+      # Single root lockfile — npm workspaces install frontend + @reign/core.
+      - name: Install dependencies
         run: npm ci
 
       - name: Install Playwright browsers
@@ -473,7 +481,7 @@ jobs:
         with:
           node-version: "24"
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Gitleaks
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
@@ -487,7 +495,8 @@ jobs:
           cd backend && govulncheck ./...
 
       - name: NPM Audit
-        run: cd frontend && npm audit --package-lock-only --audit-level=moderate
+        # Single root lockfile covers all workspaces (frontend + @reign/core).
+        run: npm audit --package-lock-only --audit-level=moderate
 
       # Self-enforce the SHA-pin guarantee from #113/#194: fail if any
       # workflow reintroduces a mutable `uses: …@vN` tag ref. Matches the

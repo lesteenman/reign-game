@@ -15,7 +15,6 @@
       "@app/*": ["./src/app/*"],
       "@shared/*": ["./src/shared/*"],
       "@features/*": ["./src/features/*"],
-      "@engine/*": ["./src/engine/*"],
       "@theme/*": ["./src/theme/*"],
       "@storage/*": ["./src/storage/*"]
     }

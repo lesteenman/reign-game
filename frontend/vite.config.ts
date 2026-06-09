@@ -17,8 +17,9 @@ declare const process: { env: Record<string, string | undefined> };
 // Google Fonts mirrors the original T-113 setup.
 
 export default defineConfig(({ mode }) => ({
-  // Resolves @app/@shared/@features/@engine/@theme/@storage aliases
-  // from tsconfig.app.json so Vite + Vitest match tsc + IDE.
+  // Resolves @app/@shared/@features/@theme/@storage aliases from
+  // tsconfig.app.json so Vite + Vitest match tsc + IDE. @reign/core
+  // resolves via the npm-workspace symlink + its package.json exports.
   resolve: {
     tsconfigPaths: true,
   },

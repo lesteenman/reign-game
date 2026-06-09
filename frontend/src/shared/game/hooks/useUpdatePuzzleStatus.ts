@@ -1,6 +1,6 @@
 import { useMutation } from '@tanstack/react-query';
 import { updatePuzzleStatus } from '@shared/game/services/puzzleService';
-import type { Mode } from '@engine/types';
+import type { Mode } from '@reign/core/engine';
 
 interface UpdatePuzzleStatusArgs {
   puzzleId: string;

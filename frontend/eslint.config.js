@@ -12,14 +12,15 @@ import globals from 'globals';
  *
  *   no-restricted-imports (pattern: "../*")
  *     Bans any literal `../` import string. Sibling-folder imports
- *     (`./X`) still allowed; aliases (@app/@shared/@features/@engine/
- *     @theme/@storage) are allowed because they don't literally start
- *     with `../`. Pairs with tsconfig.app.json + tsconfig.json paths.
- *     Eliminates the `../../../` churn that dominated #196 and #197.
+ *     (`./X`) still allowed; aliases (@app/@shared/@features/@theme/
+ *     @storage) and the @reign/core workspace package are allowed because
+ *     they don't literally start with `../`. Pairs with tsconfig.app.json
+ *     + tsconfig.json paths. Eliminates the `../../../` churn that
+ *     dominated #196 and #197.
  *
  *     Why not `import/no-relative-parent-imports`? That rule resolves
  *     imports to absolute paths and flags any that land in a parent
- *     directory — which catches alias imports too (e.g. `@engine/types`
+ *     directory — which catches alias imports too (e.g. `@theme/types`
  *     from `src/shared/game/components/...` resolves to a parent dir).
  *     The literal-syntax check is what we actually want.
  *
@@ -28,7 +29,10 @@ import globals from 'globals';
  *       - No cross-feature imports (features/X cannot import from
  *         features/Y).
  *       - Unidirectional layering: `shared → features → app`.
- *         shared/engine/theme/storage cannot import from features/app.
+ *         shared/theme/storage cannot import from features/app.
+ *     @reign/core (engine + theme tokens/types + storage interface) is a
+ *     workspace package — the leaf of the dependency graph, allowed
+ *     everywhere — so it isn't a `src/` zone here.
  *
  * Playwright specs at frontend/playwright/ are exempt from the alias
  * rule — their `../test-helpers/X` imports are tiny intra-playwright
@@ -154,7 +158,7 @@ export default tseslint.config(
             {
               group: ['../*', './*/*'],
               message:
-                'Use a path alias (@app/@shared/@features/@engine/@theme/@storage; transitional: @services) instead of a cross-folder relative import. See tsconfig.app.json paths + frontend/CLAUDE.md.',
+                'Use a path alias (@app/@shared/@features/@theme/@storage) or the @reign/core package instead of a cross-folder relative import. See tsconfig.app.json paths + frontend/CLAUDE.md.',
             },
           ],
         },
@@ -195,17 +199,16 @@ export default tseslint.config(
               target: './src/shared',
               from: ['./src/features', './src/app'],
             },
-            // Engine is pure domain — nothing react/feature/app.
-            {
-              target: './src/engine',
-              from: ['./src/features', './src/app', './src/shared'],
-            },
-            // Theme is design tokens — features/app are above it.
+            // Theme remainder (ThemeContext + useDarkMode) is app-local
+            // chrome — features/app are above it. (Tokens/types moved to
+            // @reign/core.)
             {
               target: './src/theme',
               from: ['./src/features', './src/app'],
             },
-            // Storage is IndexedDB plumbing.
+            // Storage remainder (IndexedDB db.ts) — features/app are above
+            // it. (Types + utils + the GameStorage interface moved to
+            // @reign/core.)
             {
               target: './src/storage',
               from: ['./src/features', './src/app'],

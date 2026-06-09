@@ -33,6 +33,7 @@ sudo chown -R vscode:vscode \
   /home/vscode/.npm \
   /home/vscode/go \
   /home/vscode/.aws/sso/cache \
+  /workspaces/reign-game/node_modules \
   /workspaces/reign-game/frontend/node_modules \
   || true
 # /home/vscode/.claude is the Claude Code config volume; chown only the top
@@ -136,11 +137,12 @@ fi
 echo "--- Downloading Go modules ---"
 ( cd backend && go mod download )
 
-echo "--- Installing frontend dependencies ---"
+echo "--- Installing workspace dependencies (root: frontend + @reign/core) ---"
 # `npm ci` clears node_modules content before installing, so no manual rm.
-# The container-local `frontend-node-modules` volume keeps Linux native
-# bindings separate from the host's darwin bindings.
-( cd frontend && npm ci )
+# Single root lockfile (npm workspaces). Container-local node_modules
+# volumes at the repo root AND frontend/ keep Linux native bindings
+# separate from the host's darwin bindings (see docker-compose.yml).
+npm ci
 
 # Playwright browser + system libs. `install-deps` apt-installs the shared
 # objects chromium needs (libnss3, libatk, etc.); `install chromium` drops
@@ -153,7 +155,8 @@ echo "--- Installing frontend dependencies ---"
 # `sudo env "PATH=$PATH" ...` forwards the vscode user's PATH so the playwright
 # binary can locate `node` via its `#!/usr/bin/env node` shebang.
 echo "--- Installing Playwright chromium + system deps ---"
-( cd frontend && sudo env "PATH=$PATH" ./node_modules/.bin/playwright install-deps chromium )
-( cd frontend && ./node_modules/.bin/playwright install chromium )
+# npm workspaces hoist the playwright bin to the repo-root node_modules/.bin.
+sudo env "PATH=$PATH" ./node_modules/.bin/playwright install-deps chromium
+./node_modules/.bin/playwright install chromium
 
 echo "=== Setup complete ==="
