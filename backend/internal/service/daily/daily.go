@@ -218,7 +218,9 @@ func (s *Service) FinalizeDaily(
 //     submission.AssignedAt (cross-midnight submissions credit the
 //     prior date's counter).
 //  3. PutItem leaderboard row at DAILY-LEADERBOARD#{playOriginDate} —
-//     signed-in only. Anonymous (deviceId-keyed) submissions skip this leg.
+//     signed-in only. Anonymous (deviceId-keyed) submissions and anti-cheat
+//     flagged solves (submission.CheatFlag != "") skip this leg; flagged
+//     solves also record the reason on the PLAY row in leg 1.
 //
 // Delegates the actual TransactWriteItems call to s.store.WriteTransaction,
 // keeping orchestration in service/ per the architecture rule.
@@ -230,6 +232,23 @@ func (s *Service) SubmitPlay(ctx context.Context, playerID, date string, submiss
 		return fmt.Errorf("invalid submission: submittedAt before assignedAt (delta=%dms)", elapsedMs)
 	}
 
+	playUpdateExpr := "SET #outcome = :solved, submittedAt = :submittedAt, " +
+		"serverElapsedMs = :serverMs, clientClaimedMs = :clientMs"
+	playValues := map[string]types.AttributeValue{
+		":solved":      &types.AttributeValueMemberS{Value: repository.PlayOutcomeSolved},
+		":started":     &types.AttributeValueMemberS{Value: repository.PlayOutcomeStarted},
+		":submittedAt": &types.AttributeValueMemberS{Value: submittedAt},
+		":serverMs":    &types.AttributeValueMemberN{Value: strconv.FormatInt(elapsedMs, 10)},
+		":clientMs":    &types.AttributeValueMemberN{Value: strconv.FormatInt(submission.ClientMs, 10)},
+	}
+	// Anti-cheat: a flagged solve records the suspicion reason on the PLAY
+	// row and skips the leaderboard leg below — the solve still counts but
+	// the suspect time does not rank.
+	if submission.CheatFlag != "" {
+		playUpdateExpr += ", cheatFlag = :cheatFlag"
+		playValues[":cheatFlag"] = &types.AttributeValueMemberS{Value: submission.CheatFlag}
+	}
+
 	items := []types.TransactWriteItem{
 		{
 			Update: &types.Update{
@@ -238,21 +257,12 @@ func (s *Service) SubmitPlay(ctx context.Context, playerID, date string, submiss
 					"PK": &types.AttributeValueMemberS{Value: repository.BuildPlayPK(playerID)},
 					"SK": &types.AttributeValueMemberS{Value: repository.BuildPlaySK(date)},
 				},
-				UpdateExpression: aws.String(
-					"SET #outcome = :solved, submittedAt = :submittedAt, " +
-						"serverElapsedMs = :serverMs, clientClaimedMs = :clientMs",
-				),
+				UpdateExpression:    aws.String(playUpdateExpr),
 				ConditionExpression: aws.String("#outcome = :started"),
 				ExpressionAttributeNames: map[string]string{
 					"#outcome": "outcome",
 				},
-				ExpressionAttributeValues: map[string]types.AttributeValue{
-					":solved":      &types.AttributeValueMemberS{Value: repository.PlayOutcomeSolved},
-					":started":     &types.AttributeValueMemberS{Value: repository.PlayOutcomeStarted},
-					":submittedAt": &types.AttributeValueMemberS{Value: submittedAt},
-					":serverMs":    &types.AttributeValueMemberN{Value: strconv.FormatInt(elapsedMs, 10)},
-					":clientMs":    &types.AttributeValueMemberN{Value: strconv.FormatInt(submission.ClientMs, 10)},
-				},
+				ExpressionAttributeValues: playValues,
 			},
 		},
 		{
@@ -274,7 +284,7 @@ func (s *Service) SubmitPlay(ctx context.Context, playerID, date string, submiss
 		},
 	}
 
-	if !submission.IsAnonymous {
+	if !submission.IsAnonymous && submission.CheatFlag == "" {
 		items = append(items, types.TransactWriteItem{
 			Put: &types.Put{
 				TableName: aws.String(s.tableName),
@@ -534,13 +544,24 @@ func (s *Service) SubmitDaily(ctx context.Context, in SubmitInput) (*SubmitResul
 		return nil, ErrNegativeClockSkew
 	}
 
-	// 11. Build submission and call SubmitPlay.
+	// 11. Anti-cheat: flag implausibly fast solves and large client/server
+	// time divergence. A flagged solve still counts but is excluded from the
+	// leaderboard (silent — the player-facing response is unchanged). Uses
+	// the difficulty from the puzzle already read above (no extra DDB read).
+	cheatFlag := evaluateCheatFlag(puzzle.Difficulty, serverElapsedMs, in.PlayTimeMs)
+	if cheatFlag != "" {
+		log.Printf("WARN: daily service: submit cheat_flag=%s date=%s player=%s difficulty=%d serverElapsedMs=%d clientClaimedMs=%d",
+			cheatFlag, in.Date, truncatePlayer(in.PlayerID), puzzle.Difficulty, serverElapsedMs, in.PlayTimeMs)
+	}
+
+	// 12. Build submission and call SubmitPlay.
 	submitInput := repository.SubmitInput{
 		PuzzleID:    schedule.PuzzleID,
 		AssignedAt:  assignedAt,
 		SubmittedAt: now,
 		ClientMs:    in.PlayTimeMs,
 		IsAnonymous: in.IsAnonymous,
+		CheatFlag:   cheatFlag,
 	}
 	if !in.IsAnonymous {
 		submitInput.UserID = in.PlayerID
@@ -558,10 +579,12 @@ func (s *Service) SubmitDaily(ctx context.Context, in SubmitInput) (*SubmitResul
 		return nil, fmt.Errorf("daily service: submit transaction for %s/%s: %w", in.PlayerID, in.Date, submitErr)
 	}
 
-	// 12. Fetch leaderboard rank (best-effort; signed-in only).
+	// 13. Fetch leaderboard rank (best-effort; signed-in + unflagged only).
+	// A flagged solve has no leaderboard row, so a rank lookup would be
+	// misleading — leave LeaderboardRank nil (silent exclusion).
 	result := &SubmitResult{ServerElapsedMs: serverElapsedMs}
 	var rankMs int64
-	if !in.IsAnonymous {
+	if !in.IsAnonymous && cheatFlag == "" {
 		rankStart := time.Now()
 		rank, rankErr := s.store.LeaderboardRank(ctx, in.Date, serverElapsedMs, in.PlayerID)
 		rankMs = time.Since(rankStart).Milliseconds()
