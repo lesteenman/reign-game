@@ -90,7 +90,7 @@ Notes:
 4. The job builds the Lambdas, `terraform init` against `reign-game/prod`, `terraform apply`, fetches the Clerk publishable key + API key from SSM/TF, builds + syncs the frontend, invalidates CloudFront, then runs post-deploy verification.
 
 First-apply specifics:
-- prod has **no `imports.tf`** (its Lambda log groups have never existed) — the apply creates everything fresh. This is expected; acc's import blocks are an acc-only artifact of #162.
+- Neither env has an `imports.tf` — the prod apply creates every resource (incl. Lambda log groups) fresh. acc's #162 log-group import blocks were one-time adoption directives that have long since applied, so they were dropped as redundant; prod's groups never existed, so it never needed them.
 - After the apply succeeds, create the user-facing DNS CNAME (step 3) using `terraform -chdir=infra/envs/prod output -raw cloudfront_url`.
 
 ## 8. Verify end-to-end

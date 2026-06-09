@@ -44,9 +44,8 @@ infra/
 │   │   ├── outputs.tf        ← root outputs (cloudfront_url, api_gateway_url, frontend_bucket_name, frontend_distribution_id, puzzle_table_name, sqs_queue_url, generator_function_name, clerk_publishable_key_param_name, client_api_key_value)
 │   │   ├── versions.tf       ← terraform >= 1.14, AWS provider ~> 5.0
 │   │   ├── backend.tf        ← S3 backend with placeholders (real values via -backend-config in CI/CD)
-│   │   ├── imports.tf        ← one-time CloudWatch log-group adoption (#162; acc-only — prod's Lambdas have never run)
 │   │   └── terraform.tfvars  ← committed env identity (environment="acc")
-│   └── prod/                 ← thin prod root (state key reign-game/prod); same structure, no imports.tf
+│   └── prod/                 ← thin prod root (state key reign-game/prod); same structure
 │       └── terraform.tfvars  ← committed env identity (environment="prod", domain_aliases=["reign.steenman.me"])
 └── modules/
     ├── api/                  ← REST API: Lambda + API Gateway + IAM + Clerk SSM params  (see modules/api/README.md)
