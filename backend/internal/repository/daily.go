@@ -178,6 +178,11 @@ type SubmitInput struct {
 	// UserID is the Clerk user ID, used as the leaderboard SK suffix.
 	// Ignored when IsAnonymous=true.
 	UserID string
+	// CheatFlag is the anti-cheat suspicion reason for this solve, or ""
+	// when the solve is plausible. When non-empty, Service.SubmitPlay
+	// records it on the PLAY row and skips the leaderboard leg so the
+	// suspect time does not rank (the solve still counts).
+	CheatFlag string
 }
 
 // BuildDailySchedulePK constructs DAILY#YYYY-MM-DD. Exported so the
