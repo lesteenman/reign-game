@@ -44,9 +44,20 @@ source of truth). Branch, plan, and code are the *implementation* phase, which i
 
 4. **Confirm with the supervisor, then move to "Up Next."** Post the DoR, then get the supervisor's
    confirmation of *this* issue's DoR — the per-issue focus checkpoint (see `preparing-ready-issues` →
-   One issue at a time). Only then run `task board:up-next ISSUE=<n>` so the card lands in the project
-   board's Up Next column, and only then start the next issue's conversation. Requires `GH_TOKEN`
-   (Projects: read/write) in `.devcontainer/.env.local`.
+   One issue at a time). Only then move the card to the project board's "Up Next" column via the
+   authenticated `gh project` CLI (project 1, owner `lesteenman`), and only then start the next issue's
+   conversation:
+
+   ```
+   PROJECT_ID=PVT_kwHOAA6y2s4BXy4s            # project 1, owner lesteenman
+   STATUS_FIELD=PVTSSF_lAHOAA6y2s4BXy4szhS9T9Q
+   UP_NEXT_OPTION=86c2b848                     # Status: Backlog bbf0514a, Up Next 86c2b848, In Progress e2c394a9, In Review 3f7ebe2b, Done 721d766f
+   ITEM=$(gh project item-list 1 --owner lesteenman --limit 200 --format json --jq '.items[] | select(.content.number==<N>) | .id')
+   gh project item-edit --project-id "$PROJECT_ID" --id "$ITEM" --field-id "$STATUS_FIELD" --single-select-option-id "$UP_NEXT_OPTION"
+   ```
+
+   This needs the `gh` auth (keyring) to carry the Projects scope. (Board moves are deliberately not a
+   Taskfile target — the Taskfile is dev-flow only.)
 
 ## Definition of Ready (the gate)
 

@@ -1,5 +1,10 @@
 version: "3"
 
+# Scope: development-flow actions only — build, test, lint, and dev/e2e stack
+# lifecycle. Deployment (`terraform apply`) is CD's job (it runs on merge to
+# main), and moving project-board cards is done via `gh project` in the
+# refinement skills. Neither deployment nor refinement belongs in this Taskfile.
+
 # LocalStack endpoint vars (host vs devcontainer divergence).
 #
 # On the host, LocalStack is reachable on the published port at 127.0.0.1:4566
@@ -209,14 +214,6 @@ tasks:
       - test:backend
       - test:core
       - test:frontend
-
-  deploy:
-    desc: Deploy infrastructure via Terraform
-    deps:
-      - build
-    dir: infra
-    cmds:
-      - terraform apply
 
   # ---------------------------------------------------------------------------
   # Dev lifecycle (STANDARD — use these to start/stop the stack during testing).
@@ -878,62 +875,3 @@ tasks:
           "$DEVCONTAINER" up --workspace-folder .
         fi
         "$DEVCONTAINER" exec --workspace-folder . bash
-
-  board:up-next:
-    desc: 'Move a GitHub issue to a project-board Status (default "Up Next"), adding it to the board first if absent. Usage: task board:up-next ISSUE=<n> [STATUS="Up Next"]'
-    vars:
-      PROJECT_NUMBER: 1
-      PROJECT_OWNER: lesteenman
-      STATUS: '{{.STATUS | default "Up Next"}}'
-    cmds:
-      - |
-        bash <<'BASH'
-        set -euo pipefail
-
-        issue="{{.ISSUE}}"
-        owner="{{.PROJECT_OWNER}}"
-        number="{{.PROJECT_NUMBER}}"
-        status="{{.STATUS}}"
-
-        if [ -z "$issue" ]; then
-          echo "ISSUE is required — usage: task board:up-next ISSUE=<n>" >&2
-          exit 1
-        fi
-        if [ -z "${GH_TOKEN:-}" ]; then
-          echo "GH_TOKEN is unset — set it in .devcontainer/.env.local (fine-grained PAT with Projects: read/write)." >&2
-          exit 1
-        fi
-
-        # Project node id — required by `item-edit` (it takes the PVT_ id,
-        # not the human-facing number).
-        project_id=$(gh project view "$number" --owner "$owner" --format json | jq -r '.id')
-
-        # Ensure the issue is on the board. `item-add` is idempotent: adding
-        # an issue already on the board returns the existing item, not an error.
-        gh project item-add "$number" --owner "$owner" \
-          --url "https://github.com/$owner/reign-game/issues/$issue" >/dev/null
-
-        # Resolve the board item id for this issue.
-        item_id=$(gh project item-list "$number" --owner "$owner" --format json --limit 1000 \
-          | jq -r --argjson n "$issue" '.items[] | select(.content.number == $n) | .id')
-        if [ -z "$item_id" ]; then
-          echo "could not resolve a board item for issue #$issue" >&2
-          exit 1
-        fi
-
-        # Look up the Status field + target option ids at runtime — they
-        # differ per project and change whenever the board is edited, so
-        # they must never be hard-coded.
-        fields=$(gh project field-list "$number" --owner "$owner" --format json)
-        field_id=$(echo "$fields" | jq -r '.fields[] | select(.name == "Status") | .id')
-        option_id=$(echo "$fields" \
-          | jq -r --arg s "$status" '.fields[] | select(.name == "Status") | .options[] | select(.name == $s) | .id')
-        if [ -z "$field_id" ] || [ -z "$option_id" ]; then
-          echo "could not resolve the Status field or \"$status\" option on project #$number" >&2
-          exit 1
-        fi
-
-        gh project item-edit --id "$item_id" --project-id "$project_id" \
-          --field-id "$field_id" --single-select-option-id "$option_id" >/dev/null
-        echo "moved issue #$issue to \"$status\""
-        BASH
