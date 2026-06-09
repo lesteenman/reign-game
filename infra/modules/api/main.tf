@@ -157,12 +157,19 @@ resource "aws_api_gateway_deployment" "api" {
   # name but the deployment was never rebuilt, leaving the stage
   # invoking the deleted reign-game-prod-api Lambda and serving 500s
   # for two days). Resource and method ids are included so additions
-  # to the API surface also force a redeploy.
+  # to the API surface also force a redeploy. The method's config
+  # attributes (`api_key_required`, `authorization`) are hashed too,
+  # because a method `id` is the composite (rest_api_id, resource_id,
+  # http_method) and does NOT change when enforcement or auth flips —
+  # so a flag change alone would otherwise leave the stage serving the
+  # pre-change deployment.
   triggers = {
     redeployment = sha1(jsonencode([
       aws_api_gateway_resource.api_root.id,
       aws_api_gateway_resource.api_proxy.id,
       aws_api_gateway_method.api_proxy_any.id,
+      aws_api_gateway_method.api_proxy_any.api_key_required,
+      aws_api_gateway_method.api_proxy_any.authorization,
       aws_api_gateway_integration.api_proxy_lambda.id,
       aws_api_gateway_integration.api_proxy_lambda.uri,
     ]))

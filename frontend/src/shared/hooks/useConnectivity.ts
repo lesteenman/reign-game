@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { apiKeyHeader } from '@shared/api/client';
 import { useOnlineStatus } from './useOnlineStatus';
 
 /**
@@ -25,7 +26,11 @@ export function useConnectivity(): boolean {
     let cancelled = false;
 
     function probe() {
-      fetch('/api/health', { method: 'HEAD', cache: 'no-store' })
+      fetch('/api/health', {
+        method: 'HEAD',
+        cache: 'no-store',
+        headers: apiKeyHeader(),
+      })
         .then((r) => {
           if (!cancelled) setProbeOffline(!r.ok);
         })

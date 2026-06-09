@@ -149,7 +149,9 @@ jobs:
 
       # Post-deploy verification — gates the (native) acc Deployment status.
       # Last step of the job, so a failure marks the Deployment `failure`.
-      # Probes the live site only (no secrets); see frontend/scripts/verify-deploy.mjs.
+      # Probes the live site; receives the browser-public (masked) API key
+      # so it can assert api-key enforcement (keyed 200 / keyless 403).
+      # See frontend/scripts/verify-deploy.mjs.
       - name: Cache Playwright browsers
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
@@ -162,4 +164,6 @@ jobs:
 
       - name: Post-deploy verification
         working-directory: frontend
+        env:
+          API_KEY: ${{ steps.api_key.outputs.value }}
         run: node scripts/verify-deploy.mjs https://reign.acc.steenman.me

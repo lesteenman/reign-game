@@ -5,9 +5,13 @@
 //
 //   node scripts/verify-deploy.mjs https://reign.acc.steenman.me
 //
+// The browser-public (masked) API key arrives via the API_KEY env var so
+// the gate can assert live api-key enforcement on the edge.
+//
 // Checks (medium depth, per #241 DoR):
 //   1. The 6 security headers are present on `/`.
-//   2. GET /api/health returns 200.
+//   2. keyed GET /api/health (x-api-key) returns 200; keyless returns 403
+//      — proves api-key enforcement is live on the stage.
 //   3. The deployed frontend loads with no SAME-ORIGIN console errors or
 //      uncaught exceptions (third-party CDN failures — e.g. Google Fonts
 //      — are runner-network-dependent, not deploy defects, so they're
@@ -34,6 +38,7 @@ const REQUIRED_HEADERS = [
   'content-security-policy',
   'permissions-policy',
 ];
+const API_KEY = process.env.API_KEY || '';
 const ATTEMPTS = 3;
 const RETRY_DELAY_MS = 30_000;
 
@@ -48,10 +53,23 @@ async function runChecks() {
   if (missing.length) fail(`missing security headers: ${missing.join(', ')}`);
   else console.log(`✓ all 6 security headers present`);
 
-  // 2. Backend health
-  const health = await fetch(BASE + '/api/health');
-  if (health.status !== 200) fail(`/api/health returned ${health.status}, expected 200`);
-  else console.log(`✓ /api/health 200`);
+  // 2. Backend health + api-key enforcement.
+  // keyed -> 200, keyless -> 403. A fresh stage deployment can take a few
+  // seconds to propagate, so retry the pair briefly before failing (the
+  // outer ATTEMPTS loop is coarse 30s spacing; this absorbs the short
+  // propagation window without burning a whole attempt).
+  let healthErr = null;
+  for (let i = 0; i < 5; i++) {
+    healthErr = null;
+    const keyed = await fetch(BASE + '/api/health', { headers: API_KEY ? { 'x-api-key': API_KEY } : {} });
+    const keyless = await fetch(BASE + '/api/health');
+    if (keyed.status !== 200) healthErr = `keyed /api/health returned ${keyed.status}, expected 200`;
+    else if (keyless.status !== 403) healthErr = `keyless /api/health returned ${keyless.status}, expected 403`;
+    if (!healthErr) break;
+    if (i < 4) await new Promise((r) => setTimeout(r, 3_000));
+  }
+  if (healthErr) fail(healthErr);
+  else console.log(`✓ /api/health: keyed 200, keyless 403`);
 
   // 3. Live frontend -> API wire + no console errors
   const browser = await chromium.launch({ headless: true });
