@@ -218,7 +218,6 @@ task test:backend       # Run backend tests
 task lint:backend       # Run golangci-lint
 task build:frontend     # Build frontend
 task test:frontend      # Run frontend unit tests
-task deploy             # Build + terraform apply
 
 # E2E lifecycle
 task e2e:up              # Full e2e stack (LocalStack + e2e backend + e2e frontend + seeded fixtures)

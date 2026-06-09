@@ -13,7 +13,7 @@ volumes, not the host filesystem.
   `govulncheck` v1.3.0
 - `aws-cli` v2.34.45 — `aws sso login`, `aws s3 ...`, etc.
 - `gh` (GitHub CLI, via the devcontainer feature) — PR/issue/run ops, git
-  HTTPS auth, and the `task board:up-next` board move; reads `GH_TOKEN`
+  HTTPS auth, and `gh project` board moves; reads `GH_TOKEN`
 - `uv` 0.11.12 (provides `uvx`, used by the AWS MCP proxy)
 - Docker CLI with the host socket mounted
 
@@ -149,14 +149,14 @@ auto-refreshed from the SSO bearer when needed.)
 
 `gh` reads `GH_TOKEN` natively; the `post-create.sh` git credential helper
 reads the same value, so it powers PR/issue/run ops, `git push`/`pull`, and
-the `task board:up-next` board move. Create a fine-grained PAT at
+`gh project` board moves. Create a fine-grained PAT at
 <https://github.com/settings/personal-access-tokens> scoped to
 `lesteenman/reign-game` with these repository permissions:
 
 - Contents: read/write
 - Pull requests: read/write
 - Issues: read/write
-- Projects: read/write (for `task board:up-next` — Projects v2 is GraphQL-only and needs a project-write credential)
+- Projects: read/write (for `gh project` board moves — Projects v2 is GraphQL-only and needs a project-write credential)
 - Actions: read (so the agent can poll CI status)
 - Metadata: read (mandatory)
 
