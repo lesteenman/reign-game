@@ -41,6 +41,12 @@ trigger fires). Autonomy changes *who decides design*, not *whether the gates ru
   stay open for explicit approval.
 - Also held: any PR where my own code-review or security pass surfaced a finding I could **not** fully
   resolve.
+- **Out-of-repo deploy-role prerequisites get an `aws-personal` issue, not just a PR flag.** When a
+  hold-open PR needs a deploy-role IAM grant (a new AWS resource type) or an OIDC trust subject (a new
+  GitHub Environment), file the prerequisite as an issue on `lesteenman/aws-personal` (which owns the
+  `github-actions-deploy` role) with the exact policy statement / OIDC `sub` + a link to the reign PR,
+  and link it back from the PR. That's how it gets picked up — don't leave it only as a PR comment the
+  supervisor has to transcribe. (See infra/CLAUDE.md lesson 8.)
 - **Merge = deploy** (CD ships to acc on merge to main). Autonomous merge is safe in proportion to the
   post-deploy verification gate. **#241 (GitHub Environments + Deployments verification) is the stated
   prerequisite for widening autonomous merge** — until it lands, keep the hold set conservative.
