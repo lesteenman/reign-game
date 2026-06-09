@@ -55,6 +55,10 @@ execution time is unclarity — the `executing-ready-issues` skill notifies and 
 
 - [ ] **Problem + PO rationale** — what, and why (the user value).
 - [ ] **Acceptance criteria** — explicit, enumerated, testable. Not "make it work."
+- [ ] **Grounding verified against the code** — any claim that data "already exists / is already
+      persisted / is available from X" is grepped against the real struct, schema, or handler before
+      Ready. If the field/attribute/path isn't actually there, scope **and** risk class must include
+      adding it — a framed "read-only surface" can hide a write-path change.
 - [ ] **Design forks resolved** — every option-decision made and recorded. No open "should we X or Y."
 - [ ] **Test-plan sketch** — what proves it: unit / integration / e2e. Cross-boundary contracts
       flagged for real-wire verification (Change Workflow integration step).
@@ -75,6 +79,8 @@ Surface only via notify-and-hold on a genuine surprise, plus the end-of-session 
 - ❌ Creating a branch or committing a spec file during refinement (premature; clutters git).
 - ❌ Invoking `writing-plans` as part of refinement (that's implementation).
 - ❌ Answering your own design fork to "keep moving" (violates HITL — notify-and-hold instead).
+- ❌ Asserting that state "already exists" / "is already persisted" without grepping the schema for it
+  (e.g. claiming a struct field is stored when no write path sets it) — verify or the spec mis-scopes.
 - ❌ A single `AskUserQuestion` call carrying forks for **more than one issue** (cross-issue batching —
   forbidden however related, independent, or trivial; see `preparing-ready-issues` → One issue at a
   time). Same-issue, multi-question calls are fine.

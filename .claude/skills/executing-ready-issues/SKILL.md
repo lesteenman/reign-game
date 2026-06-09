@@ -61,6 +61,24 @@ When a batch contains stacked PRs (B based on A) or overlapping files, the order
   (e.g. #118 GSI + #164 SSE both in `modules/database/main.tf`) — the second goes CONFLICTING once the
   first lands. Rebase it on `main`, resolve to keep both blocks, force-push.
 
+## Subagent dispatch mechanics
+
+The lead orchestrates; subagents do the engineering. Two rules keep dispatches from stalling or
+producing false findings:
+
+- **Implementer prompts forbid long-running verification (> ~5 min); the lead runs the long gates.**
+  An implementer that blocks on a soak / property-corpus / full-`-race` / e2e run hits the 600s Bash
+  timeout and dies before committing (a finished tree left uncommitted — the lead then commits it as
+  housekeeping, never re-engineers it). Scope the implementer to the **fast, CI-matching** checks
+  (build, `-short` unit suites, `tsc`, lint) and explicitly hand the long gate (property corpus, soak,
+  full e2e) to the orchestrator to run after the code lands. Match CI exactly — e.g. the generator
+  suite is `-short` (full `go test ./internal/generator/...` exceeds 600s; see `backend/CLAUDE.md`).
+- **Code-review subagents read the diff three-dot, never two-dot.** Give reviewers `gh pr diff <n>` or
+  `git diff main...<branch>` (merge-base). A two-dot `git diff main <branch>` on a branch that is behind
+  `main` (common for hold-open worktree branches reviewed before a rebase) renders every main-only
+  change as a phantom *deletion* — reviewers raise false CRITICALs ("this reverts #X") that a real
+  three-way merge would never produce.
+
 ## Re-entry digest
 
 When the supervisor returns, deliver a **single digest** (not "go read N PRs cold"), via
