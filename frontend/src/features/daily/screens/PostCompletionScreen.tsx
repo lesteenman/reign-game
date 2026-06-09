@@ -1,8 +1,10 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useUser } from '@clerk/react';
 import { styled, Text, View } from 'tamagui';
 import { PageShell } from '@shared/components/PageShell';
 import { SecondaryButton } from '@shared/components/Button';
+import { ClaimUsernamePrompt } from '@shared/profile/ClaimUsernamePrompt';
 
 export interface PostCompletionScreenProps {
   serverElapsedMs: number;
@@ -215,6 +217,18 @@ export function PostCompletionScreen({
     navigate('/');
   }, [navigate]);
 
+  // Claim-a-name eligibility: a numeric leaderboardRank is the
+  // signed-in + leaderboard-eligible signal (anonymous solves never
+  // carry a rank). Show the prompt only when such a player has no
+  // username yet. `isLoaded` guards against a flash of the prompt
+  // before Clerk hydrates the user.
+  const { user, isLoaded: userIsLoaded } = useUser();
+  const showClaimPrompt =
+    typeof leaderboardRank === 'number' &&
+    userIsLoaded &&
+    !!user &&
+    !user.username;
+
   const initialNow = useMemo(() => now ?? new Date(), [now]);
   const [currentTime, setCurrentTime] = useState<Date>(initialNow);
 
@@ -272,6 +286,8 @@ export function PostCompletionScreen({
             <RankNumber>#{leaderboardRank}</RankNumber>
           </RankLine>
         )}
+
+        {showClaimPrompt && <ClaimUsernamePrompt />}
 
         <CountdownBlock>
           <CountdownLabel>Next puzzle in</CountdownLabel>
