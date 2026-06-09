@@ -67,6 +67,7 @@ Project-wide TDD rule in `/CLAUDE.md`. Backend-specific:
 - Test happy + unhappy + edge cases. Boundary values, NaN, Inf, empty strings, max values.
 - Mock external dependencies (AWS clients, Clerk client), not the unit under test.
 - Use `testing.Short()` to guard long-running tests; pre-push and CI must pass `-short` (see lesson #6 in infra/CLAUDE.md).
+- **Verify with `-short`, matching CI** — full `go test ./internal/generator/...` (no `-short`) runs the property corpus + heavy solver tests and **exceeds the 600s Bash timeout**. Use `go test -short ./internal/generator/...` for the standard gate; run the corpus/soak separately and unbounded (`go test -run TestPropertyCorpus -timeout 30m ./internal/generator/`, or `task soak`). Never tell a subagent to run the non-`-short` generator suite as a check — it will time out before committing.
 
 ## Lessons (Reign-specific)
 
