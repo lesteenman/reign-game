@@ -1,17 +1,43 @@
 import { render, screen, cleanup, act } from '@shared/test-utils';
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { ThemeProvider } from '@theme/ThemeContext';
 import { MemoryRouter } from 'react-router-dom';
-import { PostCompletionScreen } from './PostCompletionScreen';
 
 /**
  * Tests for the daily post-completion screen.
  *
- * Pure presentational component — no service mocks needed. Countdown
- * uses fake timers via Vitest; submitted-at rendering pins UTC + a
- * fixed `now` so the local-time render is deterministic across CI
- * timezones.
+ * Countdown uses fake timers via Vitest; submitted-at rendering pins UTC
+ * + a fixed `now` so the local-time render is deterministic across CI
+ * timezones. `useUser` is mocked so the claim-a-name eligibility gate is
+ * controllable; the prompt itself is stubbed (its internals are covered
+ * by ClaimUsernamePrompt.test.tsx) so these tests assert only the gate.
  */
+
+// Configurable Clerk user mock. Defaults to "not loaded" so the existing
+// presentational tests never trip the claim prompt. The return type is
+// widened so per-test overrides can supply a user with a username.
+type UseUserResult = {
+  user: { username: string | null } | null;
+  isLoaded: boolean;
+};
+const useUserMock = vi.fn<() => UseUserResult>(() => ({
+  user: null,
+  isLoaded: false,
+}));
+vi.mock('@clerk/react', () => ({
+  useUser: () => useUserMock(),
+}));
+
+vi.mock('@shared/profile/ClaimUsernamePrompt', () => ({
+  ClaimUsernamePrompt: () => <div data-testid="claim-username-prompt-stub" />,
+}));
+
+import { PostCompletionScreen } from './PostCompletionScreen';
+
+beforeEach(() => {
+  useUserMock.mockReset();
+  useUserMock.mockReturnValue({ user: null, isLoaded: false });
+});
 
 afterEach(() => {
   cleanup();
@@ -81,6 +107,63 @@ describe('PostCompletionScreen', () => {
 
     // Assert — anonymous players see no rank line
     expect(screen.queryByTestId('daily-leaderboard-rank')).not.toBeInTheDocument();
+  });
+
+  describe('claim-a-name prompt', () => {
+    const promptStub = () => screen.queryByTestId('claim-username-prompt-stub');
+
+    it('shows the prompt for a signed-in, leaderboard-eligible player with no username', () => {
+      // Arrange — signed in, loaded, no username; rank present (eligible)
+      useUserMock.mockReturnValue({
+        user: { username: null },
+        isLoaded: true,
+      });
+
+      // Act
+      renderScreen({ ...BASE_PROPS, leaderboardRank: 5 });
+
+      // Assert
+      expect(promptStub()).toBeInTheDocument();
+    });
+
+    it('hides the prompt when the player already has a username', () => {
+      // Arrange
+      useUserMock.mockReturnValue({
+        user: { username: 'alreadyset' },
+        isLoaded: true,
+      });
+
+      // Act
+      renderScreen({ ...BASE_PROPS, leaderboardRank: 5 });
+
+      // Assert
+      expect(promptStub()).not.toBeInTheDocument();
+    });
+
+    it('hides the prompt for anonymous players (no leaderboard rank)', () => {
+      // Arrange — even a loaded user with no username, but no rank → anon
+      useUserMock.mockReturnValue({
+        user: { username: null },
+        isLoaded: true,
+      });
+
+      // Act — no leaderboardRank prop ⇒ not leaderboard-eligible
+      renderScreen(BASE_PROPS);
+
+      // Assert
+      expect(promptStub()).not.toBeInTheDocument();
+    });
+
+    it('hides the prompt while Clerk is still loading', () => {
+      // Arrange — eligible rank but user not yet hydrated
+      useUserMock.mockReturnValue({ user: null, isLoaded: false });
+
+      // Act
+      renderScreen({ ...BASE_PROPS, leaderboardRank: 5 });
+
+      // Assert — no flash of the prompt before hydration
+      expect(promptStub()).not.toBeInTheDocument();
+    });
   });
 
   it('displays submittedAt in HH:MM', () => {

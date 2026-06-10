@@ -3,6 +3,7 @@ module github.com/eriksteenman/reign-game/backend
 go 1.26
 
 require (
+	github.com/TwiN/go-away v1.8.1
 	github.com/aws/aws-lambda-go v1.54.0
 	github.com/aws/aws-sdk-go-v2 v1.41.12
 	github.com/aws/aws-sdk-go-v2/config v1.32.23
@@ -33,4 +34,5 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.43.2 // indirect
 	github.com/aws/smithy-go v1.27.1 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/text v0.31.0 // indirect
 )

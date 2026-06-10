@@ -76,12 +76,15 @@ backend/
 │   │   ├── generate.go          # GET /api/puzzles/generate (legacy, slow)
 │   │   ├── health.go            # GET /api/health
 │   │   ├── params.go            # Shared handler helpers
+│   │   ├── profile.go           # PUT /api/profile/username (signed-in; Clerk-native username + profanity gate, #129)
 │   │   ├── replenish.go         # POST /api/admin/replenish — thin shim over internal/replenish.Sweep
 │   │   ├── serve.go             # GET /api/puzzles/next — fires reactive replenish hook on successful serve
 │   │   ├── status.go            # PUT /api/puzzles/{id}/status
 │   │   └── verdict.go           # PUT /api/admin/puzzles/{id}/verdict (Phase 7, R-081)
 │   ├── model/                   # Legacy domain types (Phase 5 kept puzzle.go only)
 │   │   └── puzzle.go
+│   ├── profile/                 # Pure username validator: format + profanity (go-away) + reserved names (#129)
+│   │   └── username.go
 │   ├── repository/              # DynamoDB data access
 │   │   ├── daily.go             # DailyRepository: schedule / candidate / play / leaderboard rows (Phase 8, R-8-01)
 │   │   ├── daily_test.go
@@ -261,6 +264,7 @@ design/
 | PUT | /api/admin/puzzles/{id}/verdict | Admin | Submit up/down verdict on a played puzzle (Phase 7, R-081) |
 | GET | /api/daily/{date} | Anonymous or User | Today's or yesterday's daily puzzle + player state (Phase 8, R-8-01) |
 | POST | /api/daily/{date}/result | Anonymous or User | Submit a daily-puzzle solve; signed-in players get a leaderboard row (Phase 8, R-8-01) |
+| PUT | /api/profile/username | User | Set leaderboard username: format + profanity gate, then Clerk-native write (Clerk enforces uniqueness → 409); signed-in only (#129) |
 
 *Admin-marked endpoints sit behind `RequireAuth` + `RequireAdmin` (Phase 6, R-08A): anonymous → 401, signed-in non-admin → 403, signed-in with `publicMetadata.role === 'admin'` → 200. `/api/config/modes` is the public alternative the landing page calls so it never has to touch any admin endpoint.*
 

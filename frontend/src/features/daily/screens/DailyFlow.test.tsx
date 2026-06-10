@@ -6,6 +6,14 @@ import { DailyFlow } from './DailyFlow';
 import { ApiError } from '@shared/api';
 import type { DailyPuzzlePayload, DailySubmitResponse } from '@shared/types/daily';
 
+// PostCompletionScreen (rendered on the solved branch) calls Clerk's
+// useUser for the claim-a-name eligibility gate. Mock it here so the
+// flow tests render without a ClerkProvider; "not loaded" keeps the
+// claim prompt off these state-machine tests.
+vi.mock('@clerk/react', () => ({
+  useUser: () => ({ user: null, isLoaded: false }),
+}));
+
 // Mock the daily service so the component's data-fetch + submit
 // effects are observable. The default `mockResolvedValue` is replaced
 // per test to drive each branch of the daily-flow state machine.

@@ -21,6 +21,7 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/auth"
 	"github.com/eriksteenman/reign-game/backend/internal/awsclient"
 	"github.com/eriksteenman/reign-game/backend/internal/handler"
+	"github.com/eriksteenman/reign-game/backend/internal/profile"
 	"github.com/eriksteenman/reign-game/backend/internal/queue"
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 	configservice "github.com/eriksteenman/reign-game/backend/internal/service/config"
@@ -63,6 +64,20 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 		r.Get("/health", handler.HealthCheck)
 		r.Head("/health", handler.HealthCheck)
 		r.Get("/puzzles/generate", handler.GenerateHandler)
+
+		// Profile routes are signed-in only (RequireAuth, no
+		// RequireAdmin) and carry no repository dependency, so they
+		// mount unconditionally — independent of the DDB-gated routes
+		// below. PUT /api/profile/username validates the requested name
+		// (format + profanity/reserved) before the Clerk write, so the
+		// gate can't be bypassed by Clerk's drop-in UI.
+		r.Route("/profile", func(r chi.Router) {
+			r.Use(auth.RequireAuth(auth.NewClerkSessionVerifier()))
+			r.Put("/username", handler.ProfileUsernameHandler(
+				handler.NewClerkUsernameUpdater(),
+				profile.NewUsernameValidator(),
+			))
+		})
 
 		if repo != nil {
 			r.Get("/puzzles/next", handler.ServeHandler(serveservice.New(repo, replenishHook)))
