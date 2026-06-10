@@ -70,6 +70,12 @@ execution time is unclarity — the `executing-ready-issues` skill notifies and 
       persisted / is available from X" is grepped against the real struct, schema, or handler before
       Ready. If the field/attribute/path isn't actually there, scope **and** risk class must include
       adding it — a framed "read-only surface" can hide a write-path change.
+- [ ] **Data / environment availability checked** — does the acceptance depend on data or an
+      environment that does not exist yet (real users, prod, an accrued corpus, real traffic)? If so,
+      do **not** post a DoR whose acceptance is unachievable now: scope the issue to what is
+      measurable/buildable today and split the data- or prod-gated remainder into a deferred follow-up
+      (link it). Parking the whole issue (status `blocked` with the gate named) is also valid. Decide
+      this **before** the design conversation, not mid-refinement.
 - [ ] **Design forks resolved** — every option-decision made and recorded. No open "should we X or Y."
 - [ ] **Test-plan sketch** — what proves it: unit / integration / e2e. Cross-boundary contracts
       flagged for real-wire verification (Change Workflow integration step).
