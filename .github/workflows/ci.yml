@@ -313,7 +313,7 @@ jobs:
       id-token: write
     defaults:
       run:
-        working-directory: infra
+        working-directory: infra/envs/acc
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
@@ -336,6 +336,15 @@ jobs:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
+      # Validate prod with no creds (init -backend=false) — a cheap syntax
+      # guard so a broken prod root can't merge even though prod never plans
+      # in CI. acc is validated below as part of its real backend init.
+      - name: Terraform Validate (prod)
+        working-directory: infra/envs/prod
+        run: |
+          terraform init -backend=false
+          terraform validate
+
       - name: Terraform Init
         run: |
           terraform init \
@@ -344,11 +353,13 @@ jobs:
             -backend-config="region=${{ vars.CI_AWS_REGION }}" \
             -backend-config="use_lockfile=true"
 
-      - name: Terraform Validate
+      - name: Terraform Validate (acc)
         run: terraform validate
 
+      # Recursive fmt check across infra/ (both env roots + shared modules).
       - name: Terraform Format Check
-        run: terraform fmt -check
+        working-directory: infra
+        run: terraform fmt -check -recursive
 
       - name: Build reproducible Lambda zip
         working-directory: ${{ github.workspace }}

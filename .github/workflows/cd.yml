@@ -67,7 +67,7 @@ jobs:
         run: npm ci
 
       - name: Terraform Init
-        working-directory: infra
+        working-directory: infra/envs/acc
         run: |
           terraform init \
             -backend-config="bucket=${{ secrets.TF_VAR_TERRAFORM_STATE_BUCKET }}" \
@@ -76,7 +76,7 @@ jobs:
             -backend-config="use_lockfile=true"
 
       - name: Terraform Apply
-        working-directory: infra
+        working-directory: infra/envs/acc
         env:
           # Initial-apply-only inputs for the Clerk SSM parameters. Both
           # parameters use lifecycle { ignore_changes = [value] }, so
@@ -107,7 +107,7 @@ jobs:
           # Terraform on the previous step. SSM is the source of truth so
           # rotations done in the SSM console flow through to subsequent
           # frontend builds without a Terraform change.
-          PARAM_NAME=$(terraform -chdir=infra output -raw clerk_publishable_key_param_name)
+          PARAM_NAME=$(terraform -chdir=infra/envs/acc output -raw clerk_publishable_key_param_name)
           PUBLISHABLE_KEY=$(aws ssm get-parameter \
             --name "${PARAM_NAME}" \
             --query 'Parameter.Value' \
@@ -125,7 +125,7 @@ jobs:
           # sensitive output. Frontend bakes it into the bundle so every
           # /api/* request carries `x-api-key` and binds to the usage
           # plan's per-key throttle.
-          API_KEY=$(terraform -chdir=infra output -raw client_api_key_value)
+          API_KEY=$(terraform -chdir=infra/envs/acc output -raw client_api_key_value)
           # Mask even though it's browser-public — keeps it out of build logs.
           echo "::add-mask::${API_KEY}"
           echo "value=${API_KEY}" >> "$GITHUB_OUTPUT"
@@ -139,12 +139,12 @@ jobs:
 
       - name: Sync frontend to S3
         run: |
-          BUCKET=$(terraform -chdir=infra output -raw frontend_bucket_name)
+          BUCKET=$(terraform -chdir=infra/envs/acc output -raw frontend_bucket_name)
           aws s3 sync frontend/dist/ "s3://${BUCKET}" --delete
 
       - name: Invalidate CloudFront cache
         run: |
-          DIST_ID=$(terraform -chdir=infra output -raw frontend_distribution_id)
+          DIST_ID=$(terraform -chdir=infra/envs/acc output -raw frontend_distribution_id)
           aws cloudfront create-invalidation --distribution-id "${DIST_ID}" --paths "/*"
 
       # Post-deploy verification — gates the (native) acc Deployment status.
