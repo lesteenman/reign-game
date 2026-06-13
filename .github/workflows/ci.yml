@@ -77,6 +77,10 @@ jobs:
         working-directory: frontend
         run: npm test
 
+      - name: Typecheck (@reign/core)
+        working-directory: packages/core
+        run: npm run typecheck
+
       - name: Test (@reign/core)
         working-directory: packages/core
         run: npm test
