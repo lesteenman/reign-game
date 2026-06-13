@@ -81,6 +81,31 @@ export default defineConfig(({ mode }) => ({
       },
     }),
   ],
+  // Per-library vendor chunks. Splitting the four big vendor
+  // groups into their own chunks keeps each chunk under the 150 kB-gzip
+  // budget and maximises browser-cache stability across deploys (a bump
+  // to one library doesn't invalidate the others). Rolldown (Vite 8's
+  // bundler) honours the Rollup-compat `manualChunks` callback.
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (!id.includes("node_modules")) return undefined;
+          if (
+            /node_modules\/(react|react-dom|react-router|react-router-dom|scheduler)\//.test(
+              id,
+            )
+          ) {
+            return "react";
+          }
+          if (/node_modules\/(tamagui|@tamagui)\//.test(id)) return "tamagui";
+          if (/node_modules\/@clerk\//.test(id)) return "clerk";
+          if (/node_modules\/@tanstack\//.test(id)) return "tanstack";
+          return undefined;
+        },
+      },
+    },
+  },
   define: {
     __TEST_ATTRS__: mode !== "production",
   },

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import {
   BrowserRouter,
   Routes,
@@ -6,10 +7,45 @@ import {
   useSearchParams,
 } from 'react-router-dom';
 import { LandingPage } from '@features/landing/pages/LandingPage';
-import { CurationPage } from '@features/curation/pages/CurationPage';
-import { PlayPuzzlePage } from '@features/curation/pages/PlayPuzzlePage';
-import { ProtectedAdminRoute } from '@features/admin/components/ProtectedAdminRoute';
 import { DailyFlow } from '@features/daily/screens/DailyFlow';
+import { PageShell } from '@shared/components/PageShell';
+import { Spinner } from '@shared/components/Spinner';
+
+// Admin + curation are admin-gated routes most users never reach, so
+// their code is lazily loaded and split out of the initial bundle.
+// Landing and the daily flow stay eager — daily is the primary user
+// flow and is kept free of a Suspense navigation waterfall.
+const CurationPage = lazy(() =>
+  import('@features/curation/pages/CurationPage').then((m) => ({
+    default: m.CurationPage,
+  })),
+);
+const PlayPuzzlePage = lazy(() =>
+  import('@features/curation/pages/PlayPuzzlePage').then((m) => ({
+    default: m.PlayPuzzlePage,
+  })),
+);
+const ProtectedAdminRoute = lazy(() =>
+  import('@features/admin/components/ProtectedAdminRoute').then((m) => ({
+    default: m.ProtectedAdminRoute,
+  })),
+);
+
+/**
+ * Suspense fallback for lazy routes — reuses the existing
+ * `<Spinner>` inside `<PageShell>` so it matches `AdminLoading` /
+ * `DailyFlow`'s loading state byte-for-byte (no layout shift; CLS
+ * stays 0).
+ */
+function RouteFallback() {
+  return (
+    <PageShell>
+      <div data-testid="route-loading" aria-live="polite">
+        <Spinner />
+      </div>
+    </PageShell>
+  );
+}
 
 /**
  * `/play` is shared between two features, dispatched on the `flow=`
@@ -34,7 +70,13 @@ function PlayRoute() {
       </div>
     );
   }
-  if (flow === 'curation') return <PlayPuzzlePage />;
+  if (flow === 'curation') {
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <PlayPuzzlePage />
+      </Suspense>
+    );
+  }
   // Unknown or missing flow → home (preserves the legacy ST-11
   // no-state redirect behaviour).
   return <Navigate to="/" replace />;
@@ -56,12 +98,21 @@ export function Router() {
         <Route
           path="/curation"
           element={
-            <ProtectedAdminRoute>
-              <CurationPage />
-            </ProtectedAdminRoute>
+            <Suspense fallback={<RouteFallback />}>
+              <ProtectedAdminRoute>
+                <CurationPage />
+              </ProtectedAdminRoute>
+            </Suspense>
           }
         />
-        <Route path="/admin" element={<ProtectedAdminRoute />} />
+        <Route
+          path="/admin"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <ProtectedAdminRoute />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
