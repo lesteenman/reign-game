@@ -73,6 +73,10 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Bundle budget
+        working-directory: frontend
+        run: npm run budget
+
       - name: Test (app)
         working-directory: frontend
         run: npm test
