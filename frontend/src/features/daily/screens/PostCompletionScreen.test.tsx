@@ -112,7 +112,7 @@ describe('PostCompletionScreen', () => {
   describe('claim-a-name prompt', () => {
     const promptStub = () => screen.queryByTestId('claim-username-prompt-stub');
 
-    it('shows the prompt for a signed-in, leaderboard-eligible player with no username', () => {
+    it('shows the prompt and a rank line with no name suffix for a player with no username', () => {
       // Arrange — signed in, loaded, no username; rank present (eligible)
       useUserMock.mockReturnValue({
         user: { username: null },
@@ -122,11 +122,15 @@ describe('PostCompletionScreen', () => {
       // Act
       renderScreen({ ...BASE_PROPS, leaderboardRank: 5 });
 
-      // Assert
+      // Assert — prompt present and the rank line carries the rank with
+      // no "as <name>" suffix (null-safe display).
       expect(promptStub()).toBeInTheDocument();
+      const rankLine = screen.getByTestId('daily-leaderboard-rank');
+      expect(rankLine).toHaveTextContent('#5');
+      expect(rankLine).not.toHaveTextContent(/\bas\b/);
     });
 
-    it('hides the prompt when the player already has a username', () => {
+    it('hides the prompt and shows the username in the rank line when set', () => {
       // Arrange
       useUserMock.mockReturnValue({
         user: { username: 'alreadyset' },
@@ -136,8 +140,11 @@ describe('PostCompletionScreen', () => {
       // Act
       renderScreen({ ...BASE_PROPS, leaderboardRank: 5 });
 
-      // Assert
+      // Assert — durable confirmation: the rank line names the player.
       expect(promptStub()).not.toBeInTheDocument();
+      const rankLine = screen.getByTestId('daily-leaderboard-rank');
+      expect(rankLine).toHaveTextContent('#5');
+      expect(rankLine).toHaveTextContent('alreadyset');
     });
 
     it('hides the prompt for anonymous players (no leaderboard rank)', () => {

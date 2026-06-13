@@ -37,8 +37,10 @@ describe('ClaimUsernamePrompt', () => {
     expect(screen.getByTestId('claim-username-input')).toBeInTheDocument();
   });
 
-  it('shows success copy with the saved name on a successful claim', async () => {
-    // Arrange
+  it('renders no transient success copy after a successful claim', async () => {
+    // Arrange — durable confirmation lives in the call site (driven by
+    // user.username); this component must not render a success branch
+    // that the parent's eligibility gate unmounts before it can paint.
     setUsernameMock.mockResolvedValue('happyplayer');
     render(<ClaimUsernamePrompt />);
 
@@ -48,13 +50,14 @@ describe('ClaimUsernamePrompt', () => {
     });
     fireEvent.click(screen.getByTestId('claim-username-submit'));
 
-    // Assert
+    // Assert — the mutation runs (and reloads the Clerk user) but no
+    // success node is rendered by this component.
     await waitFor(() =>
-      expect(screen.getByTestId('claim-username-success')).toHaveTextContent(
-        'happyplayer',
-      ),
+      expect(setUsernameMock).toHaveBeenCalledWith('happyplayer'),
     );
-    expect(setUsernameMock).toHaveBeenCalledWith('happyplayer');
+    expect(
+      screen.queryByTestId('claim-username-success'),
+    ).not.toBeInTheDocument();
   });
 
   it.each([

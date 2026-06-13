@@ -43,16 +43,6 @@ const ErrorLine = styledAny(Text, {
   margin: 0,
 });
 
-const SuccessLine = styledAny(Text, {
-  name: 'ClaimUsernameSuccess',
-  fontSize: '$4',
-  fontWeight: '600',
-  color: '$body',
-  textAlign: 'center',
-  render: <p />,
-  margin: 0,
-});
-
 /**
  * Maps a failed set-username call to a single line of user-facing copy.
  * Status mapping mirrors the backend contract: 400 invalid format,
@@ -78,8 +68,9 @@ function errorCopy(err: unknown): string {
  * Claim-a-name prompt shown after a signed-in, leaderboard-eligible daily
  * solve when the player has no username yet. Lets them set a leaderboard
  * display name inline, surfacing validation errors from the backend. On
- * success the name is shown and (via the hook's user.reload()) the
- * prompt's visibility guard at the call site goes false.
+ * success the hook calls user.reload(), which populates user.username and
+ * flips the call site's visibility guard false (this component unmounts);
+ * the durable confirmation lives at the call site, driven by user.username.
  *
  * The caller owns the eligibility gate (signed-in + leaderboard-eligible
  * + no username); this component only renders the form.
@@ -93,16 +84,6 @@ export function ClaimUsernamePrompt() {
     if (trimmed.length === 0) return;
     mutation.mutate(trimmed);
   }, [value, mutation]);
-
-  if (mutation.isSuccess) {
-    return (
-      <PromptBlock data-testid="claim-username-success">
-        <SuccessLine>
-          You&apos;ll appear on the board as {mutation.data}.
-        </SuccessLine>
-      </PromptBlock>
-    );
-  }
 
   return (
     <PromptBlock data-testid="claim-username-prompt">
