@@ -42,11 +42,15 @@ echo "--- Frontend: lint ---"
 cd "$ROOT/frontend"
 npm run lint
 
-echo "--- Frontend: build (includes tsc -b across @reign/core + app) ---"
+echo "--- Frontend: build (tsc -b typechecks the app; @reign/core is typechecked by its own step) ---"
 npm run build
 
 echo "--- Frontend: unit tests ---"
 npx vitest run
+
+echo "--- Core: typecheck ---"
+cd "$ROOT/packages/core"
+npm run typecheck
 
 echo "--- Core: unit tests ---"
 cd "$ROOT/packages/core"
