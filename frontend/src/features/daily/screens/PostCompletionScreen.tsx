@@ -284,6 +284,7 @@ export function PostCompletionScreen({
           <RankLine data-testid="daily-leaderboard-rank">
             Today&apos;s rank:{' '}
             <RankNumber>#{leaderboardRank}</RankNumber>
+            {user?.username ? <> as {user.username}</> : null}
           </RankLine>
         )}
 
