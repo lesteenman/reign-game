@@ -181,3 +181,25 @@ were filed together as **#307**; item 3 → **#308**; item 4 → **#309**; the C
   the frontend reds above are **not** infra-latency.
 - **Field / RUM Core Web Vitals** — real-user LCP/CLS and true **INP** (needs `web-vitals` instrumentation
   + real users) → **#170**. The post-completion route, not lab-measurable, falls here too.
+
+---
+
+## Post-remediation re-measure — 2026-06-13 (#307 + #308 + #309 shipped)
+
+Re-ran the landing-route Lighthouse pass (same tool/config: Lighthouse 13.4.0, mobile / Slow-4G /
+4× CPU, median of 3) against **acc** after #307 (CloudFront compression + immutable Cache-Control) and
+#308 (route + vendor code-split) deployed.
+
+| Metric | Baseline (2026-06-10) | After #307+#308 | Target |
+|---|---|---|---|
+| Performance score | 44 | **75–91** (median 83) | ≥ 90 |
+| TBT | 812 ms | **0 ms** | < 200 ms ✓ |
+| LCP | 8.04 s | **3.8 s** | < 2.5 s |
+
+**TBT is at the lab floor (0 ms)** — the code-split (#308) removed the monolithic up-front parse/exec
+that drove the 812 ms, so main-thread blocking is now well under the 200 ms target. **#309** then defers
+service-worker registration off the critical render path (`registerSW({ immediate: false })`, registers
+on `load`) — a correctness/best-practice change verified to still register the SW; its marginal TBT
+effect is below lab resolution because #308 already floored TBT. No Clerk-deferral follow-up is needed
+(TBT is under target). LCP improved markedly (8.0 → 3.8 s) but is still above the 2.5 s "good" line —
+remaining LCP headroom is render/network, not main-thread, and is field-measured via #170.
