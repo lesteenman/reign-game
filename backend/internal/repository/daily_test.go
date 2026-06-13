@@ -500,6 +500,170 @@ func TestListApprovedPool(t *testing.T) {
 	}
 }
 
+func TestListReadyPoolNoDownvotes(t *testing.T) {
+	// poolItem mirrors the helper in TestListApprovedPool. The repository
+	// delegates pool filtering to DynamoDB's FilterExpression, so the mock
+	// returns the *post-filter* slice the real DDB would emit; the test
+	// asserts both the FilterExpression shape (so DDB filters correctly in
+	// prod) and the post-unmarshal records the repository returns.
+	poolItem := func(id string, up, down int, lastDailyDate string) map[string]types.AttributeValue {
+		item := map[string]types.AttributeValue{
+			"PK":     &types.AttributeValueMemberS{Value: "9#standard"},
+			"SK":     &types.AttributeValueMemberS{Value: id},
+			"status": &types.AttributeValueMemberS{Value: "ready"},
+			"verdictSummary": &types.AttributeValueMemberM{
+				Value: map[string]types.AttributeValue{
+					"up":            &types.AttributeValueMemberN{Value: itoa(up)},
+					"down":          &types.AttributeValueMemberN{Value: itoa(down)},
+					"lastUpdatedAt": &types.AttributeValueMemberS{Value: "2026-04-26T10:00:00Z"},
+				},
+			},
+		}
+		if lastDailyDate != "" {
+			item["lastDailyDate"] = &types.AttributeValueMemberS{Value: lastDailyDate}
+		}
+		return item
+	}
+
+	now := time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC)
+	wantCutoff := now.AddDate(0, 0, -DailyRecycleWindowDays).Format("2006-01-02") // "2026-04-16"
+
+	tests := []struct {
+		name                   string
+		excludeRecentlyDailied bool
+		preFilteredItems       []map[string]types.AttributeValue
+		queryErr               error
+		wantErr                bool
+		wantIDs                []string
+		wantCutoffPresent      bool
+	}{
+		{
+			// Partition holds:
+			//   A: up=1 down=0   → FilterExpression accepts (down=0) → returned
+			//   B: up=0 down=0   → FilterExpression accepts (no up-vote required) → returned
+			//   C: up=2 down=1   → FilterExpression rejects (down>=1) → omitted
+			name:                   "returns not-down-voted puzzles incl. up=0 (down == 0)",
+			excludeRecentlyDailied: false,
+			preFilteredItems: []map[string]types.AttributeValue{
+				poolItem("puzzle-A", 1, 0, ""),
+				poolItem("puzzle-B", 0, 0, ""),
+			},
+			wantIDs: []string{"puzzle-A", "puzzle-B"},
+		},
+		{
+			// Recycle-window honored: only puzzles outside the window survive.
+			//   F: down=0 lastDailyDate=2026-04-10 (20 days ago) → accepts
+			//   G: down=0 (no lastDailyDate) → accepts
+			name:                   "with excludeRecentlyDailied=true filters dailied within window",
+			excludeRecentlyDailied: true,
+			preFilteredItems: []map[string]types.AttributeValue{
+				poolItem("puzzle-F", 0, 0, "2026-04-10"),
+				poolItem("puzzle-G", 0, 0, ""),
+			},
+			wantIDs:           []string{"puzzle-F", "puzzle-G"},
+			wantCutoffPresent: true,
+		},
+		{
+			name:                   "propagates DDB Query error",
+			excludeRecentlyDailied: false,
+			queryErr:               errors.New("dynamodb query failed"),
+			wantErr:                true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Arrange
+			var capturedInput *dynamodb.QueryInput
+			mock := &mockDynamoDBClient{
+				queryFunc: func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+					capturedInput = params
+					if tt.queryErr != nil {
+						return nil, tt.queryErr
+					}
+					return &dynamodb.QueryOutput{Items: tt.preFilteredItems}, nil
+				},
+			}
+			repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+			// Act
+			got, err := repo.ListReadyPoolNoDownvotes(context.Background(), 9, "standard", tt.excludeRecentlyDailied, now)
+
+			// Assert
+			if tt.wantErr {
+				if err == nil {
+					t.Fatal("expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if capturedInput == nil {
+				t.Fatal("Query was not called")
+			}
+			pkVal := capturedInput.ExpressionAttributeValues[":pk"].(*types.AttributeValueMemberS).Value
+			if pkVal != "9#standard" {
+				t.Errorf(":pk = %q, want 9#standard", pkVal)
+			}
+			zeroVal := capturedInput.ExpressionAttributeValues[":zero"].(*types.AttributeValueMemberN).Value
+			if zeroVal != "0" {
+				t.Errorf(":zero = %q, want 0", zeroVal)
+			}
+			filter := ""
+			if capturedInput.FilterExpression != nil {
+				filter = *capturedInput.FilterExpression
+			}
+			if !strings.Contains(filter, "verdictSummary.down = :zero") {
+				t.Errorf("FilterExpression missing down = :zero clause; got %q", filter)
+			}
+			if strings.Contains(filter, "verdictSummary.up") {
+				t.Errorf("FilterExpression must NOT reference an up-vote clause; got %q", filter)
+			}
+			if _, present := capturedInput.ExpressionAttributeValues[":one"]; present {
+				t.Errorf(":one must not be present (no up-vote clause); got %v", capturedInput.ExpressionAttributeValues[":one"])
+			}
+			if strings.Contains(filter, "status") {
+				t.Errorf("FilterExpression must NOT reference status; got %q", filter)
+			}
+			if tt.wantCutoffPresent {
+				cutoffAttr, ok := capturedInput.ExpressionAttributeValues[":cutoff"].(*types.AttributeValueMemberS)
+				if !ok {
+					t.Fatalf(":cutoff missing or wrong type when excludeRecentlyDailied=true")
+				}
+				if cutoffAttr.Value != wantCutoff {
+					t.Errorf(":cutoff = %q, want %q", cutoffAttr.Value, wantCutoff)
+				}
+				if !strings.Contains(filter, "attribute_not_exists(lastDailyDate)") || !strings.Contains(filter, "lastDailyDate < :cutoff") {
+					t.Errorf("FilterExpression missing recycle-window clause; got %q", filter)
+				}
+			} else {
+				if _, present := capturedInput.ExpressionAttributeValues[":cutoff"]; present {
+					t.Errorf(":cutoff should not be present when excludeRecentlyDailied=false")
+				}
+				if strings.Contains(filter, "lastDailyDate") {
+					t.Errorf("FilterExpression should not reference lastDailyDate when excludeRecentlyDailied=false; got %q", filter)
+				}
+			}
+			if len(got) != len(tt.wantIDs) {
+				t.Fatalf("len(got) = %d, want %d", len(got), len(tt.wantIDs))
+			}
+			gotIDs := make(map[string]bool, len(got))
+			for _, p := range got {
+				gotIDs[p.ID] = true
+				if p.GridSize != 9 || p.Mode != "standard" {
+					t.Errorf("identity not stamped on row: got (size=%d, mode=%q); want (9, standard)", p.GridSize, p.Mode)
+				}
+			}
+			for _, want := range tt.wantIDs {
+				if !gotIDs[want] {
+					t.Errorf("expected puzzle %q in result; got IDs %v", want, gotIDs)
+				}
+			}
+		})
+	}
+}
+
 func TestPuzzleRecordLastDailyDate(t *testing.T) {
 	t.Run("with value, marshals and unmarshals", func(t *testing.T) {
 		// Arrange

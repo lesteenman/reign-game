@@ -358,6 +358,61 @@ func (r *PuzzleRepository) ListApprovedPool(ctx context.Context, size int, mode 
 	return records, nil
 }
 
+// ListReadyPoolNoDownvotes returns ready, not-down-voted puzzles
+// eligible for daily assignment, scoped to (size, mode). It is the
+// daily fallback pool used only when no verdicted puzzle is available:
+// the eligibility gate is `verdictSummary.down == 0` — no up-vote is
+// required (so never-verdicted puzzles with up=0 are eligible) and the
+// lifecycle Status is not filtered, mirroring ListApprovedPool.
+// When excludeRecentlyDailied=true, also rejects puzzles whose
+// `lastDailyDate` falls within the DailyRecycleWindowDays-day rolling
+// window relative to `now`.
+//
+// Per CLAUDE.md lesson 10, this method does NOT pass DDB Limit
+// alongside FilterExpression — DDB's Limit applies pre-filter and can
+// return zero results from a non-empty pool. The pool partitions are
+// small (<60 items in the steady state), so a full partition scan is
+// safe.
+func (r *PuzzleRepository) ListReadyPoolNoDownvotes(ctx context.Context, size int, mode string, excludeRecentlyDailied bool, now time.Time) ([]PuzzleRecord, error) {
+	pk := buildPK(size, mode)
+
+	filter := "verdictSummary.down = :zero"
+	values := map[string]types.AttributeValue{
+		":pk":   &types.AttributeValueMemberS{Value: pk},
+		":zero": &types.AttributeValueMemberN{Value: "0"},
+	}
+	if excludeRecentlyDailied {
+		cutoff := now.UTC().AddDate(0, 0, -DailyRecycleWindowDays).Format("2006-01-02")
+		filter += " AND (attribute_not_exists(lastDailyDate) OR lastDailyDate < :cutoff)"
+		values[":cutoff"] = &types.AttributeValueMemberS{Value: cutoff}
+	}
+
+	output, err := r.client.Query(ctx, &dynamodb.QueryInput{
+		TableName:                 aws.String(r.tableName),
+		KeyConditionExpression:    aws.String("PK = :pk"),
+		FilterExpression:          aws.String(filter),
+		ExpressionAttributeValues: values,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("querying no-downvote pool for %s: %w", pk, err)
+	}
+
+	records := make([]PuzzleRecord, 0, len(output.Items))
+	for _, item := range output.Items {
+		var record PuzzleRecord
+		if err := attributevalue.UnmarshalMap(item, &record); err != nil {
+			return nil, fmt.Errorf("unmarshaling no-downvote-pool record: %w", err)
+		}
+		record.GridSize = size
+		record.Mode = mode
+		if skAttr, ok := item["SK"].(*types.AttributeValueMemberS); ok {
+			record.ID = skAttr.Value
+		}
+		records = append(records, record)
+	}
+	return records, nil
+}
+
 // GetPlay reads the per-player play row for (playerId, date). Returns
 // (nil, nil) when absent.
 func (r *PuzzleRepository) GetPlay(ctx context.Context, playerID, date string) (*PlayRecord, error) {
