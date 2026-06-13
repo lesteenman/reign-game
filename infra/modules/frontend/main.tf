@@ -263,6 +263,7 @@ resource "aws_cloudfront_distribution" "frontend" {
     cached_methods             = ["GET", "HEAD"]
     target_origin_id           = "s3-frontend"
     viewer_protocol_policy     = "redirect-to-https"
+    compress                   = true                                   # gzip/brotli the app bundle (CachingOptimized keys on Accept-Encoding)
     cache_policy_id            = "658327ea-f89d-4fab-a63d-7e88639e58f6" # CachingOptimized managed policy
     response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
 
