@@ -56,6 +56,9 @@ func (f *submitDailyFakeStore) WriteTransaction(ctx context.Context, items []typ
 func (f *submitDailyFakeStore) ListApprovedPool(_ context.Context, _ int, _ string, _ bool, _ time.Time) ([]repository.PuzzleRecord, error) {
 	return nil, nil
 }
+func (f *submitDailyFakeStore) ListReadyPoolNoDownvotes(_ context.Context, _ int, _ string, _ bool, _ time.Time) ([]repository.PuzzleRecord, error) {
+	return nil, nil
+}
 func (f *submitDailyFakeStore) PutCandidateIfAbsent(_ context.Context, _, _ string) error { return nil }
 func (f *submitDailyFakeStore) SubmitPlayTransactionally(ctx context.Context, playerID, date string, submission *repository.SubmitInput) error {
 	if f.submitPlayTransactionallyFn != nil {

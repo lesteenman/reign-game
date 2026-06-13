@@ -43,6 +43,9 @@ func (f *submitFakeStore) WriteTransaction(ctx context.Context, items []types.Tr
 func (f *submitFakeStore) ListApprovedPool(_ context.Context, _ int, _ string, _ bool, _ time.Time) ([]repository.PuzzleRecord, error) {
 	return nil, nil
 }
+func (f *submitFakeStore) ListReadyPoolNoDownvotes(_ context.Context, _ int, _ string, _ bool, _ time.Time) ([]repository.PuzzleRecord, error) {
+	return nil, nil
+}
 func (f *submitFakeStore) PutCandidateIfAbsent(_ context.Context, _, _ string) error { return nil }
 func (f *submitFakeStore) SubmitPlayTransactionally(_ context.Context, _, _ string, _ *repository.SubmitInput) error {
 	return nil

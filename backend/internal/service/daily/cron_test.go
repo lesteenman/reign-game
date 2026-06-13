@@ -21,9 +21,17 @@ type fakeCronRepo struct {
 	candidateErr   error
 	pool           []repository.PuzzleRecord
 	poolErr        error
+	fallbackPool   []repository.PuzzleRecord
+	fallbackErr    error
 	putErr         error
 	putCalledWith  *struct{ puzzleID, sourcePartition string }
 	listCalledWith *struct {
+		size    int
+		mode    string
+		exclude bool
+		now     time.Time
+	}
+	fallbackCalledWith *struct {
 		size    int
 		mode    string
 		exclude bool
@@ -51,6 +59,17 @@ func (f *fakeCronRepo) ListApprovedPool(_ context.Context, size int, mode string
 		now     time.Time
 	}{size, mode, exclude, now}
 	return f.pool, f.poolErr
+}
+
+func (f *fakeCronRepo) ListReadyPoolNoDownvotes(_ context.Context, size int, mode string, exclude bool, now time.Time) ([]repository.PuzzleRecord, error) {
+	f.trackedCalls = append(f.trackedCalls, "ListReadyPoolNoDownvotes")
+	f.fallbackCalledWith = &struct {
+		size    int
+		mode    string
+		exclude bool
+		now     time.Time
+	}{size, mode, exclude, now}
+	return f.fallbackPool, f.fallbackErr
 }
 
 func (f *fakeCronRepo) PutCandidateIfAbsent(_ context.Context, puzzleID, sourcePartition string) error {
@@ -282,10 +301,12 @@ func TestEnsureCandidate_DoesNotFireHookOnFreshExisting(t *testing.T) {
 	}
 }
 
-func TestEnsureCandidate_DoesNotFireHookOnEmptyPool(t *testing.T) {
-	// Arrange — pool empty; ErrCandidatePoolEmpty; no hook fire.
+func TestEnsureCandidate_FiresHookWhenVerdictedPoolEmpty(t *testing.T) {
+	// Arrange — verdicted pool empty AND fallback empty → ErrCandidatePoolEmpty,
+	// but an empty verdicted pool is a stronger low-pool signal, so the hook
+	// MUST fire.
 	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
-	repo := &fakeCronRepo{pool: []repository.PuzzleRecord{}}
+	repo := &fakeCronRepo{pool: []repository.PuzzleRecord{}, fallbackPool: []repository.PuzzleRecord{}}
 	var calls []hookCall
 	svc := newCronTestService(repo, captureHook(&calls))
 
@@ -296,8 +317,109 @@ func TestEnsureCandidate_DoesNotFireHookOnEmptyPool(t *testing.T) {
 	if !errors.Is(err, ErrCandidatePoolEmpty) {
 		t.Fatalf("expected ErrCandidatePoolEmpty, got %v", err)
 	}
-	if len(calls) != 0 {
-		t.Errorf("hook must not fire on empty-pool path; got %d calls", len(calls))
+	if len(calls) != 1 {
+		t.Fatalf("hook must fire when the verdicted pool is empty; got %d calls", len(calls))
+	}
+	if calls[0].size != CandidatePoolSize || calls[0].mode != CandidatePoolMode {
+		t.Errorf("hook call = %+v, want {%d %s}", calls[0], CandidatePoolSize, CandidatePoolMode)
+	}
+}
+
+func TestEnsureCandidate_VerdictedEmpty_FallbackPick(t *testing.T) {
+	// Arrange — verdicted pool empty, fallback (no-downvote) pool non-empty.
+	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
+	repo := &fakeCronRepo{
+		pool:         []repository.PuzzleRecord{},
+		fallbackPool: poolPuzzles("puzzle-c", "puzzle-a", "puzzle-b"),
+	}
+	svc := newCronTestService(repo, nil)
+
+	// Act
+	err := svc.EnsureCandidate(context.Background(), now)
+
+	// Assert — picked lex-smallest from the fallback pool via the existing
+	// selection logic.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.putCalledWith == nil || repo.putCalledWith.puzzleID != "puzzle-a" {
+		t.Fatalf("expected fallback pick puzzle-a, got %+v", repo.putCalledWith)
+	}
+	// Fallback query must honor the recycle-window exclusion (excludeRecentlyDailied=true).
+	if repo.fallbackCalledWith == nil || !repo.fallbackCalledWith.exclude {
+		t.Fatalf("fallback query must pass excludeRecentlyDailied=true; got %+v", repo.fallbackCalledWith)
+	}
+	if repo.fallbackCalledWith.size != CandidatePoolSize || repo.fallbackCalledWith.mode != CandidatePoolMode {
+		t.Errorf("fallback query (size,mode) = (%d,%s), want (%d,%s)",
+			repo.fallbackCalledWith.size, repo.fallbackCalledWith.mode, CandidatePoolSize, CandidatePoolMode)
+	}
+}
+
+func TestEnsureCandidate_BothEmpty_Sentinel(t *testing.T) {
+	// Arrange — verdicted empty AND fallback empty (e.g. fallback only had
+	// down-voted rows, which the query excludes) → ErrCandidatePoolEmpty.
+	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
+	repo := &fakeCronRepo{pool: []repository.PuzzleRecord{}, fallbackPool: []repository.PuzzleRecord{}}
+	svc := newCronTestService(repo, nil)
+
+	// Act
+	err := svc.EnsureCandidate(context.Background(), now)
+
+	// Assert
+	if !errors.Is(err, ErrCandidatePoolEmpty) {
+		t.Fatalf("expected ErrCandidatePoolEmpty, got %v", err)
+	}
+	if repo.putCalledWith != nil {
+		t.Fatalf("PutCandidateIfAbsent must not be called when both pools empty; was called with %+v", repo.putCalledWith)
+	}
+}
+
+func TestEnsureCandidate_VerdictedNonEmpty_SkipsFallback(t *testing.T) {
+	// Arrange — verdicted pool non-empty; fallback would also have rows but
+	// must never be consulted (verdicted strictly preferred).
+	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
+	repo := &fakeCronRepo{
+		pool:         poolPuzzles("puzzle-verdicted"),
+		fallbackPool: poolPuzzles("puzzle-fallback"),
+	}
+	svc := newCronTestService(repo, nil)
+
+	// Act
+	err := svc.EnsureCandidate(context.Background(), now)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.putCalledWith == nil || repo.putCalledWith.puzzleID != "puzzle-verdicted" {
+		t.Fatalf("expected verdicted pick puzzle-verdicted, got %+v", repo.putCalledWith)
+	}
+	if repo.fallbackCalledWith != nil {
+		t.Fatalf("fallback query must not run when verdicted pool is non-empty; was called with %+v", repo.fallbackCalledWith)
+	}
+	for _, c := range repo.trackedCalls {
+		if c == "ListReadyPoolNoDownvotes" {
+			t.Fatalf("fallback query must not be called when verdicted pool is non-empty; calls %v", repo.trackedCalls)
+		}
+	}
+}
+
+func TestEnsureCandidate_FallbackPropagatesError(t *testing.T) {
+	// Arrange — verdicted empty, fallback query errors.
+	now := time.Date(2026, 5, 2, 18, 0, 0, 0, time.UTC)
+	plain := errors.New("ddb fallback broken")
+	repo := &fakeCronRepo{pool: []repository.PuzzleRecord{}, fallbackErr: plain}
+	svc := newCronTestService(repo, nil)
+
+	// Act
+	err := svc.EnsureCandidate(context.Background(), now)
+
+	// Assert — wrapped, errors.Is finds the underlying.
+	if err == nil {
+		t.Fatalf("expected error, got nil")
+	}
+	if !errors.Is(err, plain) {
+		t.Fatalf("expected wrapped %v, got %v (%T)", plain, err, err)
 	}
 }
 

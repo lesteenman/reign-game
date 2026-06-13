@@ -35,6 +35,11 @@ type fakeRepo struct {
 	// to bubble up as ErrPoolExhausted from the cold-start path).
 	approvedPool []repository.PuzzleRecord
 
+	// fallbackPool is what ListReadyPoolNoDownvotes returns — the
+	// no-downvote fallback consulted by EnsureCandidate only when the
+	// verdicted approvedPool is empty.
+	fallbackPool []repository.PuzzleRecord
+
 	calls []string
 }
 
@@ -99,6 +104,13 @@ func (f *fakeRepo) WriteTransaction(_ context.Context, items []types.TransactWri
 func (f *fakeRepo) ListApprovedPool(_ context.Context, _ int, _ string, _ bool, _ time.Time) ([]repository.PuzzleRecord, error) {
 	f.calls = append(f.calls, "ListApprovedPool")
 	return f.approvedPool, nil
+}
+
+// ListReadyPoolNoDownvotes returns the seeded fallback pool. Only
+// reached when the verdicted approvedPool is empty.
+func (f *fakeRepo) ListReadyPoolNoDownvotes(_ context.Context, _ int, _ string, _ bool, _ time.Time) ([]repository.PuzzleRecord, error) {
+	f.calls = append(f.calls, "ListReadyPoolNoDownvotes")
+	return f.fallbackPool, nil
 }
 
 // PutCandidateIfAbsent simulates the conditional Put: only writes
@@ -427,6 +439,116 @@ func TestSyncFinalizeForToday_BothAbsent_BootstrapsFromApprovedPool(t *testing.T
 	}
 	if canonical == nil || canonical.PuzzleID != "puzzle-from-pool" {
 		t.Errorf("expected canonical schedule with bootstrapped puzzle, got %+v", canonical)
+	}
+}
+
+func TestSyncFinalizeForToday_BothAbsent_BootstrapsFromFallbackPool(t *testing.T) {
+	// Arrange — cold-start: candidate AND yesterday both absent, the
+	// verdicted approved pool is EMPTY, but the no-downvote fallback pool
+	// has a ready puzzle. Sync-fallback should bootstrap from the fallback
+	// pool rather than 500 as ErrPoolExhausted.
+	today := "2026-05-08"
+	yesterday := "2026-05-07"
+	repo := &fakeRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{}, // yesterday absent
+		candidate:      nil,                                     // candidate absent → cold-start
+		approvedPool:   nil,                                     // verdicted pool empty
+		fallbackPool: []repository.PuzzleRecord{
+			{ID: "puzzle-from-fallback"},
+		},
+		scheduleAfterFinalize: map[string]*repository.ScheduleRecord{
+			today: {
+				Date:            today,
+				PuzzleID:        "puzzle-from-fallback",
+				SourcePartition: "9#standard",
+				AssignedAt:      "2026-05-08T00:00:01Z",
+			},
+		},
+	}
+	svc := newTestService(repo)
+
+	// Act
+	canonical, err := svc.SyncFinalizeForToday(context.Background(), today, yesterday, time.Now())
+
+	// Assert
+	if err != nil {
+		t.Fatalf("expected nil error after fallback bootstrap, got %v", err)
+	}
+	if repo.finalizeCall == nil {
+		t.Fatal("FinalizeDaily MUST be called after the fallback bootstrap")
+	}
+	if repo.finalizeCall.mode != repository.FinalizeModeConfirm {
+		t.Errorf("expected mode=confirm, got %q", repo.finalizeCall.mode)
+	}
+	if repo.finalizeCall.puzzleID != "puzzle-from-fallback" {
+		t.Errorf("expected puzzleID from fallback pool, got %q", repo.finalizeCall.puzzleID)
+	}
+	if canonical == nil || canonical.PuzzleID != "puzzle-from-fallback" {
+		t.Errorf("expected canonical schedule with fallback puzzle, got %+v", canonical)
+	}
+}
+
+func TestSyncFinalizeForToday_RecycleUnplayed_WinsOverFallbackCandidate(t *testing.T) {
+	// Arrange — yesterday went unplayed (started==0, solved==0) and a
+	// candidate is present. Recycle-if-unplayed (chooseFinalizeTarget) must
+	// still win ahead of fresh selection even though a fallback candidate
+	// could have been drawn. The candidate here stands in for one that the
+	// fallback path could have produced; the fallback query must never run
+	// because both candidate and yesterday are present (no cold-start).
+	today := "2026-05-08"
+	yesterday := "2026-05-07"
+	repo := &fakeRepo{
+		scheduleByDate: map[string]*repository.ScheduleRecord{
+			yesterday: {
+				Date:            yesterday,
+				PuzzleID:        "puzzle-yesterday",
+				SourcePartition: "9#standard",
+				Counters:        repository.ScheduleCounters{Started: 0, Solved: 0},
+			},
+		},
+		candidate: &repository.CandidateRecord{
+			PuzzleID:        "puzzle-fresh-candidate",
+			SourcePartition: "9#standard",
+			QueuedAt:        "2026-05-07T18:00:00Z",
+		},
+		approvedPool: nil,
+		fallbackPool: []repository.PuzzleRecord{{ID: "puzzle-from-fallback"}},
+		scheduleAfterFinalize: map[string]*repository.ScheduleRecord{
+			today: {
+				Date:            today,
+				PuzzleID:        "puzzle-yesterday",
+				SourcePartition: "9#standard",
+				AssignedAt:      "2026-05-08T00:00:01Z",
+			},
+		},
+	}
+	svc := newTestService(repo)
+
+	// Act
+	canonical, err := svc.SyncFinalizeForToday(context.Background(), today, yesterday, time.Now())
+
+	// Assert — recycle wins.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if repo.finalizeCall == nil {
+		t.Fatal("FinalizeDaily MUST be called")
+	}
+	if repo.finalizeCall.mode != repository.FinalizeModeRecycle {
+		t.Errorf("expected mode=recycle (yesterday unplayed), got %q", repo.finalizeCall.mode)
+	}
+	if repo.finalizeCall.puzzleID != "puzzle-yesterday" {
+		t.Errorf("expected recycle of yesterday's puzzle, got %q", repo.finalizeCall.puzzleID)
+	}
+	if canonical == nil || canonical.PuzzleID != "puzzle-yesterday" {
+		t.Errorf("expected canonical schedule recycling yesterday, got %+v", canonical)
+	}
+	// Neither pool query should have run — candidate + yesterday both present,
+	// so the cold-start bootstrap path (which consults the pools) is skipped.
+	for _, call := range repo.calls {
+		if call == "ListApprovedPool" || call == "ListReadyPoolNoDownvotes" {
+			t.Fatalf("pool query %q must not run when not in cold-start; calls %v", call, repo.calls)
+		}
 	}
 }
 

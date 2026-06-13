@@ -98,6 +98,10 @@ func (s *stubStore) ListApprovedPool(_ context.Context, _ int, _ string, _ bool,
 	return nil, nil
 }
 
+func (s *stubStore) ListReadyPoolNoDownvotes(_ context.Context, _ int, _ string, _ bool, _ time.Time) ([]repository.PuzzleRecord, error) {
+	return nil, nil
+}
+
 func (s *stubStore) PutCandidateIfAbsent(_ context.Context, _, _ string) error {
 	return nil
 }

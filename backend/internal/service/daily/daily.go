@@ -59,6 +59,7 @@ type Store interface {
 	GetCandidate(ctx context.Context) (*repository.CandidateRecord, error)
 	WriteTransaction(ctx context.Context, items []types.TransactWriteItem) error
 	ListApprovedPool(ctx context.Context, size int, mode string, excludeRecentlyDailied bool, now time.Time) ([]repository.PuzzleRecord, error)
+	ListReadyPoolNoDownvotes(ctx context.Context, size int, mode string, excludeRecentlyDailied bool, now time.Time) ([]repository.PuzzleRecord, error)
 	PutCandidateIfAbsent(ctx context.Context, puzzleID, sourcePartition string) error
 	LeaderboardRank(ctx context.Context, date string, elapsedMs int64, userID string) (int, error)
 }

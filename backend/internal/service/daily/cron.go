@@ -36,19 +36,21 @@ var ErrCandidatePoolEmpty = errors.New("approved candidate pool is empty")
 //
 // Algorithm:
 //  1. GetCandidate. Fresh (queuedAt within 24h relative to `now`) -> nil.
-//  2. List approved pool with excludeRecentlyDailied=true.
-//  3. Empty -> ErrCandidatePoolEmpty.
+//  2. List approved (verdicted) pool with excludeRecentlyDailied=true.
+//  3. Verdicted empty -> fall back to the no-downvote pool. Still
+//     empty -> ErrCandidatePoolEmpty. Verdicted is strictly preferred.
 //  4. Pick lexicographically smallest puzzleID — deterministic so
 //     duplicate firings select the same row and the conditional
 //     PutCandidateIfAbsent collapses cleanly.
 //  5. PutCandidateIfAbsent. ErrCandidateAlreadyExists -> nil (race-loser).
 //
-// s.replenishHook, if non-nil, is invoked synchronously after a
-// non-empty ListApprovedPool result, with the partition's (size, mode).
-// The pool read drained the approved partition; the hook gives the
-// caller a chance to publish auto-replenish messages. Wiring decides
-// whether to dispatch async/sync. The hook is not invoked on
-// fresh-candidate (no read), pool-empty, or pool-read-error paths.
+// s.replenishHook, if non-nil, is invoked synchronously with the
+// partition's (size, mode) in exactly one of two cases: the verdicted
+// pool read returned ≥1 row (it just drained by 1), OR the verdicted
+// pool was empty (the strongest low-pool signal, whether or not the
+// fallback yields a candidate). The two cases are mutually exclusive, so
+// the hook fires at most once. It is not invoked on the fresh-candidate
+// (no read) or pool-read-error paths.
 //
 // Future-clock-skew: a candidate with QueuedAt > now is treated as
 // stale (refresh) — defensive, not strictly required.
@@ -65,15 +67,30 @@ func (s *Service) EnsureCandidate(ctx context.Context, now time.Time) error {
 	if err != nil {
 		return fmt.Errorf("ensure daily candidate: list approved pool: %w", err)
 	}
-	if len(pool) == 0 {
-		return ErrCandidatePoolEmpty
-	}
 
-	// Approved-pool read succeeded with at least one row — partition
-	// just drained by 1. Fire the auto-replenish hook (if wired) before
-	// the Put: the Put outcome (winner/race-loser/error) doesn't
-	// affect whether replenish should run.
-	if s.replenishHook != nil {
+	if len(pool) == 0 {
+		// No verdicted puzzle available — an empty verdicted pool is the
+		// strongest low-pool signal, so fire the auto-replenish hook (if
+		// wired) regardless of whether the fallback produces a candidate.
+		if s.replenishHook != nil {
+			s.replenishHook(CandidatePoolSize, CandidatePoolMode)
+		}
+
+		// Fallback: serve a ready, not-down-voted puzzle instead of
+		// recycling/erroring. Verdicted stays strictly preferred — this
+		// branch runs only when the verdicted pool is empty.
+		pool, err = s.store.ListReadyPoolNoDownvotes(ctx, CandidatePoolSize, CandidatePoolMode, true, now)
+		if err != nil {
+			return fmt.Errorf("ensure daily candidate: list no-downvote pool: %w", err)
+		}
+		if len(pool) == 0 {
+			return ErrCandidatePoolEmpty
+		}
+	} else if s.replenishHook != nil {
+		// Approved-pool read succeeded with at least one row — partition
+		// just drained by 1. Fire the auto-replenish hook (if wired) before
+		// the Put: the Put outcome (winner/race-loser/error) doesn't
+		// affect whether replenish should run.
 		s.replenishHook(CandidatePoolSize, CandidatePoolMode)
 	}
 
