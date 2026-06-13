@@ -71,6 +71,30 @@ async function runChecks() {
   if (healthErr) fail(healthErr);
   else console.log(`✓ /api/health: keyed 200, keyless 403`);
 
+  // 2b. Hashed JS asset is compressed + immutably cached.
+  // A CloudFront `compress` regression (uncompressed wire) or a CD upload
+  // that drops the immutable Cache-Control would both reach the user as a
+  // slow first/repeat load — assert both on a live hashed asset. The asset
+  // URL is content-hashed, so discover it from the served index.html rather
+  // than hard-coding a name that changes every build.
+  const indexHtml = await (await fetch(BASE + '/')).text();
+  const assetMatch = indexHtml.match(/\/assets\/[^"']+-[A-Za-z0-9_-]+\.js/);
+  if (!assetMatch) {
+    fail(`no hashed /assets/*.js URL found in index.html — cannot verify compression/cache headers`);
+  } else {
+    const assetUrl = BASE + assetMatch[0];
+    const assetRes = await fetch(assetUrl, { headers: { 'Accept-Encoding': 'gzip, br' } });
+    const enc = assetRes.headers.get('content-encoding') || '';
+    const cc = assetRes.headers.get('cache-control') || '';
+    if (!/\b(gzip|br)\b/.test(enc)) {
+      fail(`hashed asset ${assetMatch[0]} content-encoding is "${enc || '(none)'}", expected gzip or br`);
+    } else if (!/immutable/.test(cc) || !/max-age=31536000/.test(cc)) {
+      fail(`hashed asset ${assetMatch[0]} cache-control is "${cc || '(none)'}", expected immutable + max-age=31536000`);
+    } else {
+      console.log(`✓ hashed asset compressed (${enc}) + immutable cached`);
+    }
+  }
+
   // 3. Live frontend -> API wire + no console errors
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
