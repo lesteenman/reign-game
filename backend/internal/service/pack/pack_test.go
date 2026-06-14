@@ -17,6 +17,7 @@ type fakeStore struct {
 	updatePack    func(ctx context.Context, p *repository.PackRecord) error
 	deletePack    func(ctx context.Context, slug string) error
 	getPuzzle     func(ctx context.Context, size int, mode, id string) (*repository.PuzzleRecord, error)
+	batchGet      func(ctx context.Context, size int, mode string, ids []string) ([]repository.PuzzleRecord, error)
 	listApproved  func(ctx context.Context, size int, mode string, excludeRecent bool, now time.Time) ([]repository.PuzzleRecord, error)
 	lastPutRecord *repository.PackRecord
 	lastUpdateRec *repository.PackRecord
@@ -45,6 +46,9 @@ func (f *fakeStore) GetPuzzle(ctx context.Context, size int, mode, id string) (*
 func (f *fakeStore) ListApprovedPool(ctx context.Context, size int, mode string, excludeRecent bool, now time.Time) ([]repository.PuzzleRecord, error) {
 	return f.listApproved(ctx, size, mode, excludeRecent, now)
 }
+func (f *fakeStore) BatchGetPuzzles(ctx context.Context, size int, mode string, ids []string) ([]repository.PuzzleRecord, error) {
+	return f.batchGet(ctx, size, mode, ids)
+}
 
 // verdictUpPuzzle is a puzzle that passes the verdict-up gate.
 func verdictUpPuzzle(id string) *repository.PuzzleRecord {
@@ -67,6 +71,225 @@ func baseStore() *fakeStore {
 		listApproved: func(_ context.Context, _ int, _ string, _ bool, _ time.Time) ([]repository.PuzzleRecord, error) {
 			return nil, nil
 		},
+		batchGet: func(_ context.Context, _ int, _ string, _ []string) ([]repository.PuzzleRecord, error) {
+			return nil, nil
+		},
+	}
+}
+
+// servePuzzle is a stored puzzle row carrying the fields ServePack
+// projects (regionMap + metadata) plus a solution that must NOT leak.
+func servePuzzle(id string) repository.PuzzleRecord {
+	return repository.PuzzleRecord{
+		ID:                   id,
+		GridSize:             7,
+		Mode:                 "standard",
+		RegionMap:            [][]int{{0, 1}, {1, 0}},
+		Solution:             [][]bool{{true, false}, {false, true}},
+		Difficulty:           3,
+		MaxTier:              2,
+		TierCounts:           []int{0, 1, 2, 0, 0},
+		TraceLen:             4,
+		GenerationDurationMs: 120,
+		CreatedAt:            "2026-06-14T00:00:00Z",
+		Seed:                 42,
+	}
+}
+
+func TestServePack_PublishedHappyPath(t *testing.T) {
+	// Arrange — a published pack with two puzzles in a fixed order.
+	store := baseStore()
+	store.getPack = func(_ context.Context, _ string) (*repository.PackRecord, error) {
+		return &repository.PackRecord{
+			Slug: "starter", Name: "Starter", Size: 7, Mode: "standard",
+			Published: true, PuzzleIDs: []string{"id-1", "id-2"},
+		}, nil
+	}
+	store.batchGet = func(_ context.Context, _ int, _ string, _ []string) ([]repository.PuzzleRecord, error) {
+		// Returned out of pack order — ServePack must reorder.
+		return []repository.PuzzleRecord{servePuzzle("id-2"), servePuzzle("id-1")}, nil
+	}
+	svc := pack.New(store, time.Now)
+
+	// Act
+	got, err := svc.ServePack(context.Background(), "starter")
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Slug != "starter" || got.Name != "Starter" || got.Size != 7 || got.Mode != "standard" {
+		t.Errorf("manifest = %+v", got)
+	}
+	if got.PuzzleCount != 2 {
+		t.Errorf("PuzzleCount = %d, want 2", got.PuzzleCount)
+	}
+	if len(got.Puzzles) != 2 {
+		t.Fatalf("len(Puzzles) = %d, want 2", len(got.Puzzles))
+	}
+	// Order preserved per the pack's PuzzleIDs, not the BatchGet order.
+	if got.Puzzles[0].ID != "id-1" || got.Puzzles[1].ID != "id-2" {
+		t.Errorf("order = %q,%q, want id-1,id-2", got.Puzzles[0].ID, got.Puzzles[1].ID)
+	}
+	// Metadata is carried through.
+	if got.Puzzles[0].Difficulty != 3 || got.Puzzles[0].Seed != 42 || got.Puzzles[0].TraceLen != 4 {
+		t.Errorf("metadata not carried: %+v", got.Puzzles[0])
+	}
+}
+
+func TestServePack_Draft_NotFound(t *testing.T) {
+	// Arrange — an unpublished pack must be indistinguishable from missing.
+	store := baseStore()
+	store.getPack = func(_ context.Context, _ string) (*repository.PackRecord, error) {
+		return &repository.PackRecord{Slug: "draft", Size: 7, Mode: "standard", Published: false, PuzzleIDs: []string{"id-1"}}, nil
+	}
+	batchCalled := false
+	store.batchGet = func(_ context.Context, _ int, _ string, _ []string) ([]repository.PuzzleRecord, error) {
+		batchCalled = true
+		return nil, nil
+	}
+	svc := pack.New(store, time.Now)
+
+	// Act
+	_, err := svc.ServePack(context.Background(), "draft")
+
+	// Assert
+	if !errors.Is(err, pack.ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+	if batchCalled {
+		t.Error("must not read puzzles for a draft pack")
+	}
+}
+
+func TestServePack_Unknown_NotFound(t *testing.T) {
+	// Arrange — absent slug.
+	store := baseStore()
+	store.getPack = func(_ context.Context, _ string) (*repository.PackRecord, error) { return nil, nil }
+	svc := pack.New(store, time.Now)
+
+	// Act
+	_, err := svc.ServePack(context.Background(), "missing")
+
+	// Assert
+	if !errors.Is(err, pack.ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestServePack_SkipsAbsentPuzzle_PreservesOrder(t *testing.T) {
+	// Arrange — pack references three ids; the middle one is absent.
+	store := baseStore()
+	store.getPack = func(_ context.Context, _ string) (*repository.PackRecord, error) {
+		return &repository.PackRecord{
+			Slug: "p", Size: 7, Mode: "standard", Published: true,
+			PuzzleIDs: []string{"id-1", "gone", "id-3"},
+		}, nil
+	}
+	store.batchGet = func(_ context.Context, _ int, _ string, _ []string) ([]repository.PuzzleRecord, error) {
+		return []repository.PuzzleRecord{servePuzzle("id-3"), servePuzzle("id-1")}, nil
+	}
+	svc := pack.New(store, time.Now)
+
+	// Act
+	got, err := svc.ServePack(context.Background(), "p")
+
+	// Assert — absent id dropped, remaining served in pack order.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got.Puzzles) != 2 {
+		t.Fatalf("len = %d, want 2", len(got.Puzzles))
+	}
+	if got.Puzzles[0].ID != "id-1" || got.Puzzles[1].ID != "id-3" {
+		t.Errorf("order = %q,%q, want id-1,id-3", got.Puzzles[0].ID, got.Puzzles[1].ID)
+	}
+	// PuzzleCount reflects the manifest count, not the served count.
+	if got.PuzzleCount != 3 {
+		t.Errorf("PuzzleCount = %d, want 3 (manifest size)", got.PuzzleCount)
+	}
+}
+
+func TestServePack_EmptyPublished(t *testing.T) {
+	// Arrange — published pack with no puzzles.
+	store := baseStore()
+	store.getPack = func(_ context.Context, _ string) (*repository.PackRecord, error) {
+		return &repository.PackRecord{Slug: "p", Size: 7, Mode: "standard", Published: true, PuzzleIDs: nil}, nil
+	}
+	svc := pack.New(store, time.Now)
+
+	// Act
+	got, err := svc.ServePack(context.Background(), "p")
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Puzzles == nil {
+		t.Error("Puzzles must be a non-nil empty slice")
+	}
+	if len(got.Puzzles) != 0 {
+		t.Errorf("len = %d, want 0", len(got.Puzzles))
+	}
+}
+
+func TestServePack_PureRead(t *testing.T) {
+	// Arrange — a published pack. The fake store records any mutation
+	// call; ServePack must never trigger one. (MarkServed / UpdateStatus
+	// / replenish are not even on the Store interface — assert via the
+	// methods that exist: only GetPack + BatchGetPuzzles run.)
+	store := baseStore()
+	store.getPack = func(_ context.Context, _ string) (*repository.PackRecord, error) {
+		return &repository.PackRecord{Slug: "p", Size: 7, Mode: "standard", Published: true, PuzzleIDs: []string{"id-1"}}, nil
+	}
+	store.getPuzzle = func(_ context.Context, _ int, _ string, _ string) (*repository.PuzzleRecord, error) {
+		t.Error("ServePack must not call GetPuzzle (use BatchGetPuzzles)")
+		return nil, nil
+	}
+	store.batchGet = func(_ context.Context, _ int, _ string, _ []string) ([]repository.PuzzleRecord, error) {
+		return []repository.PuzzleRecord{servePuzzle("id-1")}, nil
+	}
+	svc := pack.New(store, time.Now)
+
+	// Act
+	_, err := svc.ServePack(context.Background(), "p")
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestListPublished_ExcludesDrafts(t *testing.T) {
+	// Arrange — mix of published and draft packs.
+	store := baseStore()
+	store.listPacks = func(_ context.Context) ([]repository.PackRecord, error) {
+		return []repository.PackRecord{
+			{Slug: "pub-a", Name: "A", Size: 7, Mode: "standard", Published: true, PuzzleIDs: []string{"x", "y"}},
+			{Slug: "draft-b", Name: "B", Size: 9, Mode: "double", Published: false, PuzzleIDs: []string{"z"}},
+			{Slug: "pub-c", Name: "C", Size: 9, Mode: "double", Published: true, PuzzleIDs: nil},
+		}, nil
+	}
+	svc := pack.New(store, time.Now)
+
+	// Act
+	got, err := svc.ListPublished(context.Background())
+
+	// Assert — only the two published packs, in summary shape.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2 (drafts excluded)", len(got))
+	}
+	for _, s := range got {
+		if s.Slug == "draft-b" {
+			t.Error("draft pack leaked into ListPublished")
+		}
+	}
+	// PuzzleCount derived from the manifest length.
+	if got[0].Slug == "pub-a" && got[0].PuzzleCount != 2 {
+		t.Errorf("pub-a PuzzleCount = %d, want 2", got[0].PuzzleCount)
 	}
 }
 

@@ -1,6 +1,8 @@
 package handler
 
 import (
+	"strconv"
+
 	packsvc "github.com/eriksteenman/reign-game/backend/internal/service/pack"
 )
 
@@ -58,6 +60,78 @@ type packCandidateMeta struct {
 	TraceLen             int    `json:"traceLen"`
 	GenerationDurationMs int64  `json:"generationDurationMs"`
 	CreatedAt            string `json:"createdAt"`
+}
+
+// PackServeView is the public read response for GET /api/packs/{slug}:
+// the manifest plus every puzzle's play data, no solution.
+type PackServeView struct {
+	Pack    PackManifest      `json:"pack"`
+	Puzzles []PackServePuzzle `json:"puzzles"`
+}
+
+// PackManifest is the manifest block carried by both the serve and list
+// responses. Size and mode are pack-level (single-combo pack).
+type PackManifest struct {
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Size        int    `json:"size"`
+	Mode        string `json:"mode"`
+	PuzzleCount int    `json:"puzzleCount"`
+}
+
+// PackServePuzzle is one puzzle's play data within a served pack —
+// mirrors the serve DTO (puzzleId, regionMap, metadata), no solution.
+type PackServePuzzle struct {
+	PuzzleID  string        `json:"puzzleId"`
+	RegionMap [][]int       `json:"regionMap"`
+	Metadata  serveMetadata `json:"metadata"`
+}
+
+// packServeViewFrom builds the serve response from a packsvc.PackServeView.
+func packServeViewFrom(v *packsvc.PackServeView) PackServeView {
+	puzzles := make([]PackServePuzzle, len(v.Puzzles))
+	for i := range v.Puzzles {
+		p := &v.Puzzles[i]
+		meta := serveMetadata{
+			Difficulty:           p.Difficulty,
+			MaxTier:              p.MaxTier,
+			TierCounts:           p.TierCounts,
+			TraceLen:             p.TraceLen,
+			GenerationDurationMs: p.GenerationDurationMs,
+			CreatedAt:            p.CreatedAt,
+		}
+		// Match the serve DTO: omit seed for pre-R-06C rows (Seed=0)
+		// rather than emitting a misleading "0".
+		if p.Seed != 0 {
+			meta.Seed = strconv.FormatInt(p.Seed, 10)
+		}
+		puzzles[i] = PackServePuzzle{
+			PuzzleID:  p.ID,
+			RegionMap: p.RegionMap,
+			Metadata:  meta,
+		}
+	}
+	return PackServeView{
+		Pack: PackManifest{
+			Slug:        v.Slug,
+			Name:        v.Name,
+			Size:        v.Size,
+			Mode:        v.Mode,
+			PuzzleCount: v.PuzzleCount,
+		},
+		Puzzles: puzzles,
+	}
+}
+
+// packSummaryFrom builds a list-response manifest from a packsvc.PackSummary.
+func packSummaryFrom(s *packsvc.PackSummary) PackManifest {
+	return PackManifest{
+		Slug:        s.Slug,
+		Name:        s.Name,
+		Size:        s.Size,
+		Mode:        s.Mode,
+		PuzzleCount: s.PuzzleCount,
+	}
 }
 
 // packViewFrom builds a handler PackView from a packsvc.PackView.

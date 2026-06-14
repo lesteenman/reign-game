@@ -84,6 +84,17 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 			r.Get("/puzzles/next", handler.ServeHandler(serveservice.New(repo, replenishHook)))
 			r.Put("/puzzles/{id}/status", handler.StatusHandler(statusservice.New(repo)))
 
+			// packSvc backs both the public read routes (below) and the
+			// admin assembly routes (in the /admin group). One service,
+			// two surfaces — the public surface is the read-only subset.
+			packSvc := packservice.New(repo, time.Now)
+
+			// Public pack read routes — unauthenticated, OUTSIDE the
+			// /admin group. List is registered before /packs/{slug} so
+			// chi routes the static segment first.
+			r.Get("/packs", handler.ListPublishedPacksHandler(packSvc))
+			r.Get("/packs/{slug}", handler.ServePackHandler(packSvc))
+
 			// Public modes listing for the landing page. Narrower than
 			// /admin/pool — no thresholds, ready counts, or maxAttempts.
 			r.Get("/config/modes", handler.ConfigModesHandler(cfgSvc))
@@ -115,7 +126,6 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 
 				// Pack assembly. candidates is registered before
 				// /packs/{slug} so chi routes the static segment first.
-				packSvc := packservice.New(repo, time.Now)
 				r.Get("/packs", handler.ListPacksHandler(packSvc))
 				r.Get("/packs/candidates", handler.ListPackCandidatesHandler(packSvc))
 				r.Get("/packs/{slug}", handler.GetPackHandler(packSvc))

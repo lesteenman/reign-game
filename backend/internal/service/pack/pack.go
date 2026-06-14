@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"time"
 
@@ -69,6 +70,7 @@ type Store interface {
 	UpdatePack(ctx context.Context, p *repository.PackRecord) error
 	DeletePack(ctx context.Context, slug string) error
 	GetPuzzle(ctx context.Context, size int, mode, id string) (*repository.PuzzleRecord, error)
+	BatchGetPuzzles(ctx context.Context, size int, mode string, ids []string) ([]repository.PuzzleRecord, error)
 	ListApprovedPool(ctx context.Context, size int, mode string, excludeRecentlyDailied bool, now time.Time) ([]repository.PuzzleRecord, error)
 }
 
@@ -101,6 +103,41 @@ type PackView struct {
 	PuzzleIDs []string
 	CreatedAt string
 	UpdatedAt string
+}
+
+// PackServeView is the public read projection of a pack ready to play:
+// the manifest plus every puzzle's play data in pack order, no solution.
+type PackServeView struct {
+	Slug        string
+	Name        string
+	Size        int
+	Mode        string
+	PuzzleCount int
+	Puzzles     []ServePuzzle
+}
+
+// ServePuzzle is one puzzle's play data within a served pack — the
+// serve-side shape (no solution).
+type ServePuzzle struct {
+	ID                   string
+	RegionMap            [][]int
+	Difficulty           int
+	MaxTier              int
+	TierCounts           []int
+	TraceLen             int
+	GenerationDurationMs int64
+	CreatedAt            string
+	Seed                 int64
+}
+
+// PackSummary is the list-side projection of a published pack — manifest
+// fields only, no puzzles.
+type PackSummary struct {
+	Slug        string
+	Name        string
+	Size        int
+	Mode        string
+	PuzzleCount int
 }
 
 // Candidate is a verdict-up puzzle eligible for pack assembly. Carries
@@ -262,6 +299,91 @@ func (s *Service) ListCandidates(ctx context.Context, size int, modeName string)
 		}
 	}
 	return candidates, nil
+}
+
+// ServePack returns a published pack's manifest plus every puzzle's
+// play data in pack order — the public read for playing a pack. It is a
+// pure read: no status transition, no replenish. A draft or absent pack
+// returns ErrNotFound (indistinguishable, so drafts are not
+// discoverable). Puzzles are fetched in one BatchGetItem round-trip; a
+// referenced id with no row is skipped with a WARN and the rest serve
+// in pack order (served as-packed; verdict drift is ignored).
+func (s *Service) ServePack(ctx context.Context, slug string) (*PackServeView, error) {
+	rec, err := s.store.GetPack(ctx, slug)
+	if err != nil {
+		return nil, fmt.Errorf("getting pack: %w", err)
+	}
+	if rec == nil || !rec.Published {
+		return nil, ErrNotFound
+	}
+
+	view := &PackServeView{
+		Slug:        rec.Slug,
+		Name:        rec.Name,
+		Size:        rec.Size,
+		Mode:        rec.Mode,
+		PuzzleCount: len(rec.PuzzleIDs),
+		Puzzles:     []ServePuzzle{},
+	}
+	if len(rec.PuzzleIDs) == 0 {
+		return view, nil
+	}
+
+	puzzles, err := s.store.BatchGetPuzzles(ctx, rec.Size, rec.Mode, rec.PuzzleIDs)
+	if err != nil {
+		return nil, fmt.Errorf("fetching pack puzzles: %w", err)
+	}
+
+	// Index the fetched rows by id, then walk the pack's ordered ids so
+	// the response follows pack order regardless of BatchGetItem's
+	// unspecified return order. An id with no row is genuinely absent.
+	byID := make(map[string]repository.PuzzleRecord, len(puzzles))
+	for i := range puzzles {
+		byID[puzzles[i].ID] = puzzles[i]
+	}
+	for _, id := range rec.PuzzleIDs {
+		p, ok := byID[id]
+		if !ok {
+			log.Printf("WARN: packs serve: pack=%s references absent puzzle id=%s (skipped)", slug, id)
+			continue
+		}
+		view.Puzzles = append(view.Puzzles, ServePuzzle{
+			ID:                   p.ID,
+			RegionMap:            p.RegionMap,
+			Difficulty:           p.Difficulty,
+			MaxTier:              p.MaxTier,
+			TierCounts:           p.TierCounts,
+			TraceLen:             p.TraceLen,
+			GenerationDurationMs: p.GenerationDurationMs,
+			CreatedAt:            p.CreatedAt,
+			Seed:                 p.Seed,
+		})
+	}
+	return view, nil
+}
+
+// ListPublished returns the summary of every published pack — manifest
+// fields only, no puzzles. Drafts are excluded so they stay
+// undiscoverable.
+func (s *Service) ListPublished(ctx context.Context) ([]PackSummary, error) {
+	recs, err := s.store.ListPacks(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("listing packs: %w", err)
+	}
+	summaries := make([]PackSummary, 0, len(recs))
+	for i := range recs {
+		if !recs[i].Published {
+			continue
+		}
+		summaries = append(summaries, PackSummary{
+			Slug:        recs[i].Slug,
+			Name:        recs[i].Name,
+			Size:        recs[i].Size,
+			Mode:        recs[i].Mode,
+			PuzzleCount: len(recs[i].PuzzleIDs),
+		})
+	}
+	return summaries, nil
 }
 
 // validatePuzzles asserts every puzzleId exists in the pack's size+mode

@@ -291,6 +291,120 @@ func TestUpdatePack(t *testing.T) {
 	}
 }
 
+func TestBatchGetPuzzles(t *testing.T) {
+	// Arrange — two requested ids; the store returns both, out of order.
+	var capturedKeyCount int
+	mock := &mockDynamoDBClient{
+		batchGetItemFunc: func(_ context.Context, params *dynamodb.BatchGetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error) {
+			ka := params.RequestItems["puzzle-pool"]
+			capturedKeyCount = len(ka.Keys)
+			return &dynamodb.BatchGetItemOutput{
+				Responses: map[string][]map[string]types.AttributeValue{
+					"puzzle-pool": {
+						{
+							"PK":        &types.AttributeValueMemberS{Value: "7#standard"},
+							"SK":        &types.AttributeValueMemberS{Value: "id-2"},
+							"status":    &types.AttributeValueMemberS{Value: "served"},
+							"regionMap": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
+						},
+						{
+							"PK":        &types.AttributeValueMemberS{Value: "7#standard"},
+							"SK":        &types.AttributeValueMemberS{Value: "id-1"},
+							"status":    &types.AttributeValueMemberS{Value: "ready"},
+							"regionMap": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+	repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+	// Act
+	got, err := repo.BatchGetPuzzles(context.Background(), 7, "standard", []string{"id-1", "id-2"})
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedKeyCount != 2 {
+		t.Errorf("requested key count = %d, want 2", capturedKeyCount)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len = %d, want 2", len(got))
+	}
+	// Each record carries the PK/SK-derived fields populated.
+	byID := map[string]PuzzleRecord{}
+	for _, p := range got {
+		byID[p.ID] = p
+	}
+	if _, ok := byID["id-1"]; !ok {
+		t.Errorf("id-1 missing from results: %+v", got)
+	}
+	one := byID["id-1"]
+	if one.GridSize != 7 || one.Mode != "standard" {
+		t.Errorf("id-1 size/mode = %d/%s, want 7/standard", one.GridSize, one.Mode)
+	}
+}
+
+func TestBatchGetPuzzles_MissingID(t *testing.T) {
+	// Arrange — two ids requested, only one row exists in the table.
+	mock := &mockDynamoDBClient{
+		batchGetItemFunc: func(_ context.Context, _ *dynamodb.BatchGetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error) {
+			return &dynamodb.BatchGetItemOutput{
+				Responses: map[string][]map[string]types.AttributeValue{
+					"puzzle-pool": {
+						{
+							"PK":        &types.AttributeValueMemberS{Value: "7#standard"},
+							"SK":        &types.AttributeValueMemberS{Value: "present"},
+							"status":    &types.AttributeValueMemberS{Value: "ready"},
+							"regionMap": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
+						},
+					},
+				},
+			}, nil
+		},
+	}
+	repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+	// Act
+	got, err := repo.BatchGetPuzzles(context.Background(), 7, "standard", []string{"present", "absent"})
+
+	// Assert — only the present row comes back; absent is silently dropped.
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "present" {
+		t.Fatalf("got = %+v, want only [present]", got)
+	}
+}
+
+func TestBatchGetPuzzles_Empty(t *testing.T) {
+	// Arrange — no ids requested: must not call the SDK at all.
+	called := false
+	mock := &mockDynamoDBClient{
+		batchGetItemFunc: func(_ context.Context, _ *dynamodb.BatchGetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error) {
+			called = true
+			return &dynamodb.BatchGetItemOutput{}, nil
+		},
+	}
+	repo := NewPuzzleRepository(mock, "puzzle-pool")
+
+	// Act
+	got, err := repo.BatchGetPuzzles(context.Background(), 7, "standard", nil)
+
+	// Assert
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if called {
+		t.Error("BatchGetItem must not be called for an empty id list")
+	}
+	if len(got) != 0 {
+		t.Errorf("len = %d, want 0", len(got))
+	}
+}
+
 func TestDeletePack(t *testing.T) {
 	tests := []struct {
 		name      string
