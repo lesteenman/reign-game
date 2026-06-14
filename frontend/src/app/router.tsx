@@ -30,6 +30,11 @@ const ProtectedAdminRoute = lazy(() =>
     default: m.ProtectedAdminRoute,
   })),
 );
+const AdminPacksPage = lazy(() =>
+  import('@features/admin/pages/AdminPacksPage').then((m) => ({
+    default: m.AdminPacksPage,
+  })),
+);
 
 /**
  * Suspense fallback for lazy routes — reuses the existing
@@ -110,6 +115,16 @@ export function Router() {
           element={
             <Suspense fallback={<RouteFallback />}>
               <ProtectedAdminRoute />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/admin/packs"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <ProtectedAdminRoute>
+                <AdminPacksPage />
+              </ProtectedAdminRoute>
             </Suspense>
           }
         />
