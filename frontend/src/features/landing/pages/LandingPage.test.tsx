@@ -44,7 +44,7 @@ function renderLandingPage() {
 }
 
 describe('LandingPage — tile visibility across Clerk states', () => {
-  it('signed-out: shows Daily (enabled) + Packs (disabled), no Curation tile', () => {
+  it('signed-out: shows Daily + Packs (both enabled online), no Curation tile', () => {
     // Arrange
     useUserMock.mockReturnValue({ isLoaded: true, isSignedIn: false, user: null });
 
@@ -56,7 +56,7 @@ describe('LandingPage — tile visibility across Clerk states', () => {
     expect(screen.getByTestId('tile-packs')).toBeInTheDocument();
     expect(screen.queryByTestId('tile-curation')).not.toBeInTheDocument();
     expect(screen.getByTestId('tile-daily')).not.toBeDisabled();
-    expect(screen.getByTestId('tile-packs')).toBeDisabled();
+    expect(screen.getByTestId('tile-packs')).not.toBeDisabled();
   });
 
   it('signed-in user-role: same as signed-out — no Curation tile', () => {
@@ -77,7 +77,7 @@ describe('LandingPage — tile visibility across Clerk states', () => {
     expect(screen.queryByTestId('tile-curation')).not.toBeInTheDocument();
   });
 
-  it('signed-in admin: shows all three tiles; Daily + Curation enabled, Packs disabled', () => {
+  it('signed-in admin: shows all three tiles; Daily + Packs + Curation enabled online', () => {
     // Arrange
     useUserMock.mockReturnValue({
       isLoaded: true,
@@ -90,7 +90,7 @@ describe('LandingPage — tile visibility across Clerk states', () => {
 
     // Assert
     expect(screen.getByTestId('tile-daily')).not.toBeDisabled();
-    expect(screen.getByTestId('tile-packs')).toBeDisabled();
+    expect(screen.getByTestId('tile-packs')).not.toBeDisabled();
     const curation = screen.getByTestId('tile-curation');
     expect(curation).toBeInTheDocument();
     expect(curation).not.toBeDisabled();
@@ -157,7 +157,7 @@ describe('LandingPage — offline integration', () => {
     // Assert
     expect(screen.getByTestId('tile-daily')).toBeDisabled();
     expect(screen.getByTestId('tile-curation')).toBeDisabled();
-    // Packs is always disabled regardless of online state.
+    // Packs is online-gated like Daily — disabled offline.
     expect(screen.getByTestId('tile-packs')).toBeDisabled();
   });
 
@@ -189,8 +189,11 @@ describe('LandingPage — offline integration', () => {
       'title',
       'Connect to the internet to start a new puzzle',
     );
-    // Packs does NOT get the connectivity tooltip — it's "Coming soon", not a connectivity issue.
-    expect(screen.getByTestId('tile-packs')).not.toHaveAttribute('title');
+    // Packs is online-gated too — gets its own connectivity tooltip.
+    expect(screen.getByTestId('tile-packs')).toHaveAttribute(
+      'title',
+      'Connect to the internet to browse packs',
+    );
   });
 
 });
@@ -224,7 +227,7 @@ describe('LandingPage — tile click behaviour', () => {
     expect(mockNavigate).toHaveBeenCalledWith('/play?flow=daily');
   });
 
-  it('clicking the Packs tile (disabled) does NOT navigate', () => {
+  it('clicking the Packs tile navigates to /packs', () => {
     // Arrange
     useUserMock.mockReturnValue({
       isLoaded: true,
@@ -233,13 +236,11 @@ describe('LandingPage — tile click behaviour', () => {
     });
     renderLandingPage();
 
-    // Act — fireEvent.click respects the `disabled` attribute on
-    // buttons (no click event fires); we still call to assert no
-    // navigation happens.
+    // Act
     fireEvent.click(screen.getByTestId('tile-packs'));
 
     // Assert
-    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockNavigate).toHaveBeenCalledWith('/packs');
   });
 
   it('clicking the Curation tile navigates to /curation (admin only)', () => {

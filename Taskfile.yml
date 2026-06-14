@@ -740,6 +740,29 @@ tasks:
           }
         echo "  seeded DAILY-CANDIDATE -> e2e0000-0000-4000-9000-000000000001"
 
+        # Seed a published pack referencing two committed 7#standard
+        # fixtures so the player pack-play spec (browse -> play -> resume)
+        # has a published pack to load. The e2e stack has no admin step to
+        # assemble one; the public serve endpoint serves it as-packed.
+        echo "seeding published pack 'e2e-pack' (7#standard, 2 puzzles)..."
+        docker compose exec -T localstack awslocal dynamodb put-item \
+          --table-name puzzle-pool-e2e \
+          --item '{
+            "PK": {"S": "PACK"},
+            "SK": {"S": "e2e-pack"},
+            "name": {"S": "E2E Test Pack"},
+            "size": {"N": "7"},
+            "mode": {"S": "standard"},
+            "published": {"BOOL": true},
+            "puzzleIds": {"L": [{"S": "e2e0000-0000-4000-a000-000000000001"}, {"S": "e2e0000-0000-4000-a000-000000000002"}]},
+            "createdAt": {"S": "2026-01-01T00:00:00Z"},
+            "updatedAt": {"S": "2026-01-01T00:00:00Z"}
+          }' </dev/null >/dev/null 2>&1 || {
+            echo "  FAIL: seeding pack e2e-pack" >&2
+            exit 1
+          }
+        echo "  seeded pack e2e-pack -> 2 puzzles"
+
         # Seed a recycle-mode daily for today (#150 real-wire check).
         # The recycle line on PostCompletionScreen is sourced from the GET
         # /api/daily/{date} response isRecycle, which the backend derives
