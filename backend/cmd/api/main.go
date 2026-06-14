@@ -26,6 +26,7 @@ import (
 	"github.com/eriksteenman/reign-game/backend/internal/repository"
 	configservice "github.com/eriksteenman/reign-game/backend/internal/service/config"
 	dailyservice "github.com/eriksteenman/reign-game/backend/internal/service/daily"
+	packservice "github.com/eriksteenman/reign-game/backend/internal/service/pack"
 	poolservice "github.com/eriksteenman/reign-game/backend/internal/service/pool"
 	puzzlestoresvc "github.com/eriksteenman/reign-game/backend/internal/service/puzzlestore"
 	"github.com/eriksteenman/reign-game/backend/internal/service/replenish"
@@ -111,6 +112,17 @@ func newRouter(repo *repository.PuzzleRepository, pub *queue.Publisher) *chi.Mux
 				r.Put("/config/{size}/{mode}", handler.UpdateConfigHandler(cfgSvc))
 				r.Post("/config", handler.CreateConfigHandler(cfgSvc))
 				r.Put("/puzzles/{id}/verdict", handler.VerdictHandler(verdictservice.New(repo)))
+
+				// Pack assembly. candidates is registered before
+				// /packs/{slug} so chi routes the static segment first.
+				packSvc := packservice.New(repo, time.Now)
+				r.Get("/packs", handler.ListPacksHandler(packSvc))
+				r.Get("/packs/candidates", handler.ListPackCandidatesHandler(packSvc))
+				r.Get("/packs/{slug}", handler.GetPackHandler(packSvc))
+				r.Post("/packs", handler.CreatePackHandler(packSvc))
+				r.Put("/packs/{slug}", handler.UpdatePackHandler(packSvc))
+				r.Delete("/packs/{slug}", handler.DeletePackHandler(packSvc))
+
 				if pub != nil {
 					r.Post("/replenish", handler.ReplenishHandler(cfgSvc, repo, pub))
 				}
