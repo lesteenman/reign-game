@@ -75,6 +75,7 @@ backend/
 │   │   ├── daily_test.go
 │   │   ├── generate.go          # GET /api/puzzles/generate (legacy, slow)
 │   │   ├── health.go            # GET /api/health
+│   │   ├── pack.go              # GET /api/packs, GET /api/packs/{slug} (public read; published-only, no solution; #327)
 │   │   ├── params.go            # Shared handler helpers
 │   │   ├── profile.go           # PUT /api/profile/username (signed-in; Clerk-native username + profanity gate, #129)
 │   │   ├── replenish.go         # POST /api/admin/replenish — thin shim over internal/replenish.Sweep
@@ -262,6 +263,8 @@ design/
 | GET | /api/puzzles/next | No | Serve next ready puzzle from pool by size + mode |
 | PUT | /api/puzzles/{id}/status | No | Update puzzle status (solved/skipped) |
 | GET | /api/config/modes | No | Public list of enabled (size, mode) combos for the landing page (R-06A) |
+| GET | /api/packs | No | List published packs (summary shape, no puzzles); drafts excluded (#327) |
+| GET | /api/packs/{slug} | No | Serve a published pack: manifest + all puzzles' play data (no solution); draft/unknown → 404 (#327) |
 | GET | /api/admin/pool | Admin | All combos with merged config + ready counts |
 | PUT | /api/admin/config/{size}/{mode} | Admin | Update config for an existing combo |
 | POST | /api/admin/config | Admin | Create a new combo config |

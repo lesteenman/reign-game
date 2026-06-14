@@ -30,6 +30,7 @@ type DynamoDBAPI interface {
 	GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 	DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
 	TransactWriteItems(ctx context.Context, params *dynamodb.TransactWriteItemsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error)
+	BatchGetItem(ctx context.Context, params *dynamodb.BatchGetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.BatchGetItemOutput, error)
 }
 
 // ConfigRecord represents a generation config stored in the puzzle-pool DynamoDB table.
@@ -496,6 +497,83 @@ func (r *PuzzleRepository) GetPuzzle(ctx context.Context, size int, mode, puzzle
 	record.ID = puzzleID
 
 	return &record, nil
+}
+
+// batchGetMaxKeys is DynamoDB's hard limit of 100 keys per BatchGetItem
+// request. Larger id lists are chunked into successive requests.
+const batchGetMaxKeys = 100
+
+// BatchGetPuzzles fetches the given puzzle ids from a single size+mode
+// partition in one BatchGetItem round-trip per chunk of 100 keys — the
+// single-call alternative to N sequential GetPuzzle reads. Ids with no
+// matching row are silently absent from the result (BatchGetItem
+// returns only existing items); callers reconcile against the requested
+// order. The result order is unspecified — DynamoDB does not preserve
+// request order in Responses.
+func (r *PuzzleRepository) BatchGetPuzzles(ctx context.Context, size int, mode string, ids []string) ([]PuzzleRecord, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	pk := buildPK(size, mode)
+
+	records := make([]PuzzleRecord, 0, len(ids))
+	for start := 0; start < len(ids); start += batchGetMaxKeys {
+		end := start + batchGetMaxKeys
+		if end > len(ids) {
+			end = len(ids)
+		}
+		keys := make([]map[string]types.AttributeValue, 0, end-start)
+		for _, id := range ids[start:end] {
+			keys = append(keys, map[string]types.AttributeValue{
+				"PK": &types.AttributeValueMemberS{Value: pk},
+				"SK": &types.AttributeValueMemberS{Value: id},
+			})
+		}
+
+		// Drain UnprocessedKeys: DynamoDB may return a partial batch under
+		// throttling or the 16 MB response cap, handing the unread keys
+		// back for a follow-up request.
+		requestItems := map[string]types.KeysAndAttributes{
+			r.tableName: {Keys: keys},
+		}
+		for len(requestItems[r.tableName].Keys) > 0 {
+			output, err := r.client.BatchGetItem(ctx, &dynamodb.BatchGetItemInput{
+				RequestItems: requestItems,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("batch getting puzzles for %s: %w", pk, err)
+			}
+			for _, item := range output.Responses[r.tableName] {
+				record, err := unmarshalPuzzle(item, size, mode)
+				if err != nil {
+					return nil, err
+				}
+				records = append(records, record)
+			}
+			unprocessed, ok := output.UnprocessedKeys[r.tableName]
+			if !ok || len(unprocessed.Keys) == 0 {
+				break
+			}
+			requestItems = map[string]types.KeysAndAttributes{r.tableName: unprocessed}
+		}
+	}
+	return records, nil
+}
+
+// unmarshalPuzzle decodes a puzzle item and lifts the SK into ID. Size
+// and mode are supplied by the caller (the partition is known) rather
+// than parsed from the PK.
+func unmarshalPuzzle(item map[string]types.AttributeValue, size int, mode string) (PuzzleRecord, error) {
+	var record PuzzleRecord
+	if err := attributevalue.UnmarshalMap(item, &record); err != nil {
+		return PuzzleRecord{}, fmt.Errorf("unmarshaling puzzle record: %w", err)
+	}
+	record.GridSize = size
+	record.Mode = mode
+	if skAttr, ok := item["SK"].(*types.AttributeValueMemberS); ok {
+		record.ID = skAttr.Value
+	}
+	return record, nil
 }
 
 // PutVerdict writes a verdict row to the puzzle-pool table. The PK is
