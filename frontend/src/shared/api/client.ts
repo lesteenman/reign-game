@@ -56,7 +56,7 @@ export interface ApiOptions {
   signal?: AbortSignal;
 }
 
-type Method = 'GET' | 'PUT' | 'POST';
+type Method = 'GET' | 'PUT' | 'POST' | 'DELETE';
 
 async function apiRequest<T>(
   method: Method,
@@ -134,4 +134,9 @@ export function apiPost<T>(
   options?: ApiOptions,
 ): Promise<T> {
   return apiRequest<T>('POST', path, body, options);
+}
+
+/** Send a DELETE request. Resolves to `{}` on a 204/empty body. Throws ApiError on non-2xx. */
+export function apiDelete<T>(path: string, options?: ApiOptions): Promise<T> {
+  return apiRequest<T>('DELETE', path, undefined, options);
 }

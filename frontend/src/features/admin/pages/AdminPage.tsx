@@ -451,14 +451,24 @@ export function AdminPage() {
           >
             Pool Management
           </h2>
-          <button
-            type="button"
-            onClick={handleReplenishAll}
-            data-testid="replenish-all"
-            style={accentButtonStyle}
-          >
-            Replenish All
-          </button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              type="button"
+              onClick={() => navigate('/admin/packs')}
+              data-testid="manage-packs"
+              style={buttonStyle}
+            >
+              Manage Packs
+            </button>
+            <button
+              type="button"
+              onClick={handleReplenishAll}
+              data-testid="replenish-all"
+              style={accentButtonStyle}
+            >
+              Replenish All
+            </button>
+          </div>
         </div>
 
         {statusMessage && (
