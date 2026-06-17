@@ -11,8 +11,8 @@ import { useConnectivity } from '@shared/hooks/useConnectivity';
  * Three top-level tiles for the project's eventual feature set:
  * Daily, Packs, and (admin-only) Curation. Daily is live and navigates
  * to `/play?flow=daily` for both Anonymous and User identities. Packs
- * remains a disabled placeholder — a future feature (curated bundles
- * built from verdict-up puzzles in the corpus).
+ * navigates to the packs-browse surface (`/packs`) where players pick a
+ * published pack to play through.
  *
  * The Curation tile is rendered only when
  * `getClerkUserRole(user.publicMetadata) === 'admin'`.
@@ -110,8 +110,10 @@ export function LandingPage() {
         <LandingTile
           testId="tile-packs"
           title="Puzzle Packs"
-          subtitle="Coming soon"
-          enabled={false}
+          subtitle="Curated bundles of puzzles to play through."
+          enabled={online}
+          onClick={() => navigate('/packs')}
+          disabledTitle="Connect to the internet to browse packs"
         />
         {isAdmin && (
           <LandingTile

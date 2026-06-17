@@ -35,6 +35,19 @@ const AdminPacksPage = lazy(() =>
     default: m.AdminPacksPage,
   })),
 );
+// The player pack flow (browse + play) is a secondary surface, so it is
+// lazily split out of the eager landing bundle — same pattern as the
+// admin/curation routes above.
+const PacksBrowsePage = lazy(() =>
+  import('@features/packs/pages/PacksBrowsePage').then((m) => ({
+    default: m.PacksBrowsePage,
+  })),
+);
+const PackFlow = lazy(() =>
+  import('@features/packs/screens/PackFlow').then((m) => ({
+    default: m.PackFlow,
+  })),
+);
 
 /**
  * Suspense fallback for lazy routes — reuses the existing
@@ -56,8 +69,9 @@ function RouteFallback() {
  * `/play` is shared between two features, dispatched on the `flow=`
  * query param:
  *
- *   /play?flow=curation → features/curation/pages/PlayPuzzlePage
- *   /play?flow=daily    → features/daily/screens/DailyFlow
+ *   /play?flow=curation        → features/curation/pages/PlayPuzzlePage
+ *   /play?flow=daily           → features/daily/screens/DailyFlow
+ *   /play?flow=pack&pack={slug} → features/packs/screens/PackFlow
  *   /play (missing/unknown flow) → redirect home
  *
  * The dispatch lives in the router (here) rather than inside either
@@ -82,6 +96,17 @@ function PlayRoute() {
       </Suspense>
     );
   }
+  if (flow === 'pack') {
+    // `?pack=` is the published pack's slug. A missing/unknown slug
+    // surfaces a graceful not-found inside PackFlow (slug=null → its
+    // not-found branch; a fetched-but-404 pack → its error branch).
+    const slug = searchParams.get('pack');
+    return (
+      <Suspense fallback={<RouteFallback />}>
+        <PackFlow slug={slug} />
+      </Suspense>
+    );
+  }
   // Unknown or missing flow → home (preserves the legacy ST-11
   // no-state redirect behaviour).
   return <Navigate to="/" replace />;
@@ -99,6 +124,14 @@ export function Router() {
     <BrowserRouter>
       <Routes>
         <Route path="/" element={<LandingPage />} />
+        <Route
+          path="/packs"
+          element={
+            <Suspense fallback={<RouteFallback />}>
+              <PacksBrowsePage />
+            </Suspense>
+          }
+        />
         <Route path="/play" element={<PlayRoute />} />
         <Route
           path="/curation"
