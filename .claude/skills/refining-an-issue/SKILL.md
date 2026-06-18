@@ -69,7 +69,11 @@ execution time is unclarity — the `executing-ready-issues` skill notifies and 
 - [ ] **Grounding verified against the code** — any claim that data "already exists / is already
       persisted / is available from X" is grepped against the real struct, schema, or handler before
       Ready. If the field/attribute/path isn't actually there, scope **and** risk class must include
-      adding it — a framed "read-only surface" can hide a write-path change.
+      adding it — a framed "read-only surface" can hide a write-path change. **Any specified
+      persistence/key design must support the issue's required access patterns** (get / list / query /
+      uniqueness) — e.g. a per-entity partition key (`PACK#{slug}`) cannot be listed without a Scan or a
+      GSI, so "list all + unique slug + no new GSI" is internally contradictory. Check the key shape
+      against every read the issue needs before Ready, or execution hits the contradiction (`#326`).
 - [ ] **Data / environment availability checked** — does the acceptance depend on data or an
       environment that does not exist yet (real users, prod, an accrued corpus, real traffic)? If so,
       do **not** post a DoR whose acceptance is unachievable now: scope the issue to what is
