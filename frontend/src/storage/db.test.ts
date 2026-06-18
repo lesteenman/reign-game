@@ -29,16 +29,16 @@ beforeEach(async () => {
   await wipeDB();
 });
 
-describe('openDB v2 schema', () => {
-  it('creates gameState and completions stores on first open', async () => {
+describe('openDB v3 schema', () => {
+  it('creates gameState, completions, and packProgress stores on first open', async () => {
     // Arrange + Act
     const db = await openDB();
 
     // Assert
     expect(Array.from(db.objectStoreNames)).toEqual(
-      expect.arrayContaining(['gameState', 'completions']),
+      expect.arrayContaining(['gameState', 'completions', 'packProgress']),
     );
-    expect(db.version).toBe(2);
+    expect(db.version).toBe(3);
   });
 
   it('round-trips two distinct Flow Slots without overwriting each other', async () => {
@@ -115,7 +115,7 @@ describe('openDB v2 schema', () => {
   });
 });
 
-describe('openDB v1 → v2 upgrade', () => {
+describe('openDB v1 → current upgrade', () => {
   it('clears the gameState store on upgrade and preserves completions', async () => {
     // Arrange — open v1 by hand, seed legacy row + a completion
     await new Promise<void>((resolve, reject) => {
@@ -139,7 +139,7 @@ describe('openDB v1 → v2 upgrade', () => {
       req.onerror = () => reject(req.error);
     });
 
-    // Act — open at v2 via the production helper, which fires onupgradeneeded
+    // Act — open at the current version via the production helper, which fires onupgradeneeded
     resetDBCache();
     const db = await openDB();
 

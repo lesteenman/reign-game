@@ -69,8 +69,18 @@ When a batch contains stacked PRs (B based on A) or overlapping files, the order
 
 ## Subagent dispatch mechanics
 
-The lead orchestrates; subagents do the engineering. Two rules keep dispatches from stalling or
-producing false findings:
+The lead orchestrates; subagents do the engineering. These rules keep dispatches from stalling,
+colliding, or producing false findings:
+
+- **Dispatch subagents in worktree isolation (`isolation: "worktree"`).** Subagents share the lead's
+  checkout by default, so a subagent that runs `git checkout`/`switch` (even a read-only reviewer
+  comparing branches) moves the shared working-tree HEAD out from under the lead — and two implementers
+  can't run at once without clobbering each other. A per-subagent worktree makes that structurally
+  impossible: each gets its own isolated checkout, commits land on the intended branch ref (visible to
+  the lead for push), and the worktree auto-cleans if unchanged. This also unlocks **safe parallel
+  implementers** for independent, disjoint-file issues — no need to serialize. Reviewers still read the
+  diff three-dot and never need to switch branches. (A read-only reviewer on the shared tree silently
+  reset HEAD during the packs batch — worktree isolation prevents it.)
 
 - **Implementer prompts forbid long-running verification (> ~5 min); the lead runs the long gates.**
   An implementer that blocks on a soak / property-corpus / full-`-race` / e2e run hits the 600s Bash

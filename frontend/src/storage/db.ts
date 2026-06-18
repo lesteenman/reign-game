@@ -2,7 +2,7 @@ import { idFor } from '@reign/core/storage';
 import type { CompletionRecord, FlowType, GameState, GameStorage } from '@reign/core/storage';
 
 const DB_NAME = 'reign-game';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -14,6 +14,9 @@ let dbPromise: Promise<IDBDatabase> | null = null;
  * upgrade. Pre-Phase-7 rows used `id: 'current'`; the per-flow shape
  * (`id: '{flowType}:{flowId}'`) is incompatible, so the slice ships a
  * graceful drop rather than a row-level migration. `completions` survives.
+ *
+ * DB_VERSION 2 → 3 adds the `packProgress` store (local pack-play
+ * progress, keyed `pack:{slug}`). Additive — existing stores survive.
  */
 export function openDB(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
@@ -36,6 +39,10 @@ export function openDB(): Promise<IDBDatabase> {
 
       if (!db.objectStoreNames.contains('completions')) {
         db.createObjectStore('completions', { autoIncrement: true });
+      }
+
+      if (!db.objectStoreNames.contains('packProgress')) {
+        db.createObjectStore('packProgress', { keyPath: 'id' });
       }
     };
 

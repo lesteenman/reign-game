@@ -26,6 +26,7 @@ Drift detection: see `.claude/skills/architecture/SKILL.md` backend section for 
 - **Project layout.** `cmd/` for entry points, `internal/` for private packages.
 - **Tests.** Table-driven preferred. Arrange-Act-Assert with explicit `// Arrange`, `// Act`, `// Assert` comments.
 - **Doc comments.** Required on exported functions.
+- **Comments describe current state only.** No issue/PR/slice references in code comments (`// added in #327`, `// was X before #N`, `// lesson 13`) — git history + the commit message carry provenance. The issue number belongs in the commit message and PR description, never in the source.
 - **Error handling.** Wrap errors with context: `fmt.Errorf("doing X: %w", err)`.
 - **No global mutable state.** Pass dependencies via struct fields.
 - **Return directly.** When a value is computed and immediately returned, return it directly — don't assign to a local first. Exception: when the variable name aids readability of a complex expression.
