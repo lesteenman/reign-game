@@ -101,7 +101,9 @@ batched into the first:
   execution decisions inside a Ready issue, never design forks or scope.
 
 Feature branches or worktrees for all work — never commit to main. Commit after every artifact (plan,
-task, completed feature). Run git from the repo root (`git -C <root>`); fetch before reporting branch
+task, completed feature). Reference the issue in the commit message and PR description (e.g. `(#326)` in
+the subject, `Closes #326` in the body) — that is where provenance lives; never put issue/PR references
+in inline code comments. Run git from the repo root (`git -C <root>`); fetch before reporting branch
 state. A fix needed to test the change end to end ships on the same branch with rationale in the commit
 body, not a separate PR.
 
