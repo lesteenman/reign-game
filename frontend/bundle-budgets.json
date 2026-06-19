@@ -1,5 +1,5 @@
 {
   "largestChunkKb": 150,
-  "totalJsKb": 190,
+  "eagerJsKb": 180,
   "totalCssKb": 15
 }
