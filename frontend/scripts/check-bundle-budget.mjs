@@ -1,13 +1,21 @@
-// Bundle-size budget guard. Walks frontend/dist, gzips every JS and CSS
-// artifact at a fixed level (matching `gzip -c`), and fails when the
-// gzipped sizes exceed the ratified budgets in frontend/bundle-budgets.json.
+// Bundle-size budget guard. Gzips the built JS/CSS artifacts at a fixed
+// level (matching `gzip -c`) and fails when sizes exceed the ratified
+// budgets in frontend/bundle-budgets.json.
 //
 //   node scripts/check-bundle-budget.mjs
 //
-// Budgets (gzip kB): largest single JS chunk, total JS, total CSS. A breach
-// exits 1 (which budget + overage), keeping the LCP/TBT win from regressing.
+// Budgets (gzip kB):
+//   - largestChunkKb : the single biggest JS chunk (any chunk, eager or lazy).
+//   - eagerJsKb      : total of the EAGER (first-paint) JS — the chunks
+//                      referenced by index.html (entry + its static-import
+//                      vendor chunks via <script>/modulepreload). Lazy route
+//                      chunks (React.lazy) and the SW runtime load on demand,
+//                      do NOT affect first paint, and are excluded — so adding
+//                      a lazy-loaded feature does not eat the first-paint budget.
+//   - totalCssKb     : total CSS.
+// A breach exits 1 (which budget + overage), keeping the LCP/TBT win safe.
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { join, extname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 
@@ -15,22 +23,17 @@ const scriptDir = fileURLToPath(new URL('.', import.meta.url));
 const distDir = join(scriptDir, '..', 'dist');
 const budgetsPath = join(scriptDir, '..', 'bundle-budgets.json');
 
-// Recursively collect every file under dir.
 function walk(dir) {
   const out = [];
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
-    if (statSync(full).isDirectory()) {
-      out.push(...walk(full));
-    } else {
-      out.push(full);
-    }
+    if (statSync(full).isDirectory()) out.push(...walk(full));
+    else out.push(full);
   }
   return out;
 }
 
-// Fixed level 6 matches `gzip -c` (the audit tool) for determinism
-// across local and CI.
+// Fixed level 6 matches `gzip -c` (the audit tool) for determinism.
 function gzipKb(file) {
   return gzipSync(readFileSync(file), { level: 6 }).length / 1024;
 }
@@ -40,43 +43,54 @@ if (!existsSync(distDir) || walk(distDir).length === 0) {
   process.exit(1);
 }
 
-const files = walk(distDir).filter((f) => {
-  if (f.endsWith('.map')) return false;
-  const ext = extname(f);
-  return ext === '.js' || ext === '.css';
-});
+// Eager set = JS referenced by index.html (<script src> + modulepreload
+// href). Vite emits modulepreload for the entry's transitive static
+// imports; dynamic-import (React.lazy) chunks and the SW runtime are not
+// referenced here, so they fall out as lazy.
+const indexHtml = join(distDir, 'index.html');
+if (!existsSync(indexHtml)) {
+  console.error('dist/index.html missing — cannot determine the eager set.');
+  process.exit(1);
+}
+const eager = new Set(
+  [...readFileSync(indexHtml, 'utf8').matchAll(/(?:src|href)="[^"]*\/([^"/]+\.js)"/g)].map((m) => m[1]),
+);
+if (eager.size === 0) {
+  console.error('no eager JS referenced in index.html — build layout changed; refusing to pass blindly.');
+  process.exit(1);
+}
 
-const measured = files
-  .map((f) => ({ path: f.slice(distDir.length + 1), ext: extname(f), kb: gzipKb(f) }))
+const measured = walk(distDir)
+  .filter((f) => !f.endsWith('.map') && (extname(f) === '.js' || extname(f) === '.css'))
+  .map((f) => ({ path: f.slice(distDir.length + 1), name: basename(f), ext: extname(f), kb: gzipKb(f) }))
   .sort((a, b) => b.kb - a.kb);
 
 const jsFiles = measured.filter((m) => m.ext === '.js');
-const cssFiles = measured.filter((m) => m.ext === '.css');
+const eagerJs = jsFiles.filter((m) => eager.has(m.name));
 
 const largestChunkKb = jsFiles.reduce((max, m) => Math.max(max, m.kb), 0);
-const totalJsKb = jsFiles.reduce((sum, m) => sum + m.kb, 0);
-const totalCssKb = cssFiles.reduce((sum, m) => sum + m.kb, 0);
+const eagerJsKb = eagerJs.reduce((sum, m) => sum + m.kb, 0);
+const totalCssKb = measured.filter((m) => m.ext === '.css').reduce((sum, m) => sum + m.kb, 0);
 
 const budgets = JSON.parse(readFileSync(budgetsPath, 'utf8'));
 
-// Per-file table, sorted largest-first.
-console.log('Bundle artifacts (gzip):');
+console.log('Bundle artifacts (gzip; ● eager / ○ lazy):');
 for (const m of measured) {
-  console.log(`  ${m.kb.toFixed(2).padStart(8)} kB  ${m.path}`);
+  const mark = m.ext === '.js' ? (eager.has(m.name) ? '●' : '○') : ' ';
+  console.log(`  ${mark} ${m.kb.toFixed(2).padStart(8)} kB  ${m.path}`);
 }
 console.log('');
 
 const checks = [
   { label: 'Largest JS chunk', actual: largestChunkKb, limit: budgets.largestChunkKb },
-  { label: 'Total JS', actual: totalJsKb, limit: budgets.totalJsKb },
+  { label: 'Eager (first-paint) JS', actual: eagerJsKb, limit: budgets.eagerJsKb },
   { label: 'Total CSS', actual: totalCssKb, limit: budgets.totalCssKb },
 ];
 
 let failed = false;
 for (const c of checks) {
   const pass = c.actual <= c.limit;
-  const status = pass ? 'PASS' : 'FAIL';
-  let line = `  [${status}] ${c.label}: ${c.actual.toFixed(2)} kB / ${c.limit} kB`;
+  let line = `  [${pass ? 'PASS' : 'FAIL'}] ${c.label}: ${c.actual.toFixed(2)} kB / ${c.limit} kB`;
   if (!pass) {
     failed = true;
     line += ` — over by ${(c.actual - c.limit).toFixed(2)} kB`;
